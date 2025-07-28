@@ -8,7 +8,7 @@
 #include "GLFW/glfw3.h"
 #include "gfx/DeviceMetal.hpp"
 
-void WindowApple::init(DeviceMetal* device) {
+void WindowApple::init(RHIDevice* device) {
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   window_ = glfwCreateWindow(800, 600, "Metal Engine", nullptr, nullptr);
@@ -40,10 +40,12 @@ void WindowApple::init(DeviceMetal* device) {
   [ns_view setWantsLayer:YES];
 }
 
-void WindowApple::shutdown() const {
+void WindowApple::shutdown() {
   main_auto_release_pool_->release();
   glfwTerminate();
 }
 void WindowApple::poll_events() { glfwPollEvents(); }
 
 bool WindowApple::should_close() const { return glfwWindowShouldClose(window_); }
+
+std::unique_ptr<Window> create_apple_window() { return std::make_unique<WindowApple>(); }
