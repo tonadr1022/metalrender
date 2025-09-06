@@ -1,14 +1,14 @@
 #pragma once
 
-class DeviceMetal;
+class MetalDevice;
 
 class RendererMetal {
  public:
   struct CreateInfo {
-    DeviceMetal* device;
+    MetalDevice* device;
   };
   explicit RendererMetal(const CreateInfo& cinfo);
 
  private:
-  DeviceMetal* device_{};
+  [[maybe_unused]] MetalDevice* device_{};
 };

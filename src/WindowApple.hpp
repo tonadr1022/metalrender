@@ -8,19 +8,26 @@
 #define GLFW_EXPOSE_NATIVE_COCOA
 #include <GLFW/glfw3native.h>
 
-class RHIDevice;
+namespace rhi {
+class Device;
+}
+
 namespace NS {
 class AutoreleasePool;
+}
+namespace CA {
+class MetalLayer;
 }
 
 class WindowApple : public Window {
  public:
   void poll_events() override;
-  void init(RHIDevice* device) override;
+  void init(rhi::Device* device) override;
   void shutdown() override;
   [[nodiscard]] bool should_close() const override;
   GLFWwindow* window_{};
   NS::AutoreleasePool* main_auto_release_pool_{};
+  CA::MetalLayer* metal_layer_{};
 };
 
-std::unique_ptr<Window> create_apple_window();
+std::unique_ptr<WindowApple> create_apple_window();

@@ -6,9 +6,9 @@
 #include <print>
 
 #include "GLFW/glfw3.h"
-#include "gfx/DeviceMetal.hpp"
+#include "gfx/metal/MetalDevice.hpp"
 
-void WindowApple::init(RHIDevice* device) {
+void WindowApple::init(rhi::Device* device) {
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   window_ = glfwCreateWindow(800, 600, "Metal Engine", nullptr, nullptr);
@@ -38,6 +38,7 @@ void WindowApple::init(RHIDevice* device) {
   mtl_layer.backgroundColor = CGColorCreate(CGColorSpaceCreateDeviceRGB(), bg_color);
   [ns_view setLayer:mtl_layer];
   [ns_view setWantsLayer:YES];
+  metal_layer_ = (CA::MetalLayer*)mtl_layer;
 }
 
 void WindowApple::shutdown() {
@@ -48,4 +49,4 @@ void WindowApple::poll_events() { glfwPollEvents(); }
 
 bool WindowApple::should_close() const { return glfwWindowShouldClose(window_); }
 
-std::unique_ptr<Window> create_apple_window() { return std::make_unique<WindowApple>(); }
+std::unique_ptr<WindowApple> create_apple_window() { return std::make_unique<WindowApple>(); }
