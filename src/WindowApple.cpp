@@ -9,6 +9,8 @@
 #include "gfx/metal/MetalDevice.hpp"
 
 void WindowApple::init(rhi::Device* device) {
+  auto* init_pool = NS::AutoreleasePool::alloc()->init();
+  glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_FALSE);
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   window_ = glfwCreateWindow(800, 600, "Metal Engine", nullptr, nullptr);
@@ -17,7 +19,6 @@ void WindowApple::init(rhi::Device* device) {
     glfwTerminate();
     exit(EXIT_FAILURE);
   }
-  main_auto_release_pool_ = NS::AutoreleasePool::alloc()->init();
 
   NSView* ns_view = glfwGetCocoaView(window_);
   NSWindow* ns_window = glfwGetCocoaWindow(window_);
@@ -34,17 +35,20 @@ void WindowApple::init(rhi::Device* device) {
   // [mtl_layer setFramebufferOnly:NO];
   // [mtl_layer removeAllAnimations];
 
+  CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
   CGFloat bg_color[] = {0.0, 0.0, 1.0, 1.0};
-  mtl_layer.backgroundColor = CGColorCreate(CGColorSpaceCreateDeviceRGB(), bg_color);
+  CGColorRef bg_color_ref = CGColorCreate(color_space, bg_color);
+  mtl_layer.backgroundColor = bg_color_ref;
+
+  CGColorRelease(bg_color_ref);
+  CGColorSpaceRelease(color_space);
   [ns_view setLayer:mtl_layer];
   [ns_view setWantsLayer:YES];
   metal_layer_ = (CA::MetalLayer*)mtl_layer;
+  init_pool->release();
 }
 
-void WindowApple::shutdown() {
-  main_auto_release_pool_->release();
-  glfwTerminate();
-}
+void WindowApple::shutdown() { glfwTerminate(); }
 void WindowApple::poll_events() { glfwPollEvents(); }
 
 bool WindowApple::should_close() const { return glfwWindowShouldClose(window_); }
