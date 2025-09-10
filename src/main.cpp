@@ -70,9 +70,7 @@ class IndexAllocator {
 
 struct TextureUpload {
   void *data;
-  MTL::Texture *tex;
-  glm::uvec3 dims;
-  uint32_t bytes_per_row;
+  rhi::Texture tex;
 };
 
 struct ModelLoadResult {
@@ -122,24 +120,8 @@ struct TextureDesc {
   void *data{};
 };
 
-MTL::Texture *load_image(const TextureDesc &desc, MTL::Device *device) {
-  MTL::TextureDescriptor *texture_desc = MTL::TextureDescriptor::alloc()->init();
-  texture_desc->setWidth(desc.dims.x);
-  texture_desc->setHeight(desc.dims.y);
-  texture_desc->setDepth(desc.dims.z);
-  texture_desc->setPixelFormat(convert_format(desc.format));
-  texture_desc->setStorageMode(convert_storage_mode(desc.storage_mode));
-  texture_desc->setMipmapLevelCount(desc.mip_levels);
-  texture_desc->setArrayLength(desc.array_length);
-  texture_desc->setAllowGPUOptimizedContents(true);
-  texture_desc->setUsage(MTL::TextureUsageShaderRead);
-  MTL::Texture *tex = device->newTexture(texture_desc);
-  texture_desc->release();
-  return tex;
-}
-
 std::expected<ModelLoadResult, std::string> load_model(const std::filesystem::path &path,
-                                                       MTL::Device *device) {
+                                                       rhi::Device &device) {
   cgltf_options gltf_load_opts{};
   cgltf_data *raw_gltf{};
   cgltf_result gltf_res = cgltf_parse_file(&gltf_load_opts, path.c_str(), &raw_gltf);
@@ -174,15 +156,12 @@ std::expected<ModelLoadResult, std::string> load_model(const std::filesystem::pa
       std::filesystem::path full_img_path = directory_path / img.uri;
       uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
       uint32_t mip_levels = std::floor(std::log2(std::max(w, h))) + 1;
-      TextureDesc desc{.format = TextureFormat::R8G8B8A8Unorm,
-                       .storage_mode = StorageMode::GPUOnly,
-                       .dims = glm::uvec3{w, h, 1},
-                       .mip_levels = mip_levels,
-                       .array_length = 1,
-                       .data = data};
-      MTL::Texture *mtl_img = load_image(desc, device);
-      texture_uploads.emplace_back(TextureUpload{
-          .data = data, .tex = mtl_img, .dims = desc.dims, .bytes_per_row = desc.dims.x * 4});
+      rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
+                            .storage_mode = rhi::StorageMode::GPUOnly,
+                            .dims = glm::uvec3{w, h, 1},
+                            .mip_levels = mip_levels,
+                            .array_length = 1};
+      texture_uploads.emplace_back(TextureUpload{.data = data, .tex = device.create_texture(desc)});
       if (!data) {
         assert(0);
       }
@@ -270,6 +249,10 @@ struct Uniforms {
 
 }  // namespace
 
+struct RenderPass {
+  std::vector<
+};
+
 struct App {
   App() { window->init(device.get()); }
   App(const App &) = delete;
@@ -282,7 +265,7 @@ struct App {
 
   void run() {
     raw_device_ = (MTL::Device *)device->get_native_device();
-    auto model_load_res = load_model(resource_dir_ / "models" / "Cube/glTF/Cube.gltf", raw_device_);
+    auto model_load_res = load_model(resource_dir_ / "models" / "Cube/glTF/Cube.gltf", *device);
     if (!model_load_res) {
       exit(1);
     }
@@ -355,29 +338,40 @@ struct App {
 
     size_t curr_frame = 0;
 
+    std::vector<glm::mat4> instance_transforms;
+    int n = 10;
+    for (int i = -n; i <= n; i++) {
+      for (int j = -n; j <= n; j++) {
+        instance_transforms.emplace_back(glm::translate(glm::mat4{1}, glm::vec3{i, 0, j} * 2.5f));
+      }
+    }
+    size_t instance_transforms_size_bytes = sizeof(glm::mat4) * instance_transforms.size();
+    MTL::Buffer *instance_transforms_buffer =
+        raw_device_->newBuffer(instance_transforms_size_bytes, MTL::ResourceStorageModeShared);
+    memcpy(instance_transforms_buffer->contents(), instance_transforms.data(),
+           instance_transforms_size_bytes);
+
     uint64_t img_handle = 0;
-    std::vector<MTL::Texture *> uploaded_textures;
+    // std::vector<MTL::Texture *> uploaded_textures;
     {
       MTL::CommandBuffer *buf = queue->commandBuffer();
       if (!model.texture_uploads.empty()) {
         MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
         for (auto &upload : model.texture_uploads) {
           auto &tex = upload.tex;
-          MTL::Region region = MTL::Region::Make2D(0, 0, upload.dims.x, upload.dims.y);
-          size_t src_img_size = upload.bytes_per_row * upload.dims.y;
+          const auto &dims = tex.desc.dims;
+          MTL::Region region = MTL::Region::Make2D(0, 0, dims.x, dims.y);
+          size_t src_img_size = tex.bytes_per_row() * dims.y;
           MTL::Buffer *upload_buf =
               raw_device_->newBuffer(src_img_size, MTL::ResourceStorageModeShared);
           memcpy(upload_buf->contents(), upload.data, src_img_size);
           MTL::Origin origin = MTL::Origin::Make(0, 0, 0);
-          MTL::Size img_size = MTL::Size::Make(upload.dims.x, upload.dims.y, upload.dims.z);
-          blit_enc->copyFromBuffer(upload_buf, 0, upload.bytes_per_row, 0, img_size, tex, 0, 0,
-                                   origin);
-          img_handle = static_cast<uint64_t>(tex->gpuResourceID()._impl);
-          uploaded_textures.push_back(tex);
+          MTL::Size img_size = MTL::Size::Make(dims.x, dims.y, dims.z);
+          // blit_enc->copyFromBuffer(upload_buf, 0, upload.bytes_per_row(), 0, img_size, tex, 0, 0,
+          //                          origin);
+          // uploaded_textures.push_back(tex);
           frag_enc->setTexture(tex, 0);
-          LINFO("{} handle", img_handle);
-          blit_enc->generateMipmaps(tex);
-          tex->retain();
+          device->generate_mipmaps(tex);
         }
         blit_enc->endEncoding();
         model.texture_uploads.clear();
@@ -431,11 +425,13 @@ struct App {
       float aspect = (h != 0) ? float(w) / float(h) : 1.0f;
       static float t = 0;
       t++;
-      float ch = t / 500.f;
+      float ch = t / 200.f;
 
+      float rad = 100;
+      float height = 20;
       uniform_data->vp = glm::perspective(glm::radians(70.f), aspect, 0.1f, 1000.f) *
-                         glm::lookAt(glm::vec3{glm::sin(ch) * 2, 2, glm::cos(ch) * 2}, glm::vec3{0},
-                                     glm::vec3{0, 1, 0});
+                         glm::lookAt(glm::vec3{glm::sin(ch) * rad, height, glm::cos(ch) * rad},
+                                     glm::vec3{0}, glm::vec3{0, 1, 0});
 
       for (auto *tex : uploaded_textures) {
         enc->useResource(tex, MTL::ResourceUsageRead);
@@ -444,8 +440,11 @@ struct App {
       enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
       enc->setFragmentBuffer(materials_buffer.get(), 0, 0);
       enc->setCullMode(MTL::CullModeBack);
+      enc->setVertexBuffer(uniform_buffer.get(), uniforms_offset, 1);
+      enc->setVertexBuffer(instance_transforms_buffer, 0, 2);
       enc->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, indices_size / sizeof(uint16_t),
-                                 MTL::IndexTypeUInt16, index_buffer.get(), 0, 1);
+                                 MTL::IndexTypeUInt16, index_buffer.get(), 0,
+                                 instance_transforms.size());
       enc->endEncoding();
       buf->presentDrawable(drawable);
       buf->commit();

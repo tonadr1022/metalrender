@@ -23,12 +23,18 @@ struct Uniforms {
     float4x4 vp;
 };
 
+struct InstanceData {
+    float4x4 model;
+};
+
 v2f vertex vertexMain(uint vertexId [[vertex_id]],
+                      uint id_instance [[instance_id]],
                       device const Vertex* vertices [[buffer(0)]],
-                      constant Uniforms& uniforms [[buffer(1)]]) {
+                      constant Uniforms& uniforms [[buffer(1)]],
+                      device const InstanceData* instances [[buffer(2)]]) {
     v2f o;
     device const Vertex* vert = vertices + vertexId;
-    o.position = uniforms.vp * uniforms.model * float4(vert->pos.xyz, 1.0);
+    o.position = uniforms.vp * instances[id_instance].model * float4(vert->pos.xyz, 1.0);
     o.color = half4(half3(vert->normal.xyz) * .5 + .5, 1.0);
     o.material_id = 0;
     o.uv = vert->uv;
