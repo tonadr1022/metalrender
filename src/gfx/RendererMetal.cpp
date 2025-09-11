@@ -1,5 +1,221 @@
 #include "RendererMetal.hpp"
 
-RendererMetal::RendererMetal(const CreateInfo& cinfo) : device_(cinfo.device) {
+#include <Metal/Metal.hpp>
+#include <glm/mat4x4.hpp>
 
+#include "ModelLoader.hpp"
+#include "QuartzCore/CAMetalDrawable.hpp"
+#include "QuartzCore/CAMetalLayer.hpp"
+#include "WindowApple.hpp"
+#include "core/BitUtil.hpp"
+#include "core/FileUtil.hpp"
+#include "core/Logger.hpp"
+#include "glm/ext/matrix_clip_space.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "metal/MetalDevice.hpp"
+#include "metal/MetalUtil.hpp"
+
+namespace {
+
+struct Uniforms {
+  glm::mat4 model;
+  glm::mat4 vp;
+};
+
+}  // namespace
+
+void RendererMetal::init(const CreateInfo &cinfo) {
+  device_ = cinfo.device;
+  window_ = cinfo.window;
+  shader_dir_ = cinfo.resource_dir / "shaders";
+  assert(!shader_dir_.empty());
+  raw_device_ = device_->get_device();
+  main_cmd_queue_ = raw_device_->newCommandQueue();
+
+  {
+    MTL::TextureDescriptor *texture_descriptor = MTL::TextureDescriptor::alloc()->init();
+    texture_descriptor->setPixelFormat(MTL::PixelFormatDepth32Float);
+    auto dims = window_->get_window_size();
+    texture_descriptor->setWidth(dims.x);
+    texture_descriptor->setHeight(dims.y);
+    texture_descriptor->setDepth(1);
+    texture_descriptor->setStorageMode(MTL::StorageModePrivate);
+    texture_descriptor->setMipmapLevelCount(1);
+    texture_descriptor->setSampleCount(1);
+    texture_descriptor->setUsage(MTL::TextureUsageRenderTarget);
+    depth_tex_ = device_->get_device()->newTexture(texture_descriptor);
+    texture_descriptor->release();
+  }
+
+  {
+    // main pipeline
+    forward_pass_shader_ = load_shader().value();
+    MTL::RenderPipelineDescriptor *pipeline_desc = MTL::RenderPipelineDescriptor::alloc()->init();
+    pipeline_desc->setVertexFunction(forward_pass_shader_.vert_func);
+    pipeline_desc->setFragmentFunction(forward_pass_shader_.frag_func);
+    pipeline_desc->setLabel(util::mtl::string("basic"));
+    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
+
+    NS::Error *err{};
+    main_pso_ = raw_device_->newRenderPipelineState(pipeline_desc, &err);
+    if (err) {
+      util::mtl::print_err(err);
+      exit(1);
+    }
+
+    pipeline_desc->release();
+  }
+
+  MTL::ArgumentEncoder *frag_enc = forward_pass_shader_.frag_func->newArgumentEncoder(0);
+  materials_buffer_ = NS::TransferPtr(
+      raw_device_->newBuffer(frag_enc->encodedLength(), MTL::ResourceStorageModeShared));
+  frag_enc->setArgumentBuffer(materials_buffer_.get(), 0);
+  {
+    // per frame uniform buffer
+    main_uniform_buffer_ = NS::TransferPtr(raw_device_->newBuffer(
+        frames_in_flight_ * util::align_256(sizeof(Uniforms)), MTL::ResourceStorageModeShared));
+  }
+}
+
+void RendererMetal::shutdown() {}
+
+void RendererMetal::render() {
+  auto *frame_ar_pool = NS::AutoreleasePool::alloc()->init();
+
+  flush_pending_texture_uploads();
+
+  CA::MetalDrawable *drawable = window_->metal_layer_->nextDrawable();
+  if (!drawable) {
+    frame_ar_pool->release();
+    return;
+  }
+
+  MTL::RenderPassDescriptor *render_pass_desc = MTL::RenderPassDescriptor::renderPassDescriptor();
+  auto *color0 = render_pass_desc->colorAttachments()->object(0);
+  MTL::RenderPassDepthAttachmentDescriptor *desc =
+      MTL::RenderPassDepthAttachmentDescriptor::alloc()->init();
+  desc->setTexture(depth_tex_);
+  desc->setClearDepth(1.0);
+  desc->setLoadAction(MTL::LoadActionClear);
+  desc->setStoreAction(MTL::StoreActionStore);
+  render_pass_desc->setDepthAttachment(desc);
+  color0->setTexture(drawable->texture());
+  color0->setLoadAction(MTL::LoadActionClear);
+  color0->setClearColor(MTL::ClearColor::Make(0.5, 0.1, 0.12, 1.0));
+  color0->setStoreAction(MTL::StoreActionStore);
+
+  MTL::CommandBuffer *buf = main_cmd_queue_->commandBuffer();
+  MTL::RenderCommandEncoder *enc = buf->renderCommandEncoder(render_pass_desc);
+
+  {
+    MTL::DepthStencilDescriptor *depth_stencil_desc = MTL::DepthStencilDescriptor::alloc()->init();
+    depth_stencil_desc->setDepthCompareFunction(MTL::CompareFunctionLess);
+    depth_stencil_desc->setDepthWriteEnabled(true);
+    enc->setDepthStencilState(raw_device_->newDepthStencilState(depth_stencil_desc));
+  }
+  enc->setRenderPipelineState(main_pso_);
+  enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
+
+  // TODO: class for this
+  size_t uniforms_offset = (curr_frame_ % frames_in_flight_) * util::align_256(sizeof(Uniforms));
+
+  auto *uniform_data = reinterpret_cast<Uniforms *>(
+      reinterpret_cast<uint8_t *>(main_uniform_buffer_->contents()) + uniforms_offset);
+  uniform_data->model = glm::mat4{1};
+  auto window_dims = window_->get_window_size();
+  float aspect = (window_dims.x != 0) ? float(window_dims.x) / float(window_dims.y) : 1.0f;
+  static float t = 0;
+  t++;
+  float ch = t / 500.f;
+
+  uniform_data->vp = glm::perspective(glm::radians(70.f), aspect, 0.1f, 1000.f) *
+                     glm::lookAt(glm::vec3{glm::sin(ch) * 2, 2, glm::cos(ch) * 2}, glm::vec3{0},
+                                 glm::vec3{0, 1, 0});
+
+  enc->setVertexBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
+  enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
+  enc->setFragmentBuffer(materials_buffer_.get(), 0, 0);
+  enc->setCullMode(MTL::CullModeBack);
+  for (auto &model : models_) {
+    for (auto &mesh : model.meshes) {
+      enc->useResource(mesh.material->albedo_tex, MTL::ResourceUsageSample);
+      // frag_enc set texture
+
+      // bind mesh stuff
+      enc->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, mesh.index_count, MTL::IndexTypeUInt16,
+                                 main_index_buffer_.get(), 0, 1);
+    }
+  }
+
+  enc->endEncoding();
+  buf->presentDrawable(drawable);
+  buf->commit();
+
+  curr_frame_++;
+  frame_ar_pool->release();
+}
+
+void RendererMetal::load_model(const std::filesystem::path &path) {
+  auto result = ResourceManager::get().load_model(path, device_->get_device());
+  assert(result.has_value());
+  auto &model = result.value();
+
+  pending_texture_uploads_.append_range(result->texture_uploads);
+  result->texture_uploads.clear();
+
+  size_t vertices_size = model.vertices.size() * sizeof(DefaultVertex);
+  size_t indices_size = model.indices.size() * sizeof(uint16_t);
+  main_vert_buffer_ =
+      NS::TransferPtr(raw_device_->newBuffer(vertices_size, MTL::ResourceStorageModeShared));
+  memcpy(main_vert_buffer_->contents(), model.vertices.data(), vertices_size);
+  main_index_buffer_ =
+      NS::TransferPtr(raw_device_->newBuffer(indices_size, MTL::ResourceStorageModeShared));
+  memcpy(main_index_buffer_->contents(), model.indices.data(), indices_size);
+  // TODO: LMAOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO JANNNNNNNNNNNNNNNNK
+  result->model.meshes[0].material =
+      new Material{.albedo_tex = pending_texture_uploads_.back().tex};
+  models_.emplace_back(std::move(result->model));
+}
+
+std::optional<Shader> RendererMetal::load_shader() {
+  std::string src = util::load_file_to_string(shader_dir_ / "basic1.metal");
+  NS::String *path = NS::String::string(src.c_str(), NS::ASCIIStringEncoding);
+  NS::Error *err{};
+  MTL::Library *shader_lib = raw_device_->newLibrary(path, nullptr, &err);
+
+  if (err != nullptr) {
+    util::mtl::print_err(err);
+    return std::nullopt;
+  }
+
+  Shader result{};
+  result.vert_func = shader_lib->newFunction(util::mtl::string("vertexMain"));
+  result.frag_func = shader_lib->newFunction(util::mtl::string("fragmentMain"));
+  shader_lib->release();
+  return result;
+}
+
+void RendererMetal::flush_pending_texture_uploads() {
+  MTL::CommandBuffer *buf = main_cmd_queue_->commandBuffer();
+  if (!pending_texture_uploads_.empty()) {
+    MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
+    for (auto &upload : pending_texture_uploads_) {
+      auto &tex = upload.tex;
+      size_t src_img_size = upload.bytes_per_row * upload.dims.y;
+      MTL::Buffer *upload_buf =
+          raw_device_->newBuffer(src_img_size, MTL::ResourceStorageModeShared);
+      memcpy(upload_buf->contents(), upload.data, src_img_size);
+      MTL::Origin origin = MTL::Origin::Make(0, 0, 0);
+      MTL::Size img_size = MTL::Size::Make(upload.dims.x, upload.dims.y, upload.dims.z);
+      blit_enc->copyFromBuffer(upload_buf, 0, upload.bytes_per_row, 0, img_size, tex, 0, 0, origin);
+      // frag_enc->setTexture(tex, 0);
+      blit_enc->generateMipmaps(tex);
+      tex->retain();
+    }
+    blit_enc->endEncoding();
+    pending_texture_uploads_.clear();
+  }
+  buf->commit();
+  buf->waitUntilCompleted();
 }

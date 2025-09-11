@@ -22,7 +22,8 @@ class WindowApple : public Window {
   void init(rhi::Device* device) override;
   void shutdown() override;
   [[nodiscard]] bool should_close() const override;
-  GLFWwindow* get_handle() const { return window_; }
+  [[nodiscard]] GLFWwindow* get_handle() const { return window_; }
+  glm::uvec2 get_window_size() override;
 
   // TODO: lol
   CA::MetalLayer* metal_layer_{};

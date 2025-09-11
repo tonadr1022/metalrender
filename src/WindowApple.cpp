@@ -53,4 +53,10 @@ void WindowApple::poll_events() { glfwPollEvents(); }
 
 bool WindowApple::should_close() const { return glfwWindowShouldClose(window_); }
 
+glm::uvec2 WindowApple::get_window_size() {
+  int x, y;
+  glfwGetFramebufferSize(window_, &x, &y);
+  return {x, y};
+}
+
 std::unique_ptr<WindowApple> create_apple_window() { return std::make_unique<WindowApple>(); }
