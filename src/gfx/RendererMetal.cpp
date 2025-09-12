@@ -32,6 +32,9 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   raw_device_ = device_->get_device();
   main_cmd_queue_ = raw_device_->newCommandQueue();
 
+  // TODO: rethink
+  all_textures_.resize(k_max_textures);
+
   {
     MTL::TextureDescriptor *texture_descriptor = MTL::TextureDescriptor::alloc()->init();
     texture_descriptor->setPixelFormat(MTL::PixelFormatDepth32Float);
@@ -70,13 +73,8 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   MTL::ArgumentEncoder *frag_enc = forward_pass_shader_.frag_func->newArgumentEncoder(0);
   scene_arg_buffer_ = NS::TransferPtr(raw_device_->newBuffer(frag_enc->encodedLength(), 0));
   frag_enc->setArgumentBuffer(scene_arg_buffer_.get(), 0);
-  struct Material {
-    int albedo{};
-  };
 
-  std::array<Material, 1> mats = {Material{.albedo = 0}};
-  size_t mat_buf_size = sizeof(Material) * mats.size();
-  materials_buffer_ = NS::TransferPtr(raw_device_->newBuffer(mat_buf_size, 0));
+  materials_buffer_ = NS::TransferPtr(raw_device_->newBuffer(k_max_materials, 0));
 
   frag_enc->setBuffer(materials_buffer_.get(), 0, k_max_textures);
   frag_enc->release();
@@ -149,8 +147,8 @@ void RendererMetal::render() {
   enc->setCullMode(MTL::CullModeBack);
   for (auto &model : models_) {
     for (auto &mesh : model.meshes) {
-      enc->useResource(mesh.material->albedo_tex, MTL::ResourceUsageSample);
-      // frag_enc set texture
+      enc->useResource(all_textures_[all_materials_[mesh.material_id].albedo],
+                       MTL::ResourceUsageSample);
 
       // bind mesh stuff
       enc->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, mesh.index_count, MTL::IndexTypeUInt16,
@@ -167,7 +165,7 @@ void RendererMetal::render() {
 }
 
 void RendererMetal::load_model(const std::filesystem::path &path) {
-  auto result = ResourceManager::get().load_model(path, device_->get_device());
+  auto result = ResourceManager::get().load_model(path, *this);
   assert(result.has_value());
   auto &model = result.value();
 
@@ -182,15 +180,28 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
   main_index_buffer_ =
       NS::TransferPtr(raw_device_->newBuffer(indices_size, MTL::ResourceStorageModeShared));
   memcpy(main_index_buffer_->contents(), model.indices.data(), indices_size);
-  // TODO: LMAOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO JANNNNNNNNNNNNNNNNK
-  result->model.meshes[0].material =
-      new Material{.albedo_tex = pending_texture_uploads_.back().tex};
-  auto *frag_enc = forward_pass_shader_.frag_func->newArgumentEncoder(0);
-  assert(frag_enc);
-  assert(result->model.meshes[0].material->albedo_tex);
-  frag_enc->setArgumentBuffer(scene_arg_buffer_.get(), 0);
-  frag_enc->setTexture(result->model.meshes[0].material->albedo_tex, 0);
   models_.emplace_back(std::move(result->model));
+  // TODO: material allocator
+  memcpy(materials_buffer_->contents(), model.materials.data(),
+         model.materials.size() * sizeof(Material));
+  all_materials_.append_range(std::move(model.materials));
+}
+
+TextureWithIdx RendererMetal::load_material_image(const TextureDesc &desc) {
+  MTL::TextureDescriptor *texture_desc = MTL::TextureDescriptor::alloc()->init();
+  texture_desc->setWidth(desc.dims.x);
+  texture_desc->setHeight(desc.dims.y);
+  texture_desc->setDepth(desc.dims.z);
+  texture_desc->setPixelFormat(util::mtl::convert_format(desc.format));
+  texture_desc->setStorageMode(util::mtl::convert_storage_mode(desc.storage_mode));
+  texture_desc->setMipmapLevelCount(desc.mip_levels);
+  texture_desc->setArrayLength(desc.array_length);
+  texture_desc->setAllowGPUOptimizedContents(true);
+  texture_desc->setUsage(MTL::TextureUsageShaderRead);
+  MTL::Texture *tex = raw_device_->newTexture(texture_desc);
+  texture_desc->release();
+  uint32_t idx = texture_index_allocator_.alloc_idx();
+  return {.tex = tex, .idx = idx};
 }
 
 std::optional<Shader> RendererMetal::load_shader() {
@@ -212,11 +223,14 @@ std::optional<Shader> RendererMetal::load_shader() {
 }
 
 void RendererMetal::flush_pending_texture_uploads() {
-  MTL::CommandBuffer *buf = main_cmd_queue_->commandBuffer();
   if (!pending_texture_uploads_.empty()) {
+    MTL::CommandBuffer *buf = main_cmd_queue_->commandBuffer();
+    // TODO: global argument buffer
+    auto *frag_enc = forward_pass_shader_.frag_func->newArgumentEncoder(0);
+    frag_enc->setArgumentBuffer(scene_arg_buffer_.get(), 0);
     MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
     for (auto &upload : pending_texture_uploads_) {
-      auto &tex = upload.tex;
+      MTL::Texture *tex = upload.tex;
       size_t src_img_size = upload.bytes_per_row * upload.dims.y;
       MTL::Buffer *upload_buf =
           raw_device_->newBuffer(src_img_size, MTL::ResourceStorageModeShared);
@@ -224,13 +238,14 @@ void RendererMetal::flush_pending_texture_uploads() {
       MTL::Origin origin = MTL::Origin::Make(0, 0, 0);
       MTL::Size img_size = MTL::Size::Make(upload.dims.x, upload.dims.y, upload.dims.z);
       blit_enc->copyFromBuffer(upload_buf, 0, upload.bytes_per_row, 0, img_size, tex, 0, 0, origin);
-      // frag_enc->setTexture(tex, 0);
       blit_enc->generateMipmaps(tex);
+      frag_enc->setTexture(tex, upload.idx);
       tex->retain();
+      all_textures_[upload.idx] = tex;
     }
     blit_enc->endEncoding();
     pending_texture_uploads_.clear();
+    buf->commit();
+    buf->waitUntilCompleted();
   }
-  buf->commit();
-  buf->waitUntilCompleted();
 }

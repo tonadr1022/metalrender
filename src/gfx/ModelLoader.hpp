@@ -14,18 +14,19 @@ class Device;
 struct TextureUpload {
   void *data;
   MTL::Texture *tex;
+  uint32_t idx;
   glm::uvec3 dims;
   uint32_t bytes_per_row;
 };
 
 struct Material {
-  MTL::Texture *albedo_tex;
+  uint32_t albedo{};
 };
 
 struct Mesh {
   size_t vertex_count;
   size_t index_count;
-  Material *material;
+  size_t material_id;
 };
 
 struct Model {
@@ -37,7 +38,10 @@ struct ModelLoadResult {
   std::vector<DefaultVertex> vertices;
   std::vector<uint16_t> indices;
   std::vector<TextureUpload> texture_uploads;
+  std::vector<Material> materials;
 };
+
+class RendererMetal;
 
 class ResourceManager {
  public:
@@ -53,7 +57,7 @@ class ResourceManager {
   static ResourceManager &get() { return *instance_; }
 
   std::expected<ModelLoadResult, std::string> load_model(const std::filesystem::path &path,
-                                                         MTL::Device *device);
+                                                         RendererMetal &renderer);
 
  private:
   inline static ResourceManager *instance_{};

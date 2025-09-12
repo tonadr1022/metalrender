@@ -5,6 +5,7 @@
 
 #include "Foundation/NSSharedPtr.hpp"
 #include "ModelLoader.hpp"
+#include "core/Allocator.hpp"
 
 class MetalDevice;
 class WindowApple;
@@ -30,6 +31,11 @@ struct Shader {
   MTL::Function* frag_func{};
 };
 
+struct TextureWithIdx {
+  MTL::Texture* tex;
+  uint32_t idx;
+};
+
 class RendererMetal {
  public:
   struct CreateInfo {
@@ -42,6 +48,7 @@ class RendererMetal {
   void shutdown();
   void render();
   void load_model(const std::filesystem::path& path);
+  TextureWithIdx load_material_image(const TextureDesc& desc);
 
  private:
   std::optional<Shader> load_shader();
@@ -61,6 +68,10 @@ class RendererMetal {
   NS::SharedPtr<MTL::Buffer> scene_arg_buffer_{};
   std::vector<TextureUpload> pending_texture_uploads_;
   constexpr static int k_max_textures{1024};
+  constexpr static int k_max_materials{1024};
+  std::vector<Material> all_materials_;
+  std::vector<MTL::Texture*> all_textures_;
+  IndexAllocator texture_index_allocator_{k_max_textures};
   void flush_pending_texture_uploads();
 
   std::filesystem::path shader_dir_{};

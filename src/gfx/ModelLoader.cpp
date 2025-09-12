@@ -8,30 +8,11 @@
 #include <Metal/Metal.hpp>
 #include <format>
 
+#include "RendererMetal.hpp"
 #include "metal/MetalUtil.hpp"
 
-namespace {
-
-// TODO: move
-MTL::Texture *load_image(const TextureDesc &desc, MTL::Device *device) {
-  MTL::TextureDescriptor *texture_desc = MTL::TextureDescriptor::alloc()->init();
-  texture_desc->setWidth(desc.dims.x);
-  texture_desc->setHeight(desc.dims.y);
-  texture_desc->setDepth(desc.dims.z);
-  texture_desc->setPixelFormat(util::mtl::convert_format(desc.format));
-  texture_desc->setStorageMode(util::mtl::convert_storage_mode(desc.storage_mode));
-  texture_desc->setMipmapLevelCount(desc.mip_levels);
-  texture_desc->setArrayLength(desc.array_length);
-  texture_desc->setAllowGPUOptimizedContents(true);
-  texture_desc->setUsage(MTL::TextureUsageShaderRead);
-  MTL::Texture *tex = device->newTexture(texture_desc);
-  texture_desc->release();
-  return tex;
-}
-}  // namespace
-
 std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
-    const std::filesystem::path &path, MTL::Device *device) {
+    const std::filesystem::path &path, RendererMetal &renderer) {
   cgltf_options gltf_load_opts{};
   cgltf_data *raw_gltf{};
   cgltf_result gltf_res = cgltf_parse_file(&gltf_load_opts, path.c_str(), &raw_gltf);
@@ -72,15 +53,26 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
                        .mip_levels = mip_levels,
                        .array_length = 1,
                        .data = data};
-      MTL::Texture *mtl_img = load_image(desc, device);
-      texture_uploads.emplace_back(TextureUpload{
-          .data = data, .tex = mtl_img, .dims = desc.dims, .bytes_per_row = desc.dims.x * 4});
+      TextureWithIdx texture_with_idx = renderer.load_material_image(desc);
+      texture_uploads.emplace_back(TextureUpload{.data = data,
+                                                 .tex = texture_with_idx.tex,
+                                                 .idx = texture_with_idx.idx,
+                                                 .dims = desc.dims,
+                                                 .bytes_per_row = desc.dims.x * 4});
       if (!data) {
         assert(0);
       }
     } else {
       assert(0 && "need to handle yet");
     }
+  }
+
+  auto &materials = result.materials;
+  for (size_t material_i = 0; material_i < gltf->materials_count; material_i++) {
+    cgltf_material *gltf_mat = &gltf->materials[material_i];
+    size_t tex_idx = gltf_mat->pbr_metallic_roughness.base_color_texture.texture - gltf->textures;
+    Material material{.albedo = texture_uploads[tex_idx].idx};
+    materials.push_back(material);
   }
 
   auto &vertices = result.vertices;
@@ -99,17 +91,14 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
         for (size_t i = 0; i < primitive.indices->count; i++) {
           indices.push_back(cgltf_accessor_read_index(primitive.indices, i));
         }
+        size_t material_idx = primitive.material - gltf->materials;
         meshes.push_back(Mesh{
             .vertex_count = vertex_count,
             .index_count = primitive_index_count,
+            .material_id = material_idx,
         });
       }
       for (size_t attr_i = 0; attr_i < primitive.attributes_count; attr_i++) {
-        if (primitive.material) {
-          // const cgltf_material &material = *primitive.material;
-          // const cgltf_texture_view &base_color_tex =
-          //     material.pbr_metallic_roughness.base_color_texture;
-        }
         const auto &attr = primitive.attributes[attr_i];
         cgltf_accessor *accessor = attr.data;
         if (attr.type == cgltf_attribute_type_position) {
