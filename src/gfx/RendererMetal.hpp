@@ -58,7 +58,9 @@ class RendererMetal {
   NS::SharedPtr<MTL::Buffer> main_index_buffer_{};
   NS::SharedPtr<MTL::Buffer> main_uniform_buffer_{};
   NS::SharedPtr<MTL::Buffer> materials_buffer_{};
+  NS::SharedPtr<MTL::Buffer> scene_arg_buffer_{};
   std::vector<TextureUpload> pending_texture_uploads_;
+  constexpr static int k_max_textures{1024};
   void flush_pending_texture_uploads();
 
   std::filesystem::path shader_dir_{};

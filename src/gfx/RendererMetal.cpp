@@ -68,9 +68,19 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   }
 
   MTL::ArgumentEncoder *frag_enc = forward_pass_shader_.frag_func->newArgumentEncoder(0);
-  materials_buffer_ = NS::TransferPtr(
-      raw_device_->newBuffer(frag_enc->encodedLength(), MTL::ResourceStorageModeShared));
-  frag_enc->setArgumentBuffer(materials_buffer_.get(), 0);
+  scene_arg_buffer_ = NS::TransferPtr(raw_device_->newBuffer(frag_enc->encodedLength(), 0));
+  frag_enc->setArgumentBuffer(scene_arg_buffer_.get(), 0);
+  struct Material {
+    int albedo{};
+  };
+
+  std::array<Material, 1> mats = {Material{.albedo = 0}};
+  size_t mat_buf_size = sizeof(Material) * mats.size();
+  materials_buffer_ = NS::TransferPtr(raw_device_->newBuffer(mat_buf_size, 0));
+
+  frag_enc->setBuffer(materials_buffer_.get(), 0, k_max_textures);
+  frag_enc->release();
+
   {
     // per frame uniform buffer
     main_uniform_buffer_ = NS::TransferPtr(raw_device_->newBuffer(
@@ -135,7 +145,7 @@ void RendererMetal::render() {
 
   enc->setVertexBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
   enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
-  enc->setFragmentBuffer(materials_buffer_.get(), 0, 0);
+  enc->setFragmentBuffer(scene_arg_buffer_.get(), 0, 0);
   enc->setCullMode(MTL::CullModeBack);
   for (auto &model : models_) {
     for (auto &mesh : model.meshes) {
@@ -175,6 +185,11 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
   // TODO: LMAOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO JANNNNNNNNNNNNNNNNK
   result->model.meshes[0].material =
       new Material{.albedo_tex = pending_texture_uploads_.back().tex};
+  auto *frag_enc = forward_pass_shader_.frag_func->newArgumentEncoder(0);
+  assert(frag_enc);
+  assert(result->model.meshes[0].material->albedo_tex);
+  frag_enc->setArgumentBuffer(scene_arg_buffer_.get(), 0);
+  frag_enc->setTexture(result->model.meshes[0].material->albedo_tex, 0);
   models_.emplace_back(std::move(result->model));
 }
 
