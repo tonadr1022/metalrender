@@ -22,7 +22,8 @@ struct TextureUpload {
 };
 
 struct Material {
-  uint32_t albedo{};
+  uint32_t albedo_tex{UINT32_MAX};
+  uint32_t normal_tex{UINT32_MAX};
 };
 
 struct Mesh {

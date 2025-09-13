@@ -11,14 +11,16 @@
 #include "core/FileUtil.hpp"
 #include "core/Logger.hpp"
 #include "glm/ext/matrix_clip_space.hpp"
-#include "glm/ext/matrix_transform.hpp"
 #include "metal/MetalDevice.hpp"
 #include "metal/MetalUtil.hpp"
 
 namespace {
 
+enum class RenderMode : uint32_t { Default, Normals, NormalMap };
+
 struct Uniforms {
-  glm::mat4 vp;
+  glm::mat4 vp{};
+  RenderMode render_mode{RenderMode::Default};
 };
 
 }  // namespace
@@ -88,12 +90,12 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     arg0->setDataType(MTL::DataTypeTexture);
     arg0->setTextureType(MTL::TextureType2D);
 
-    MTL::ArgumentDescriptor *arg1 = MTL::ArgumentDescriptor::alloc()->init();
-    arg1->setIndex(k_max_textures);
-    arg1->setAccess(MTL::ArgumentAccessReadOnly);
-    arg1->setDataType(MTL::DataTypePointer);
-    NS::Object *args_arr[] = {arg0, arg1};
-    NS::Array *args = NS::Array::array(args_arr, 2);
+    // MTL::ArgumentDescriptor *arg1 = MTL::ArgumentDescriptor::alloc()->init();
+    // arg1->setIndex(k_max_textures);
+    // arg1->setAccess(MTL::ArgumentAccessReadOnly);
+    // arg1->setDataType(MTL::DataTypePointer);
+    std::array<NS::Object *, 1> args_arr{arg0};
+    NS::Array *args = NS::Array::array(args_arr.data(), args_arr.size());
     global_arg_enc_ = raw_device_->newArgumentEncoder(args);
     global_arg_enc_->setArgumentBuffer(scene_arg_buffer_.get(), 0);
     for (auto &i : args_arr) {
@@ -105,7 +107,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
 
   materials_buffer_ = NS::TransferPtr(raw_device_->newBuffer(k_max_materials, 0));
 
-  frag_enc->setBuffer(materials_buffer_.get(), 0, k_max_textures);
+  // frag_enc->setBuffer(materials_buffer_.get(), 0, k_max_textures);
   frag_enc->release();
 
   {
@@ -162,12 +164,15 @@ void RendererMetal::render(const RenderArgs &render_args) {
   float aspect = (window_dims.x != 0) ? float(window_dims.x) / float(window_dims.y) : 1.0f;
   uniform_data->vp =
       glm::perspective(glm::radians(70.f), aspect, 0.1f, 10000.f) * render_args.view_mat;
+  uniform_data->render_mode = RenderMode::Normals;
 
   enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
   enc->setVertexBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
   enc->setVertexBuffer(instance_model_matrix_buf_.get(), 0, 2);
   enc->setVertexBuffer(instance_material_id_buf_.get(), 0, 3);
   enc->setFragmentBuffer(scene_arg_buffer_.get(), 0, 0);
+  enc->setFragmentBuffer(materials_buffer_.get(), 0, 1);
+  enc->setFragmentBuffer(main_uniform_buffer_.get(), uniforms_offset, 2);
 
   enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
   enc->setCullMode(MTL::CullModeBack);

@@ -66,7 +66,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
   auto &texture_uploads = result.texture_uploads;
   texture_uploads.reserve(gltf->images_count);
 
-  auto load_img = [&](uint32_t gltf_img_i) {
+  auto load_img = [&](uint32_t gltf_img_i) -> uint32_t {
     const cgltf_image &img = gltf->images[gltf_img_i];
     if (!img.buffer_view) {
       int w, h, comp;
@@ -88,8 +88,10 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
       if (!data) {
         assert(0);
       }
+      return texture_with_idx.idx;
     } else {
       assert(0 && "need to handle yet");
+      return UINT32_MAX;
     }
   };
 
@@ -98,10 +100,20 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
   auto &materials = result.materials;
   for (size_t material_i = 0; material_i < gltf->materials_count; material_i++) {
     cgltf_material *gltf_mat = &gltf->materials[material_i];
-    size_t gltf_image_i =
-        gltf_mat->pbr_metallic_roughness.base_color_texture.texture->image - gltf->images;
-    load_img(gltf_image_i);
-    Material material{.albedo = texture_uploads.back().idx};
+    Material material{};
+    auto set_and_load_material_img = [&gltf, &load_img](const cgltf_texture_view *tex_view,
+                                                        uint32_t &result_tex_id) {
+      if (!tex_view || !tex_view->texture || !tex_view->texture->image) {
+        return;
+      }
+      size_t gltf_image_i = tex_view->texture->image - gltf->images;
+      result_tex_id = load_img(gltf_image_i);
+    };
+
+    set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.base_color_texture,
+                              material.albedo_tex);
+    set_and_load_material_img(&gltf_mat->normal_texture, material.normal_tex);
+
     materials.push_back(material);
   }
 
