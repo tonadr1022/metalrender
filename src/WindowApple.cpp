@@ -8,7 +8,10 @@
 #include "GLFW/glfw3.h"
 #include "gfx/metal/MetalDevice.hpp"
 
-void WindowApple::init(rhi::Device* device) {
+void WindowApple::init(rhi::Device* device, KeyCallbackFn key_callback_fn,
+                       CursorPosCallbackFn cursor_pos_callback_fn) {
+  this->key_callback_fn_ = key_callback_fn;
+  this->cursor_pos_callback_fn_ = cursor_pos_callback_fn;
   auto* init_pool = NS::AutoreleasePool::alloc()->init();
   glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_FALSE);
   glfwInit();
@@ -46,6 +49,16 @@ void WindowApple::init(rhi::Device* device) {
   [ns_view setWantsLayer:YES];
   metal_layer_ = (CA::MetalLayer*)mtl_layer;
   init_pool->release();
+
+  glfwSetWindowUserPointer(window_, this);
+  glfwSetKeyCallback(window_, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+    auto* win = reinterpret_cast<WindowApple*>(glfwGetWindowUserPointer(window));
+    win->key_callback_fn_(key, action, mods);
+  });
+  glfwSetCursorPosCallback(window_, [](GLFWwindow* window, double xpos, double ypos) {
+    auto* win = reinterpret_cast<WindowApple*>(glfwGetWindowUserPointer(window));
+    win->cursor_pos_callback_fn_(xpos, ypos);
+  });
 }
 
 void WindowApple::shutdown() { glfwTerminate(); }

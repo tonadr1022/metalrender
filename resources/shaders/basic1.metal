@@ -26,19 +26,29 @@ struct SceneResourcesBuf {
 };
 
 struct Uniforms {
-    float4x4 model;
     float4x4 vp;
-    int mat_id;
+};
+
+struct InstanceModel {
+    float4x4 model;
+};
+
+struct InstanceMaterialId {
+    uint mat_id;
 };
 
 v2f vertex vertexMain(uint vertexId [[vertex_id]],
                       device const Vertex* vertices [[buffer(0)]],
-                      constant Uniforms& uniforms [[buffer(1)]]) {
+                      constant Uniforms& uniforms [[buffer(1)]],
+                      device const InstanceModel* models [[buffer(2)]],
+                      device const InstanceMaterialId* instance_materials [[buffer(3)]],
+                      uint inst_id [[instance_id]]) {
     v2f o;
+    float4x4 model = models[inst_id].model;
     device const Vertex* vert = vertices + vertexId;
-    o.position = uniforms.vp * uniforms.model * float4(vert->pos.xyz, 1.0);
+    o.position = uniforms.vp * model * float4(vert->pos.xyz, 1.0);
     o.color = half4(half3(vert->normal.xyz) * .5 + .5, 1.0);
-    o.material_id = uniforms.mat_id;
+    o.material_id = instance_materials[inst_id].mat_id;
     o.uv = vert->uv;
     return o;
 }

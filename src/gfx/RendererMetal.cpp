@@ -18,9 +18,7 @@
 namespace {
 
 struct Uniforms {
-  glm::mat4 model;
   glm::mat4 vp;
-  int32_t mat_id;
 };
 
 }  // namespace
@@ -154,23 +152,24 @@ void RendererMetal::render(const RenderArgs &render_args) {
     enc->setDepthStencilState(raw_device_->newDepthStencilState(depth_stencil_desc));
   }
   enc->setRenderPipelineState(main_pso_);
-  enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
 
   // TODO: class for this
   size_t uniforms_offset = (curr_frame_ % frames_in_flight_) * util::align_256(sizeof(Uniforms));
 
   auto *uniform_data = reinterpret_cast<Uniforms *>(
       reinterpret_cast<uint8_t *>(main_uniform_buffer_->contents()) + uniforms_offset);
-  uniform_data->model = glm::mat4{1};
   auto window_dims = window_->get_window_size();
   float aspect = (window_dims.x != 0) ? float(window_dims.x) / float(window_dims.y) : 1.0f;
   uniform_data->vp =
-      glm::perspective(glm::radians(70.f), aspect, 0.1f, 1000.f) * render_args.view_mat;
-  uniform_data->mat_id = 0;
+      glm::perspective(glm::radians(70.f), aspect, 0.1f, 10000.f) * render_args.view_mat;
 
+  enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
   enc->setVertexBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
-  enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
+  enc->setVertexBuffer(instance_model_matrix_buf_.get(), 0, 2);
+  enc->setVertexBuffer(instance_material_id_buf_.get(), 0, 3);
   enc->setFragmentBuffer(scene_arg_buffer_.get(), 0, 0);
+
+  enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
   enc->setCullMode(MTL::CullModeBack);
   // TODO: this is awful
   for (MTL::Texture *tex : all_textures_) {
@@ -179,12 +178,18 @@ void RendererMetal::render(const RenderArgs &render_args) {
     }
   }
 
+  uint32_t i = 0;
   for (auto &model : models_) {
-    for (auto &mesh : model.meshes) {
+    for (auto &node : model.nodes) {
+      if (node.mesh_id == Model::invalid_id) {
+        continue;
+      }
+      auto &mesh = model.meshes[node.mesh_id];
       // bind mesh stuff
       enc->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, mesh.index_count, MTL::IndexTypeUInt16,
                                  main_index_buffer_.get(), mesh.index_offset, 1,
-                                 (uint32_t)mesh.vertex_offset, 0);
+                                 (uint32_t)(mesh.vertex_offset / sizeof(DefaultVertex)), i);
+      i++;
     }
   }
 
@@ -204,10 +209,14 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
   pending_texture_uploads_.append_range(result->texture_uploads);
   result->texture_uploads.clear();
 
-  for (const auto &mesh : model.model.meshes) {
+  for (const auto &node : model.model.nodes) {
+    if (node.mesh_id == UINT32_MAX) {
+      continue;
+    }
+    auto &mesh = model.model.meshes[node.mesh_id];
     uint32_t instance_id = instance_idx_allocator_.alloc_idx();
     *((uint32_t *)instance_material_id_buf_->contents() + instance_id) = mesh.material_id;
-    *((glm::mat4 *)instance_model_matrix_buf_->contents() + instance_id) = glm::mat4{1};
+    *((glm::mat4 *)instance_model_matrix_buf_->contents() + instance_id) = node.global_transform;
   }
 
   size_t vertices_size = model.vertices.size() * sizeof(DefaultVertex);

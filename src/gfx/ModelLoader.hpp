@@ -2,6 +2,8 @@
 
 #include <expected>
 #include <filesystem>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/mat4x4.hpp>
 #include <string>
 
 #include "GFXTypes.hpp"
@@ -31,8 +33,19 @@ struct Mesh {
   size_t material_id;
 };
 
+struct Node {
+  glm::mat4 local_transform{1};
+  glm::mat4 global_transform{1};
+  std::vector<uint32_t> children;
+  uint32_t mesh_id{UINT32_MAX};
+};
+
 struct Model {
+  constexpr static uint32_t invalid_id = UINT32_MAX;
+  std::vector<Node> nodes;
+  std::vector<uint32_t> root_nodes;
   std::vector<Mesh> meshes;
+  glm::mat4 root_transform{1};
 };
 
 struct ModelLoadResult {
@@ -42,6 +55,8 @@ struct ModelLoadResult {
   std::vector<TextureUpload> texture_uploads;
   std::vector<Material> materials;
 };
+
+void update_global_transforms(const Model &model);
 
 class RendererMetal;
 

@@ -19,7 +19,9 @@ class MetalLayer;
 class WindowApple : public Window {
  public:
   void poll_events() override;
-  void init(rhi::Device* device) override;
+
+  void init(rhi::Device* device, KeyCallbackFn key_callback_fn,
+            CursorPosCallbackFn cursor_pos_callback_fn) override;
   void shutdown() override;
   [[nodiscard]] bool should_close() const override;
   [[nodiscard]] GLFWwindow* get_handle() const { return window_; }
@@ -29,6 +31,8 @@ class WindowApple : public Window {
   CA::MetalLayer* metal_layer_{};
 
  private:
+  KeyCallbackFn key_callback_fn_;
+  CursorPosCallbackFn cursor_pos_callback_fn_;
   GLFWwindow* window_{};
 };
 

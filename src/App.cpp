@@ -1,5 +1,6 @@
 #include "App.hpp"
 
+#include <fstream>
 #include <glm/gtc/quaternion.hpp>
 
 #include "WindowApple.hpp"
@@ -104,21 +105,23 @@ bool Camera::process_mouse(glm::vec2 offset) {
 App::App() {
   resource_dir_ = get_resource_dir();
   shader_dir_ = resource_dir_ / "shaders";
+  load_config();
   device_ = create_metal_device();
   window_ = create_apple_window();
   device_->init();
-  window_->init(device_.get());
+  window_->init(
+      device_.get(), [this](int key, int action, int mods) { on_key_event(key, action, mods); },
+      [this](double x_pos, double y_pos) { on_curse_pos_event(x_pos, y_pos); });
+
+  on_hide_mouse_change();
+
   ResourceManager::init();
-  glfwSetWindowUserPointer(window_->get_handle(), this);
-  glfwSetCursorPosCallback(window_->get_handle(), [](GLFWwindow* window, double xpos, double ypos) {
-    ((App*)glfwGetWindowUserPointer(window))->on_key_event(xpos, ypos);
-  });
   renderer_.init(RendererMetal::CreateInfo{
       .device = device_.get(), .window = window_.get(), .resource_dir = resource_dir_});
 }
 
 void App::run() {
-  renderer_.load_model("/Users/tony/models/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf");
+  renderer_.load_model(config_.initial_model_path);
   // renderer_.load_model(resource_dir_ / "models/Cube/glTF/Cube.gltf");
 
   double last_time = glfwGetTime();
@@ -126,25 +129,9 @@ void App::run() {
     window_->poll_events();
     double curr_time = glfwGetTime();
     auto dt = static_cast<float>(curr_time - last_time);
+    last_time = curr_time;
     camera_.update_pos(window_->get_handle(), dt);
 
-    // glm::vec3 movement{};
-    // if (glfwGetKey(window_->get_handle(), GLFW_KEY_I)) {
-    //   movement.x++;
-    // }
-    // if (glfwGetKey(window_->get_handle(), GLFW_KEY_K)) {
-    //   movement.x--;
-    // }
-    // if (glfwGetKey(window_->get_handle(), GLFW_KEY_L)) {
-    //   movement.x--;
-    // }
-    // static float t = 0;
-    // t++;
-    // float ch = t / 500.f;
-    // glm::mat4 view_mat = glm::lookAt(glm::vec3{glm::sin(ch) * 2, 2, glm::cos(ch) * 2},
-    // glm::vec3{0},
-    //                                  glm::vec3{0, 1, 0});
-    // RenderArgs args{view_mat};
     RenderArgs args{.view_mat = camera_.get_view_mat()};
     renderer_.render(args);
   }
@@ -154,14 +141,43 @@ void App::run() {
   device_->shutdown();
 }
 
-void App::on_key_event(double xpos, double ypos) {
+void App::on_curse_pos_event(double xpos, double ypos) {
   glm::vec2 pos = {xpos, ypos};
   if (first_mouse_) {
     first_mouse_ = false;
     last_pos_ = pos;
     return;
   }
+
   glm::vec2 offset = {pos.x - last_pos_.x, last_pos_.y - pos.y};
   last_pos_ = pos;
- ` camera_.process_mouse(offset);
+  if (hide_mouse_) {
+    camera_.process_mouse(offset);
+  }
+}
+
+void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
+  bool is_press = action == GLFW_PRESS;
+  if (is_press) {
+    if (key == GLFW_KEY_ESCAPE) {
+      hide_mouse_ = !hide_mouse_;
+      on_hide_mouse_change();
+    }
+  }
+}
+
+void App::on_hide_mouse_change() {
+  glfwSetInputMode(window_->get_handle(), GLFW_CURSOR,
+                   hide_mouse_ ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+}
+
+void App::load_config() {
+  std::filesystem::path config_file{resource_dir_ / "config.txt"};
+  std::ifstream f(config_file);
+  if (!f.is_open()) {
+    LCRITICAL("Failed to load config file: {}", config_file.string());
+    return;
+  }
+
+  f >> config_.initial_model_path;
 }
