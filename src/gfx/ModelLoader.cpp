@@ -82,26 +82,28 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
     const auto &mesh = gltf->meshes[mesh_i];
     for (size_t prim_i = 0; prim_i < mesh.primitives_count; prim_i++) {
       const auto &primitive = mesh.primitives[prim_i];
+
       size_t base_vertex = vertices.size();
-      size_t vertex_count = gltf->accessors[primitive.attributes[0].index].count;
-      vertices.resize(vertices.size() + vertex_count);
+      size_t vertex_offset = base_vertex * sizeof(DefaultVertex);
+      size_t index_offset = SIZE_T_MAX;
+      size_t index_count = SIZE_T_MAX;
       if (primitive.indices) {
-        size_t primitive_index_count = primitive.indices->count;
-        indices.reserve(indices.size() + primitive_index_count);
+        index_count = primitive.indices->count;
+        // TODO: uint32_t indices
+        index_offset = indices.size() * sizeof(uint16_t);
+        indices.reserve(indices.size() + index_count);
         for (size_t i = 0; i < primitive.indices->count; i++) {
           indices.push_back(cgltf_accessor_read_index(primitive.indices, i));
         }
-        size_t material_idx = primitive.material - gltf->materials;
-        meshes.push_back(Mesh{
-            .vertex_count = vertex_count,
-            .index_count = primitive_index_count,
-            .material_id = material_idx,
-        });
       }
+      size_t vertex_count{};
       for (size_t attr_i = 0; attr_i < primitive.attributes_count; attr_i++) {
         const auto &attr = primitive.attributes[attr_i];
         cgltf_accessor *accessor = attr.data;
         if (attr.type == cgltf_attribute_type_position) {
+          vertex_count = accessor->count;
+          vertices.resize(vertices.size() + vertex_count);
+
           for (size_t i = 0; i < accessor->count; i++) {
             float pos[3] = {0, 0, 0};
             cgltf_accessor_read_float(accessor, i, pos, 3);
@@ -121,6 +123,15 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
           }
         }
       }
+
+      size_t material_idx = primitive.material - gltf->materials;
+      meshes.push_back(Mesh{
+          .vertex_offset = vertex_offset,
+          .index_offset = index_offset,
+          .vertex_count = vertex_count,
+          .index_count = index_count,
+          .material_id = material_idx,
+      });
     }
   }
 

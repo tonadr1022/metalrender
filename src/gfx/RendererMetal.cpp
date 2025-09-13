@@ -33,6 +33,15 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   raw_device_ = device_->get_device();
   main_cmd_queue_ = raw_device_->newCommandQueue();
 
+  {
+    // TODO: handle resizing/more instances
+    uint32_t instance_capacity = instance_idx_allocator_.get_capacity();
+    instance_material_id_buf_ = NS::TransferPtr(raw_device_->newBuffer(
+        sizeof(uint32_t) * instance_capacity, MTL::ResourceStorageModeShared));
+    instance_model_matrix_buf_ = NS::TransferPtr(raw_device_->newBuffer(
+        sizeof(glm::mat4) * instance_capacity, MTL::ResourceStorageModeShared));
+  }
+
   // TODO: rethink
   all_textures_.resize(k_max_textures);
 
@@ -110,7 +119,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
 
 void RendererMetal::shutdown() {}
 
-void RendererMetal::render() {
+void RendererMetal::render(const RenderArgs &render_args) {
   auto *frame_ar_pool = NS::AutoreleasePool::alloc()->init();
 
   flush_pending_texture_uploads();
@@ -155,27 +164,27 @@ void RendererMetal::render() {
   uniform_data->model = glm::mat4{1};
   auto window_dims = window_->get_window_size();
   float aspect = (window_dims.x != 0) ? float(window_dims.x) / float(window_dims.y) : 1.0f;
-  static float t = 0;
-  t++;
-  float ch = t / 500.f;
-
-  uniform_data->vp = glm::perspective(glm::radians(70.f), aspect, 0.1f, 1000.f) *
-                     glm::lookAt(glm::vec3{glm::sin(ch) * 2, 2, glm::cos(ch) * 2}, glm::vec3{0},
-                                 glm::vec3{0, 1, 0});
+  uniform_data->vp =
+      glm::perspective(glm::radians(70.f), aspect, 0.1f, 1000.f) * render_args.view_mat;
   uniform_data->mat_id = 0;
 
   enc->setVertexBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
   enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
   enc->setFragmentBuffer(scene_arg_buffer_.get(), 0, 0);
   enc->setCullMode(MTL::CullModeBack);
+  // TODO: this is awful
+  for (MTL::Texture *tex : all_textures_) {
+    if (tex) {
+      enc->useResource(tex, MTL::ResourceUsageSample);
+    }
+  }
+
   for (auto &model : models_) {
     for (auto &mesh : model.meshes) {
-      enc->useResource(all_textures_[all_materials_[mesh.material_id].albedo],
-                       MTL::ResourceUsageSample);
-
       // bind mesh stuff
       enc->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, mesh.index_count, MTL::IndexTypeUInt16,
-                                 main_index_buffer_.get(), 0, 1);
+                                 main_index_buffer_.get(), mesh.index_offset, 1,
+                                 (uint32_t)mesh.vertex_offset, 0);
     }
   }
 
@@ -194,6 +203,12 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
 
   pending_texture_uploads_.append_range(result->texture_uploads);
   result->texture_uploads.clear();
+
+  for (const auto &mesh : model.model.meshes) {
+    uint32_t instance_id = instance_idx_allocator_.alloc_idx();
+    *((uint32_t *)instance_material_id_buf_->contents() + instance_id) = mesh.material_id;
+    *((glm::mat4 *)instance_model_matrix_buf_->contents() + instance_id) = glm::mat4{1};
+  }
 
   size_t vertices_size = model.vertices.size() * sizeof(DefaultVertex);
   size_t indices_size = model.indices.size() * sizeof(uint16_t);

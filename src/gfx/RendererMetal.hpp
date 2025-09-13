@@ -2,6 +2,7 @@
 
 #include <Metal/MTLBuffer.hpp>
 #include <filesystem>
+#include <glm/mat4x4.hpp>
 
 #include "Foundation/NSSharedPtr.hpp"
 #include "ModelLoader.hpp"
@@ -36,6 +37,10 @@ struct TextureWithIdx {
   uint32_t idx;
 };
 
+struct RenderArgs {
+  glm::mat4 view_mat;
+};
+
 class RendererMetal {
  public:
   struct CreateInfo {
@@ -46,7 +51,7 @@ class RendererMetal {
 
   void init(const CreateInfo& cinfo);
   void shutdown();
-  void render();
+  void render(const RenderArgs& render_args);
   void load_model(const std::filesystem::path& path);
   TextureWithIdx load_material_image(const TextureDesc& desc);
 
@@ -66,6 +71,11 @@ class RendererMetal {
   NS::SharedPtr<MTL::Buffer> main_uniform_buffer_{};
   NS::SharedPtr<MTL::Buffer> materials_buffer_{};
   NS::SharedPtr<MTL::Buffer> scene_arg_buffer_{};
+
+  IndexAllocator instance_idx_allocator_{1024};
+  NS::SharedPtr<MTL::Buffer> instance_model_matrix_buf_{};
+  NS::SharedPtr<MTL::Buffer> instance_material_id_buf_{};
+
   MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
   constexpr static int k_max_textures{1024};

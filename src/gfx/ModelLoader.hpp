@@ -24,6 +24,8 @@ struct Material {
 };
 
 struct Mesh {
+  size_t vertex_offset;  // element count
+  size_t index_offset;   // index count
   size_t vertex_count;
   size_t index_count;
   size_t material_id;
@@ -54,7 +56,10 @@ class ResourceManager {
     delete instance_;
     instance_ = nullptr;
   }
-  static ResourceManager &get() { return *instance_; }
+  static ResourceManager &get() {
+    assert(instance_);
+    return *instance_;
+  }
 
   std::expected<ModelLoadResult, std::string> load_model(const std::filesystem::path &path,
                                                          RendererMetal &renderer);
