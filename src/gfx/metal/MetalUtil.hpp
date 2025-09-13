@@ -14,6 +14,7 @@ namespace util::mtl {
 void print_err(NS::Error *err);
 
 inline NS::String *string(const char *v) { return NS::String::string(v, NS::ASCIIStringEncoding); }
+inline NS::String *string(const std::string &v) { return string(v.c_str()); }
 
 inline MTL::StorageMode convert_storage_mode(StorageMode mode) {
   switch (mode) {

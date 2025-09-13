@@ -51,7 +51,8 @@ void WindowApple::init(rhi::Device* device, KeyCallbackFn key_callback_fn,
   init_pool->release();
 
   glfwSetWindowUserPointer(window_, this);
-  glfwSetKeyCallback(window_, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+  glfwSetKeyCallback(window_, [](GLFWwindow* window, int key, [[maybe_unused]] int scancode,
+                                 int action, int mods) {
     auto* win = reinterpret_cast<WindowApple*>(glfwGetWindowUserPointer(window));
     win->key_callback_fn_(key, action, mods);
   });

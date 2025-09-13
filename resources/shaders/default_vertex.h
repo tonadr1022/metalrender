@@ -1,0 +1,12 @@
+#ifndef DEFAULT_VERTEX_H
+#define DEFAULT_VERTEX_H
+
+#include "shader_core.h"
+
+struct DefaultVertex {
+  packed_float4 pos;
+  packed_float2 uv;
+  packed_float3 normal;
+};
+
+#endif

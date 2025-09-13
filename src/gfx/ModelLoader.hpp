@@ -7,6 +7,7 @@
 #include <string>
 
 #include "GFXTypes.hpp"
+#include "default_vertex.h"
 
 namespace MTL {
 class Texture;

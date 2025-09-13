@@ -29,6 +29,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   device_ = cinfo.device;
   window_ = cinfo.window;
   shader_dir_ = cinfo.resource_dir / "shaders";
+  resource_dir_ = cinfo.resource_dir;
   assert(!shader_dir_.empty());
   raw_device_ = device_->get_device();
   main_cmd_queue_ = raw_device_->newCommandQueue();
@@ -157,14 +158,13 @@ void RendererMetal::render(const RenderArgs &render_args) {
 
   // TODO: class for this
   size_t uniforms_offset = (curr_frame_ % frames_in_flight_) * util::align_256(sizeof(Uniforms));
-
   auto *uniform_data = reinterpret_cast<Uniforms *>(
       reinterpret_cast<uint8_t *>(main_uniform_buffer_->contents()) + uniforms_offset);
   auto window_dims = window_->get_window_size();
   float aspect = (window_dims.x != 0) ? float(window_dims.x) / float(window_dims.y) : 1.0f;
   uniform_data->vp =
       glm::perspective(glm::radians(70.f), aspect, 0.1f, 10000.f) * render_args.view_mat;
-  uniform_data->render_mode = RenderMode::Normals;
+  uniform_data->render_mode = RenderMode::Default;
 
   enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
   enc->setVertexBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
@@ -258,9 +258,9 @@ TextureWithIdx RendererMetal::load_material_image(const TextureDesc &desc) {
 
 std::optional<Shader> RendererMetal::load_shader() {
   std::string src = util::load_file_to_string(shader_dir_ / "basic1.metal");
-  NS::String *path = NS::String::string(src.c_str(), NS::ASCIIStringEncoding);
   NS::Error *err{};
-  MTL::Library *shader_lib = raw_device_->newLibrary(path, nullptr, &err);
+  MTL::Library *shader_lib = raw_device_->newLibrary(
+      util::mtl::string(resource_dir_ / "shader_out" / "default.metallib"), &err);
 
   if (err != nullptr) {
     util::mtl::print_err(err);

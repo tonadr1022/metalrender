@@ -1,7 +1,8 @@
 #include <metal_stdlib>
 using namespace metal;
 
-constexpr constant int k_max_materials = 1024;
+#include "shader_constants.h"
+#include "default_vertex.h"
 
 struct v2f {
   float4 position [[position]];
@@ -9,12 +10,6 @@ struct v2f {
   half3 normal;
   float2 uv;
   uint material_id [[flat]];
-};
-
-struct Vertex {
-    packed_float4 pos;
-    packed_float2 uv;
-    packed_float3 normal;
 };
 
 struct Material {
@@ -44,14 +39,14 @@ struct InstanceMaterialId {
 };
 
 v2f vertex vertexMain(uint vertexId [[vertex_id]],
-                      device const Vertex* vertices [[buffer(0)]],
+                      device const DefaultVertex* vertices [[buffer(0)]],
                       constant Uniforms& uniforms [[buffer(1)]],
                       device const InstanceModel* models [[buffer(2)]],
                       device const InstanceMaterialId* instance_materials [[buffer(3)]],
                       uint inst_id [[instance_id]]) {
     v2f o;
     float4x4 model = models[inst_id].model;
-    device const Vertex* vert = vertices + vertexId;
+    device const DefaultVertex* vert = vertices + vertexId;
     o.position = uniforms.vp * model * float4(vert->pos.xyz, 1.0);
     o.color = half4(half3(vert->normal.xyz) * .5 + .5, 1.0);
     o.material_id = instance_materials[inst_id].mat_id;

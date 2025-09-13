@@ -7,6 +7,7 @@
 #include "Foundation/NSSharedPtr.hpp"
 #include "ModelLoader.hpp"
 #include "core/Allocator.hpp"
+#include "shader_constants.h"
 
 class MetalDevice;
 class WindowApple;
@@ -78,7 +79,6 @@ class RendererMetal {
 
   MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
-  constexpr static int k_max_textures{1024};
   constexpr static int k_max_materials{1024};
   std::vector<Material> all_materials_;
   std::vector<MTL::Texture*> all_textures_;
@@ -86,6 +86,7 @@ class RendererMetal {
   void flush_pending_texture_uploads();
 
   std::filesystem::path shader_dir_{};
+  std::filesystem::path resource_dir_{};
   Shader forward_pass_shader_{};
   size_t curr_frame_{};
   size_t frames_in_flight_{2};

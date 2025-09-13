@@ -1,1 +1,2 @@
 /Users/tony/models/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf
+/Users/tony/models/glTF-Sample-Assets/Models/Cube/glTF/Cube.gltf
