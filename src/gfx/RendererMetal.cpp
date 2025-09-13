@@ -20,6 +20,7 @@ namespace {
 struct Uniforms {
   glm::mat4 model;
   glm::mat4 vp;
+  int32_t mat_id;
 };
 
 }  // namespace
@@ -72,6 +73,27 @@ void RendererMetal::init(const CreateInfo &cinfo) {
 
   MTL::ArgumentEncoder *frag_enc = forward_pass_shader_.frag_func->newArgumentEncoder(0);
   scene_arg_buffer_ = NS::TransferPtr(raw_device_->newBuffer(frag_enc->encodedLength(), 0));
+  {
+    MTL::ArgumentDescriptor *arg0 = MTL::ArgumentDescriptor::alloc()->init();
+    arg0->setIndex(0);
+    arg0->setAccess(MTL::ArgumentAccessReadOnly);
+    arg0->setArrayLength(k_max_textures);
+    arg0->setDataType(MTL::DataTypeTexture);
+    arg0->setTextureType(MTL::TextureType2D);
+
+    MTL::ArgumentDescriptor *arg1 = MTL::ArgumentDescriptor::alloc()->init();
+    arg1->setIndex(k_max_textures);
+    arg1->setAccess(MTL::ArgumentAccessReadOnly);
+    arg1->setDataType(MTL::DataTypePointer);
+    NS::Object *args_arr[] = {arg0, arg1};
+    NS::Array *args = NS::Array::array(args_arr, 2);
+    global_arg_enc_ = raw_device_->newArgumentEncoder(args);
+    global_arg_enc_->setArgumentBuffer(scene_arg_buffer_.get(), 0);
+    for (auto &i : args_arr) {
+      i->release();
+    }
+  }
+
   frag_enc->setArgumentBuffer(scene_arg_buffer_.get(), 0);
 
   materials_buffer_ = NS::TransferPtr(raw_device_->newBuffer(k_max_materials, 0));
@@ -140,6 +162,7 @@ void RendererMetal::render() {
   uniform_data->vp = glm::perspective(glm::radians(70.f), aspect, 0.1f, 1000.f) *
                      glm::lookAt(glm::vec3{glm::sin(ch) * 2, 2, glm::cos(ch) * 2}, glm::vec3{0},
                                  glm::vec3{0, 1, 0});
+  uniform_data->mat_id = 0;
 
   enc->setVertexBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
   enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
@@ -225,9 +248,6 @@ std::optional<Shader> RendererMetal::load_shader() {
 void RendererMetal::flush_pending_texture_uploads() {
   if (!pending_texture_uploads_.empty()) {
     MTL::CommandBuffer *buf = main_cmd_queue_->commandBuffer();
-    // TODO: global argument buffer
-    auto *frag_enc = forward_pass_shader_.frag_func->newArgumentEncoder(0);
-    frag_enc->setArgumentBuffer(scene_arg_buffer_.get(), 0);
     MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
     for (auto &upload : pending_texture_uploads_) {
       MTL::Texture *tex = upload.tex;
@@ -239,7 +259,7 @@ void RendererMetal::flush_pending_texture_uploads() {
       MTL::Size img_size = MTL::Size::Make(upload.dims.x, upload.dims.y, upload.dims.z);
       blit_enc->copyFromBuffer(upload_buf, 0, upload.bytes_per_row, 0, img_size, tex, 0, 0, origin);
       blit_enc->generateMipmaps(tex);
-      frag_enc->setTexture(tex, upload.idx);
+      global_arg_enc_->setTexture(tex, upload.idx);
       tex->retain();
       all_textures_[upload.idx] = tex;
     }

@@ -66,6 +66,7 @@ class RendererMetal {
   NS::SharedPtr<MTL::Buffer> main_uniform_buffer_{};
   NS::SharedPtr<MTL::Buffer> materials_buffer_{};
   NS::SharedPtr<MTL::Buffer> scene_arg_buffer_{};
+  MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
   constexpr static int k_max_textures{1024};
   constexpr static int k_max_materials{1024};

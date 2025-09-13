@@ -28,17 +28,17 @@ struct SceneResourcesBuf {
 struct Uniforms {
     float4x4 model;
     float4x4 vp;
+    int mat_id;
 };
 
 v2f vertex vertexMain(uint vertexId [[vertex_id]],
                       device const Vertex* vertices [[buffer(0)]],
-                      constant Uniforms& uniforms [[buffer(1)]],
-                      constant int& mat_id [[buffer(2)]]) {
+                      constant Uniforms& uniforms [[buffer(1)]]) {
     v2f o;
     device const Vertex* vert = vertices + vertexId;
     o.position = uniforms.vp * uniforms.model * float4(vert->pos.xyz, 1.0);
     o.color = half4(half3(vert->normal.xyz) * .5 + .5, 1.0);
-    o.material_id = mat_id;
+    o.material_id = uniforms.mat_id;
     o.uv = vert->uv;
     return o;
 }
