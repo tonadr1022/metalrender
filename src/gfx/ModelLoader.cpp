@@ -8,17 +8,17 @@
 #include <Metal/Metal.hpp>
 #include <format>
 #include <glm/gtx/quaternion.hpp>
+#include <span>
 
 #include "RendererMetal.hpp"
-#include "metal/MetalUtil.hpp"
+#include "meshoptimizer.h"
 
 namespace {
 
 glm::mat4 calc_transform(const glm::vec3 &translation, const glm::quat &rotation,
                          const glm::vec3 &scale) {
-  glm::mat4 S = glm::scale(glm::mat4{1}, scale);
-  glm::mat4 R = glm::mat4_cast(rotation);
-  return glm::translate(glm::mat4{1}, translation) * R * S;
+  return glm::translate(glm::mat4{1}, translation) * glm::mat4_cast(rotation) *
+         glm::scale(glm::mat4{1}, scale);
 }
 
 void update_global_transforms(Model &model, uint32_t node_i, const glm::mat4 &parent_transform) {
@@ -29,17 +29,49 @@ void update_global_transforms(Model &model, uint32_t node_i, const glm::mat4 &pa
   }
 }
 
+// Ref: https://github.com/zeux/meshoptimizer
+MeshletData load_meshlet_data(std::span<DefaultVertex> vertices, std::span<IndexT> indices) {
+  const size_t max_meshlets = meshopt_buildMeshletsBound(indices.size(), k_max_vertices_per_meshlet,
+                                                         k_max_triangles_per_meshlet);
+  // cone_weight set to a value between 0 and 1 to balance cone culling efficiency with other forms
+  // of culling like frustum or occlusion culling (0.25 is a reasonable default).
+  const float cone_weight{0.0f};
+  std::vector<meshopt_Meshlet> meshlets(max_meshlets);
+  std::vector<uint32_t> meshlet_vertices(indices.size());
+  std::vector<uint8_t> meshlet_triangles(indices.size());
+
+  const size_t meshlet_count = meshopt_buildMeshlets(
+      meshlets.data(), meshlet_vertices.data(), meshlet_triangles.data(), indices.data(),
+      indices.size(), &vertices[0].pos.x, vertices.size(), sizeof(DefaultVertex),
+      k_max_vertices_per_meshlet, k_max_triangles_per_meshlet, cone_weight);
+
+  const meshopt_Meshlet &last = meshlets[meshlet_count - 1];
+  meshlet_vertices.resize(last.vertex_offset + last.vertex_count);
+  meshlet_triangles.resize(last.triangle_offset + (last.triangle_count * 3));
+  meshlets.resize(meshlet_count);
+
+  for (auto &m : meshlets) {
+    meshopt_optimizeMeshlet(&meshlet_vertices[m.vertex_offset],
+                            &meshlet_triangles[m.triangle_offset], m.triangle_count,
+                            m.vertex_count);
+  }
+
+  return MeshletData{.meshlets = std::move(meshlets),
+                     .meshlet_vertices = std::move(meshlet_vertices),
+                     .meshlet_triangles = std::move(meshlet_triangles)};
+}
+
 }  // namespace
 
 void update_global_transforms(Model &model) {
-  for (uint32_t root_node_i : model.root_nodes) {
+  for (const uint32_t root_node_i : model.root_nodes) {
     update_global_transforms(model, root_node_i, model.root_transform);
   }
 }
 
 std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
     const std::filesystem::path &path, RendererMetal &renderer) {
-  cgltf_options gltf_load_opts{};
+  const cgltf_options gltf_load_opts{};
   cgltf_data *raw_gltf{};
   cgltf_result gltf_res = cgltf_parse_file(&gltf_load_opts, path.c_str(), &raw_gltf);
   std::unique_ptr<cgltf_data, void (*)(cgltf_data *)> gltf(raw_gltf, cgltf_free);
@@ -48,10 +80,9 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
   if (gltf_res != cgltf_result_success) {
     if (gltf_res == cgltf_result_file_not_found) {
       return std::unexpected(std::format("Failed to load GLTF. File not found {}", path.c_str()));
-    } else {
-      return std::unexpected(std::format("Failed to laod GLTF with error {} for file {}",
-                                         static_cast<int>(gltf_res), path.c_str()));
     }
+    return std::unexpected(std::format("Failed to laod GLTF with error {} for file {}",
+                                       static_cast<int>(gltf_res), path.c_str()));
   }
 
   gltf_res = cgltf_load_buffers(&gltf_load_opts, gltf.get(), path.c_str());
@@ -70,16 +101,15 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
     const cgltf_image &img = gltf->images[gltf_img_i];
     if (!img.buffer_view) {
       int w, h, comp;
-      std::filesystem::path full_img_path = directory_path / img.uri;
-      uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
-      uint32_t mip_levels = static_cast<uint32_t>(std::floor(std::log2(std::max(w, h)))) + 1;
-      TextureDesc desc{.format = TextureFormat::R8G8B8A8Unorm,
-                       .storage_mode = StorageMode::GPUOnly,
-                       .dims = glm::uvec3{w, h, 1},
-                       .mip_levels = mip_levels,
-                       .array_length = 1,
-                       .data = data};
-      TextureWithIdx texture_with_idx = renderer.load_material_image(desc);
+      const std::filesystem::path full_img_path = directory_path / img.uri;
+      const uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
+      const uint32_t mip_levels = static_cast<uint32_t>(std::floor(std::log2(std::max(w, h)))) + 1;
+      const TextureDesc desc{.format = TextureFormat::R8G8B8A8Unorm,
+                             .storage_mode = StorageMode::GPUOnly,
+                             .dims = glm::uvec3{w, h, 1},
+                             .mip_levels = mip_levels,
+                             .array_length = 1};
+      const TextureWithIdx texture_with_idx = renderer.load_material_image(desc);
       texture_uploads.emplace_back(TextureUpload{.data = data,
                                                  .tex = texture_with_idx.tex,
                                                  .idx = texture_with_idx.idx,
@@ -89,24 +119,23 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
         assert(0);
       }
       return texture_with_idx.idx;
-    } else {
-      assert(0 && "need to handle yet");
-      return UINT32_MAX;
     }
+    assert(0 && "need to handle yet");
+    return UINT32_MAX;
   };
 
   auto &result_nodes = result.model.nodes;
 
   auto &materials = result.materials;
   for (size_t material_i = 0; material_i < gltf->materials_count; material_i++) {
-    cgltf_material *gltf_mat = &gltf->materials[material_i];
+    const cgltf_material *gltf_mat = &gltf->materials[material_i];
     Material material{};
     auto set_and_load_material_img = [&gltf, &load_img](const cgltf_texture_view *tex_view,
                                                         uint32_t &result_tex_id) {
       if (!tex_view || !tex_view->texture || !tex_view->texture->image) {
         return;
       }
-      size_t gltf_image_i = tex_view->texture->image - gltf->images;
+      const size_t gltf_image_i = tex_view->texture->image - gltf->images;
       result_tex_id = load_img(gltf_image_i);
     };
 
@@ -134,14 +163,14 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
         primitive_mesh_indices_per_mesh[mesh_i].push_back(overall_mesh_i);
         const cgltf_primitive &primitive = mesh.primitives[prim_i];
 
-        size_t base_vertex = all_vertices.size();
-        size_t vertex_offset = base_vertex * sizeof(DefaultVertex);
-        size_t index_offset = SIZE_T_MAX;
-        size_t index_count = SIZE_T_MAX;
+        const size_t base_vertex = all_vertices.size();
+        const size_t vertex_offset = base_vertex * sizeof(DefaultVertex);
+        size_t index_offset = SIZE_MAX;
+        size_t index_count = SIZE_MAX;
         if (primitive.indices) {
           index_count = primitive.indices->count;
           // TODO: uint32_t indices
-          index_offset = all_indices.size() * sizeof(uint16_t);
+          index_offset = all_indices.size() * sizeof(IndexT);
           all_indices.reserve(all_indices.size() + index_count);
           for (size_t i = 0; i < primitive.indices->count; i++) {
             all_indices.push_back(cgltf_accessor_read_index(primitive.indices, i));
@@ -152,7 +181,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
         all_vertices.resize(all_vertices.size() + vertex_count);
         for (size_t attr_i = 0; attr_i < primitive.attributes_count; attr_i++) {
           const auto &attr = primitive.attributes[attr_i];
-          cgltf_accessor *accessor = attr.data;
+          const cgltf_accessor *accessor = attr.data;
           if (attr.type == cgltf_attribute_type_position) {
             for (size_t i = 0; i < accessor->count; i++) {
               float pos[3] = {0, 0, 0};
@@ -174,7 +203,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
           }
         }
 
-        size_t material_idx = primitive.material - gltf->materials;
+        const size_t material_idx = primitive.material - gltf->materials;
         meshes.push_back(Mesh{
             .vertex_offset = vertex_offset,
             .index_offset = index_offset,
@@ -184,27 +213,34 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
         });
       }
     }
+    auto &meshlet_datas = result.model.meshlet_datas;
+    for (const Mesh &mesh : meshes) {
+      meshlet_datas.emplace_back(load_meshlet_data(
+          std::span(&all_vertices[mesh.vertex_offset / sizeof(DefaultVertex)], mesh.vertex_count),
+          std::span(&all_indices[mesh.index_offset / sizeof(IndexT)], mesh.index_count)));
+    }
   }
   {
     // process nodes
     for (size_t node_i = 0; node_i < gltf->nodes_count; node_i++) {
       const cgltf_node &gltf_node = gltf->nodes[node_i];
 
-      glm::vec3 translation = gltf_node.has_translation
-                                  ? glm::vec3{gltf_node.translation[0], gltf_node.translation[1],
-                                              gltf_node.translation[2]}
-                                  : glm::vec3{};
-      glm::quat rotation = gltf_node.has_rotation
-                               ? glm::quat{gltf_node.rotation[3], gltf_node.rotation[0],
-                                           gltf_node.rotation[1], gltf_node.rotation[2]}
-                               : glm::identity<glm::quat>();
-      glm::vec3 scale = gltf_node.has_scale
-                            ? glm::vec3{gltf_node.scale[0], gltf_node.scale[1], gltf_node.scale[2]}
-                            : glm::vec3{1};
+      const glm::vec3 translation =
+          gltf_node.has_translation ? glm::vec3{gltf_node.translation[0], gltf_node.translation[1],
+                                                gltf_node.translation[2]}
+                                    : glm::vec3{};
+      const glm::quat rotation = gltf_node.has_rotation
+                                     ? glm::quat{gltf_node.rotation[3], gltf_node.rotation[0],
+                                                 gltf_node.rotation[1], gltf_node.rotation[2]}
+                                     : glm::identity<glm::quat>();
+      const glm::vec3 scale =
+          gltf_node.has_scale
+              ? glm::vec3{gltf_node.scale[0], gltf_node.scale[1], gltf_node.scale[2]}
+              : glm::vec3{1};
 
       std::vector<uint32_t> children;
       if (gltf_node.mesh) {
-        uint32_t mesh_id = static_cast<uint32_t>(gltf_node.mesh - gltf->meshes);
+        auto mesh_id = static_cast<uint32_t>(gltf_node.mesh - gltf->meshes);
         for (auto prim_mesh_id : primitive_mesh_indices_per_mesh[mesh_id]) {
           children.push_back(static_cast<uint32_t>(result_nodes.size()));
           result_nodes.emplace_back(Node{.mesh_id = prim_mesh_id});

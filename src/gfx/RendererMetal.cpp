@@ -8,20 +8,15 @@
 #include "QuartzCore/CAMetalLayer.hpp"
 #include "WindowApple.hpp"
 #include "core/BitUtil.hpp"
-#include "core/FileUtil.hpp"
 #include "core/Logger.hpp"
 #include "glm/ext/matrix_clip_space.hpp"
 #include "metal/MetalDevice.hpp"
 #include "metal/MetalUtil.hpp"
+#include "shader_global_uniforms.h"
 
 namespace {
 
 enum class RenderMode : uint32_t { Default, Normals, NormalMap };
-
-struct Uniforms {
-  glm::mat4 vp{};
-  RenderMode render_mode{RenderMode::Default};
-};
 
 }  // namespace
 
@@ -36,7 +31,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
 
   {
     // TODO: handle resizing/more instances
-    uint32_t instance_capacity = instance_idx_allocator_.get_capacity();
+    const uint32_t instance_capacity = instance_idx_allocator_.get_capacity();
     instance_material_id_buf_ = NS::TransferPtr(raw_device_->newBuffer(
         sizeof(uint32_t) * instance_capacity, MTL::ResourceStorageModeShared));
     instance_model_matrix_buf_ = NS::TransferPtr(raw_device_->newBuffer(
@@ -63,7 +58,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
 
   {
     // main pipeline
-    forward_pass_shader_ = load_shader().value();
+    load_shaders();
     MTL::RenderPipelineDescriptor *pipeline_desc = MTL::RenderPipelineDescriptor::alloc()->init();
     pipeline_desc->setVertexFunction(forward_pass_shader_.vert_func);
     pipeline_desc->setFragmentFunction(forward_pass_shader_.frag_func);
@@ -80,6 +75,28 @@ void RendererMetal::init(const CreateInfo &cinfo) {
 
     pipeline_desc->release();
   }
+  // {
+  //   // mesh shader pipeline
+  //   MTL::MeshRenderPipelineDescriptor *pipeline_desc =
+  //       MTL::MeshRenderPipelineDescriptor::alloc()->init();
+  //   pipeline_desc->setMeshFunction(forward_mesh_shader_.mesh_func);
+  //   pipeline_desc->setObjectFunction(forward_mesh_shader_.object_func);
+  //   pipeline_desc->setFragmentFunction(forward_mesh_shader_.frag_func);
+  //   pipeline_desc->setLabel(util::mtl::string("basic mesh"));
+  //   pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+  //   pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
+  //
+  //   NS::Error *err{};
+  //   mesh_pso_ =
+  //       raw_device_->newRenderPipelineState(pipeline_desc, MTL::PipelineOptionNone, nullptr,
+  //       &err);
+  //   if (err) {
+  //     util::mtl::print_err(err);
+  //     exit(1);
+  //   }
+  //
+  //   pipeline_desc->release();
+  // }
 
   MTL::ArgumentEncoder *frag_enc = forward_pass_shader_.frag_func->newArgumentEncoder(0);
   scene_arg_buffer_ = NS::TransferPtr(raw_device_->newBuffer(frag_enc->encodedLength(), 0));
@@ -96,7 +113,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     // arg1->setAccess(MTL::ArgumentAccessReadOnly);
     // arg1->setDataType(MTL::DataTypePointer);
     std::array<NS::Object *, 1> args_arr{arg0};
-    NS::Array *args = NS::Array::array(args_arr.data(), args_arr.size());
+    const NS::Array *args = NS::Array::array(args_arr.data(), args_arr.size());
     global_arg_enc_ = raw_device_->newArgumentEncoder(args);
     global_arg_enc_->setArgumentBuffer(scene_arg_buffer_.get(), 0);
     for (auto &i : args_arr) {
@@ -125,7 +142,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
 
   flush_pending_texture_uploads();
 
-  CA::MetalDrawable *drawable = window_->metal_layer_->nextDrawable();
+  const CA::MetalDrawable *drawable = window_->metal_layer_->nextDrawable();
   if (!drawable) {
     frame_ar_pool->release();
     return;
@@ -154,47 +171,53 @@ void RendererMetal::render(const RenderArgs &render_args) {
     depth_stencil_desc->setDepthWriteEnabled(true);
     enc->setDepthStencilState(raw_device_->newDepthStencilState(depth_stencil_desc));
   }
-  enc->setRenderPipelineState(main_pso_);
-
-  // TODO: class for this
-  size_t uniforms_offset = (curr_frame_ % frames_in_flight_) * util::align_256(sizeof(Uniforms));
-  auto *uniform_data = reinterpret_cast<Uniforms *>(
-      reinterpret_cast<uint8_t *>(main_uniform_buffer_->contents()) + uniforms_offset);
-  auto window_dims = window_->get_window_size();
-  float aspect = (window_dims.x != 0) ? float(window_dims.x) / float(window_dims.y) : 1.0f;
-  uniform_data->vp =
-      glm::perspective(glm::radians(70.f), aspect, 0.1f, 10000.f) * render_args.view_mat;
-  uniform_data->render_mode = RenderMode::Default;
-
-  enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
-  enc->setVertexBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
-  enc->setVertexBuffer(instance_model_matrix_buf_.get(), 0, 2);
-  enc->setVertexBuffer(instance_material_id_buf_.get(), 0, 3);
-  enc->setFragmentBuffer(scene_arg_buffer_.get(), 0, 0);
-  enc->setFragmentBuffer(materials_buffer_.get(), 0, 1);
-  enc->setFragmentBuffer(main_uniform_buffer_.get(), uniforms_offset, 2);
-
-  enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
-  enc->setCullMode(MTL::CullModeBack);
   // TODO: this is awful
-  for (MTL::Texture *tex : all_textures_) {
+  for (const MTL::Texture *tex : all_textures_) {
     if (tex) {
       enc->useResource(tex, MTL::ResourceUsageSample);
     }
   }
+  // TODO: class for this
+  const size_t uniforms_offset =
+      (curr_frame_ % frames_in_flight_) * util::align_256(sizeof(Uniforms));
+  auto *uniform_data = reinterpret_cast<Uniforms *>(
+      reinterpret_cast<uint8_t *>(main_uniform_buffer_->contents()) + uniforms_offset);
+  auto window_dims = window_->get_window_size();
+  const float aspect = (window_dims.x != 0) ? float(window_dims.x) / float(window_dims.y) : 1.0f;
+  uniform_data->vp =
+      glm::perspective(glm::radians(70.f), aspect, 0.1f, 10000.f) * render_args.view_mat;
+  uniform_data->render_mode = (uint32_t)RenderMode::Default;
 
-  uint32_t i = 0;
-  for (auto &model : models_) {
-    for (auto &node : model.nodes) {
-      if (node.mesh_id == Model::invalid_id) {
-        continue;
+  if (render_mesh_shader_) {
+    enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
+    enc->setMeshBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
+  } else {
+    enc->setRenderPipelineState(main_pso_);
+    enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
+    enc->setVertexBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
+    enc->setVertexBuffer(instance_model_matrix_buf_.get(), 0, 2);
+    enc->setVertexBuffer(instance_material_id_buf_.get(), 0, 3);
+    enc->setFragmentBuffer(scene_arg_buffer_.get(), 0, 0);
+    enc->setFragmentBuffer(materials_buffer_.get(), 0, 1);
+    enc->setFragmentBuffer(main_uniform_buffer_.get(), uniforms_offset, 2);
+
+    enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
+    enc->setCullMode(MTL::CullModeBack);
+
+    uint32_t i = 0;
+    for (auto &model : models_) {
+      for (auto &node : model.nodes) {
+        if (node.mesh_id == Model::invalid_id) {
+          continue;
+        }
+        auto &mesh = model.meshes[node.mesh_id];
+        // bind mesh stuff
+        enc->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, mesh.index_count,
+                                   MTL::IndexTypeUInt16, main_index_buffer_.get(),
+                                   mesh.index_offset, 1,
+                                   (uint32_t)(mesh.vertex_offset / sizeof(DefaultVertex)), i);
+        i++;
       }
-      auto &mesh = model.meshes[node.mesh_id];
-      // bind mesh stuff
-      enc->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, mesh.index_count, MTL::IndexTypeUInt16,
-                                 main_index_buffer_.get(), mesh.index_offset, 1,
-                                 (uint32_t)(mesh.vertex_offset / sizeof(DefaultVertex)), i);
-      i++;
     }
   }
 
@@ -219,13 +242,13 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
       continue;
     }
     auto &mesh = model.model.meshes[node.mesh_id];
-    uint32_t instance_id = instance_idx_allocator_.alloc_idx();
+    const uint32_t instance_id = instance_idx_allocator_.alloc_idx();
     *((uint32_t *)instance_material_id_buf_->contents() + instance_id) = mesh.material_id;
     *((glm::mat4 *)instance_model_matrix_buf_->contents() + instance_id) = node.global_transform;
   }
 
-  size_t vertices_size = model.vertices.size() * sizeof(DefaultVertex);
-  size_t indices_size = model.indices.size() * sizeof(uint16_t);
+  const size_t vertices_size = model.vertices.size() * sizeof(DefaultVertex);
+  const size_t indices_size = model.indices.size() * sizeof(uint16_t);
   main_vert_buffer_ =
       NS::TransferPtr(raw_device_->newBuffer(vertices_size, MTL::ResourceStorageModeShared));
   memcpy(main_vert_buffer_->contents(), model.vertices.data(), vertices_size);
@@ -252,26 +275,30 @@ TextureWithIdx RendererMetal::load_material_image(const TextureDesc &desc) {
   texture_desc->setUsage(MTL::TextureUsageShaderRead);
   MTL::Texture *tex = raw_device_->newTexture(texture_desc);
   texture_desc->release();
-  uint32_t idx = texture_index_allocator_.alloc_idx();
-  return {.tex = tex, .idx = idx};
+  return {.tex = tex, .idx = texture_index_allocator_.alloc_idx()};
 }
 
-std::optional<Shader> RendererMetal::load_shader() {
-  std::string src = util::load_file_to_string(shader_dir_ / "basic1.metal");
+void RendererMetal::load_shaders() {
   NS::Error *err{};
   MTL::Library *shader_lib = raw_device_->newLibrary(
       util::mtl::string(resource_dir_ / "shader_out" / "default.metallib"), &err);
 
   if (err != nullptr) {
     util::mtl::print_err(err);
-    return std::nullopt;
+    return;
   }
 
-  Shader result{};
-  result.vert_func = shader_lib->newFunction(util::mtl::string("vertexMain"));
-  result.frag_func = shader_lib->newFunction(util::mtl::string("fragmentMain"));
+  {
+    forward_pass_shader_.vert_func = shader_lib->newFunction(util::mtl::string("vertexMain"));
+    forward_pass_shader_.frag_func = shader_lib->newFunction(util::mtl::string("fragmentMain"));
+
+    forward_mesh_shader_.mesh_func = shader_lib->newFunction(util::mtl::string("basic1_mesh_main"));
+    forward_mesh_shader_.object_func =
+        shader_lib->newFunction(util::mtl::string("basic1_object_main"));
+    forward_mesh_shader_.frag_func =
+        shader_lib->newFunction(util::mtl::string("basic1_fragment_main"));
+  }
   shader_lib->release();
-  return result;
 }
 
 void RendererMetal::flush_pending_texture_uploads() {
@@ -280,12 +307,12 @@ void RendererMetal::flush_pending_texture_uploads() {
     MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
     for (auto &upload : pending_texture_uploads_) {
       MTL::Texture *tex = upload.tex;
-      size_t src_img_size = upload.bytes_per_row * upload.dims.y;
+      const auto src_img_size = static_cast<size_t>(upload.bytes_per_row) * upload.dims.y;
       MTL::Buffer *upload_buf =
           raw_device_->newBuffer(src_img_size, MTL::ResourceStorageModeShared);
       memcpy(upload_buf->contents(), upload.data, src_img_size);
-      MTL::Origin origin = MTL::Origin::Make(0, 0, 0);
-      MTL::Size img_size = MTL::Size::Make(upload.dims.x, upload.dims.y, upload.dims.z);
+      const MTL::Origin origin = MTL::Origin::Make(0, 0, 0);
+      const MTL::Size img_size = MTL::Size::Make(upload.dims.x, upload.dims.y, upload.dims.z);
       blit_enc->copyFromBuffer(upload_buf, 0, upload.bytes_per_row, 0, img_size, tex, 0, 0, origin);
       blit_enc->generateMipmaps(tex);
       global_arg_enc_->setTexture(tex, upload.idx);

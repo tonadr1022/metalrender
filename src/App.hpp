@@ -12,7 +12,7 @@ class Camera {
   bool update_pos(GLFWwindow *window, float dt);
   bool process_mouse(glm::vec2 offset);
 
-  glm::vec3 pos;
+  glm::vec3 pos{};
   float pitch{}, yaw{};
   glm::vec3 front{}, right{};
   glm::vec3 max_velocity{5.f};
@@ -48,7 +48,7 @@ struct App {
   std::unique_ptr<WindowApple> window_;
   Camera camera_;
   bool first_mouse_{true};
-  bool hide_mouse_{true};
+  bool hide_mouse_{false};
 
   glm::vec2 last_pos_{};
   // TODO: ptr for impl/RHI

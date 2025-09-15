@@ -3,6 +3,7 @@ using namespace metal;
 
 #include "shader_constants.h"
 #include "default_vertex.h"
+#include "shader_global_uniforms.h"
 
 struct v2f {
   float4 position [[position]];
@@ -24,11 +25,6 @@ struct SceneResourcesBuf {
 #define RENDER_MODE_DEFAULT 0
 #define RENDER_MODE_NORMALS 1
 #define RENDER_MODE_NORMAL_MAP 2
-
-struct Uniforms {
-    float4x4 vp;
-    uint32_t render_mode;
-};
 
 struct InstanceModel {
     float4x4 model;

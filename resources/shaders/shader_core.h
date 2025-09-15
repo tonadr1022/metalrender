@@ -3,6 +3,9 @@
 
 #ifdef __METAL__
 
+#define uint32_t uint
+#define ATTR_POSITION [[position]]
+
 #else
 #include <glm/mat4x4.hpp>
 #define packed_float4x4 glm::mat4
@@ -15,6 +18,7 @@
 #define float3 glm::vec3
 #define float4 glm::vec4
 
+#define ATTR_POSITION
 #endif
 
 #endif

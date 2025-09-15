@@ -6,16 +6,18 @@
 #include <glm/mat4x4.hpp>
 #include <string>
 
-#include "GFXTypes.hpp"
 #include "default_vertex.h"
+#include "meshoptimizer.h"
 
 namespace MTL {
 class Texture;
 class Device;
 }  // namespace MTL
 
+using IndexT = uint16_t;
+
 struct TextureUpload {
-  void *data;
+  const void *data;
   MTL::Texture *tex;
   uint32_t idx;
   glm::uvec3 dims;
@@ -42,23 +44,30 @@ struct Node {
   uint32_t mesh_id{UINT32_MAX};
 };
 
+struct MeshletData {
+  std::vector<meshopt_Meshlet> meshlets;
+  std::vector<uint32_t> meshlet_vertices;
+  std::vector<uint8_t> meshlet_triangles;
+};
+
 struct Model {
   constexpr static uint32_t invalid_id = UINT32_MAX;
   std::vector<Node> nodes;
   std::vector<uint32_t> root_nodes;
   std::vector<Mesh> meshes;
+  std::vector<MeshletData> meshlet_datas;
   glm::mat4 root_transform{1};
 };
 
 struct ModelLoadResult {
   Model model;
   std::vector<DefaultVertex> vertices;
-  std::vector<uint16_t> indices;
+  std::vector<IndexT> indices;
   std::vector<TextureUpload> texture_uploads;
   std::vector<Material> materials;
 };
 
-void update_global_transforms(const Model &model);
+void update_global_transforms(Model &model);
 
 class RendererMetal;
 

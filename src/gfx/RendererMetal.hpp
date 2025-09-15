@@ -5,6 +5,7 @@
 #include <glm/mat4x4.hpp>
 
 #include "Foundation/NSSharedPtr.hpp"
+#include "GFXTypes.hpp"
 #include "ModelLoader.hpp"
 #include "core/Allocator.hpp"
 #include "shader_constants.h"
@@ -29,6 +30,8 @@ class RenderPipelineState;
 }  // namespace MTL
 
 struct Shader {
+  MTL::Function* object_func{};
+  MTL::Function* mesh_func{};
   MTL::Function* vert_func{};
   MTL::Function* frag_func{};
 };
@@ -57,7 +60,7 @@ class RendererMetal {
   TextureWithIdx load_material_image(const TextureDesc& desc);
 
  private:
-  std::optional<Shader> load_shader();
+  void load_shaders();
   std::vector<Model> models_;
 
   [[maybe_unused]] MetalDevice* device_{};
@@ -66,16 +69,17 @@ class RendererMetal {
   MTL::Device* raw_device_{};
   MTL::CommandQueue* main_cmd_queue_{};
   MTL::RenderPipelineState* main_pso_{};
+  MTL::RenderPipelineState* mesh_pso_{};
 
-  NS::SharedPtr<MTL::Buffer> main_vert_buffer_{};
-  NS::SharedPtr<MTL::Buffer> main_index_buffer_{};
-  NS::SharedPtr<MTL::Buffer> main_uniform_buffer_{};
-  NS::SharedPtr<MTL::Buffer> materials_buffer_{};
-  NS::SharedPtr<MTL::Buffer> scene_arg_buffer_{};
+  NS::SharedPtr<MTL::Buffer> main_vert_buffer_;
+  NS::SharedPtr<MTL::Buffer> main_index_buffer_;
+  NS::SharedPtr<MTL::Buffer> main_uniform_buffer_;
+  NS::SharedPtr<MTL::Buffer> materials_buffer_;
+  NS::SharedPtr<MTL::Buffer> scene_arg_buffer_;
 
   IndexAllocator instance_idx_allocator_{1024};
-  NS::SharedPtr<MTL::Buffer> instance_model_matrix_buf_{};
-  NS::SharedPtr<MTL::Buffer> instance_material_id_buf_{};
+  NS::SharedPtr<MTL::Buffer> instance_model_matrix_buf_;
+  NS::SharedPtr<MTL::Buffer> instance_material_id_buf_;
 
   MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
@@ -85,9 +89,11 @@ class RendererMetal {
   IndexAllocator texture_index_allocator_{k_max_textures};
   void flush_pending_texture_uploads();
 
-  std::filesystem::path shader_dir_{};
-  std::filesystem::path resource_dir_{};
-  Shader forward_pass_shader_{};
-  size_t curr_frame_{};
+  std::filesystem::path shader_dir_;
+  std::filesystem::path resource_dir_;
+  Shader forward_pass_shader_;
+  Shader forward_mesh_shader_;
+  size_t curr_frame_;
   size_t frames_in_flight_{2};
+  bool render_mesh_shader_{false};
 };

@@ -1,10 +1,12 @@
 #pragma once
 
-#include "glm/vec3.hpp"
+#include "glm/ext/vector_uint3.hpp"
 
 enum class TextureFormat { Undefined, R8G8B8A8Srgb, R8G8B8A8Unorm };
 
 enum class StorageMode { GPUOnly, CPUAndGPU, CPUOnly };
+
+using IndexT = uint16_t;
 
 struct TextureDesc {
   TextureFormat format{TextureFormat::Undefined};
@@ -12,5 +14,4 @@ struct TextureDesc {
   glm::uvec3 dims{1};
   uint32_t mip_levels{1};
   uint32_t array_length{1};
-  void *data{};
 };

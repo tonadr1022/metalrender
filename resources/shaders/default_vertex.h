@@ -9,4 +9,10 @@ struct DefaultVertex {
   packed_float3 normal;
 };
 
+struct MeshletVertex {
+  float4 pos ATTR_POSITION;
+  float2 uv;
+  float3 normal;
+};
+
 #endif
