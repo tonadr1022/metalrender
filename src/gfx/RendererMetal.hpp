@@ -81,6 +81,11 @@ class RendererMetal {
   NS::SharedPtr<MTL::Buffer> instance_model_matrix_buf_;
   NS::SharedPtr<MTL::Buffer> instance_material_id_buf_;
 
+  NS::SharedPtr<MTL::Buffer> object_shader_param_buf_;
+  NS::SharedPtr<MTL::Buffer> meshlet_buf_;
+  NS::SharedPtr<MTL::Buffer> meshlet_vertices_buf_;
+  NS::SharedPtr<MTL::Buffer> meshlet_triangles_buf_;
+
   MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
   constexpr static int k_max_materials{1024};
@@ -95,5 +100,5 @@ class RendererMetal {
   Shader forward_mesh_shader_;
   size_t curr_frame_;
   size_t frames_in_flight_{2};
-  bool render_mesh_shader_{false};
+  bool render_mesh_shader_{true};
 };

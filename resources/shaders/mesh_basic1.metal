@@ -29,18 +29,21 @@ static float3 hue2rgb(float hue) {
     return rgb;
 }
 
+struct ObjectParams {
+    uint meshlet_base;
+    uint meshlet_count;
+};
 
 [[object]]
 void basic1_object_main(object_data ObjectPayload& payload [[payload]],
-                 constant uint& meshlet_base [[buffer(0)]],
-                 constant uint& meshlet_count [[buffer(1)]],
+                 constant ObjectParams& params [[buffer(0)]],
                  uint thread_idx [[thread_position_in_threadgroup]],
                  mesh_grid_properties grid) {
 
     if (thread_idx == 0) {
-        payload.meshlet_base = meshlet_base;
-        payload.meshlet_count = meshlet_count;
-        grid.set_threadgroups_per_grid(uint3(meshlet_count, 1, 1));
+        payload.meshlet_base = params.meshlet_base;
+        payload.meshlet_count = params.meshlet_count;
+        grid.set_threadgroups_per_grid(uint3(params.meshlet_count, 1, 1));
     }
 
 }

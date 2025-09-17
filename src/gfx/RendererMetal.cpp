@@ -75,28 +75,27 @@ void RendererMetal::init(const CreateInfo &cinfo) {
 
     pipeline_desc->release();
   }
-  // {
-  //   // mesh shader pipeline
-  //   MTL::MeshRenderPipelineDescriptor *pipeline_desc =
-  //       MTL::MeshRenderPipelineDescriptor::alloc()->init();
-  //   pipeline_desc->setMeshFunction(forward_mesh_shader_.mesh_func);
-  //   pipeline_desc->setObjectFunction(forward_mesh_shader_.object_func);
-  //   pipeline_desc->setFragmentFunction(forward_mesh_shader_.frag_func);
-  //   pipeline_desc->setLabel(util::mtl::string("basic mesh"));
-  //   pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
-  //   pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
-  //
-  //   NS::Error *err{};
-  //   mesh_pso_ =
-  //       raw_device_->newRenderPipelineState(pipeline_desc, MTL::PipelineOptionNone, nullptr,
-  //       &err);
-  //   if (err) {
-  //     util::mtl::print_err(err);
-  //     exit(1);
-  //   }
-  //
-  //   pipeline_desc->release();
-  // }
+  {
+    // mesh shader pipeline
+    MTL::MeshRenderPipelineDescriptor *pipeline_desc =
+        MTL::MeshRenderPipelineDescriptor::alloc()->init();
+    pipeline_desc->setMeshFunction(forward_mesh_shader_.mesh_func);
+    pipeline_desc->setObjectFunction(forward_mesh_shader_.object_func);
+    pipeline_desc->setFragmentFunction(forward_mesh_shader_.frag_func);
+    pipeline_desc->setLabel(util::mtl::string("basic mesh shader"));
+    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
+
+    NS::Error *err{};
+    mesh_pso_ =
+        raw_device_->newRenderPipelineState(pipeline_desc, MTL::PipelineOptionNone, nullptr, &err);
+    if (err) {
+      util::mtl::print_err(err);
+      exit(1);
+    }
+
+    pipeline_desc->release();
+  }
 
   MTL::ArgumentEncoder *frag_enc = forward_pass_shader_.frag_func->newArgumentEncoder(0);
   scene_arg_buffer_ = NS::TransferPtr(raw_device_->newBuffer(frag_enc->encodedLength(), 0));
@@ -189,8 +188,40 @@ void RendererMetal::render(const RenderArgs &render_args) {
   uniform_data->render_mode = (uint32_t)RenderMode::Default;
 
   if (render_mesh_shader_) {
-    enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
+    enc->setMeshBuffer(main_vert_buffer_.get(), 0, 0);
     enc->setMeshBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
+    enc->setRenderPipelineState(mesh_pso_);
+
+    uint32_t i = 0;
+    for (auto &model : models_) {
+      for (auto &node : model.nodes) {
+        if (node.mesh_id == Model::invalid_id) {
+          continue;
+        }
+        if (i > 0) break;
+        // const auto &mesh = model.meshes[node.mesh_id];
+        const auto &meshlet_data = model.meshlet_datas[node.mesh_id];
+        // TODO: this needs to be actually set for multiple meshes
+        enc->setMeshBuffer(meshlet_buf_.get(), 0, 2);
+        enc->setMeshBuffer(meshlet_vertices_buf_.get(), meshlet_data.meshlet_vertices_offset, 3);
+        enc->setMeshBuffer(meshlet_triangles_buf_.get(), meshlet_data.meshlet_triangles_offset, 4);
+        enc->setObjectBuffer(object_shader_param_buf_.get(), 0, 0);
+
+        uint32_t threads_per_object_grid = meshlet_data.meshlets.size();
+        uint32_t threads_per_object_thread_group = 32;
+        uint32_t thread_groups_per_object =
+            (threads_per_object_grid + threads_per_object_thread_group - 1) /
+            threads_per_object_thread_group;
+        uint32_t max_mesh_threads =
+            std::max(k_max_triangles_per_meshlet, k_max_vertices_per_meshlet);
+        uint32_t threads_per_mesh_thread_group = max_mesh_threads;
+        enc->drawMeshThreadgroups(MTL::Size::Make(thread_groups_per_object, 1, 1),
+                                  MTL::Size::Make(threads_per_object_thread_group, 1, 1),
+                                  MTL::Size::Make(threads_per_mesh_thread_group, 1, 1));
+
+        i++;
+      }
+    }
   } else {
     enc->setRenderPipelineState(main_pso_);
     enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
@@ -210,7 +241,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
         if (node.mesh_id == Model::invalid_id) {
           continue;
         }
-        auto &mesh = model.meshes[node.mesh_id];
+        const auto &mesh = model.meshes[node.mesh_id];
         // bind mesh stuff
         enc->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, mesh.index_count,
                                    MTL::IndexTypeUInt16, main_index_buffer_.get(),
@@ -255,11 +286,39 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
   main_index_buffer_ =
       NS::TransferPtr(raw_device_->newBuffer(indices_size, MTL::ResourceStorageModeShared));
   memcpy(main_index_buffer_->contents(), model.indices.data(), indices_size);
-  models_.emplace_back(std::move(result->model));
   // TODO: material allocator
   memcpy(materials_buffer_->contents(), model.materials.data(),
          model.materials.size() * sizeof(Material));
   all_materials_.append_range(std::move(model.materials));
+
+  // TODO: MOVEEEEEEEEEEEE
+  {
+    object_shader_param_buf_ = NS::TransferPtr(
+        raw_device_->newBuffer(sizeof(uint32_t) * 2, MTL::ResourceStorageModeShared));
+    assert(model.model.meshlet_datas.size() > 0);
+    struct {
+      uint32_t meshlet_base;
+      uint32_t meshlet_count;
+    } params{.meshlet_base = 0,
+             .meshlet_count = (uint32_t)model.model.meshlet_datas[0].meshlets.size()};
+    memcpy(object_shader_param_buf_->contents(), &params, sizeof(params));
+    const auto &meshlet_data_0 = model.model.meshlet_datas[0];
+    size_t tot_meshlet_size = meshlet_data_0.meshlets.size() * sizeof(meshopt_Meshlet);
+    meshlet_buf_ =
+        NS::TransferPtr(raw_device_->newBuffer(tot_meshlet_size, MTL::ResourceStorageModeShared));
+    memcpy(meshlet_buf_->contents(), meshlet_data_0.meshlets.data(), tot_meshlet_size);
+    size_t meshlet_vertices_size = meshlet_data_0.meshlet_vertices.size() * sizeof(uint32_t);
+    meshlet_vertices_buf_ = NS::TransferPtr(
+        raw_device_->newBuffer(meshlet_vertices_size, MTL::ResourceStorageModeShared));
+    memcpy(meshlet_vertices_buf_->contents(), meshlet_data_0.meshlet_vertices.data(),
+           meshlet_vertices_size);
+    size_t meshlet_triangles_size = meshlet_data_0.meshlet_triangles.size() * sizeof(uint8_t);
+    meshlet_triangles_buf_ = NS::TransferPtr(
+        raw_device_->newBuffer(meshlet_triangles_size, MTL::ResourceStorageModeShared));
+    memcpy(meshlet_triangles_buf_->contents(), meshlet_data_0.meshlet_triangles.data(),
+           meshlet_triangles_size);
+  }
+  models_.emplace_back(std::move(result->model));
 }
 
 TextureWithIdx RendererMetal::load_material_image(const TextureDesc &desc) {

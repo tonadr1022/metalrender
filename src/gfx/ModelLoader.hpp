@@ -48,6 +48,8 @@ struct MeshletData {
   std::vector<meshopt_Meshlet> meshlets;
   std::vector<uint32_t> meshlet_vertices;
   std::vector<uint8_t> meshlet_triangles;
+  uint32_t meshlet_vertices_offset{}; // element offset
+  uint32_t meshlet_triangles_offset{}; // element offset
 };
 
 struct Model {
