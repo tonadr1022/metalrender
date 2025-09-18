@@ -5,12 +5,6 @@ using namespace metal;
 #include "default_vertex.h"
 #include "shader_global_uniforms.h"
 
-// should this change?
-struct ObjectPayload {
-    uint meshlet_base; // unit == element;
-    uint meshlet_count;
-};
-
 struct MeshletDesc {
     uint vertex_offset;
     uint triangle_offset;
@@ -29,21 +23,18 @@ static float3 hue2rgb(float hue) {
     return rgb;
 }
 
-struct ObjectParams {
+struct InstanceData {
+    uint mat_id;
     uint meshlet_base;
     uint meshlet_count;
 };
 
 [[object]]
-void basic1_object_main(object_data ObjectPayload& payload [[payload]],
-                 constant ObjectParams& params [[buffer(0)]],
-                 uint thread_idx [[thread_position_in_threadgroup]],
-                 mesh_grid_properties grid) {
-
+void basic1_object_main(constant InstanceData& instance_data [[buffer(0)]],
+                        uint thread_idx [[thread_position_in_threadgroup]],
+                        mesh_grid_properties grid) {
     if (thread_idx == 0) {
-        payload.meshlet_base = params.meshlet_base;
-        payload.meshlet_count = params.meshlet_count;
-        grid.set_threadgroups_per_grid(uint3(params.meshlet_count, 1, 1));
+        grid.set_threadgroups_per_grid(uint3(instance_data.meshlet_count, 1, 1));
     }
 
 }
@@ -59,21 +50,22 @@ using Meshlet = metal::mesh<MeshletVertex,
                             topology::triangle
                             >;
 [[mesh]]
-void basic1_mesh_main(const object_data ObjectPayload& object [[payload]],
-                        device const DefaultVertex* vertices [[buffer(0)]],
-                        constant Uniforms& uniforms [[buffer(1)]],
-                        constant MeshletDesc* meshlets [[buffer(2)]],
-                        device const uint* meshlet_vertices [[buffer(3)]],
-                        device const uchar* meshlet_triangles [[buffer(4)]],
-                        uint payload_idx [[threadgroup_position_in_grid]],
-                        uint thread_idx [[thread_position_in_threadgroup]],
-                        Meshlet out_mesh) {
-    uint meshlet_idx = payload_idx + object.meshlet_base;
-    constant MeshletDesc& meshlet = meshlets[meshlet_idx];
+void basic1_mesh_main(device const DefaultVertex* vertices [[buffer(0)]],
+                      constant Uniforms& uniforms [[buffer(1)]],
+                      device const MeshletDesc* meshlets [[buffer(2)]],
+                      device const uint* meshlet_vertices [[buffer(3)]],
+                      device const uchar* meshlet_triangles [[buffer(4)]],
+                      constant float4x4& model [[buffer(5)]],
+                      device const InstanceData& instance_data [[buffer(6)]],
+                      uint payload_idx [[threadgroup_position_in_grid]],
+                      uint thread_idx [[thread_position_in_threadgroup]],
+                      Meshlet out_mesh) {
+    uint meshlet_idx = payload_idx + instance_data.meshlet_base;
+    device const MeshletDesc& meshlet = meshlets[meshlet_idx];
     if (thread_idx < meshlet.vertex_count) {
         device const DefaultVertex& vert = vertices[meshlet_vertices[meshlet.vertex_offset + thread_idx]];
         MeshletVertex out_vert;
-        out_vert.pos = uniforms.vp * float4(vert.pos.xyz, 1.0);
+        out_vert.pos = uniforms.vp * model * float4(vert.pos.xyz, 1.0);
         out_vert.uv = vert.uv;
         out_vert.normal = vert.normal;
         out_mesh.set_vertex(thread_idx, out_vert);
@@ -85,7 +77,7 @@ void basic1_mesh_main(const object_data ObjectPayload& object [[payload]],
         out_mesh.set_index(i + 1, meshlet_triangles[meshlet.triangle_offset + i + 1]);
         out_mesh.set_index(i + 2, meshlet_triangles[meshlet.triangle_offset + i + 2]);
         MeshletPrimitive prim = {
-            .color = float4(hue2rgb(meshlet_idx * 1.71f), 1)
+            .color = float4(hue2rgb(instance_data.meshlet_base * 1.71f), 1)
         };
         out_mesh.set_primitive(thread_idx, prim);
     }

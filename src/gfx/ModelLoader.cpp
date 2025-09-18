@@ -203,7 +203,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
           }
         }
 
-        const size_t material_idx = primitive.material - gltf->materials;
+        const uint32_t material_idx = primitive.material - gltf->materials;
         meshes.push_back(Mesh{
             .vertex_offset = vertex_offset,
             .index_offset = index_offset,

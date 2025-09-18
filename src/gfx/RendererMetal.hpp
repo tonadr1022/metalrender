@@ -81,7 +81,13 @@ class RendererMetal {
   NS::SharedPtr<MTL::Buffer> instance_model_matrix_buf_;
   NS::SharedPtr<MTL::Buffer> instance_material_id_buf_;
 
-  NS::SharedPtr<MTL::Buffer> object_shader_param_buf_;
+  struct InstanceData {
+    uint32_t mat_id;
+    uint32_t meshlet_base;
+    uint32_t meshlet_count;
+  };
+  NS::SharedPtr<MTL::Buffer> instance_data_buf_;
+  // NS::SharedPtr<MTL::Buffer> object_shader_param_buf_;
   NS::SharedPtr<MTL::Buffer> meshlet_buf_;
   NS::SharedPtr<MTL::Buffer> meshlet_vertices_buf_;
   NS::SharedPtr<MTL::Buffer> meshlet_triangles_buf_;

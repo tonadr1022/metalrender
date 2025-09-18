@@ -32,6 +32,8 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   {
     // TODO: handle resizing/more instances
     const uint32_t instance_capacity = instance_idx_allocator_.get_capacity();
+    instance_data_buf_ = NS::TransferPtr(raw_device_->newBuffer(
+        sizeof(InstanceData) * instance_capacity, MTL::ResourceStorageModeShared));
     instance_material_id_buf_ = NS::TransferPtr(raw_device_->newBuffer(
         sizeof(uint32_t) * instance_capacity, MTL::ResourceStorageModeShared));
     instance_model_matrix_buf_ = NS::TransferPtr(raw_device_->newBuffer(
@@ -188,7 +190,6 @@ void RendererMetal::render(const RenderArgs &render_args) {
   uniform_data->render_mode = (uint32_t)RenderMode::Default;
 
   if (render_mesh_shader_) {
-    enc->setMeshBuffer(main_vert_buffer_.get(), 0, 0);
     enc->setMeshBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
     enc->setRenderPipelineState(mesh_pso_);
 
@@ -198,23 +199,27 @@ void RendererMetal::render(const RenderArgs &render_args) {
         if (node.mesh_id == Model::invalid_id) {
           continue;
         }
-        if (i > 0) break;
-        // const auto &mesh = model.meshes[node.mesh_id];
+        if (i > 1) break;
+        const auto &mesh = model.meshes[node.mesh_id];
         const auto &meshlet_data = model.meshlet_datas[node.mesh_id];
-        // TODO: this needs to be actually set for multiple meshes
-        enc->setMeshBuffer(meshlet_buf_.get(), 0, 2);
-        enc->setMeshBuffer(meshlet_vertices_buf_.get(), meshlet_data.meshlet_vertices_offset, 3);
-        enc->setMeshBuffer(meshlet_triangles_buf_.get(), meshlet_data.meshlet_triangles_offset, 4);
-        enc->setObjectBuffer(object_shader_param_buf_.get(), 0, 0);
+        enc->setMeshBuffer(main_vert_buffer_.get(), mesh.vertex_offset, 0);
+        enc->setMeshBuffer(meshlet_buf_.get(), meshlet_data.meshlet_base * sizeof(meshopt_Meshlet),
+                           2);
+        enc->setMeshBuffer(meshlet_vertices_buf_.get(),
+                           meshlet_data.meshlet_vertices_offset * sizeof(uint32_t), 3);
+        enc->setMeshBuffer(meshlet_triangles_buf_.get(),
+                           meshlet_data.meshlet_triangles_offset * sizeof(uint8_t), 4);
+        enc->setMeshBuffer(instance_data_buf_.get(), i * sizeof(InstanceData), 6);
+        enc->setObjectBuffer(instance_data_buf_.get(), i * sizeof(InstanceData), 0);
+        enc->setMeshBuffer(instance_model_matrix_buf_.get(), i * sizeof(glm::mat4), 5);
 
-        uint32_t threads_per_object_grid = meshlet_data.meshlets.size();
-        uint32_t threads_per_object_thread_group = 32;
-        uint32_t thread_groups_per_object =
-            (threads_per_object_grid + threads_per_object_thread_group - 1) /
-            threads_per_object_thread_group;
-        uint32_t max_mesh_threads =
+        const uint32_t num_meshlets = meshlet_data.meshlets.size();
+        const uint32_t threads_per_object_thread_group = 32;
+        const uint32_t thread_groups_per_object =
+            (num_meshlets + threads_per_object_thread_group - 1) / threads_per_object_thread_group;
+        const uint32_t max_mesh_threads =
             std::max(k_max_triangles_per_meshlet, k_max_vertices_per_meshlet);
-        uint32_t threads_per_mesh_thread_group = max_mesh_threads;
+        const uint32_t threads_per_mesh_thread_group = max_mesh_threads;
         enc->drawMeshThreadgroups(MTL::Size::Make(thread_groups_per_object, 1, 1),
                                   MTL::Size::Make(threads_per_object_thread_group, 1, 1),
                                   MTL::Size::Make(threads_per_mesh_thread_group, 1, 1));
@@ -268,14 +273,35 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
   pending_texture_uploads_.append_range(result->texture_uploads);
   result->texture_uploads.clear();
 
+  // TODO: MOVEEEEEEEEEEEE PLEASE!!!!!!!!!!!!!
+  auto &meshlet_datas = model.model.meshlet_datas;
+  size_t tot_meshlet_count{};
+  size_t tot_meshlet_verts_count{};
+  size_t tot_meshlet_tri_count{};
+  for (auto &meshlet_data : meshlet_datas) {
+    meshlet_data.meshlet_triangles_offset = tot_meshlet_tri_count;
+    meshlet_data.meshlet_vertices_offset = tot_meshlet_verts_count;
+    meshlet_data.meshlet_base = tot_meshlet_count;
+    tot_meshlet_count += meshlet_data.meshlets.size();
+    tot_meshlet_verts_count += meshlet_data.meshlet_vertices.size();
+    tot_meshlet_tri_count += meshlet_data.meshlet_triangles.size();
+  }
+
+  uint32_t instance_id = 0;
   for (const auto &node : model.model.nodes) {
     if (node.mesh_id == UINT32_MAX) {
       continue;
     }
     auto &mesh = model.model.meshes[node.mesh_id];
-    const uint32_t instance_id = instance_idx_allocator_.alloc_idx();
+    const auto &meshlet_data = model.model.meshlet_datas[node.mesh_id];
+    // const uint32_t instance_id = instance_idx_allocator_.alloc_idx();
+    *((InstanceData *)instance_data_buf_->contents() + instance_id) =
+        InstanceData{.mat_id = mesh.material_id,
+                     .meshlet_base = meshlet_data.meshlet_base,
+                     .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size())};
     *((uint32_t *)instance_material_id_buf_->contents() + instance_id) = mesh.material_id;
     *((glm::mat4 *)instance_model_matrix_buf_->contents() + instance_id) = node.global_transform;
+    instance_id++;
   }
 
   const size_t vertices_size = model.vertices.size() * sizeof(DefaultVertex);
@@ -291,32 +317,33 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
          model.materials.size() * sizeof(Material));
   all_materials_.append_range(std::move(model.materials));
 
-  // TODO: MOVEEEEEEEEEEEE
   {
-    object_shader_param_buf_ = NS::TransferPtr(
-        raw_device_->newBuffer(sizeof(uint32_t) * 2, MTL::ResourceStorageModeShared));
-    assert(model.model.meshlet_datas.size() > 0);
-    struct {
-      uint32_t meshlet_base;
-      uint32_t meshlet_count;
-    } params{.meshlet_base = 0,
-             .meshlet_count = (uint32_t)model.model.meshlet_datas[0].meshlets.size()};
-    memcpy(object_shader_param_buf_->contents(), &params, sizeof(params));
-    const auto &meshlet_data_0 = model.model.meshlet_datas[0];
-    size_t tot_meshlet_size = meshlet_data_0.meshlets.size() * sizeof(meshopt_Meshlet);
+    const size_t tot_meshlet_size = tot_meshlet_count * sizeof(meshopt_Meshlet);
+    const size_t tot_meshlet_verts_size = tot_meshlet_verts_count * sizeof(uint32_t);
+    const size_t tot_meshlet_tri_size = tot_meshlet_tri_count * sizeof(uint8_t);
     meshlet_buf_ =
         NS::TransferPtr(raw_device_->newBuffer(tot_meshlet_size, MTL::ResourceStorageModeShared));
-    memcpy(meshlet_buf_->contents(), meshlet_data_0.meshlets.data(), tot_meshlet_size);
-    size_t meshlet_vertices_size = meshlet_data_0.meshlet_vertices.size() * sizeof(uint32_t);
     meshlet_vertices_buf_ = NS::TransferPtr(
-        raw_device_->newBuffer(meshlet_vertices_size, MTL::ResourceStorageModeShared));
-    memcpy(meshlet_vertices_buf_->contents(), meshlet_data_0.meshlet_vertices.data(),
-           meshlet_vertices_size);
-    size_t meshlet_triangles_size = meshlet_data_0.meshlet_triangles.size() * sizeof(uint8_t);
+        raw_device_->newBuffer(tot_meshlet_verts_size, MTL::ResourceStorageModeShared));
     meshlet_triangles_buf_ = NS::TransferPtr(
-        raw_device_->newBuffer(meshlet_triangles_size, MTL::ResourceStorageModeShared));
-    memcpy(meshlet_triangles_buf_->contents(), meshlet_data_0.meshlet_triangles.data(),
-           meshlet_triangles_size);
+        raw_device_->newBuffer(tot_meshlet_tri_size, MTL::ResourceStorageModeShared));
+    size_t meshlet_offset{};
+    size_t meshlet_tri_offset{};
+    size_t meshlet_verts_offset{};
+    for (const auto &meshlet_data : meshlet_datas) {
+      const size_t meshlet_copy_size = meshlet_data.meshlets.size() * sizeof(meshopt_Meshlet);
+      const size_t meshlet_vert_copy_size = meshlet_data.meshlet_vertices.size() * sizeof(uint32_t);
+      const size_t meshlet_tri_copy_size = meshlet_data.meshlet_triangles.size() * sizeof(uint8_t);
+      memcpy((uint8_t *)meshlet_buf_->contents() + meshlet_offset, meshlet_data.meshlets.data(),
+             meshlet_copy_size);
+      memcpy((uint8_t *)meshlet_vertices_buf_->contents() + meshlet_verts_offset,
+             meshlet_data.meshlet_vertices.data(), meshlet_vert_copy_size);
+      memcpy((uint8_t *)meshlet_triangles_buf_->contents() + meshlet_tri_offset,
+             meshlet_data.meshlet_triangles.data(), meshlet_tri_copy_size);
+      meshlet_offset += meshlet_copy_size;
+      meshlet_tri_offset += meshlet_tri_copy_size;
+      meshlet_verts_offset += meshlet_vert_copy_size;
+    }
   }
   models_.emplace_back(std::move(result->model));
 }

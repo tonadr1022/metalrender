@@ -34,7 +34,7 @@ struct Mesh {
   size_t index_offset;   // index count
   size_t vertex_count;
   size_t index_count;
-  size_t material_id;
+  uint32_t material_id;
 };
 
 struct Node {
@@ -48,8 +48,9 @@ struct MeshletData {
   std::vector<meshopt_Meshlet> meshlets;
   std::vector<uint32_t> meshlet_vertices;
   std::vector<uint8_t> meshlet_triangles;
-  uint32_t meshlet_vertices_offset{}; // element offset
-  uint32_t meshlet_triangles_offset{}; // element offset
+  uint32_t meshlet_base{};              // element offset
+  uint32_t meshlet_vertices_offset{};   // element offset
+  uint32_t meshlet_triangles_offset{};  // element offset
 };
 
 struct Model {
