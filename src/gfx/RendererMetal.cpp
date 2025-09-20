@@ -29,6 +29,14 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   raw_device_ = device_->get_device();
   main_cmd_queue_ = raw_device_->newCommandQueue();
 
+  MTL::IndirectCommandBufferDescriptor *cmd_buf_desc =
+      MTL::IndirectCommandBufferDescriptor::alloc()->init();
+  cmd_buf_desc->setCommandTypes(MTL::IndirectCommandTypeDrawMeshThreadgroups);
+  cmd_buf_desc->setInheritBuffers(false);
+  cmd_buf_desc->setInheritPipelineState(true);
+  ind_cmd_buf_ = NS::TransferPtr(raw_device_->newIndirectCommandBuffer(cmd_buf_desc, 1024, 0));
+  cmd_buf_desc->release();
+
   {
     // TODO: handle resizing/more instances
     const uint32_t instance_capacity = instance_idx_allocator_.get_capacity();
@@ -99,21 +107,25 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     pipeline_desc->release();
   }
 
-  MTL::ArgumentEncoder *frag_enc = forward_pass_shader_.frag_func->newArgumentEncoder(0);
-  scene_arg_buffer_ = NS::TransferPtr(raw_device_->newBuffer(frag_enc->encodedLength(), 0));
+  // TODO: better size management this is awful
+  scene_arg_buffer_ =
+      NS::TransferPtr(raw_device_->newBuffer((8 * k_max_textures) + (8 * k_max_materials), 0));
   {
     MTL::ArgumentDescriptor *arg0 = MTL::ArgumentDescriptor::alloc()->init();
+    size_t curr_idx = 0;
     arg0->setIndex(0);
     arg0->setAccess(MTL::ArgumentAccessReadOnly);
     arg0->setArrayLength(k_max_textures);
+    curr_idx += k_max_textures;
     arg0->setDataType(MTL::DataTypeTexture);
     arg0->setTextureType(MTL::TextureType2D);
 
-    // MTL::ArgumentDescriptor *arg1 = MTL::ArgumentDescriptor::alloc()->init();
-    // arg1->setIndex(k_max_textures);
-    // arg1->setAccess(MTL::ArgumentAccessReadOnly);
-    // arg1->setDataType(MTL::DataTypePointer);
-    std::array<NS::Object *, 1> args_arr{arg0};
+    MTL::ArgumentDescriptor *arg1 = MTL::ArgumentDescriptor::alloc()->init();
+    arg1->setIndex(curr_idx);
+    arg1->setAccess(MTL::ArgumentAccessReadOnly);
+    arg1->setArrayLength(k_max_textures);
+    arg1->setDataType(MTL::DataTypePointer);
+    std::array<NS::Object *, 2> args_arr{arg0, arg1};
     const NS::Array *args = NS::Array::array(args_arr.data(), args_arr.size());
     global_arg_enc_ = raw_device_->newArgumentEncoder(args);
     global_arg_enc_->setArgumentBuffer(scene_arg_buffer_.get(), 0);
@@ -122,12 +134,15 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     }
   }
 
-  frag_enc->setArgumentBuffer(scene_arg_buffer_.get(), 0);
-
   materials_buffer_ = NS::TransferPtr(raw_device_->newBuffer(k_max_materials, 0));
 
   // frag_enc->setBuffer(materials_buffer_.get(), 0, k_max_textures);
-  frag_enc->release();
+  MTL::Function *const funcs[] = {forward_pass_shader_.frag_func, forward_mesh_shader_.frag_func};
+  for (const auto &func : funcs) {
+    MTL::ArgumentEncoder *frag_enc = func->newArgumentEncoder(0);
+    frag_enc->setArgumentBuffer(scene_arg_buffer_.get(), 0);
+    frag_enc->release();
+  }
 
   {
     // per frame uniform buffer
@@ -173,11 +188,15 @@ void RendererMetal::render(const RenderArgs &render_args) {
     enc->setDepthStencilState(raw_device_->newDepthStencilState(depth_stencil_desc));
   }
   // TODO: this is awful
-  for (const MTL::Texture *tex : all_textures_) {
-    if (tex) {
-      enc->useResource(tex, MTL::ResourceUsageSample);
+  auto use_scene_arg_buffer_resources = [this](auto enc) {
+    for (const MTL::Texture *tex : all_textures_) {
+      if (tex) {
+        enc->useResource(tex, MTL::ResourceUsageSample);
+      }
     }
-  }
+    enc->useResource(materials_buffer_.get(), MTL::ResourceUsageRead);
+  };
+
   // TODO: class for this
   const size_t uniforms_offset =
       (curr_frame_ % frames_in_flight_) * util::align_256(sizeof(Uniforms));
@@ -189,32 +208,51 @@ void RendererMetal::render(const RenderArgs &render_args) {
       glm::perspective(glm::radians(70.f), aspect, 0.1f, 10000.f) * render_args.view_mat;
   uniform_data->render_mode = (uint32_t)RenderMode::Default;
 
-  if (render_mesh_shader_) {
-    enc->setMeshBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
+  auto bind_fragment_resources = [this, &uniforms_offset](MTL::RenderCommandEncoder *enc) {
+    enc->setFragmentBuffer(scene_arg_buffer_.get(), 0, 0);
+    enc->setFragmentBuffer(main_uniform_buffer_.get(), uniforms_offset, 2);
+  };
+
+  if (render_icb_) {  // also implies mesh shaders
     enc->setRenderPipelineState(mesh_pso_);
+    MTL::ComputePassDescriptor *compute_pass_descriptor =
+        MTL::ComputePassDescriptor::computePassDescriptor();
+    compute_pass_descriptor->setDispatchType(MTL::DispatchTypeSerial);
+    MTL::ComputeCommandEncoder *enc2 = buf->computeCommandEncoder(compute_pass_descriptor);
+    use_scene_arg_buffer_resources(enc2);
+
+  } else if (render_mesh_shader_) {
+    use_scene_arg_buffer_resources(enc);
+    enc->setRenderPipelineState(mesh_pso_);
+    enc->setMeshBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
 
     uint32_t i = 0;
+    enc->setMeshBuffer(meshlet_buf_.get(), 0, 2);
+    enc->setMeshBuffer(instance_model_matrix_buf_.get(), 0, 5);
+    enc->setMeshBuffer(instance_data_buf_.get(), 0, 6);
+    enc->setMeshBuffer(meshlet_vertices_buf_.get(), 0, 3);
+    enc->setMeshBuffer(meshlet_triangles_buf_.get(), 0, 4);
+    enc->setObjectBuffer(instance_data_buf_.get(), 0, 0);
+    enc->setMeshBuffer(main_vert_buffer_.get(), 0, 0);
+    bind_fragment_resources(enc);
+
     for (auto &model : models_) {
       for (auto &node : model.nodes) {
         if (node.mesh_id == Model::invalid_id) {
           continue;
         }
-        if (i > 1) break;
         const auto &mesh = model.meshes[node.mesh_id];
         const auto &meshlet_data = model.meshlet_datas[node.mesh_id];
-        enc->setMeshBuffer(main_vert_buffer_.get(), mesh.vertex_offset, 0);
-        enc->setMeshBuffer(meshlet_buf_.get(), meshlet_data.meshlet_base * sizeof(meshopt_Meshlet),
-                           2);
-        enc->setMeshBuffer(meshlet_vertices_buf_.get(),
-                           meshlet_data.meshlet_vertices_offset * sizeof(uint32_t), 3);
-        enc->setMeshBuffer(meshlet_triangles_buf_.get(),
-                           meshlet_data.meshlet_triangles_offset * sizeof(uint8_t), 4);
-        enc->setMeshBuffer(instance_data_buf_.get(), i * sizeof(InstanceData), 6);
-        enc->setObjectBuffer(instance_data_buf_.get(), i * sizeof(InstanceData), 0);
-        enc->setMeshBuffer(instance_model_matrix_buf_.get(), i * sizeof(glm::mat4), 5);
+        struct TaskCmd {
+          uint32_t instance_idx;
+          uint32_t mesh_vertex_offset;
+        } task_cmd{.instance_idx = i,
+                   .mesh_vertex_offset =
+                       static_cast<uint32_t>(mesh.vertex_offset / sizeof(DefaultVertex))};
+        enc->setObjectBytes(&task_cmd, sizeof(TaskCmd), 1);
 
         const uint32_t num_meshlets = meshlet_data.meshlets.size();
-        const uint32_t threads_per_object_thread_group = 32;
+        const uint32_t threads_per_object_thread_group = 256;
         const uint32_t thread_groups_per_object =
             (num_meshlets + threads_per_object_thread_group - 1) / threads_per_object_thread_group;
         const uint32_t max_mesh_threads =
@@ -228,14 +266,13 @@ void RendererMetal::render(const RenderArgs &render_args) {
       }
     }
   } else {
+    use_scene_arg_buffer_resources(enc);
     enc->setRenderPipelineState(main_pso_);
     enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
     enc->setVertexBuffer(main_uniform_buffer_.get(), uniforms_offset, 1);
     enc->setVertexBuffer(instance_model_matrix_buf_.get(), 0, 2);
     enc->setVertexBuffer(instance_material_id_buf_.get(), 0, 3);
-    enc->setFragmentBuffer(scene_arg_buffer_.get(), 0, 0);
-    enc->setFragmentBuffer(materials_buffer_.get(), 0, 1);
-    enc->setFragmentBuffer(main_uniform_buffer_.get(), uniforms_offset, 2);
+    bind_fragment_resources(enc);
 
     enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
     enc->setCullMode(MTL::CullModeBack);
@@ -298,24 +335,27 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
     *((InstanceData *)instance_data_buf_->contents() + instance_id) =
         InstanceData{.mat_id = mesh.material_id,
                      .meshlet_base = meshlet_data.meshlet_base,
-                     .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size())};
+                     .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size()),
+                     .meshlet_vertices_offset = meshlet_data.meshlet_vertices_offset,
+                     .meshlet_triangles_offset = meshlet_data.meshlet_triangles_offset};
     *((uint32_t *)instance_material_id_buf_->contents() + instance_id) = mesh.material_id;
     *((glm::mat4 *)instance_model_matrix_buf_->contents() + instance_id) = node.global_transform;
     instance_id++;
   }
 
-  const size_t vertices_size = model.vertices.size() * sizeof(DefaultVertex);
-  const size_t indices_size = model.indices.size() * sizeof(uint16_t);
+  const size_t vertices_size = model.model.vertices.size() * sizeof(DefaultVertex);
+  const size_t indices_size = model.model.indices.size() * sizeof(uint16_t);
   main_vert_buffer_ =
       NS::TransferPtr(raw_device_->newBuffer(vertices_size, MTL::ResourceStorageModeShared));
-  memcpy(main_vert_buffer_->contents(), model.vertices.data(), vertices_size);
+  memcpy(main_vert_buffer_->contents(), model.model.vertices.data(), vertices_size);
   main_index_buffer_ =
       NS::TransferPtr(raw_device_->newBuffer(indices_size, MTL::ResourceStorageModeShared));
-  memcpy(main_index_buffer_->contents(), model.indices.data(), indices_size);
+  memcpy(main_index_buffer_->contents(), model.model.indices.data(), indices_size);
   // TODO: material allocator
   memcpy(materials_buffer_->contents(), model.materials.data(),
          model.materials.size() * sizeof(Material));
   all_materials_.append_range(std::move(model.materials));
+  global_arg_enc_->setBuffer(materials_buffer_.get(), 0, 1024);
 
   {
     const size_t tot_meshlet_size = tot_meshlet_count * sizeof(meshopt_Meshlet);

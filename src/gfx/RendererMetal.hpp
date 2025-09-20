@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Metal/MTLBuffer.hpp>
+#include <Metal/MTLIndirectCommandBuffer.hpp>
 #include <filesystem>
 #include <glm/mat4x4.hpp>
 
@@ -21,6 +22,7 @@ class AutoreleasePool;
 
 namespace MTL {
 
+class IndirectCommandBuffer;
 class CommandQueue;
 class Device;
 class Function;
@@ -80,11 +82,14 @@ class RendererMetal {
   IndexAllocator instance_idx_allocator_{1024};
   NS::SharedPtr<MTL::Buffer> instance_model_matrix_buf_;
   NS::SharedPtr<MTL::Buffer> instance_material_id_buf_;
+  NS::SharedPtr<MTL::IndirectCommandBuffer> ind_cmd_buf_;
 
   struct InstanceData {
     uint32_t mat_id;
     uint32_t meshlet_base;
     uint32_t meshlet_count;
+    uint32_t meshlet_vertices_offset;
+    uint32_t meshlet_triangles_offset;
   };
   NS::SharedPtr<MTL::Buffer> instance_data_buf_;
   // NS::SharedPtr<MTL::Buffer> object_shader_param_buf_;
@@ -107,4 +112,5 @@ class RendererMetal {
   size_t curr_frame_;
   size_t frames_in_flight_{2};
   bool render_mesh_shader_{true};
+  bool render_icb_{false};
 };

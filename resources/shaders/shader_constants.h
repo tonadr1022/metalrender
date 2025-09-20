@@ -1,6 +1,10 @@
 #ifndef SHADER_COMMON_H
 #define SHADER_COMMON_H
 
+#define RENDER_MODE_DEFAULT 0
+#define RENDER_MODE_NORMALS 1
+#define RENDER_MODE_NORMAL_MAP 2
+
 #ifndef __METAL__
 #define CONSTANT
 #define INLINE inline

@@ -20,11 +20,8 @@ struct Material {
 
 struct SceneResourcesBuf {
     array<texture2d<float>, k_max_materials> textures [[id(0)]];
+    device Material* materials [[id(1024)]];
 };
-
-#define RENDER_MODE_DEFAULT 0
-#define RENDER_MODE_NORMALS 1
-#define RENDER_MODE_NORMAL_MAP 2
 
 struct InstanceModel {
     float4x4 model;
@@ -60,23 +57,19 @@ constexpr sampler default_texture_sampler(
 );
 
 float4 fragment fragmentMain(v2f in [[stage_in]],
-                            constant SceneResourcesBuf& scene_buf [[buffer(0)]],
-                            device const Material* materials [[buffer(1)]],
+                            device const SceneResourcesBuf& scene_buf [[buffer(0)]],
                             constant Uniforms& uniforms [[buffer(2)]]) {
     uint render_mode = uniforms.render_mode;
+    device const Material& material = scene_buf.materials[in.material_id];
     float4 out_color = float4(0.0);
     if (render_mode == RENDER_MODE_DEFAULT) {
-        int albedo_idx = materials[in.material_id].albedo_tex;
+        int albedo_idx = material.albedo_tex;
         float4 albedo = scene_buf.textures[albedo_idx].sample(default_texture_sampler, in.uv);
-        if (albedo.a < 0.5) {
-            discard_fragment();
-        } else {
-            out_color = albedo;
-        }
+        out_color = albedo;
     } else if (render_mode == RENDER_MODE_NORMALS) {
         out_color = float4(float3(in.normal * 0.5 + 0.5), 1.0);
     } else if (render_mode == RENDER_MODE_NORMAL_MAP) {
-        int normal_tex_idx = materials[in.material_id].normal_tex;
+        int normal_tex_idx = material.normal_tex;
         float4 normal = scene_buf.textures[normal_tex_idx].sample(default_texture_sampler, in.uv);
         normal.xyz = normal.xyz * 0.5 + 0.5;
         out_color = normal;

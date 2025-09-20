@@ -55,6 +55,8 @@ struct MeshletData {
 
 struct Model {
   constexpr static uint32_t invalid_id = UINT32_MAX;
+  std::vector<DefaultVertex> vertices;
+  std::vector<IndexT> indices;
   std::vector<Node> nodes;
   std::vector<uint32_t> root_nodes;
   std::vector<Mesh> meshes;
@@ -64,8 +66,6 @@ struct Model {
 
 struct ModelLoadResult {
   Model model;
-  std::vector<DefaultVertex> vertices;
-  std::vector<IndexT> indices;
   std::vector<TextureUpload> texture_uploads;
   std::vector<Material> materials;
 };

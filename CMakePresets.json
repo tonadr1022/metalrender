@@ -32,6 +32,14 @@
       }
     },
     {
+      "name": "ReleaseXcode",
+      "generator": "Xcode",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
       "name": "Release",
       "inherits": "default",
       "cacheVariables": {

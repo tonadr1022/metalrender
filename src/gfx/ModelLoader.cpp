@@ -146,8 +146,8 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
     materials.push_back(material);
   }
 
-  auto &all_vertices = result.vertices;
-  auto &all_indices = result.indices;
+  auto &all_vertices = result.model.vertices;
+  auto &all_indices = result.model.indices;
   auto &meshes = result.model.meshes;
   std::vector<uint32_t> gltf_node_to_node_i;
   gltf_node_to_node_i.resize(gltf->nodes_count, UINT32_MAX);
