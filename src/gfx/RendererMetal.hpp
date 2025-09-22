@@ -115,6 +115,10 @@ class RendererMetal {
   size_t curr_frame_;
   size_t frames_in_flight_{2};
   uint32_t tot_meshes_{0};
-  bool render_mesh_shader_{true};
-  bool render_icb_{true};
+  enum class DrawMode {
+    IndirectMeshShader,
+    MeshShader,
+    VertexShader,
+  };
+  DrawMode draw_mode_{DrawMode::IndirectMeshShader};
 };

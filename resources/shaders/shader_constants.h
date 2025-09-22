@@ -4,6 +4,7 @@
 #define RENDER_MODE_DEFAULT 0
 #define RENDER_MODE_NORMALS 1
 #define RENDER_MODE_NORMAL_MAP 2
+#define RENDER_MODE_UVS 3
 
 #ifndef __METAL__
 #define CONSTANT

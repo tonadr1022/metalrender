@@ -227,7 +227,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
   auto window_dims = window_->get_window_size();
   const float aspect = (window_dims.x != 0) ? float(window_dims.x) / float(window_dims.y) : 1.0f;
   uniform_data->vp =
-      glm::perspective(glm::radians(70.f), aspect, 0.1f, 10000.f) * render_args.view_mat;
+      glm::perspective(glm::radians(70.f), aspect, 0.001f, 10000.f) * render_args.view_mat;
   uniform_data->render_mode = (uint32_t)RenderMode::Default;
 
   auto bind_fragment_resources = [this, &uniforms_offset](MTL::RenderCommandEncoder *enc) {
@@ -237,7 +237,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
 
   {
     ZoneScopedN("encode draw cmds");
-    if (render_icb_) {  // also implies mesh shaders
+    if (draw_mode_ == DrawMode::IndirectMeshShader) {  // also implies mesh shaders
 
       {
         MTL::BlitCommandEncoder *reset_blit_enc = buf->blitCommandEncoder();
@@ -274,7 +274,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
         enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
         enc->setCullMode(MTL::CullModeBack);
         enc->setRenderPipelineState(mesh_pso_);
-        MTL::Resource *resources[] = {
+        const MTL::Resource *const resources[] = {
             main_vert_buffer_.get(),          meshlet_buf_.get(),
             instance_model_matrix_buf_.get(), instance_data_buf_.get(),
             meshlet_vertices_buf_.get(),      meshlet_triangles_buf_.get(),
@@ -286,7 +286,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
         enc->endEncoding();
       }
 
-    } else if (render_mesh_shader_) {
+    } else if (draw_mode_ == DrawMode::MeshShader) {
       MTL::RenderCommandEncoder *enc = buf->renderCommandEncoder(render_pass_desc);
       set_depth_stencil_state(enc);
       use_scene_arg_buffer_resources(enc);
@@ -329,7 +329,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
         }
       }
       enc->endEncoding();
-    } else {
+    } else {  // draw_mode_ == DrawMode::VertexShader
       MTL::RenderCommandEncoder *enc = buf->renderCommandEncoder(render_pass_desc);
       set_depth_stencil_state(enc);
       use_scene_arg_buffer_resources(enc);
@@ -352,7 +352,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
           const auto &mesh = model.meshes[node.mesh_id];
           // bind mesh stuff
           enc->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, mesh.index_count,
-                                     MTL::IndexTypeUInt16, main_index_buffer_.get(),
+                                     MTL::IndexTypeUInt32, main_index_buffer_.get(),
                                      mesh.index_offset, 1,
                                      (uint32_t)(mesh.vertex_offset / sizeof(DefaultVertex)), i);
           i++;
@@ -410,7 +410,7 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
   }
 
   const size_t vertices_size = model.model.vertices.size() * sizeof(DefaultVertex);
-  const size_t indices_size = model.model.indices.size() * sizeof(uint16_t);
+  const size_t indices_size = model.model.indices.size() * sizeof(IndexT);
   main_vert_buffer_ =
       NS::TransferPtr(raw_device_->newBuffer(vertices_size, MTL::ResourceStorageModeShared));
   memcpy(main_vert_buffer_->contents(), model.model.vertices.data(), vertices_size);

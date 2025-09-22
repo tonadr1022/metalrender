@@ -6,6 +6,7 @@
 #include <glm/mat4x4.hpp>
 #include <string>
 
+#include "GFXTypes.hpp"
 #include "default_vertex.h"
 #include "meshoptimizer.h"
 
@@ -13,8 +14,6 @@ namespace MTL {
 class Texture;
 class Device;
 }  // namespace MTL
-
-using IndexT = uint16_t;
 
 struct TextureUpload {
   const void *data;

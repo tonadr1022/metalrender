@@ -167,8 +167,8 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
         primitive_mesh_indices_per_mesh[mesh_i].push_back(overall_mesh_i);
         const cgltf_primitive &primitive = mesh.primitives[prim_i];
 
-        const uint32_t base_vertex = static_cast<uint32_t>(all_vertices.size());
-        const uint32_t vertex_offset = base_vertex * sizeof(DefaultVertex);
+        const auto base_vertex = static_cast<uint32_t>(all_vertices.size());
+        const size_t vertex_offset = base_vertex * sizeof(DefaultVertex);
         uint32_t index_offset = UINT32_MAX;
         uint32_t index_count = UINT32_MAX;
         if (primitive.indices) {
@@ -180,7 +180,8 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
             all_indices.push_back(cgltf_accessor_read_index(primitive.indices, i));
           }
         }
-        uint32_t vertex_count = static_cast<uint32_t>(primitive.attributes[0].data->count);
+        assert(primitive.attributes_count > 0);
+        const auto vertex_count = static_cast<uint32_t>(primitive.attributes[0].data->count);
         all_vertices.resize(all_vertices.size() + vertex_count);
         for (size_t attr_i = 0; attr_i < primitive.attributes_count; attr_i++) {
           const auto &attr = primitive.attributes[attr_i];
@@ -192,8 +193,8 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
               all_vertices[base_vertex + i].pos = glm::vec4{pos[0], pos[1], pos[2], 0};
             }
           } else if (attr.type == cgltf_attribute_type_texcoord) {
-            float uv[2] = {0, 0};
             for (size_t i = 0; i < accessor->count; i++) {
+              float uv[2] = {0, 0};
               cgltf_accessor_read_float(accessor, i, uv, 2);
               all_vertices[base_vertex + i].uv = glm::vec2{uv[0], uv[1]};
             }
@@ -206,9 +207,11 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
           }
         }
 
-        const uint32_t material_idx = primitive.material - gltf->materials;
+        const uint32_t material_idx =
+            primitive.material ? primitive.material - gltf->materials : UINT32_MAX;
+        assert(vertex_offset < UINT32_MAX);
         meshes.push_back(Mesh{
-            .vertex_offset = vertex_offset,
+            .vertex_offset = static_cast<uint32_t>(vertex_offset),
             .index_offset = index_offset,
             .vertex_count = vertex_count,
             .index_count = index_count,
@@ -247,6 +250,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
       std::vector<uint32_t> children;
       if (gltf_node.mesh) {
         auto mesh_id = static_cast<uint32_t>(gltf_node.mesh - gltf->meshes);
+        children.reserve(primitive_mesh_indices_per_mesh[mesh_id].size());
         for (auto prim_mesh_id : primitive_mesh_indices_per_mesh[mesh_id]) {
           children.push_back(static_cast<uint32_t>(result_nodes.size()));
           tot_mesh_nodes++;
@@ -256,7 +260,8 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
 
       children.reserve(children.size() + gltf_node.children_count);
       for (uint32_t ci = 0; ci < gltf_node.children_count; ci++) {
-        children.push_back(static_cast<uint32_t>(gltf_node.children[ci] - gltf->nodes));
+        children.push_back(
+            gltf_node_to_node_i[static_cast<uint32_t>(gltf_node.children[ci] - gltf->nodes)]);
       }
 
       gltf_node_to_node_i[node_i] = static_cast<uint32_t>(result_nodes.size());

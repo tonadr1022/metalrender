@@ -73,6 +73,8 @@ float4 fragment fragmentMain(v2f in [[stage_in]],
         float4 normal = scene_buf.textures[normal_tex_idx].sample(default_texture_sampler, in.uv);
         normal.xyz = normal.xyz * 0.5 + 0.5;
         out_color = normal;
+    } else if (render_mode == RENDER_MODE_UVS) {
+        out_color = float4(in.uv,0.0,1.0);
     }
     return out_color;
 }

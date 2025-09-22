@@ -33,8 +33,10 @@ struct ObjectPayload {
 void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
                         device const InstanceData* instance_data [[buffer(0)]],
                         uint thread_idx [[thread_position_in_threadgroup]],
+                        uint object_idx [[threadgroup_position_in_grid]],
                         mesh_grid_properties grid) {
     if (thread_idx == 0) {
+        //out_payload.instance_id = object_idx;
         out_payload.instance_id = instance_data->instance_id;
         grid.set_threadgroups_per_grid(uint3(instance_data->meshlet_count, 1, 1));
     }

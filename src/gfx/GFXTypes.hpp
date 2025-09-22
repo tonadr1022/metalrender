@@ -6,7 +6,7 @@ enum class TextureFormat { Undefined, R8G8B8A8Srgb, R8G8B8A8Unorm };
 
 enum class StorageMode { GPUOnly, CPUAndGPU, CPUOnly };
 
-using IndexT = uint16_t;
+using IndexT = uint32_t;
 
 struct TextureDesc {
   TextureFormat format{TextureFormat::Undefined};

@@ -32,7 +32,7 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
     }
     device const ObjectInfo& obj_info = icb_container->obj_infos[object_idx];
     const uint num_meshlets = obj_info.num_meshlets;
-    const uint threads_per_object_thread_group = 256;
+    const uint threads_per_object_thread_group = 128;
     const uint thread_groups_per_object =
             (num_meshlets + threads_per_object_thread_group - 1) / threads_per_object_thread_group;
     const uint max_mesh_threads =
