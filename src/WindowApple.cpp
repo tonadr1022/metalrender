@@ -65,6 +65,12 @@ void WindowApple::init(rhi::Device* device, KeyCallbackFn key_callback_fn,
 void WindowApple::shutdown() { glfwTerminate(); }
 void WindowApple::poll_events() { glfwPollEvents(); }
 
+void WindowApple::set_vsync(bool vsync) {
+  [(CAMetalLayer*)metal_layer_ setDisplaySyncEnabled:vsync];
+}
+
+bool WindowApple::get_vsync() const { return [(CAMetalLayer*)metal_layer_ displaySyncEnabled]; }
+
 bool WindowApple::should_close() const { return glfwWindowShouldClose(window_); }
 
 glm::uvec2 WindowApple::get_window_size() {

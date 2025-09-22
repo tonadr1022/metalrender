@@ -22,6 +22,7 @@ class AutoreleasePool;
 
 namespace MTL {
 
+class ComputePipelineState;
 class IndirectCommandBuffer;
 class CommandQueue;
 class Device;
@@ -36,6 +37,7 @@ struct Shader {
   MTL::Function* mesh_func{};
   MTL::Function* vert_func{};
   MTL::Function* frag_func{};
+  MTL::Function* compute_func{};
 };
 
 struct TextureWithIdx {
@@ -72,6 +74,7 @@ class RendererMetal {
   MTL::CommandQueue* main_cmd_queue_{};
   MTL::RenderPipelineState* main_pso_{};
   MTL::RenderPipelineState* mesh_pso_{};
+  MTL::ComputePipelineState* dispatch_mesh_pso_{};
 
   NS::SharedPtr<MTL::Buffer> main_vert_buffer_;
   NS::SharedPtr<MTL::Buffer> main_index_buffer_;
@@ -84,19 +87,18 @@ class RendererMetal {
   NS::SharedPtr<MTL::Buffer> instance_material_id_buf_;
   NS::SharedPtr<MTL::IndirectCommandBuffer> ind_cmd_buf_;
 
-  struct InstanceData {
-    uint32_t mat_id;
-    uint32_t meshlet_base;
-    uint32_t meshlet_count;
-    uint32_t meshlet_vertices_offset;
-    uint32_t meshlet_triangles_offset;
-  };
   NS::SharedPtr<MTL::Buffer> instance_data_buf_;
   // NS::SharedPtr<MTL::Buffer> object_shader_param_buf_;
   NS::SharedPtr<MTL::Buffer> meshlet_buf_;
+  // NS::SharedPtr<MTL::Buffer> gpu_mesh_data_buf_;
   NS::SharedPtr<MTL::Buffer> meshlet_vertices_buf_;
   NS::SharedPtr<MTL::Buffer> meshlet_triangles_buf_;
+  NS::SharedPtr<MTL::Buffer> dispatch_mesh_encode_arg_buf_;
+  NS::SharedPtr<MTL::Buffer> dispatch_mesh_icb_container_buf_;
 
+  NS::SharedPtr<MTL::Buffer> obj_info_buf_;
+  NS::SharedPtr<MTL::Buffer> create_buffer(
+      size_t size, void* data, MTL::ResourceOptions options = MTL::ResourceStorageModeShared);
   MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
   constexpr static int k_max_materials{1024};
@@ -109,8 +111,10 @@ class RendererMetal {
   std::filesystem::path resource_dir_;
   Shader forward_pass_shader_;
   Shader forward_mesh_shader_;
+  Shader dispatch_mesh_shader_;
   size_t curr_frame_;
   size_t frames_in_flight_{2};
+  uint32_t tot_meshes_{0};
   bool render_mesh_shader_{true};
-  bool render_icb_{false};
+  bool render_icb_{true};
 };

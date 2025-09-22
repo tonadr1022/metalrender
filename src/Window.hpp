@@ -12,6 +12,8 @@ class Window {
   using KeyCallbackFn = std::function<void(int key, int action, int mods)>;
   using CursorPosCallbackFn = std::function<void(double x_pos, double y_pos)>;
 
+  virtual void set_vsync(bool vsync) = 0;
+  virtual bool get_vsync() const = 0;
   virtual void init(rhi::Device* device, KeyCallbackFn key_callback_fn,
                     CursorPosCallbackFn cursor_pos_callback_fn) = 0;
   virtual void shutdown() = 0;

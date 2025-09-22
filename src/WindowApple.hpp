@@ -20,6 +20,8 @@ class WindowApple : public Window {
  public:
   void poll_events() override;
 
+  void set_vsync(bool vsync) override;
+  bool get_vsync() const override;
   void init(rhi::Device* device, KeyCallbackFn key_callback_fn,
             CursorPosCallbackFn cursor_pos_callback_fn) override;
   void shutdown() override;

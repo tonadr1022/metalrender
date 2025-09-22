@@ -7,6 +7,7 @@
 #include "core/Logger.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "glm/ext/matrix_transform.hpp"
+#include "tracy/Tracy.hpp"
 
 namespace {
 
@@ -103,6 +104,7 @@ bool Camera::process_mouse(glm::vec2 offset) {
 }
 
 App::App() {
+  ZoneScoped;
   resource_dir_ = get_resource_dir();
   shader_dir_ = resource_dir_ / "shaders";
   load_config();
@@ -121,11 +123,13 @@ App::App() {
 }
 
 void App::run() {
+  ZoneScoped;
   renderer_.load_model(config_.initial_model_path);
   // renderer_.load_model(resource_dir_ / "models/Cube/glTF/Cube.gltf");
 
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
+    ZoneScopedN("main loop");
     window_->poll_events();
     double curr_time = glfwGetTime();
     auto dt = static_cast<float>(curr_time - last_time);
@@ -162,6 +166,9 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
     if (key == GLFW_KEY_ESCAPE) {
       hide_mouse_ = !hide_mouse_;
       on_hide_mouse_change();
+    }
+    if (key == GLFW_KEY_TAB) {
+      window_->set_vsync(!window_->get_vsync());
     }
   }
 }

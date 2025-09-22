@@ -30,7 +30,8 @@ void update_global_transforms(Model &model, uint32_t node_i, const glm::mat4 &pa
 }
 
 // Ref: https://github.com/zeux/meshoptimizer
-MeshletData load_meshlet_data(std::span<DefaultVertex> vertices, std::span<IndexT> indices) {
+MeshletData load_meshlet_data(std::span<DefaultVertex> vertices, std::span<IndexT> indices,
+                              uint32_t base_vertex) {
   const size_t max_meshlets = meshopt_buildMeshletsBound(indices.size(), k_max_vertices_per_meshlet,
                                                          k_max_triangles_per_meshlet);
   // cone_weight set to a value between 0 and 1 to balance cone culling efficiency with other forms
@@ -50,6 +51,9 @@ MeshletData load_meshlet_data(std::span<DefaultVertex> vertices, std::span<Index
   meshlet_triangles.resize(last.triangle_offset + (last.triangle_count * 3));
   meshlets.resize(meshlet_count);
 
+  for (auto &v : meshlet_vertices) {
+    v += base_vertex;
+  }
   for (auto &m : meshlets) {
     meshopt_optimizeMeshlet(&meshlet_vertices[m.vertex_offset],
                             &meshlet_triangles[m.triangle_offset], m.triangle_count,
@@ -163,10 +167,10 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
         primitive_mesh_indices_per_mesh[mesh_i].push_back(overall_mesh_i);
         const cgltf_primitive &primitive = mesh.primitives[prim_i];
 
-        const size_t base_vertex = all_vertices.size();
-        const size_t vertex_offset = base_vertex * sizeof(DefaultVertex);
-        size_t index_offset = SIZE_MAX;
-        size_t index_count = SIZE_MAX;
+        const uint32_t base_vertex = static_cast<uint32_t>(all_vertices.size());
+        const uint32_t vertex_offset = base_vertex * sizeof(DefaultVertex);
+        uint32_t index_offset = UINT32_MAX;
+        uint32_t index_count = UINT32_MAX;
         if (primitive.indices) {
           index_count = primitive.indices->count;
           // TODO: uint32_t indices
@@ -176,8 +180,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
             all_indices.push_back(cgltf_accessor_read_index(primitive.indices, i));
           }
         }
-        size_t vertex_count{};
-        vertex_count = primitive.attributes[0].data->count;
+        uint32_t vertex_count = static_cast<uint32_t>(primitive.attributes[0].data->count);
         all_vertices.resize(all_vertices.size() + vertex_count);
         for (size_t attr_i = 0; attr_i < primitive.attributes_count; attr_i++) {
           const auto &attr = primitive.attributes[attr_i];
@@ -215,13 +218,16 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
     }
     auto &meshlet_datas = result.model.meshlet_datas;
     for (const Mesh &mesh : meshes) {
+      uint32_t base_vertex = mesh.vertex_offset / sizeof(DefaultVertex);
       meshlet_datas.emplace_back(load_meshlet_data(
-          std::span(&all_vertices[mesh.vertex_offset / sizeof(DefaultVertex)], mesh.vertex_count),
-          std::span(&all_indices[mesh.index_offset / sizeof(IndexT)], mesh.index_count)));
+          std::span(&all_vertices[base_vertex], mesh.vertex_count),
+          std::span(&all_indices[mesh.index_offset / sizeof(IndexT)], mesh.index_count),
+          base_vertex));
     }
   }
   {
     // process nodes
+    uint32_t tot_mesh_nodes = 0;
     for (size_t node_i = 0; node_i < gltf->nodes_count; node_i++) {
       const cgltf_node &gltf_node = gltf->nodes[node_i];
 
@@ -243,6 +249,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
         auto mesh_id = static_cast<uint32_t>(gltf_node.mesh - gltf->meshes);
         for (auto prim_mesh_id : primitive_mesh_indices_per_mesh[mesh_id]) {
           children.push_back(static_cast<uint32_t>(result_nodes.size()));
+          tot_mesh_nodes++;
           result_nodes.emplace_back(Node{.mesh_id = prim_mesh_id});
         }
       }
@@ -266,6 +273,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
       root_nodes.push_back(gltf_node_to_node_i[scene->nodes[i] - gltf->nodes]);
     }
 
+    result.model.tot_mesh_nodes = tot_mesh_nodes;
     update_global_transforms(result.model);
   }
 

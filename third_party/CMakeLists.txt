@@ -10,3 +10,7 @@ target_include_directories(stb_image INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/stb_i
 
 set(MESHOPT_INSTALL OFF)
 add_subdirectory(meshoptimizer)
+
+option(TRACY_ENABLE "Enable profiling" ON)
+option(TRACY_ONLY_IPV4 "IPv4 only" ON)
+add_subdirectory(tracy)

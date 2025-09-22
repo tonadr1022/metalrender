@@ -58,7 +58,7 @@ constexpr sampler default_texture_sampler(
 
 float4 fragment fragmentMain(v2f in [[stage_in]],
                             device const SceneResourcesBuf& scene_buf [[buffer(0)]],
-                            constant Uniforms& uniforms [[buffer(2)]]) {
+                            constant Uniforms& uniforms [[buffer(1)]]) {
     uint render_mode = uniforms.render_mode;
     device const Material& material = scene_buf.materials[in.material_id];
     float4 out_color = float4(0.0);

@@ -4,6 +4,7 @@ using namespace metal;
 #include "shader_constants.h"
 #include "default_vertex.h"
 #include "shader_global_uniforms.h"
+#include "mesh_shared.h"
 
 struct MeshletDesc {
     uint vertex_offset;
@@ -23,36 +24,20 @@ static float3 hue2rgb(float hue) {
     return rgb;
 }
 
-struct InstanceData {
-    uint mat_id;
-    uint meshlet_base;
-    uint meshlet_count;
-    uint meshlet_vertices_offset;
-    uint meshlet_triangles_offset;
-};
 
 struct ObjectPayload {
     uint instance_id;
-    uint mesh_vertex_offset;
-};
-
-struct TaskCmd {
-    uint instance_id;
-    uint mesh_vertex_offset;
 };
 
 [[object]]
 void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
-                        constant InstanceData* instance_datas [[buffer(0)]],
-                        constant TaskCmd& task_cmd [[buffer(1)]],
+                        device const InstanceData* instance_data [[buffer(0)]],
                         uint thread_idx [[thread_position_in_threadgroup]],
                         mesh_grid_properties grid) {
     if (thread_idx == 0) {
-        out_payload.instance_id = task_cmd.instance_id;
-        out_payload.mesh_vertex_offset = task_cmd.mesh_vertex_offset;
-        grid.set_threadgroups_per_grid(uint3(instance_datas[task_cmd.instance_id].meshlet_count, 1, 1));
+        out_payload.instance_id = instance_data->instance_id;
+        grid.set_threadgroups_per_grid(uint3(instance_data->meshlet_count, 1, 1));
     }
-
 }
 
 struct MeshletPrimitive {
@@ -73,20 +58,18 @@ void basic1_mesh_main(object_data const ObjectPayload& payload [[payload]],
                       device const MeshletDesc* meshlets [[buffer(2)]],
                       device const uint* meshlet_vertices [[buffer(3)]],
                       device const uchar* meshlet_triangles [[buffer(4)]],
-                      constant float4x4* models [[buffer(5)]],
-                      device const InstanceData* instance_datas [[buffer(6)]],
+                      device const float4x4& model [[buffer(5)]],
+                      device const InstanceData& instance_data [[buffer(6)]],
                       uint payload_idx [[threadgroup_position_in_grid]],
                       uint thread_idx [[thread_position_in_threadgroup]],
                       Meshlet out_mesh) {
     uint meshlet_idx = payload_idx;
     uint instance_id = payload.instance_id;
-    device const InstanceData& instance_data = instance_datas[instance_id];
     device const MeshletDesc& meshlet = meshlets[meshlet_idx + instance_data.meshlet_base];
     if (thread_idx < meshlet.vertex_count) {
-        device const DefaultVertex& vert = vertices[meshlet_vertices[meshlet.vertex_offset + thread_idx + instance_data.meshlet_vertices_offset]
-         + payload.mesh_vertex_offset];
+        device const DefaultVertex& vert = vertices[meshlet_vertices[meshlet.vertex_offset + thread_idx + instance_data.meshlet_vertices_offset]];
         MeshletVertex out_vert;
-        out_vert.pos = uniforms.vp * models[instance_id] * float4(vert.pos.xyz, 1.0);
+        out_vert.pos = uniforms.vp * model * float4(vert.pos.xyz, 1.0);
         out_vert.uv = vert.uv;
         out_vert.normal = vert.normal;
         out_mesh.set_vertex(thread_idx, out_vert);
@@ -99,7 +82,7 @@ void basic1_mesh_main(object_data const ObjectPayload& payload [[payload]],
         out_mesh.set_index(i + 2, meshlet_triangles[meshlet.triangle_offset + i + 2 + instance_data.meshlet_triangles_offset]);
         MeshletPrimitive prim = {
             .mat_id = instance_data.mat_id,
-            .color = float4(hue2rgb(thread_idx), 1.0),
+            .color = float4(hue2rgb((meshlet_idx + instance_id) * 1.71f), 1.0),
         };
         out_mesh.set_primitive(thread_idx, prim);
     }
@@ -136,7 +119,7 @@ struct SceneResourcesBuf {
 [[fragment]]
 float4 basic1_fragment_main(FragmentIn in [[stage_in]],
                             device const SceneResourcesBuf& scene_buf [[buffer(0)]],
-                            constant Uniforms& uniforms [[buffer(2)]]) {
+                            constant Uniforms& uniforms [[buffer(1)]]) {
     // return in.prim.color;
     uint render_mode = uniforms.render_mode;
     float4 out_color = float4(0.0);

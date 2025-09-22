@@ -30,10 +30,10 @@ struct Material {
 };
 
 struct Mesh {
-  size_t vertex_offset;  // element count
-  size_t index_offset;   // index count
-  size_t vertex_count;
-  size_t index_count;
+  uint32_t vertex_offset;  // element count
+  uint32_t index_offset;   // index count
+  uint32_t vertex_count;
+  uint32_t index_count;
   uint32_t material_id;
 };
 
@@ -58,6 +58,7 @@ struct Model {
   std::vector<DefaultVertex> vertices;
   std::vector<IndexT> indices;
   std::vector<Node> nodes;
+  uint32_t tot_mesh_nodes{};
   std::vector<uint32_t> root_nodes;
   std::vector<Mesh> meshes;
   std::vector<MeshletData> meshlet_datas;
