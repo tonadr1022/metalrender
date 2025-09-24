@@ -3,6 +3,7 @@
 #include "Foundation/NSString.hpp"
 #include "Metal/MTLPixelFormat.hpp"
 #include "Metal/MTLResource.hpp"
+#include "Metal/MTLTexture.hpp"
 #include "gfx/GFXTypes.hpp"
 
 namespace NS {
@@ -15,6 +16,22 @@ void print_err(NS::Error *err);
 
 inline NS::String *string(const char *v) { return NS::String::string(v, NS::ASCIIStringEncoding); }
 inline NS::String *string(const std::string &v) { return string(v.c_str()); }
+
+inline MTL::TextureUsage convert_texture_usage(TextureUsage usage) {
+  MTL::TextureUsage result{};
+
+  if (usage & TextureUsageShaderRead) {
+    result |= MTL::TextureUsageShaderRead;
+  }
+  if (usage & TextureUsageRenderTarget) {
+    result |= MTL::TextureUsageRenderTarget;
+  }
+  if (usage & TextureUsageShaderWrite) {
+    result |= MTL::TextureUsageShaderWrite;
+  }
+
+  return result;
+}
 
 inline MTL::StorageMode convert_storage_mode(StorageMode mode) {
   switch (mode) {
@@ -37,6 +54,8 @@ inline MTL::PixelFormat convert_format(TextureFormat format) {
       return MTL::PixelFormatRGBA8Unorm_sRGB;
     case TextureFormat::R8G8B8A8Unorm:
       return MTL::PixelFormatRGBA8Unorm;
+    case TextureFormat::D32float:
+      return MTL::PixelFormatDepth32Float;
     default:
       assert(0 && "unhandled texture format");
       return MTL::PixelFormatInvalid;

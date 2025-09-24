@@ -41,7 +41,7 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
     render_command cmd(icb_container->cmd_buf, object_idx);
 
     cmd.set_mesh_buffer(draw_args.main_vertex_buf, 0);
-    cmd.set_mesh_buffer(draw_args.uniform_buf + params.uniforms_offset, 1);
+    cmd.set_mesh_buffer(draw_args.uniform_buf, 1);
     cmd.set_mesh_buffer(draw_args.meshlet_buf, 2);
     cmd.set_mesh_buffer(draw_args.meshlet_vertices_buf, 3);
     cmd.set_mesh_buffer(draw_args.meshlet_triangles_buf, 4);
@@ -51,7 +51,7 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
     cmd.set_object_buffer(draw_args.instance_data_buf + object_idx * sizeof(InstanceData), 0);
 
     cmd.set_fragment_buffer(draw_args.scene_arg_buf, 0);
-    cmd.set_fragment_buffer(draw_args.uniform_buf + params.uniforms_offset, 1);
+    cmd.set_fragment_buffer(draw_args.uniform_buf, 1);
 
     cmd.draw_mesh_threadgroups(uint3(thread_groups_per_object, 1, 1),
                                uint3(threads_per_object_thread_group, 1, 1),

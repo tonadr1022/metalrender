@@ -64,7 +64,20 @@ class RendererMetal {
   TextureWithIdx load_material_image(const TextureDesc& desc);
 
  private:
+  struct PerFrameData {
+    NS::SharedPtr<MTL::Buffer> uniform_buf;
+  };
   void load_shaders();
+  void init_imgui();
+  void shutdown_imgui();
+  void render_imgui();
+  void set_global_uniform_data(const RenderArgs& render_args);
+  void flush_pending_texture_uploads();
+  void recreate_render_target_textures();
+  PerFrameData& get_curr_frame_data() { return per_frame_datas_[curr_frame_ % frames_in_flight_]; }
+  NS::SharedPtr<MTL::Buffer> create_buffer(
+      size_t size, void* data, MTL::ResourceOptions options = MTL::ResourceStorageModeShared);
+
   std::vector<Model> models_;
 
   [[maybe_unused]] MetalDevice* device_{};
@@ -78,7 +91,6 @@ class RendererMetal {
 
   NS::SharedPtr<MTL::Buffer> main_vert_buffer_;
   NS::SharedPtr<MTL::Buffer> main_index_buffer_;
-  NS::SharedPtr<MTL::Buffer> main_uniform_buffer_;
   NS::SharedPtr<MTL::Buffer> materials_buffer_;
   NS::SharedPtr<MTL::Buffer> scene_arg_buffer_;
 
@@ -97,15 +109,11 @@ class RendererMetal {
   NS::SharedPtr<MTL::Buffer> dispatch_mesh_icb_container_buf_;
 
   NS::SharedPtr<MTL::Buffer> obj_info_buf_;
-  NS::SharedPtr<MTL::Buffer> create_buffer(
-      size_t size, void* data, MTL::ResourceOptions options = MTL::ResourceStorageModeShared);
   MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
-  constexpr static int k_max_materials{1024};
   std::vector<Material> all_materials_;
   std::vector<MTL::Texture*> all_textures_;
   IndexAllocator texture_index_allocator_{k_max_textures};
-  void flush_pending_texture_uploads();
 
   std::filesystem::path shader_dir_;
   std::filesystem::path resource_dir_;
@@ -114,11 +122,14 @@ class RendererMetal {
   Shader dispatch_mesh_shader_;
   size_t curr_frame_;
   size_t frames_in_flight_{2};
+
+  std::vector<PerFrameData> per_frame_datas_;
   uint32_t tot_meshes_{0};
   enum class DrawMode {
     IndirectMeshShader,
     MeshShader,
     VertexShader,
   };
+
   DrawMode draw_mode_{DrawMode::IndirectMeshShader};
 };

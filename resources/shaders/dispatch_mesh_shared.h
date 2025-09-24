@@ -14,6 +14,5 @@ enum EncodeMeshDrawArgsE {
 
 struct DispatchMeshParams {
   uint32_t tot_meshes;
-  uint32_t uniforms_offset;
 };
 #endif
