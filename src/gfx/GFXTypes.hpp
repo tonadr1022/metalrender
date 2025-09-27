@@ -2,6 +2,8 @@
 
 #include "glm/ext/vector_uint3.hpp"
 
+namespace rhi {
+
 enum class TextureFormat {
   Undefined,
   R8G8B8A8Srgb,
@@ -28,3 +30,10 @@ struct TextureDesc {
   uint32_t mip_levels{1};
   uint32_t array_length{1};
 };
+
+struct BufferDesc {
+  StorageMode storage_mode{StorageMode::GPUOnly};
+  size_t size{};
+};
+
+}  // namespace rhi

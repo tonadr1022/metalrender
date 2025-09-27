@@ -30,7 +30,7 @@ void update_global_transforms(Model &model, uint32_t node_i, const glm::mat4 &pa
 }
 
 // Ref: https://github.com/zeux/meshoptimizer
-MeshletData load_meshlet_data(std::span<DefaultVertex> vertices, std::span<IndexT> indices,
+MeshletData load_meshlet_data(std::span<DefaultVertex> vertices, std::span<rhi::IndexT> indices,
                               uint32_t base_vertex) {
   const size_t max_meshlets = meshopt_buildMeshletsBound(indices.size(), k_max_vertices_per_meshlet,
                                                          k_max_triangles_per_meshlet);
@@ -108,11 +108,11 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
       const std::filesystem::path full_img_path = directory_path / img.uri;
       const uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
       const uint32_t mip_levels = static_cast<uint32_t>(std::floor(std::log2(std::max(w, h)))) + 1;
-      const TextureDesc desc{.format = TextureFormat::R8G8B8A8Unorm,
-                             .storage_mode = StorageMode::GPUOnly,
-                             .dims = glm::uvec3{w, h, 1},
-                             .mip_levels = mip_levels,
-                             .array_length = 1};
+      const rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
+                                  .storage_mode = rhi::StorageMode::GPUOnly,
+                                  .dims = glm::uvec3{w, h, 1},
+                                  .mip_levels = mip_levels,
+                                  .array_length = 1};
       const TextureWithIdx texture_with_idx = renderer.load_material_image(desc);
       texture_uploads.emplace_back(TextureUpload{.data = data,
                                                  .tex = texture_with_idx.tex,
@@ -174,7 +174,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
         if (primitive.indices) {
           index_count = primitive.indices->count;
           // TODO: uint32_t indices
-          index_offset = all_indices.size() * sizeof(IndexT);
+          index_offset = all_indices.size() * sizeof(rhi::IndexT);
           all_indices.reserve(all_indices.size() + index_count);
           for (size_t i = 0; i < primitive.indices->count; i++) {
             all_indices.push_back(cgltf_accessor_read_index(primitive.indices, i));
@@ -221,10 +221,10 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
     }
     auto &meshlet_datas = result.model.meshlet_datas;
     for (const Mesh &mesh : meshes) {
-      uint32_t base_vertex = mesh.vertex_offset / sizeof(DefaultVertex);
+      const uint32_t base_vertex = mesh.vertex_offset / sizeof(DefaultVertex);
       meshlet_datas.emplace_back(load_meshlet_data(
           std::span(&all_vertices[base_vertex], mesh.vertex_count),
-          std::span(&all_indices[mesh.index_offset / sizeof(IndexT)], mesh.index_count),
+          std::span(&all_indices[mesh.index_offset / sizeof(rhi::IndexT)], mesh.index_count),
           base_vertex));
     }
   }

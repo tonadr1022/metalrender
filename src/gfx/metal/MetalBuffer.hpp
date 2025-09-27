@@ -8,8 +8,9 @@ class Buffer;
 
 class MetalBuffer : public rhi::Buffer {
  public:
-  explicit MetalBuffer(const rhi::BufferDesc& desc);
+  MetalBuffer(const rhi::BufferDesc& desc, MTL::Buffer* buffer);
+  MetalBuffer() = default;
+  void* contents() override;
 
- private:
-  [[maybe_unused]] MTL::Buffer* buffer_;
+  [[maybe_unused]] MTL::Buffer* buffer_{};
 };

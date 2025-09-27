@@ -2,18 +2,19 @@
 
 #include <cstddef>
 
-namespace rhi {
+#include "GFXTypes.hpp"
 
-struct BufferDesc {
-  size_t size;
-};
+namespace rhi {
 
 class Buffer {
  public:
   explicit Buffer(const BufferDesc& desc) : desc_(desc) {}
+  Buffer() = default;
+  virtual void* contents() = 0;
+  [[nodiscard]] size_t size() const { return desc_.size; }
 
  private:
-  [[maybe_unused]] BufferDesc desc_;
+  BufferDesc desc_;
 };
 
 }  // namespace rhi

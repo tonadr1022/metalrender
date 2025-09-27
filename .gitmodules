@@ -13,3 +13,6 @@
 [submodule "third_party/imgui"]
 	path = third_party/imgui
 	url = git@github.com:ocornut/imgui.git
+[submodule "third_party/OffsetAllocator"]
+	path = third_party/OffsetAllocator
+	url = git@github.com:sebbbi/OffsetAllocator.git

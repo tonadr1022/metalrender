@@ -17,7 +17,8 @@ void print_err(NS::Error *err);
 inline NS::String *string(const char *v) { return NS::String::string(v, NS::ASCIIStringEncoding); }
 inline NS::String *string(const std::string &v) { return string(v.c_str()); }
 
-inline MTL::TextureUsage convert_texture_usage(TextureUsage usage) {
+inline MTL::TextureUsage convert_texture_usage(rhi::TextureUsage usage) {
+  using namespace rhi;
   MTL::TextureUsage result{};
 
   if (usage & TextureUsageShaderRead) {
@@ -33,7 +34,8 @@ inline MTL::TextureUsage convert_texture_usage(TextureUsage usage) {
   return result;
 }
 
-inline MTL::StorageMode convert_storage_mode(StorageMode mode) {
+inline MTL::StorageMode convert_storage_mode(rhi::StorageMode mode) {
+  using namespace rhi;
   switch (mode) {
     case StorageMode::CPUAndGPU:
     case StorageMode::CPUOnly:
@@ -48,7 +50,8 @@ inline MTL::StorageMode convert_storage_mode(StorageMode mode) {
   return MTL::StorageModePrivate;
 }
 
-inline MTL::PixelFormat convert_format(TextureFormat format) {
+inline MTL::PixelFormat convert_format(rhi::TextureFormat format) {
+  using namespace rhi;
   switch (format) {
     case TextureFormat::R8G8B8A8Srgb:
       return MTL::PixelFormatRGBA8Unorm_sRGB;

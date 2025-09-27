@@ -9,6 +9,9 @@
 #include "GFXTypes.hpp"
 #include "ModelLoader.hpp"
 #include "core/Allocator.hpp"
+#include "core/Handle.hpp"
+#include "core/Pool.hpp"
+#include "offsetAllocator.hpp"
 #include "shader_constants.h"
 
 class MetalDevice;
@@ -49,6 +52,28 @@ struct RenderArgs {
   glm::mat4 view_mat;
 };
 
+struct ModelGPUResources {
+  OffsetAllocator::Allocation instance_data_gpu_slot;
+};
+
+using ModelGPUHandle = GenerationalHandle<ModelGPUResources>;
+
+class InstanceDataMgr {
+ public:
+  InstanceDataMgr(size_t initial_element_cap, MTL::Device* device);
+  [[nodiscard]] MTL::Buffer* model_matrix_buf() const { return model_matrix_buf_.get(); }
+  [[nodiscard]] MTL::Buffer* instance_data_buf() const { return instance_data_buf_.get(); }
+  OffsetAllocator::Allocation allocate(size_t element_count);
+  void free(OffsetAllocator::Allocation alloc) { allocator_.free(alloc); }
+
+ private:
+  void allocate_buffers(size_t element_count);
+  OffsetAllocator::Allocator allocator_;
+  NS::SharedPtr<MTL::Buffer> model_matrix_buf_;
+  NS::SharedPtr<MTL::Buffer> instance_data_buf_;
+  MTL::Device* device_;
+};
+
 class RendererMetal {
  public:
   struct CreateInfo {
@@ -60,8 +85,9 @@ class RendererMetal {
   void init(const CreateInfo& cinfo);
   void shutdown();
   void render(const RenderArgs& render_args);
-  void load_model(const std::filesystem::path& path);
-  TextureWithIdx load_material_image(const TextureDesc& desc);
+  ModelGPUHandle load_model(const std::filesystem::path& path);
+  void free_model(ModelGPUHandle model);
+  TextureWithIdx load_material_image(const rhi::TextureDesc& desc);
 
  private:
   struct PerFrameData {
@@ -77,6 +103,9 @@ class RendererMetal {
   PerFrameData& get_curr_frame_data() { return per_frame_datas_[curr_frame_ % frames_in_flight_]; }
   NS::SharedPtr<MTL::Buffer> create_buffer(
       size_t size, void* data, MTL::ResourceOptions options = MTL::ResourceStorageModeShared);
+
+  // TODO: make publically reservable
+  Pool<ModelGPUHandle, ModelGPUResources> model_gpu_resource_pool_{100};
 
   std::vector<Model> models_;
 
@@ -94,12 +123,12 @@ class RendererMetal {
   NS::SharedPtr<MTL::Buffer> materials_buffer_;
   NS::SharedPtr<MTL::Buffer> scene_arg_buffer_;
 
-  IndexAllocator instance_idx_allocator_{1024};
-  NS::SharedPtr<MTL::Buffer> instance_model_matrix_buf_;
-  NS::SharedPtr<MTL::Buffer> instance_material_id_buf_;
+  std::optional<InstanceDataMgr> instance_data_mgr_;
+
   NS::SharedPtr<MTL::IndirectCommandBuffer> ind_cmd_buf_;
 
-  NS::SharedPtr<MTL::Buffer> instance_data_buf_;
+  // NS::SharedPtr<MTL::Buffer> instance_data_buf_;
+  // std::optional<GPUAllocator> instance_data_buf_;
   // NS::SharedPtr<MTL::Buffer> object_shader_param_buf_;
   NS::SharedPtr<MTL::Buffer> meshlet_buf_;
   // NS::SharedPtr<MTL::Buffer> gpu_mesh_data_buf_;

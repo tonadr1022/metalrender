@@ -55,7 +55,7 @@ struct MeshletData {
 struct Model {
   constexpr static uint32_t invalid_id = UINT32_MAX;
   std::vector<DefaultVertex> vertices;
-  std::vector<IndexT> indices;
+  std::vector<rhi::IndexT> indices;
   std::vector<Node> nodes;
   uint32_t tot_mesh_nodes{};
   std::vector<uint32_t> root_nodes;

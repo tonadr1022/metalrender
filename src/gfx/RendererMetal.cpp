@@ -18,6 +18,7 @@
 #include "glm/ext/matrix_clip_space.hpp"
 #include "imgui_impl_glfw.h"
 #include "mesh_shared.h"
+#include "metal/GPUAllocator.hpp"
 #include "metal/MetalDevice.hpp"
 #include "metal/MetalUtil.hpp"
 #include "shader_global_uniforms.h"
@@ -26,6 +27,28 @@ namespace {
 enum class RenderMode : uint32_t { Default, Normals, NormalMap };
 
 }  // namespace
+
+InstanceDataMgr::InstanceDataMgr(size_t initial_element_cap, MTL::Device *device)
+    : allocator_(initial_element_cap), device_(device) {
+  allocate_buffers(initial_element_cap);
+}
+
+OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
+  const OffsetAllocator::Allocation alloc = allocator_.allocate(element_count);
+  if (alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
+    assert(allocator_.grow(allocator_.capacity()));
+    // TODO: copy contents
+    return allocate(element_count);
+  }
+  return alloc;
+}
+
+void InstanceDataMgr::allocate_buffers(size_t element_count) {
+  instance_data_buf_ = NS::TransferPtr(
+      device_->newBuffer(sizeof(InstanceData) * element_count, MTL::ResourceStorageModeShared));
+  model_matrix_buf_ = NS::TransferPtr(
+      device_->newBuffer(sizeof(glm::mat4) * element_count, MTL::ResourceStorageModeShared));
+}
 
 void RendererMetal::init(const CreateInfo &cinfo) {
   ZoneScoped;
@@ -51,16 +74,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
       raw_device_->newIndirectCommandBuffer(cmd_buf_desc, 1024, MTL::ResourceStorageModePrivate));
   cmd_buf_desc->release();
 
-  {
-    // TODO: handle resizing/more instances
-    const uint32_t instance_capacity = instance_idx_allocator_.get_capacity();
-    instance_data_buf_ = NS::TransferPtr(raw_device_->newBuffer(
-        sizeof(InstanceData) * instance_capacity, MTL::ResourceStorageModeShared));
-    instance_material_id_buf_ = NS::TransferPtr(raw_device_->newBuffer(
-        sizeof(uint32_t) * instance_capacity, MTL::ResourceStorageModeShared));
-    instance_model_matrix_buf_ = NS::TransferPtr(raw_device_->newBuffer(
-        sizeof(glm::mat4) * instance_capacity, MTL::ResourceStorageModeShared));
-  }
+  instance_data_mgr_.emplace(512, raw_device_);
 
   // TODO: rethink
   all_textures_.resize(k_max_textures);
@@ -276,8 +290,8 @@ void RendererMetal::render(const RenderArgs &render_args) {
       const MTL::Resource *const resources[] = {
           main_vert_buffer_.get(),
           meshlet_buf_.get(),
-          instance_model_matrix_buf_.get(),
-          instance_data_buf_.get(),
+          instance_data_mgr_->instance_data_buf(),
+          instance_data_mgr_->model_matrix_buf(),
           meshlet_vertices_buf_.get(),
           meshlet_triangles_buf_.get(),
           get_curr_frame_data().uniform_buf.get(),
@@ -303,9 +317,10 @@ void RendererMetal::render(const RenderArgs &render_args) {
             continue;
           }
           const auto &meshlet_data = model.meshlet_datas[node.mesh_id];
-          enc->setMeshBuffer(instance_data_buf_.get(), i * sizeof(InstanceData), 6);
-          enc->setObjectBuffer(instance_data_buf_.get(), i * sizeof(InstanceData), 0);
-          enc->setMeshBuffer(instance_model_matrix_buf_.get(), i * sizeof(glm::mat4), 5);
+          enc->setMeshBuffer(instance_data_mgr_->instance_data_buf(), i * sizeof(InstanceData), 6);
+          enc->setObjectBuffer(instance_data_mgr_->instance_data_buf(), i * sizeof(InstanceData),
+                               0);
+          enc->setMeshBuffer(instance_data_mgr_->model_matrix_buf(), i * sizeof(glm::mat4), 5);
           struct TaskCmd {
             uint32_t instance_idx;
           } task_cmd{.instance_idx = i};
@@ -329,8 +344,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
       enc->setRenderPipelineState(main_pso_);
       enc->setVertexBuffer(main_vert_buffer_.get(), 0, 0);
       enc->setVertexBuffer(get_curr_frame_data().uniform_buf.get(), 0, 1);
-      enc->setVertexBuffer(instance_model_matrix_buf_.get(), 0, 2);
-      enc->setVertexBuffer(instance_material_id_buf_.get(), 0, 3);
+      enc->setVertexBuffer(instance_data_mgr_->instance_data_buf(), 0, 2);
       bind_fragment_resources(enc);
 
       enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
@@ -381,7 +395,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
   frame_ar_pool->release();
 }
 
-void RendererMetal::load_model(const std::filesystem::path &path) {
+ModelGPUHandle RendererMetal::load_model(const std::filesystem::path &path) {
   auto result = ResourceManager::get().load_model(path, *this);
   assert(result.has_value());
   auto &model = result.value();
@@ -403,27 +417,39 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
     tot_meshlet_tri_count += meshlet_data.meshlet_triangles.size();
   }
 
-  uint32_t instance_id = 0;
+  uint32_t instance_count = 0;
+
+  for (const auto &node : model.model.nodes) {
+    if (node.mesh_id == Model::invalid_id) {
+      continue;
+    }
+    instance_count++;
+  }
+
+  const OffsetAllocator::Allocation instance_data_gpu_alloc =
+      instance_data_mgr_->allocate(instance_count);
+  uint32_t instance_copy_idx = 0;
   for (const auto &node : model.model.nodes) {
     if (node.mesh_id == UINT32_MAX) {
       continue;
     }
     auto &mesh = model.model.meshes[node.mesh_id];
     const auto &meshlet_data = model.model.meshlet_datas[node.mesh_id];
-    *((InstanceData *)instance_data_buf_->contents() + instance_id) =
+    const uint32_t instance_id = instance_data_gpu_alloc.offset + instance_copy_idx;
+    *((InstanceData *)instance_data_mgr_->instance_data_buf()->contents() + instance_id) =
         InstanceData{.instance_id = instance_id,
                      .mat_id = mesh.material_id,
                      .meshlet_base = meshlet_data.meshlet_base,
                      .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size()),
                      .meshlet_vertices_offset = meshlet_data.meshlet_vertices_offset,
                      .meshlet_triangles_offset = meshlet_data.meshlet_triangles_offset};
-    *((uint32_t *)instance_material_id_buf_->contents() + instance_id) = mesh.material_id;
-    *((glm::mat4 *)instance_model_matrix_buf_->contents() + instance_id) = node.global_transform;
-    instance_id++;
+    *((glm::mat4 *)instance_data_mgr_->model_matrix_buf()->contents() + instance_id) =
+        node.global_transform;
+    instance_copy_idx++;
   }
 
   const size_t vertices_size = model.model.vertices.size() * sizeof(DefaultVertex);
-  const size_t indices_size = model.model.indices.size() * sizeof(IndexT);
+  const size_t indices_size = model.model.indices.size() * sizeof(rhi::IndexT);
   main_vert_buffer_ =
       NS::TransferPtr(raw_device_->newBuffer(vertices_size, MTL::ResourceStorageModeShared));
   memcpy(main_vert_buffer_->contents(), model.model.vertices.data(), vertices_size);
@@ -449,17 +475,6 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
           ObjectInfo{.num_meshlets = static_cast<uint32_t>(meshlet_data.meshlets.size())});
     }
     obj_info_buf_ = create_buffer(obj_info_buf.size() * sizeof(ObjectInfo), obj_info_buf.data());
-
-    // std::vector<GPUMeshData> gpu_mesh_datas;
-    // const auto &meshes = model.model.meshes;
-    // gpu_mesh_datas.reserve(meshes.size());
-    // for (const auto &mesh : meshes) {
-    //   gpu_mesh_datas.emplace_back(GPUMeshData{
-    //       .vertex_offset = static_cast<uint32_t>(mesh.vertex_offset / sizeof(DefaultVertex)),
-    //       .vertex_count = mesh.vertex_count});
-    // }
-    // gpu_mesh_data_buf_ =
-    //     create_buffer(gpu_mesh_datas.size() * sizeof(GPUMeshData), gpu_mesh_datas.data());
   }
 
   {
@@ -508,9 +523,10 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
       arg_enc->setArgumentBuffer(dispatch_mesh_encode_arg_buf_.get(), 0);
       arg_enc->setBuffer(main_vert_buffer_.get(), 0, EncodeMeshDrawArgs_MainVertexBuf);
       arg_enc->setBuffer(meshlet_buf_.get(), 0, EncodeMeshDrawArgs_MeshletBuf);
-      arg_enc->setBuffer(instance_model_matrix_buf_.get(), 0,
+      arg_enc->setBuffer(instance_data_mgr_->model_matrix_buf(), 0,
                          EncodeMeshDrawArgs_InstanceModelMatrixBuf);
-      arg_enc->setBuffer(instance_data_buf_.get(), 0, EncodeMeshDrawArgs_InstanceDataBuf);
+      arg_enc->setBuffer(instance_data_mgr_->instance_data_buf(), 0,
+                         EncodeMeshDrawArgs_InstanceDataBuf);
       arg_enc->setBuffer(meshlet_vertices_buf_.get(), 0, EncodeMeshDrawArgs_MeshletVerticesBuf);
       arg_enc->setBuffer(meshlet_triangles_buf_.get(), 0, EncodeMeshDrawArgs_MeshletTrianglesBuf);
       arg_enc->setBuffer(get_curr_frame_data().uniform_buf.get(), 0,
@@ -520,9 +536,20 @@ void RendererMetal::load_model(const std::filesystem::path &path) {
     }
   }
   models_.emplace_back(std::move(result->model));
+
+  return model_gpu_resource_pool_.alloc(
+      ModelGPUResources{.instance_data_gpu_slot = instance_data_gpu_alloc});
+}
+void RendererMetal::free_model(ModelGPUHandle model) {
+  auto *gpu_resources = model_gpu_resource_pool_.get(model);
+  if (!gpu_resources) {
+    return;
+  }
+  instance_data_mgr_->free(gpu_resources->instance_data_gpu_slot);
+  model_gpu_resource_pool_.destroy(model);
 }
 
-TextureWithIdx RendererMetal::load_material_image(const TextureDesc &desc) {
+TextureWithIdx RendererMetal::load_material_image(const rhi::TextureDesc &desc) {
   return {.tex = device_->create_texture(desc), .idx = texture_index_allocator_.alloc_idx()};
 }
 
@@ -582,13 +609,6 @@ void RendererMetal::set_global_uniform_data(const RenderArgs &render_args) {
   uniform_data->render_mode = (uint32_t)RenderMode::Default;
 }
 
-NS::SharedPtr<MTL::Buffer> RendererMetal::create_buffer(size_t size, void *data,
-                                                        MTL::ResourceOptions options) {
-  NS::SharedPtr<MTL::Buffer> buf = NS::TransferPtr(raw_device_->newBuffer(size, options));
-  memcpy(buf->contents(), data, size);
-  return buf;
-}
-
 void RendererMetal::flush_pending_texture_uploads() {
   if (!pending_texture_uploads_.empty()) {
     MTL::CommandBuffer *buf = main_cmd_queue_->commandBuffer();
@@ -617,8 +637,15 @@ void RendererMetal::flush_pending_texture_uploads() {
 void RendererMetal::recreate_render_target_textures() {
   auto dims = window_->get_window_size();
   if (depth_tex_) depth_tex_->release();
-  depth_tex_ = device_->create_texture(TextureDesc{.format = TextureFormat::D32float,
-                                                   .storage_mode = StorageMode::GPUOnly,
-                                                   .usage = TextureUsageRenderTarget,
-                                                   .dims = glm::uvec3{dims, 1}});
+  depth_tex_ = device_->create_texture(rhi::TextureDesc{.format = rhi::TextureFormat::D32float,
+                                                        .storage_mode = rhi::StorageMode::GPUOnly,
+                                                        .usage = rhi::TextureUsageRenderTarget,
+                                                        .dims = glm::uvec3{dims, 1}});
+}
+
+NS::SharedPtr<MTL::Buffer> RendererMetal::create_buffer(size_t size, void *data,
+                                                        MTL::ResourceOptions options) {
+  NS::SharedPtr<MTL::Buffer> buf = NS::TransferPtr(raw_device_->newBuffer(size, options));
+  memcpy(buf->contents(), data, size);
+  return buf;
 }
