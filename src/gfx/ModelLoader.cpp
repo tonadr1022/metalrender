@@ -30,8 +30,8 @@ void update_global_transforms(Model &model, uint32_t node_i, const glm::mat4 &pa
 }
 
 // Ref: https://github.com/zeux/meshoptimizer
-MeshletData load_meshlet_data(std::span<DefaultVertex> vertices, std::span<rhi::IndexT> indices,
-                              uint32_t base_vertex) {
+MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
+                                    std::span<rhi::IndexT> indices, uint32_t base_vertex) {
   const size_t max_meshlets = meshopt_buildMeshletsBound(indices.size(), k_max_vertices_per_meshlet,
                                                          k_max_triangles_per_meshlet);
   // cone_weight set to a value between 0 and 1 to balance cone culling efficiency with other forms
@@ -60,9 +60,9 @@ MeshletData load_meshlet_data(std::span<DefaultVertex> vertices, std::span<rhi::
                             m.vertex_count);
   }
 
-  return MeshletData{.meshlets = std::move(meshlets),
-                     .meshlet_vertices = std::move(meshlet_vertices),
-                     .meshlet_triangles = std::move(meshlet_triangles)};
+  return MeshletLoadResult{.meshlets = std::move(meshlets),
+                           .meshlet_vertices = std::move(meshlet_vertices),
+                           .meshlet_triangles = std::move(meshlet_triangles)};
 }
 
 }  // namespace
@@ -150,9 +150,9 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
     materials.push_back(material);
   }
 
-  auto &all_vertices = result.model.vertices;
-  auto &all_indices = result.model.indices;
-  auto &meshes = result.model.meshes;
+  auto &all_vertices = result.vertices;
+  auto &all_indices = result.indices;
+  auto &meshes = result.meshes;
   std::vector<uint32_t> gltf_node_to_node_i;
   gltf_node_to_node_i.resize(gltf->nodes_count, UINT32_MAX);
 
@@ -219,7 +219,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
         });
       }
     }
-    auto &meshlet_datas = result.model.meshlet_datas;
+    auto &meshlet_datas = result.meshlet_datas;
     for (const Mesh &mesh : meshes) {
       const uint32_t base_vertex = mesh.vertex_offset / sizeof(DefaultVertex);
       meshlet_datas.emplace_back(load_meshlet_data(
@@ -280,6 +280,19 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
 
     result.model.tot_mesh_nodes = tot_mesh_nodes;
     update_global_transforms(result.model);
+  }
+
+  {  // process meshlet for entire instance
+    auto &meshlet_process_result = result.meshlet_process_result;
+    auto &meshlet_datas = result.meshlet_datas;
+    for (auto &meshlet_data : meshlet_datas) {
+      meshlet_data.meshlet_triangles_offset = meshlet_process_result.tot_meshlet_tri_count;
+      meshlet_data.meshlet_vertices_offset = meshlet_process_result.tot_meshlet_verts_count;
+      meshlet_data.meshlet_base = meshlet_process_result.tot_meshlet_count;
+      meshlet_process_result.tot_meshlet_count += meshlet_data.meshlets.size();
+      meshlet_process_result.tot_meshlet_verts_count += meshlet_data.meshlet_vertices.size();
+      meshlet_process_result.tot_meshlet_tri_count += meshlet_data.meshlet_triangles.size();
+    }
   }
 
   return result;

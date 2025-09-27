@@ -43,7 +43,7 @@ struct Node {
   uint32_t mesh_id{UINT32_MAX};
 };
 
-struct MeshletData {
+struct MeshletLoadResult {
   std::vector<meshopt_Meshlet> meshlets;
   std::vector<uint32_t> meshlet_vertices;
   std::vector<uint8_t> meshlet_triangles;
@@ -54,20 +54,27 @@ struct MeshletData {
 
 struct Model {
   constexpr static uint32_t invalid_id = UINT32_MAX;
-  std::vector<DefaultVertex> vertices;
-  std::vector<rhi::IndexT> indices;
   std::vector<Node> nodes;
   uint32_t tot_mesh_nodes{};
   std::vector<uint32_t> root_nodes;
-  std::vector<Mesh> meshes;
-  std::vector<MeshletData> meshlet_datas;
   glm::mat4 root_transform{1};
+};
+
+struct MeshletProcessResult {
+  size_t tot_meshlet_count{};
+  size_t tot_meshlet_verts_count{};
+  size_t tot_meshlet_tri_count{};
 };
 
 struct ModelLoadResult {
   Model model;
+  std::vector<Mesh> meshes;
+  std::vector<MeshletLoadResult> meshlet_datas;
+  std::vector<DefaultVertex> vertices;
+  std::vector<rhi::IndexT> indices;
   std::vector<TextureUpload> texture_uploads;
   std::vector<Material> materials;
+  MeshletProcessResult meshlet_process_result;
 };
 
 void update_global_transforms(Model &model);

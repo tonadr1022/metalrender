@@ -154,11 +154,4 @@ class RendererMetal {
 
   std::vector<PerFrameData> per_frame_datas_;
   uint32_t tot_meshes_{0};
-  enum class DrawMode {
-    IndirectMeshShader,
-    MeshShader,
-    VertexShader,
-  };
-
-  DrawMode draw_mode_{DrawMode::IndirectMeshShader};
 };
