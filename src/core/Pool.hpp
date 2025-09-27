@@ -97,9 +97,6 @@ struct Pool {
   size_t num_destroyed_{};
 };
 
-template <typename T>
-void destroy(T data);
-
 template <typename T, typename ContextT>
 struct Holder {
   Holder() = default;
@@ -115,14 +112,21 @@ struct Holder {
     if (&other == this) {
       return *this;
     }
-    context->destroy(handle);
+    destroy();
     handle = std::move(std::exchange(other.handle, T{}));
     context = std::exchange(other.context, nullptr);
     return *this;
   }
 
-  ~Holder() { destroy(handle); }
+  ~Holder() { destroy(); }
 
   T handle{};
   ContextT* context{};
+
+ private:
+  void destroy() {
+    if (context) {
+      context->destroy(handle);
+    }
+  }
 };

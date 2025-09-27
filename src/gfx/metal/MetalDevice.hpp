@@ -24,9 +24,6 @@ class Texture;
 
 class MetalDevice;
 
-using BufferHandle = GenerationalHandle<MetalBuffer>;
-using BufferHandleHolder = Holder<BufferHandle, MetalDevice>;
-
 class MetalDevice : public rhi::Device {
  public:
   void init();
@@ -34,17 +31,21 @@ class MetalDevice : public rhi::Device {
   [[nodiscard]] void* get_native_device() const override { return device_; }
 
   [[nodiscard]] MTL::Device* get_device() const { return device_; }
-  MTL::Texture* create_texture(const rhi::TextureDesc& desc);
-  BufferHandle create_buffer(const rhi::BufferDesc& desc);
+  MTL::Texture* create_texture(const rhi::TextureDesc& desc) override;
 
-  BufferHandleHolder create_bufferh(const rhi::BufferDesc& desc) {
-    return BufferHandleHolder{create_buffer(desc), this};
+  rhi::BufferHandle create_buffer(const rhi::BufferDesc& desc) override;
+  rhi::BufferHandleHolder create_buffer_h(const rhi::BufferDesc& desc) override {
+    return rhi::BufferHandleHolder{create_buffer(desc), this};
   }
+  rhi::Buffer* get_buffer(const rhi::BufferHandleHolder& handle) override {
+    return buffer_pool_.get(handle.handle);
+  }
+  rhi::Buffer* get_buffer(rhi::BufferHandle handle) override { return buffer_pool_.get(handle); }
 
-  void destroy(BufferHandle handle);
+  void destroy(rhi::BufferHandle handle) override;
 
  private:
-  Pool<BufferHandle, MetalBuffer> buffer_pool_{64};
+  Pool<rhi::BufferHandle, MetalBuffer> buffer_pool_{64};
   NS::AutoreleasePool* ar_pool_{};
   MTL::Device* device_{};
 };

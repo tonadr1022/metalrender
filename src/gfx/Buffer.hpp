@@ -12,6 +12,7 @@ class Buffer {
   Buffer() = default;
   virtual void* contents() = 0;
   [[nodiscard]] size_t size() const { return desc_.size; }
+  [[nodiscard]] const BufferDesc& desc() const { return desc_; }
 
  private:
   BufferDesc desc_;

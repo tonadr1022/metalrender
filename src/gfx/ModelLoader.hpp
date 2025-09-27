@@ -64,14 +64,14 @@ struct MeshletProcessResult {
   size_t tot_meshlet_count{};
   size_t tot_meshlet_verts_count{};
   size_t tot_meshlet_tri_count{};
+  std::vector<MeshletLoadResult> meshlet_datas;
 };
 
 struct ModelLoadResult {
   Model model;
   std::vector<Mesh> meshes;
-  std::vector<MeshletLoadResult> meshlet_datas;
   std::vector<DefaultVertex> vertices;
-  std::vector<rhi::IndexT> indices;
+  std::vector<rhi::DefaultIndexT> indices;
   std::vector<TextureUpload> texture_uploads;
   std::vector<Material> materials;
   MeshletProcessResult meshlet_process_result;

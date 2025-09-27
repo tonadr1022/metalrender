@@ -20,7 +20,7 @@ enum TextureUsage {
   TextureUsageRenderTarget
 };
 
-using IndexT = uint32_t;
+using DefaultIndexT = uint32_t;
 
 struct TextureDesc {
   TextureFormat format{TextureFormat::Undefined};

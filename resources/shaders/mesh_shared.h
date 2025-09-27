@@ -3,10 +3,6 @@
 
 #include "shader_core.h"
 
-struct ObjectInfo {
-  uint32_t num_meshlets;
-};
-
 struct InstanceData {
   uint32_t instance_id;
   uint32_t mat_id;

@@ -8,7 +8,7 @@ using namespace metal;
 
 struct ICBContainer {
     command_buffer cmd_buf [[id(0)]];
-    device const ObjectInfo* obj_infos [[id(1)]];
+    device const InstanceData* obj_infos [[id(1)]];
 };
 
 struct EncodeMeshDrawArgs {
@@ -30,8 +30,8 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
     if (object_idx >= params.tot_meshes) {
         return;
     }
-    device const ObjectInfo& obj_info = icb_container->obj_infos[object_idx];
-    const uint num_meshlets = obj_info.num_meshlets;
+    device const InstanceData& instance_data = icb_container->obj_infos[object_idx];
+    const uint num_meshlets = instance_data.meshlet_count;
     const uint threads_per_object_thread_group = 128;
     const uint thread_groups_per_object =
             (num_meshlets + threads_per_object_thread_group - 1) / threads_per_object_thread_group;

@@ -11,6 +11,8 @@ class MetalBuffer : public rhi::Buffer {
   MetalBuffer(const rhi::BufferDesc& desc, MTL::Buffer* buffer);
   MetalBuffer() = default;
   void* contents() override;
+  MTL::Buffer* buffer() const { return buffer_; }
 
+ private:
   [[maybe_unused]] MTL::Buffer* buffer_{};
 };

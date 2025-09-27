@@ -11,6 +11,8 @@
 #include "core/Allocator.hpp"
 #include "core/Handle.hpp"
 #include "core/Pool.hpp"
+#include "metal/BackedGPUAllocator.hpp"
+#include "metal/MetalDevice.hpp"
 #include "offsetAllocator.hpp"
 #include "shader_constants.h"
 
@@ -52,8 +54,26 @@ struct RenderArgs {
   glm::mat4 view_mat;
 };
 
+struct DrawBatch {
+  DrawBatch(rhi::Device& device, uint32_t initial_vertex_capacity, uint32_t initial_index_capacity);
+  BackedGPUAllocator vertex_buf;
+  BackedGPUAllocator index_buf;
+  BackedGPUAllocator meshlet_buf;
+  BackedGPUAllocator meshlet_triangles_buf;
+  BackedGPUAllocator meshlet_vertices_buf;
+};
+
+struct DrawBatchAlloc {
+  OffsetAllocator::Allocation vertex_alloc;
+  OffsetAllocator::Allocation index_alloc;
+  OffsetAllocator::Allocation meshlet_alloc;
+  OffsetAllocator::Allocation meshlet_triangles_alloc;
+  OffsetAllocator::Allocation meshlet_vertices_alloc;
+};
+
 struct ModelGPUResources {
   OffsetAllocator::Allocation instance_data_gpu_slot;
+  DrawBatchAlloc draw_batch_alloc;
 };
 
 using ModelGPUHandle = GenerationalHandle<ModelGPUResources>;
@@ -118,8 +138,16 @@ class RendererMetal {
   MTL::RenderPipelineState* mesh_pso_{};
   MTL::ComputePipelineState* dispatch_mesh_pso_{};
 
-  NS::SharedPtr<MTL::Buffer> main_vert_buffer_;
-  NS::SharedPtr<MTL::Buffer> main_index_buffer_;
+  enum class DrawBatchType {
+    Static,
+  };
+
+  DrawBatchAlloc upload_geometry(DrawBatchType type, const std::vector<DefaultVertex>& vertices,
+                                 const std::vector<rhi::DefaultIndexT>& indices,
+                                 const MeshletProcessResult& meshlets);
+
+  std::optional<DrawBatch> static_draw_batch_;
+
   NS::SharedPtr<MTL::Buffer> materials_buffer_;
   NS::SharedPtr<MTL::Buffer> scene_arg_buffer_;
 
@@ -127,17 +155,9 @@ class RendererMetal {
 
   NS::SharedPtr<MTL::IndirectCommandBuffer> ind_cmd_buf_;
 
-  // NS::SharedPtr<MTL::Buffer> instance_data_buf_;
-  // std::optional<GPUAllocator> instance_data_buf_;
-  // NS::SharedPtr<MTL::Buffer> object_shader_param_buf_;
-  NS::SharedPtr<MTL::Buffer> meshlet_buf_;
-  // NS::SharedPtr<MTL::Buffer> gpu_mesh_data_buf_;
-  NS::SharedPtr<MTL::Buffer> meshlet_vertices_buf_;
-  NS::SharedPtr<MTL::Buffer> meshlet_triangles_buf_;
   NS::SharedPtr<MTL::Buffer> dispatch_mesh_encode_arg_buf_;
   NS::SharedPtr<MTL::Buffer> dispatch_mesh_icb_container_buf_;
 
-  NS::SharedPtr<MTL::Buffer> obj_info_buf_;
   MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
   std::vector<Material> all_materials_;

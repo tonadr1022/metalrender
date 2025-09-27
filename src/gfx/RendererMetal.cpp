@@ -18,7 +18,7 @@
 #include "glm/ext/matrix_clip_space.hpp"
 #include "imgui_impl_glfw.h"
 #include "mesh_shared.h"
-#include "metal/GPUAllocator.hpp"
+#include "metal/BackedGPUAllocator.hpp"
 #include "metal/MetalDevice.hpp"
 #include "metal/MetalUtil.hpp"
 #include "shader_global_uniforms.h"
@@ -84,6 +84,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   cmd_buf_desc->release();
 
   instance_data_mgr_.emplace(128, raw_device_);
+  static_draw_batch_.emplace(*device_, 100'000, 100'000);
 
   // TODO: rethink
   all_textures_.resize(k_max_textures);
@@ -241,7 +242,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
     compute_enc->setBuffer(dispatch_mesh_icb_container_buf_.get(), 0, 0);
     compute_enc->setBuffer(dispatch_mesh_encode_arg_buf_.get(), 0, 1);
     compute_enc->useResource(ind_cmd_buf_.get(), MTL::ResourceUsageWrite);
-    compute_enc->useResource(obj_info_buf_.get(), MTL::ResourceUsageRead);
+    compute_enc->useResource(instance_data_mgr_->instance_data_buf(), MTL::ResourceUsageRead);
     DispatchMeshParams params{.tot_meshes = tot_meshes_};
     compute_enc->setBytes(&params, sizeof(DispatchMeshParams), 2);
     // TODO: this is awfulllllllllllllll.
@@ -288,12 +289,14 @@ void RendererMetal::render(const RenderArgs &render_args) {
     ZoneScopedN("encode draw cmds");
     enc->setRenderPipelineState(mesh_pso_);
     const MTL::Resource *const resources[] = {
-        main_vert_buffer_.get(),
-        meshlet_buf_.get(),
+        ((MetalBuffer *)static_draw_batch_->vertex_buf.get_buffer())->buffer(),
+        reinterpret_cast<MetalBuffer *>(static_draw_batch_->meshlet_buf.get_buffer())->buffer(),
         instance_data_mgr_->instance_data_buf(),
         instance_data_mgr_->model_matrix_buf(),
-        meshlet_vertices_buf_.get(),
-        meshlet_triangles_buf_.get(),
+        reinterpret_cast<MetalBuffer *>(static_draw_batch_->meshlet_vertices_buf.get_buffer())
+            ->buffer(),
+        reinterpret_cast<MetalBuffer *>(static_draw_batch_->meshlet_triangles_buf.get_buffer())
+            ->buffer(),
         get_curr_frame_data().uniform_buf.get(),
         scene_arg_buffer_.get(),
     };
@@ -337,15 +340,7 @@ ModelGPUHandle RendererMetal::load_model(const std::filesystem::path &path) {
   pending_texture_uploads_.append_range(result->texture_uploads);
   result->texture_uploads.clear();
 
-  uint32_t instance_count = 0;
-
-  for (const auto &node : model.model.nodes) {
-    if (node.mesh_id == Model::invalid_id) {
-      continue;
-    }
-    instance_count++;
-  }
-
+  const uint32_t instance_count = model.model.tot_mesh_nodes;
   const OffsetAllocator::Allocation instance_data_gpu_alloc =
       instance_data_mgr_->allocate(instance_count);
   uint32_t instance_copy_idx = 0;
@@ -354,89 +349,41 @@ ModelGPUHandle RendererMetal::load_model(const std::filesystem::path &path) {
       continue;
     }
     auto &mesh = model.meshes[node.mesh_id];
-    const auto &meshlet_data = model.meshlet_datas[node.mesh_id];
+    const auto &meshlet_data = model.meshlet_process_result.meshlet_datas[node.mesh_id];
     const uint32_t instance_id = instance_data_gpu_alloc.offset + instance_copy_idx;
-    *((InstanceData *)instance_data_mgr_->instance_data_buf()->contents() + instance_id) =
+    *(reinterpret_cast<InstanceData *>(instance_data_mgr_->instance_data_buf()->contents()) +
+      instance_id) =
         InstanceData{.instance_id = instance_id,
                      .mat_id = mesh.material_id,
                      .meshlet_base = meshlet_data.meshlet_base,
                      .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size()),
                      .meshlet_vertices_offset = meshlet_data.meshlet_vertices_offset,
                      .meshlet_triangles_offset = meshlet_data.meshlet_triangles_offset};
-    *((glm::mat4 *)instance_data_mgr_->model_matrix_buf()->contents() + instance_id) =
-        node.global_transform;
+    *(reinterpret_cast<glm::mat4 *>(instance_data_mgr_->model_matrix_buf()->contents()) +
+      instance_id) = node.global_transform;
     instance_copy_idx++;
   }
 
-  const size_t vertices_size = model.vertices.size() * sizeof(DefaultVertex);
-  const size_t indices_size = model.indices.size() * sizeof(rhi::IndexT);
-  main_vert_buffer_ =
-      NS::TransferPtr(raw_device_->newBuffer(vertices_size, MTL::ResourceStorageModeShared));
-  memcpy(main_vert_buffer_->contents(), model.vertices.data(), vertices_size);
-  main_index_buffer_ =
-      NS::TransferPtr(raw_device_->newBuffer(indices_size, MTL::ResourceStorageModeShared));
-  memcpy(main_index_buffer_->contents(), model.indices.data(), indices_size);
-  // TODO: material allocator
-  memcpy(materials_buffer_->contents(), model.materials.data(),
-         model.materials.size() * sizeof(Material));
-  all_materials_.append_range(std::move(model.materials));
-  global_arg_enc_->setBuffer(materials_buffer_.get(), 0, 1024);
+  auto draw_batch_alloc = upload_geometry(DrawBatchType::Static, model.vertices, model.indices,
+                                          result->meshlet_process_result);
 
-  {
-    std::vector<ObjectInfo> obj_info_buf;
-    const auto &nodes = model.model.nodes;
-    obj_info_buf.reserve(nodes.size());
-    for (const auto &node : nodes) {
-      if (node.mesh_id == Model::invalid_id) {
-        continue;
-      }
-      const auto &meshlet_data = model.meshlet_datas[node.mesh_id];
-      obj_info_buf.emplace_back(
-          ObjectInfo{.num_meshlets = static_cast<uint32_t>(meshlet_data.meshlets.size())});
-    }
-    obj_info_buf_ = create_buffer(obj_info_buf.size() * sizeof(ObjectInfo), obj_info_buf.data());
+  {  // upload materials
+
+    // TODO: material allocator
+    memcpy(materials_buffer_->contents(), model.materials.data(),
+           model.materials.size() * sizeof(Material));
+    all_materials_.append_range(std::move(model.materials));
+    global_arg_enc_->setBuffer(materials_buffer_.get(), 0, 1024);
   }
 
-  {
-    const auto &meshlet_process_result = result->meshlet_process_result;
-    const size_t tot_meshlet_size =
-        meshlet_process_result.tot_meshlet_count * sizeof(meshopt_Meshlet);
-    const size_t tot_meshlet_verts_size =
-        meshlet_process_result.tot_meshlet_verts_count * sizeof(uint32_t);
-    const size_t tot_meshlet_tri_size =
-        meshlet_process_result.tot_meshlet_tri_count * sizeof(uint8_t);
-    meshlet_buf_ =
-        NS::TransferPtr(raw_device_->newBuffer(tot_meshlet_size, MTL::ResourceStorageModeShared));
-    meshlet_vertices_buf_ = NS::TransferPtr(
-        raw_device_->newBuffer(tot_meshlet_verts_size, MTL::ResourceStorageModeShared));
-    meshlet_triangles_buf_ = NS::TransferPtr(
-        raw_device_->newBuffer(tot_meshlet_tri_size, MTL::ResourceStorageModeShared));
-    size_t meshlet_offset{};
-    size_t meshlet_tri_offset{};
-    size_t meshlet_verts_offset{};
-    for (const auto &meshlet_data : result->meshlet_datas) {
-      const size_t meshlet_copy_size = meshlet_data.meshlets.size() * sizeof(meshopt_Meshlet);
-      const size_t meshlet_vert_copy_size = meshlet_data.meshlet_vertices.size() * sizeof(uint32_t);
-      const size_t meshlet_tri_copy_size = meshlet_data.meshlet_triangles.size() * sizeof(uint8_t);
-      memcpy((uint8_t *)meshlet_buf_->contents() + meshlet_offset, meshlet_data.meshlets.data(),
-             meshlet_copy_size);
-      memcpy((uint8_t *)meshlet_vertices_buf_->contents() + meshlet_verts_offset,
-             meshlet_data.meshlet_vertices.data(), meshlet_vert_copy_size);
-      memcpy((uint8_t *)meshlet_triangles_buf_->contents() + meshlet_tri_offset,
-             meshlet_data.meshlet_triangles.data(), meshlet_tri_copy_size);
-      meshlet_offset += meshlet_copy_size;
-      meshlet_tri_offset += meshlet_tri_copy_size;
-      meshlet_verts_offset += meshlet_vert_copy_size;
-    }
-  }
-  {
+  {  // move this bs
     {
       MTL::ArgumentEncoder *arg_enc = dispatch_mesh_shader_.compute_func->newArgumentEncoder(0);
       dispatch_mesh_icb_container_buf_ = NS::TransferPtr(
           raw_device_->newBuffer(arg_enc->encodedLength(), MTL::ResourceStorageModeShared));
       arg_enc->setArgumentBuffer(dispatch_mesh_icb_container_buf_.get(), 0);
       arg_enc->setIndirectCommandBuffer(ind_cmd_buf_.get(), 0);
-      arg_enc->setBuffer(obj_info_buf_.get(), 0, 1);
+      arg_enc->setBuffer(instance_data_mgr_->instance_data_buf(), 0, 1);
       arg_enc->release();
     }
     {
@@ -445,24 +392,34 @@ ModelGPUHandle RendererMetal::load_model(const std::filesystem::path &path) {
       dispatch_mesh_encode_arg_buf_ = NS::TransferPtr(
           raw_device_->newBuffer(arg_enc->encodedLength() * 2, MTL::ResourceStorageModeShared));
       arg_enc->setArgumentBuffer(dispatch_mesh_encode_arg_buf_.get(), 0);
-      arg_enc->setBuffer(main_vert_buffer_.get(), 0, EncodeMeshDrawArgs_MainVertexBuf);
-      arg_enc->setBuffer(meshlet_buf_.get(), 0, EncodeMeshDrawArgs_MeshletBuf);
+      arg_enc->setBuffer(((MetalBuffer *)static_draw_batch_->vertex_buf.get_buffer())->buffer(), 0,
+                         EncodeMeshDrawArgs_MainVertexBuf);
+      arg_enc->setBuffer(
+          reinterpret_cast<MetalBuffer *>(static_draw_batch_->meshlet_buf.get_buffer())->buffer(),
+          0, EncodeMeshDrawArgs_MeshletBuf);
       arg_enc->setBuffer(instance_data_mgr_->model_matrix_buf(), 0,
                          EncodeMeshDrawArgs_InstanceModelMatrixBuf);
       arg_enc->setBuffer(instance_data_mgr_->instance_data_buf(), 0,
                          EncodeMeshDrawArgs_InstanceDataBuf);
-      arg_enc->setBuffer(meshlet_vertices_buf_.get(), 0, EncodeMeshDrawArgs_MeshletVerticesBuf);
-      arg_enc->setBuffer(meshlet_triangles_buf_.get(), 0, EncodeMeshDrawArgs_MeshletTrianglesBuf);
+      arg_enc->setBuffer(
+          reinterpret_cast<MetalBuffer *>(static_draw_batch_->meshlet_vertices_buf.get_buffer())
+              ->buffer(),
+          0, EncodeMeshDrawArgs_MeshletVerticesBuf);
+      arg_enc->setBuffer(
+          reinterpret_cast<MetalBuffer *>(static_draw_batch_->meshlet_triangles_buf.get_buffer())
+              ->buffer(),
+          0, EncodeMeshDrawArgs_MeshletTrianglesBuf);
       arg_enc->setBuffer(get_curr_frame_data().uniform_buf.get(), 0,
                          EncodeMeshDrawArgs_MainUniformBuf);
       arg_enc->setBuffer(scene_arg_buffer_.get(), 0, EncodeMeshDrawArgs_SceneArgBuf);
       arg_enc->release();
     }
   }
+
   models_.emplace_back(std::move(result->model));
 
-  return model_gpu_resource_pool_.alloc(
-      ModelGPUResources{.instance_data_gpu_slot = instance_data_gpu_alloc});
+  return model_gpu_resource_pool_.alloc(ModelGPUResources{
+      .instance_data_gpu_slot = instance_data_gpu_alloc, .draw_batch_alloc = draw_batch_alloc});
 }
 void RendererMetal::free_model(ModelGPUHandle model) {
   auto *gpu_resources = model_gpu_resource_pool_.get(model);
@@ -572,4 +529,78 @@ NS::SharedPtr<MTL::Buffer> RendererMetal::create_buffer(size_t size, void *data,
   NS::SharedPtr<MTL::Buffer> buf = NS::TransferPtr(raw_device_->newBuffer(size, options));
   memcpy(buf->contents(), data, size);
   return buf;
+}
+
+DrawBatch::DrawBatch(rhi::Device &device, uint32_t initial_vertex_capacity,
+                     uint32_t initial_index_capacity)
+    : vertex_buf(device,
+                 rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
+                                 .size = initial_vertex_capacity * sizeof(DefaultVertex)},
+                 sizeof(DefaultVertex)),
+      index_buf(device,
+                rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
+                                .size = initial_index_capacity * sizeof(rhi::DefaultIndexT)},
+                sizeof(rhi::DefaultIndexT)),
+      meshlet_buf(device,
+                  rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
+                                  .size = 100'000 * sizeof(meshopt_Meshlet)},
+                  sizeof(meshopt_Meshlet)),
+      meshlet_triangles_buf(device,
+                            rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
+                                            .size = 1'000'000 * sizeof(uint8_t)},
+                            sizeof(uint8_t)),
+      meshlet_vertices_buf(device,
+                           rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
+                                           .size = 1'000'000 * sizeof(uint32_t)},
+                           sizeof(uint32_t)) {}
+
+DrawBatchAlloc RendererMetal::upload_geometry([[maybe_unused]] DrawBatchType type,
+                                              const std::vector<DefaultVertex> &vertices,
+                                              const std::vector<rhi::DefaultIndexT> &indices,
+                                              const MeshletProcessResult &meshlets) {
+  auto &draw_batch = static_draw_batch_;
+
+  const auto vertex_alloc = draw_batch->vertex_buf.allocate(vertices.size());
+  memcpy((reinterpret_cast<DefaultVertex *>(draw_batch->vertex_buf.get_buffer()->contents()) +
+          vertex_alloc.offset),
+         vertices.data(), vertices.size() * sizeof(DefaultVertex));
+
+  const auto index_alloc = draw_batch->index_buf.allocate(indices.size());
+  memcpy((reinterpret_cast<rhi::DefaultIndexT *>(draw_batch->index_buf.get_buffer()->contents()) +
+          index_alloc.offset),
+         indices.data(), indices.size() * sizeof(rhi::DefaultIndexT));
+  {
+    const auto meshlet_alloc = draw_batch->meshlet_buf.allocate(meshlets.tot_meshlet_count);
+    const auto meshlet_vertices_alloc =
+        draw_batch->meshlet_vertices_buf.allocate(meshlets.tot_meshlet_verts_count);
+    const auto meshlet_triangles_alloc =
+        draw_batch->meshlet_triangles_buf.allocate(meshlets.tot_meshlet_tri_count);
+
+    size_t meshlet_offset{};
+    size_t meshlet_triangles_offset{};
+    size_t meshlet_vertices_offset{};
+    for (const auto &meshlet_data : meshlets.meshlet_datas) {
+      memcpy(
+          (reinterpret_cast<meshopt_Meshlet *>(draw_batch->meshlet_buf.get_buffer()->contents()) +
+           meshlet_alloc.offset + meshlet_offset),
+          meshlet_data.meshlets.data(), meshlet_data.meshlets.size() * sizeof(meshopt_Meshlet));
+      meshlet_offset += meshlet_data.meshlets.size();
+
+      memcpy(
+          (reinterpret_cast<uint32_t *>(draw_batch->meshlet_vertices_buf.get_buffer()->contents()) +
+           meshlet_vertices_alloc.offset + meshlet_vertices_offset),
+          meshlet_data.meshlet_vertices.data(),
+          meshlet_data.meshlet_vertices.size() * sizeof(uint32_t));
+      meshlet_vertices_offset += meshlet_data.meshlet_vertices.size();
+
+      memcpy(
+          (reinterpret_cast<uint8_t *>(draw_batch->meshlet_triangles_buf.get_buffer()->contents()) +
+           meshlet_triangles_alloc.offset + meshlet_triangles_offset),
+          meshlet_data.meshlet_triangles.data(),
+          meshlet_data.meshlet_triangles.size() * sizeof(uint8_t));
+      meshlet_triangles_offset += meshlet_data.meshlet_triangles.size();
+    }
+  }
+
+  return {.vertex_alloc = vertex_alloc, .index_alloc = index_alloc};
 }
