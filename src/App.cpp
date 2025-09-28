@@ -5,8 +5,10 @@
 
 #include "WindowApple.hpp"
 #include "core/Logger.hpp"
+#include "gfx/ResourceManager.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "glm/ext/matrix_transform.hpp"
+#include "imgui.h"
 #include "tracy/Tracy.hpp"
 
 namespace {
@@ -117,15 +119,18 @@ App::App() {
 
   on_hide_mouse_change();
 
-  ResourceManager::init();
-  renderer_.init(RendererMetal::CreateInfo{
-      .device = device_.get(), .window = window_.get(), .resource_dir = resource_dir_});
+  ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_});
+  renderer_.init(RendererMetal::CreateInfo{.device = device_.get(),
+                                           .window = window_.get(),
+                                           .resource_dir = resource_dir_,
+                                           .render_imgui_callback = [this]() { on_imgui(); }});
 }
 
 void App::run() {
   ZoneScoped;
-  renderer_.load_model(config_.initial_model_path);
-  // renderer_.load_model(resource_dir_ / "models/Cube/glTF/Cube.gltf");
+  ResourceManager::get().load_model(config_.initial_model_path);
+  ResourceManager::get().load_model(config_.initial_model_path,
+                                    glm::translate(glm::mat4{1}, glm::vec3{10, 0, 0}));
 
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
@@ -136,6 +141,9 @@ void App::run() {
     last_time = curr_time;
     camera_.update_pos(window_->get_handle(), dt);
 
+    for (const auto model : models_) {
+      ResourceManager::get().get_model(model)->update_transforms();
+    }
     RenderArgs args{.view_mat = camera_.get_view_mat()};
     renderer_.render(args);
   }
@@ -179,7 +187,7 @@ void App::on_hide_mouse_change() {
 }
 
 void App::load_config() {
-  std::filesystem::path config_file{resource_dir_ / "config.txt"};
+  const std::filesystem::path config_file{resource_dir_ / "config.txt"};
   std::ifstream f(config_file);
   if (!f.is_open()) {
     LCRITICAL("Failed to load config file: {}", config_file.string());
@@ -187,4 +195,18 @@ void App::load_config() {
   }
 
   f >> config_.initial_model_path;
+}
+
+void App::on_imgui() {
+  ImGui::Begin("Hello world");
+  renderer_.on_imgui();
+  if (ImGui::TreeNodeEx("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Text("Position: %f %f %f", camera_.pos.x, camera_.pos.y, camera_.pos.z);
+    ImGui::TreePop();
+  }
+  ImGui::End();
+}
+
+void App::load_model(const std::filesystem::path& path, const glm::mat4& transform) {
+  models_.push_back(ResourceManager::get().load_model(path, transform));
 }

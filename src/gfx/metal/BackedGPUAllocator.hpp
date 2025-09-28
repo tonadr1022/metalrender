@@ -27,9 +27,10 @@ class BackedGPUAllocator {
 
   BackedGPUAllocator& operator=(BackedGPUAllocator&& other) = delete;
 
-  OffsetAllocator::Allocation allocate(uint32_t element_count) {
+  OffsetAllocator::Allocation allocate(uint32_t element_count, bool& resize_occured) {
     const OffsetAllocator::Allocation alloc = allocator_.allocate(element_count);
     if (alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
+      resize_occured = true;
       const auto old_cap_elements = allocator_.capacity();
       const auto required_size = std::bit_ceil(std::max(element_count, allocator_.capacity() * 2));
       const auto new_cap_elements = required_size;
@@ -50,18 +51,31 @@ class BackedGPUAllocator {
       backing_buffer_ = std::move(new_buf_handle);
 
       // try again
-      return allocate(element_count);
+      return allocate(element_count, resize_occured);
     }
+    allocated_element_count_ += element_count;
+    max_seen_size_ = std::max<uint32_t>(max_seen_size_, alloc.offset + element_count);
     return alloc;
   }
 
   [[nodiscard]] rhi::Buffer* get_buffer() const { return device_.get_buffer(backing_buffer_); }
+  [[nodiscard]] const OffsetAllocator::Allocator& get_allocator() const { return allocator_; }
+  [[nodiscard]] uint32_t allocated_element_count() const { return allocated_element_count_; }
+  [[nodiscard]] uint32_t allocated_elements_size_bytes() const {
+    return allocated_element_count_ * bytes_per_element_;
+  }
+  [[nodiscard]] uint32_t max_seen_size() const { return max_seen_size_; }
 
-  void free(OffsetAllocator::Allocation alloc) { allocator_.free(alloc); }
+  void free(OffsetAllocator::Allocation alloc) {
+    allocated_element_count_ -= allocator_.allocationSize(alloc);
+    allocator_.free(alloc);
+  }
 
  private:
   rhi::BufferHandleHolder backing_buffer_;
   OffsetAllocator::Allocator allocator_;
   size_t bytes_per_element_{};
+  uint32_t max_seen_size_{};
   rhi::Device& device_;
+  uint32_t allocated_element_count_{};
 };

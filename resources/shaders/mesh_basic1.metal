@@ -32,13 +32,15 @@ struct ObjectPayload {
 [[object]]
 void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
                         device const InstanceData* instance_data [[buffer(0)]],
+                        device const MeshData* mesh_datas [[buffer(1)]], // TODO: increase max in icb
                         uint thread_idx [[thread_position_in_threadgroup]],
                         uint object_idx [[threadgroup_position_in_grid]],
                         mesh_grid_properties grid) {
     if (thread_idx == 0) {
         //out_payload.instance_id = object_idx;
+        device const MeshData& mesh_data = mesh_datas[instance_data->mesh_id];
         out_payload.instance_id = instance_data->instance_id;
-        grid.set_threadgroups_per_grid(uint3(instance_data->meshlet_count, 1, 1));
+        grid.set_threadgroups_per_grid(uint3(mesh_data.meshlet_count, 1, 1));
     }
 }
 
@@ -62,14 +64,16 @@ void basic1_mesh_main(object_data const ObjectPayload& payload [[payload]],
                       device const uchar* meshlet_triangles [[buffer(4)]],
                       device const float4x4& model [[buffer(5)]],
                       device const InstanceData& instance_data [[buffer(6)]],
+                      device const MeshData* mesh_datas [[buffer(7)]],
                       uint payload_idx [[threadgroup_position_in_grid]],
                       uint thread_idx [[thread_position_in_threadgroup]],
                       Meshlet out_mesh) {
     uint meshlet_idx = payload_idx;
     uint instance_id = payload.instance_id;
-    device const MeshletDesc& meshlet = meshlets[meshlet_idx + instance_data.meshlet_base];
+    device const MeshData& mesh_data = mesh_datas[instance_data.mesh_id];
+    device const MeshletDesc& meshlet = meshlets[meshlet_idx + mesh_data.meshlet_base];
     if (thread_idx < meshlet.vertex_count) {
-        device const DefaultVertex& vert = vertices[meshlet_vertices[meshlet.vertex_offset + thread_idx + instance_data.meshlet_vertices_offset]];
+        device const DefaultVertex& vert = vertices[meshlet_vertices[meshlet.vertex_offset + thread_idx + mesh_data.meshlet_vertices_offset]];
         MeshletVertex out_vert;
         out_vert.pos = uniforms.vp * model * float4(vert.pos.xyz, 1.0);
         out_vert.uv = vert.uv;
@@ -79,9 +83,9 @@ void basic1_mesh_main(object_data const ObjectPayload& payload [[payload]],
 
     if (thread_idx < meshlet.triangle_count) {
         uint i = thread_idx * 3;
-        out_mesh.set_index(i + 0, meshlet_triangles[meshlet.triangle_offset + i + 0 + instance_data.meshlet_triangles_offset]);
-        out_mesh.set_index(i + 1, meshlet_triangles[meshlet.triangle_offset + i + 1 + instance_data.meshlet_triangles_offset]);
-        out_mesh.set_index(i + 2, meshlet_triangles[meshlet.triangle_offset + i + 2 + instance_data.meshlet_triangles_offset]);
+        out_mesh.set_index(i + 0, meshlet_triangles[meshlet.triangle_offset + i + 0 + mesh_data.meshlet_triangles_offset]);
+        out_mesh.set_index(i + 1, meshlet_triangles[meshlet.triangle_offset + i + 1 + mesh_data.meshlet_triangles_offset]);
+        out_mesh.set_index(i + 2, meshlet_triangles[meshlet.triangle_offset + i + 2 + mesh_data.meshlet_triangles_offset]);
         MeshletPrimitive prim = {
             .mat_id = instance_data.mat_id,
             .color = float4(hue2rgb((meshlet_idx + instance_id) * 1.71f), 1.0),

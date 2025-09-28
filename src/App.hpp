@@ -3,6 +3,7 @@
 
 #include "WindowApple.hpp"
 #include "gfx/RendererMetal.hpp"
+#include "gfx/ResourceManager.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 
 class Camera {
@@ -37,6 +38,8 @@ struct App {
  private:
   void on_hide_mouse_change();
   void load_config();
+  void on_imgui();
+  void load_model(const std::filesystem::path &path, const glm::mat4 &transform = glm::mat4{1});
 
   struct Config {
     std::filesystem::path initial_model_path;
@@ -47,6 +50,7 @@ struct App {
   std::unique_ptr<MetalDevice> device_;
   std::unique_ptr<WindowApple> window_;
   Camera camera_;
+  std::vector<ModelHandle> models_;
   bool first_mouse_{true};
   bool hide_mouse_{false};
 

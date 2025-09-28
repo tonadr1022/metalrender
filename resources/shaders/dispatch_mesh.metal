@@ -15,7 +15,8 @@ struct EncodeMeshDrawArgs {
     device const char* main_vertex_buf [[id(EncodeMeshDrawArgs_MainVertexBuf)]];
     device const char* meshlet_buf [[id(EncodeMeshDrawArgs_MeshletBuf)]];
     device const char* instance_model_matrix_buf [[id(EncodeMeshDrawArgs_InstanceModelMatrixBuf)]];
-    device const char* instance_data_buf [[id(EncodeMeshDrawArgs_InstanceDataBuf)]];;
+    device const char* instance_data_buf [[id(EncodeMeshDrawArgs_InstanceDataBuf)]];
+    device const MeshData* mesh_data_buf [[id(EncodeMeshDrawArgs_MeshDataBuf)]];
     device const char* meshlet_vertices_buf [[id(EncodeMeshDrawArgs_MeshletVerticesBuf)]];
     device const char* meshlet_triangles_buf [[id(EncodeMeshDrawArgs_MeshletTrianglesBuf)]];
     device const char* uniform_buf [[id(EncodeMeshDrawArgs_MainUniformBuf)]];
@@ -31,7 +32,8 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
         return;
     }
     device const InstanceData& instance_data = icb_container->obj_infos[object_idx];
-    const uint num_meshlets = instance_data.meshlet_count;
+    device const MeshData& mesh_data = draw_args.mesh_data_buf[instance_data.mesh_id];
+    const uint num_meshlets = mesh_data.meshlet_count;
     const uint threads_per_object_thread_group = 128;
     const uint thread_groups_per_object =
             (num_meshlets + threads_per_object_thread_group - 1) / threads_per_object_thread_group;
@@ -47,8 +49,10 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
     cmd.set_mesh_buffer(draw_args.meshlet_triangles_buf, 4);
     cmd.set_mesh_buffer(draw_args.instance_model_matrix_buf + object_idx * sizeof(float4x4), 5);
     cmd.set_mesh_buffer(draw_args.instance_data_buf + object_idx * sizeof(InstanceData), 6);
+    cmd.set_mesh_buffer(draw_args.mesh_data_buf, 7);
 
     cmd.set_object_buffer(draw_args.instance_data_buf + object_idx * sizeof(InstanceData), 0);
+    cmd.set_object_buffer(draw_args.mesh_data_buf, 1);
 
     cmd.set_fragment_buffer(draw_args.scene_arg_buf, 0);
     cmd.set_fragment_buffer(draw_args.uniform_buf, 1);

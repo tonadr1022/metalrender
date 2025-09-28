@@ -7,6 +7,8 @@
 #include <string>
 
 #include "GFXTypes.hpp"
+#include "ModelInstance.hpp"
+#include "RendererTypes.hpp"
 #include "default_vertex.h"
 #include "meshoptimizer.h"
 
@@ -34,13 +36,7 @@ struct Mesh {
   uint32_t vertex_count;
   uint32_t index_count;
   uint32_t material_id;
-};
-
-struct Node {
-  glm::mat4 local_transform{1};
-  glm::mat4 global_transform{1};
-  std::vector<uint32_t> children;
-  uint32_t mesh_id{UINT32_MAX};
+  constexpr static uint32_t k_invalid_mesh_id = UINT32_MAX;
 };
 
 struct MeshletLoadResult {
@@ -52,14 +48,6 @@ struct MeshletLoadResult {
   uint32_t meshlet_triangles_offset{};  // element offset
 };
 
-struct Model {
-  constexpr static uint32_t invalid_id = UINT32_MAX;
-  std::vector<Node> nodes;
-  uint32_t tot_mesh_nodes{};
-  std::vector<uint32_t> root_nodes;
-  glm::mat4 root_transform{1};
-};
-
 struct MeshletProcessResult {
   size_t tot_meshlet_count{};
   size_t tot_meshlet_verts_count{};
@@ -68,7 +56,6 @@ struct MeshletProcessResult {
 };
 
 struct ModelLoadResult {
-  Model model;
   std::vector<Mesh> meshes;
   std::vector<DefaultVertex> vertices;
   std::vector<rhi::DefaultIndexT> indices;
@@ -77,29 +64,12 @@ struct ModelLoadResult {
   MeshletProcessResult meshlet_process_result;
 };
 
-void update_global_transforms(Model &model);
-
+// TODO: re-evaluate whether renderer is needed. images can be loaded in renderer itself
 class RendererMetal;
+namespace model {
 
-class ResourceManager {
- public:
-  static void init() {
-    assert(!instance_);
-    instance_ = new ResourceManager;
-  }
-  static void shutdown() {
-    assert(instance_);
-    delete instance_;
-    instance_ = nullptr;
-  }
-  static ResourceManager &get() {
-    assert(instance_);
-    return *instance_;
-  }
+bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
+                const glm::mat4 &root_transform, ModelInstance &out_model,
+                ModelLoadResult &out_load_result);
 
-  std::expected<ModelLoadResult, std::string> load_model(const std::filesystem::path &path,
-                                                         RendererMetal &renderer);
-
- private:
-  inline static ResourceManager *instance_{};
-};
+}

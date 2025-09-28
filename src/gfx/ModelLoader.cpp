@@ -4,29 +4,64 @@
 #include <stb_image/stb_image.h>
 #define CGLTF_IMPLEMENTATION
 #include <cgltf/cgltf.h>
-#define GLM_ENABLE_EXPERIMENTAL
+
 #include <Metal/Metal.hpp>
 #include <format>
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 #include <span>
+#include <stack>
 
 #include "RendererMetal.hpp"
 #include "meshoptimizer.h"
 
 namespace {
 
+int32_t add_node_to_hierarchy(std::vector<Hierarchy> &hierarchies, int32_t parent, int32_t level) {
+  const auto node_i = static_cast<int32_t>(hierarchies.size());
+  hierarchies.push_back(Hierarchy{.parent = parent, .level = level});
+
+  // upate parent
+  if (parent != Hierarchy::k_invalid_node_id) {
+    auto first_child_of_parent = hierarchies[parent].first_child;
+    if (first_child_of_parent == Hierarchy::k_invalid_node_id) {
+      // new node is the first child of the parent
+      hierarchies[parent].first_child = node_i;
+      // node is it's own last sibling
+      hierarchies[node_i].last_sibling = node_i;
+    } else {
+      auto last_sibling = hierarchies[first_child_of_parent].last_sibling;
+      if (last_sibling == Hierarchy::k_invalid_node_id) {
+        for (last_sibling = first_child_of_parent;
+             hierarchies[last_sibling].next_sibling != Hierarchy::k_invalid_node_id;
+             last_sibling = hierarchies[last_sibling].next_sibling);
+      }
+      hierarchies[last_sibling].next_sibling = node_i;
+      hierarchies[first_child_of_parent].last_sibling = node_i;
+    }
+  }
+  hierarchies[node_i].next_sibling = -1;
+  hierarchies[node_i].first_child = -1;
+  hierarchies[node_i].last_sibling = -1;
+  return node_i;
+}
+
+int32_t add_node_to_model(ModelInstance &model, int32_t parent, int32_t level,
+                          const glm::mat4 &local_transform, uint32_t mesh_id) {
+  const int32_t node = add_node_to_hierarchy(model.nodes, parent, level);
+  assert(std::cmp_equal(node, model.global_transforms.size()));
+  assert(std::cmp_equal(node, model.local_transforms.size()));
+  assert(std::cmp_equal(node, model.mesh_ids.size()));
+  model.global_transforms.emplace_back(1);
+  model.local_transforms.emplace_back(local_transform);
+  model.mesh_ids.emplace_back(mesh_id);
+  return node;
+}
+
 glm::mat4 calc_transform(const glm::vec3 &translation, const glm::quat &rotation,
                          const glm::vec3 &scale) {
   return glm::translate(glm::mat4{1}, translation) * glm::mat4_cast(rotation) *
          glm::scale(glm::mat4{1}, scale);
-}
-
-void update_global_transforms(Model &model, uint32_t node_i, const glm::mat4 &parent_transform) {
-  Node &node = model.nodes[node_i];
-  node.global_transform = parent_transform * node.local_transform;
-  for (auto child : node.children) {
-    update_global_transforms(model, child, node.global_transform);
-  }
 }
 
 // Ref: https://github.com/zeux/meshoptimizer
@@ -67,14 +102,13 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
 
 }  // namespace
 
-void update_global_transforms(Model &model) {
-  for (const uint32_t root_node_i : model.root_nodes) {
-    update_global_transforms(model, root_node_i, model.root_transform);
-  }
-}
+namespace model {
 
-std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
-    const std::filesystem::path &path, RendererMetal &renderer) {
+bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
+                const glm::mat4 &root_transform, ModelInstance &out_model,
+                ModelLoadResult &out_load_result) {
+  out_load_result = {};
+  out_model = {};
   const cgltf_options gltf_load_opts{};
   cgltf_data *raw_gltf{};
   cgltf_result gltf_res = cgltf_parse_file(&gltf_load_opts, path.c_str(), &raw_gltf);
@@ -83,22 +117,18 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
 
   if (gltf_res != cgltf_result_success) {
     if (gltf_res == cgltf_result_file_not_found) {
-      return std::unexpected(std::format("Failed to load GLTF. File not found {}", path.c_str()));
+      return false;
     }
-    return std::unexpected(std::format("Failed to laod GLTF with error {} for file {}",
-                                       static_cast<int>(gltf_res), path.c_str()));
+    return false;
   }
 
   gltf_res = cgltf_load_buffers(&gltf_load_opts, gltf.get(), path.c_str());
 
   if (gltf_res != cgltf_result_success) {
-    return std::unexpected(
-        std::format("Failed to load GLTF buffers for gltf path {}", path.c_str()));
+    return false;
   }
 
-  ModelLoadResult result;
-
-  auto &texture_uploads = result.texture_uploads;
+  auto &texture_uploads = out_load_result.texture_uploads;
   texture_uploads.reserve(gltf->images_count);
 
   auto load_img = [&](uint32_t gltf_img_i) -> uint32_t {
@@ -128,9 +158,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
     return UINT32_MAX;
   };
 
-  auto &result_nodes = result.model.nodes;
-
-  auto &materials = result.materials;
+  auto &materials = out_load_result.materials;
   for (size_t material_i = 0; material_i < gltf->materials_count; material_i++) {
     const cgltf_material *gltf_mat = &gltf->materials[material_i];
     Material material{};
@@ -150,9 +178,9 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
     materials.push_back(material);
   }
 
-  auto &all_vertices = result.vertices;
-  auto &all_indices = result.indices;
-  auto &meshes = result.meshes;
+  auto &all_vertices = out_load_result.vertices;
+  auto &all_indices = out_load_result.indices;
+  auto &meshes = out_load_result.meshes;
   std::vector<uint32_t> gltf_node_to_node_i;
   gltf_node_to_node_i.resize(gltf->nodes_count, UINT32_MAX);
 
@@ -219,7 +247,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
         });
       }
     }
-    auto &meshlet_datas = result.meshlet_process_result.meshlet_datas;
+    auto &meshlet_datas = out_load_result.meshlet_process_result.meshlet_datas;
     for (const Mesh &mesh : meshes) {
       const uint32_t base_vertex = mesh.vertex_offset / sizeof(DefaultVertex);
       meshlet_datas.emplace_back(load_meshlet_data(
@@ -229,10 +257,32 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
     }
   }
   {
+    auto &model = out_model;
+    model.changed_this_frame.resize(ModelInstance::k_max_hierarchy_depth);
     // process nodes
-    uint32_t tot_mesh_nodes = 0;
-    for (size_t node_i = 0; node_i < gltf->nodes_count; node_i++) {
-      const cgltf_node &gltf_node = gltf->nodes[node_i];
+    struct AddNodeStackItem {
+      uint32_t gltf_node_i;
+      int32_t parent_node;
+    };
+
+    assert(gltf->scenes_count == 1);
+    const auto *scene = &gltf->scenes[0];
+    // add root node
+    const auto root_node = add_node_to_model(model, Hierarchy::k_invalid_node_id, 0, root_transform,
+                                             Mesh::k_invalid_mesh_id);
+
+    std::stack<AddNodeStackItem> gltf_node_stack;
+    for (uint32_t i = 0; i < scene->nodes_count; i++) {
+      gltf_node_stack.push(
+          AddNodeStackItem{.gltf_node_i = static_cast<uint32_t>(scene->nodes[i] - gltf->nodes),
+                           .parent_node = root_node});
+    }
+
+    uint32_t tot_mesh_nodes{};
+    while (!gltf_node_stack.empty()) {
+      auto [gltf_node_i, parent_node] = gltf_node_stack.top();
+      gltf_node_stack.pop();
+      const cgltf_node &gltf_node = gltf->nodes[gltf_node_i];
 
       const glm::vec3 translation =
           gltf_node.has_translation ? glm::vec3{gltf_node.translation[0], gltf_node.translation[1],
@@ -246,45 +296,35 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
           gltf_node.has_scale
               ? glm::vec3{gltf_node.scale[0], gltf_node.scale[1], gltf_node.scale[2]}
               : glm::vec3{1};
+      const int32_t new_node =
+          add_node_to_model(model, parent_node, model.nodes[parent_node].level + 1,
+                            calc_transform(translation, rotation, scale), Mesh::k_invalid_mesh_id);
+      gltf_node_to_node_i[gltf_node_i] = new_node;
 
-      std::vector<uint32_t> children;
       if (gltf_node.mesh) {
-        auto mesh_id = static_cast<uint32_t>(gltf_node.mesh - gltf->meshes);
-        children.reserve(primitive_mesh_indices_per_mesh[mesh_id].size());
+        const int32_t child_level = model.nodes[parent_node].level + 1;
+        const auto mesh_id = gltf_node.mesh - gltf->meshes;
         for (auto prim_mesh_id : primitive_mesh_indices_per_mesh[mesh_id]) {
-          children.push_back(static_cast<uint32_t>(result_nodes.size()));
+          add_node_to_model(model, new_node, child_level, glm::mat4{1}, prim_mesh_id);
           tot_mesh_nodes++;
-          result_nodes.emplace_back(Node{.mesh_id = prim_mesh_id});
         }
       }
 
-      children.reserve(children.size() + gltf_node.children_count);
       for (uint32_t ci = 0; ci < gltf_node.children_count; ci++) {
-        children.push_back(
-            gltf_node_to_node_i[static_cast<uint32_t>(gltf_node.children[ci] - gltf->nodes)]);
+        const auto child_gltf_node_i = static_cast<uint32_t>(gltf_node.children[ci] - gltf->nodes);
+        gltf_node_stack.push(
+            AddNodeStackItem{.gltf_node_i = child_gltf_node_i, .parent_node = new_node});
       }
-
-      gltf_node_to_node_i[node_i] = static_cast<uint32_t>(result_nodes.size());
-      result_nodes.emplace_back(
-          Node{.local_transform = calc_transform(translation, rotation, scale),
-               .children = std::move(children)});
     }
 
-    assert(gltf->scenes_count == 1);
-    const auto *scene = &gltf->scenes[0];
-    auto &root_nodes = result.model.root_nodes;
-    root_nodes.reserve(scene->nodes_count);
-    for (uint32_t i = 0; i < scene->nodes_count; i++) {
-      root_nodes.push_back(gltf_node_to_node_i[scene->nodes[i] - gltf->nodes]);
-    }
-
-    result.model.tot_mesh_nodes = tot_mesh_nodes;
-    update_global_transforms(result.model);
+    model.tot_mesh_nodes = tot_mesh_nodes;
+    model.mark_changed(0);
+    model.update_transforms();
   }
 
   {  // process meshlet for entire instance
-    auto &meshlet_process_result = result.meshlet_process_result;
-    auto &meshlet_datas = result.meshlet_process_result.meshlet_datas;
+    auto &meshlet_process_result = out_load_result.meshlet_process_result;
+    auto &meshlet_datas = out_load_result.meshlet_process_result.meshlet_datas;
     for (auto &meshlet_data : meshlet_datas) {
       meshlet_data.meshlet_triangles_offset = meshlet_process_result.tot_meshlet_tri_count;
       meshlet_data.meshlet_vertices_offset = meshlet_process_result.tot_meshlet_verts_count;
@@ -295,5 +335,7 @@ std::expected<ModelLoadResult, std::string> ResourceManager::load_model(
     }
   }
 
-  return result;
+  return true;
 }
+
+}  // namespace model

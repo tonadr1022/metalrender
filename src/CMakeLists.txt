@@ -10,6 +10,8 @@ add_executable(${target_name}
     gfx/metal/MetalUtil.cpp
     gfx/ModelLoader.cpp
     gfx/RendererMetal.cpp
+    gfx/ModelInstance.cpp
+    gfx/ResourceManager.cpp
     WindowApple.cpp
     voxels/Chunk.hpp
     voxels/TerrainGenerator.hpp
