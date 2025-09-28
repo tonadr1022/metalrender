@@ -103,24 +103,25 @@ void RendererMetal::init(const CreateInfo &cinfo) {
 
   recreate_render_target_textures();
 
+  load_shaders();
   {
     // main pipeline
-    load_shaders();
-    MTL::RenderPipelineDescriptor *pipeline_desc = MTL::RenderPipelineDescriptor::alloc()->init();
-    pipeline_desc->setVertexFunction(forward_pass_shader_.vert_func);
-    pipeline_desc->setFragmentFunction(forward_pass_shader_.frag_func);
-    pipeline_desc->setLabel(util::mtl::string("basic"));
-    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
-    pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
+    // MTL::RenderPipelineDescriptor *pipeline_desc =
+    // MTL::RenderPipelineDescriptor::alloc()->init();
+    // pipeline_desc->setVertexFunction(forward_pass_shader_.vert_func);
+    // pipeline_desc->setFragmentFunction(forward_pass_shader_.frag_func);
+    // pipeline_desc->setLabel(util::mtl::string("basic"));
+    // pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    // pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
 
-    NS::Error *err{};
-    main_pso_ = raw_device_->newRenderPipelineState(pipeline_desc, &err);
-    if (err) {
-      util::mtl::print_err(err);
-      exit(1);
-    }
-
-    pipeline_desc->release();
+    // NS::Error *err{};
+    // main_pso_ = raw_device_->newRenderPipelineState(pipeline_desc, &err);
+    // if (err) {
+    //   util::mtl::print_err(err);
+    //   exit(1);
+    // }
+    //
+    // pipeline_desc->release();
   }
   {
     // mesh shader pipeline
@@ -159,8 +160,8 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   }
 
   // TODO: better size management this is awful
-  scene_arg_buffer_ =
-      NS::TransferPtr(raw_device_->newBuffer((8 * k_max_textures) + (8 * k_max_materials), 0));
+  scene_arg_buffer_ = NS::TransferPtr(raw_device_->newBuffer(
+      (sizeof(uint64_t) * k_max_textures) + (sizeof(uint64_t) * k_max_buffers), 0));
   {
     MTL::ArgumentDescriptor *arg0 = MTL::ArgumentDescriptor::alloc()->init();
     size_t curr_idx = 0;
@@ -185,9 +186,15 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     }
   }
 
-  materials_buf_.emplace(*device_, rhi::BufferDesc{rhi::StorageMode::CPUAndGPU, k_max_materials},
+  materials_buf_.emplace(*device_, rhi::BufferDesc{rhi::StorageMode::CPUAndGPU, k_max_textures},
                          sizeof(Material));
-  arg_encode_materials();
+  all_buffers_buf_ =
+      raw_device_->newBuffer(sizeof(uint64_t) * k_max_buffers, MTL::ResourceStorageModeShared);
+
+  global_arg_enc_->setBuffer(all_buffers_buf_, 0, k_max_textures);
+  auto material_buf_i = 1;
+  *(reinterpret_cast<uint64_t *>(all_buffers_buf_->contents()) + material_buf_i) =
+      reinterpret_cast<MetalBuffer *>(materials_buf_->get_buffer())->buffer()->gpuAddress();
 
   MTL::Function *const funcs[] = {forward_pass_shader_.frag_func, forward_mesh_shader_.frag_func};
   for (const auto &func : funcs) {
@@ -235,6 +242,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
         enc->useResource(tex, MTL::ResourceUsageSample);
       }
     }
+    enc->useResource(all_buffers_buf_, MTL::ResourceUsageRead);
     enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
   };
 
@@ -257,6 +265,8 @@ void RendererMetal::render(const RenderArgs &render_args) {
     compute_enc->setBuffer(dispatch_mesh_encode_arg_buf_.get(), 0, 1);
     compute_enc->useResource(ind_cmd_buf_.get(), MTL::ResourceUsageWrite);
     compute_enc->useResource(instance_data_mgr_->instance_data_buf(), MTL::ResourceUsageRead);
+    // TODO: remove
+    compute_enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
     DispatchMeshParams params{.tot_meshes = all_model_data_.max_objects};
     compute_enc->setBytes(&params, sizeof(DispatchMeshParams), 2);
     // TODO: this is awfulllllllllllllll.
@@ -313,6 +323,8 @@ void RendererMetal::render(const RenderArgs &render_args) {
         get_mtl_buf(static_draw_batch_->meshlet_triangles_buf),
         get_curr_frame_data().uniform_buf.get(),
         scene_arg_buffer_.get(),
+        all_buffers_buf_,
+        get_mtl_buf(*materials_buf_),
     };
     enc->useResources(resources, ARRAY_SIZE(resources), MTL::ResourceUsageRead);
     use_scene_arg_buffer_resources(enc);
@@ -320,25 +332,29 @@ void RendererMetal::render(const RenderArgs &render_args) {
                                  NS::Range::Make(0, all_model_data_.max_objects));
   }
 
-  {
-    ZoneScopedN("Imgui frame init");
-    const MTL::RenderPassDescriptor *imgui_pass_desc =
-        MTL::RenderPassDescriptor::renderPassDescriptor();
-    imgui_pass_desc->colorAttachments()->object(0)->setTexture(drawable->texture());
-    imgui_pass_desc->colorAttachments()->object(0)->setLoadAction(MTL::LoadActionLoad);
-    imgui_pass_desc->colorAttachments()->object(0)->setStoreAction(MTL::StoreActionStore);
-    ImGui_ImplMetal_NewFrame(forward_render_pass_desc);
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
+  if (render_args.draw_imgui) {
+    {
+      ZoneScopedN("Imgui frame init");
+      // TODO: don't recrete this
+      const MTL::RenderPassDescriptor *imgui_pass_desc =
+          MTL::RenderPassDescriptor::renderPassDescriptor();
+      imgui_pass_desc->colorAttachments()->object(0)->setTexture(drawable->texture());
+      imgui_pass_desc->colorAttachments()->object(0)->setLoadAction(MTL::LoadActionLoad);
+      imgui_pass_desc->colorAttachments()->object(0)->setStoreAction(MTL::StoreActionStore);
+      ImGui_ImplMetal_NewFrame(forward_render_pass_desc);
+      ImGui_ImplGlfw_NewFrame();
+      ImGui::NewFrame();
+    }
+    render_imgui();
+    ImGui::Render();
+    ImGui_ImplMetal_RenderDrawData(ImGui::GetDrawData(), buf, enc);
   }
 
-  render_imgui();
-
-  ImGui::Render();
-  ImGui_ImplMetal_RenderDrawData(ImGui::GetDrawData(), buf, enc);
   enc->endEncoding();
 
-  ImGui::EndFrame();
+  if (render_args.draw_imgui) {
+    ImGui::EndFrame();
+  }
 
   buf->presentDrawable(drawable);
   buf->commit();
@@ -386,7 +402,7 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
            result.materials.data(), result.materials.size() * sizeof(Material));
     if (resized) {
       LINFO("materials resized");
-      arg_encode_materials();
+      ASSERT(0);
     }
   }
 
@@ -714,8 +730,4 @@ DrawBatchAlloc RendererMetal::upload_geometry([[maybe_unused]] DrawBatchType typ
           .mesh_alloc = mesh_alloc,
           .meshlet_triangles_alloc = meshlet_triangles_alloc,
           .meshlet_vertices_alloc = meshlet_vertices_alloc};
-}
-
-void RendererMetal::arg_encode_materials() {
-  global_arg_enc_->setBuffer(get_mtl_buf(*materials_buf_), 0, k_max_textures);
 }

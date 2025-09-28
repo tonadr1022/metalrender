@@ -54,6 +54,7 @@ struct TextureWithIdx {
 
 struct RenderArgs {
   glm::mat4 view_mat;
+  bool draw_imgui;
 };
 
 enum class DrawBatchType {
@@ -188,7 +189,7 @@ class RendererMetal {
   MTL::Texture* depth_tex_{};
   MTL::Device* raw_device_{};
   MTL::CommandQueue* main_cmd_queue_{};
-  MTL::RenderPipelineState* main_pso_{};
+  // MTL::RenderPipelineState* main_pso_{};
   MTL::RenderPipelineState* mesh_pso_{};
   MTL::ComputePipelineState* dispatch_mesh_pso_{};
 
@@ -199,6 +200,7 @@ class RendererMetal {
   std::optional<DrawBatch> static_draw_batch_;
 
   std::optional<BackedGPUAllocator> materials_buf_;
+  MTL::Buffer* all_buffers_buf_{};
   NS::SharedPtr<MTL::Buffer> scene_arg_buffer_;
 
   std::optional<InstanceDataMgr> instance_data_mgr_;
@@ -209,7 +211,6 @@ class RendererMetal {
   NS::SharedPtr<MTL::Buffer> dispatch_mesh_icb_container_buf_;
 
   MTL::ArgumentEncoder* global_arg_enc_{};
-  void arg_encode_materials();
   std::vector<TextureUpload> pending_texture_uploads_;
   std::vector<MTL::Texture*> all_textures_;
   IndexAllocator texture_index_allocator_{k_max_textures};

@@ -129,14 +129,14 @@ App::App() {
 void App::run() {
   ZoneScoped;
   ResourceManager::get().load_model(config_.initial_model_path);
-  ResourceManager::get().load_model(config_.initial_model_path,
-                                    glm::translate(glm::mat4{1}, glm::vec3{10, 0, 0}));
+  // ResourceManager::get().load_model(config_.initial_model_path,
+  //                                   glm::translate(glm::mat4{1}, glm::vec3{10, 0, 0}));
 
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
     ZoneScopedN("main loop");
     window_->poll_events();
-    double curr_time = glfwGetTime();
+    const double curr_time = glfwGetTime();
     auto dt = static_cast<float>(curr_time - last_time);
     last_time = curr_time;
     camera_.update_pos(window_->get_handle(), dt);
@@ -144,7 +144,7 @@ void App::run() {
     for (const auto model : models_) {
       ResourceManager::get().get_model(model)->update_transforms();
     }
-    RenderArgs args{.view_mat = camera_.get_view_mat()};
+    const RenderArgs args{.view_mat = camera_.get_view_mat(), .draw_imgui = imgui_enabled_};
     renderer_.render(args);
   }
 
@@ -154,14 +154,14 @@ void App::run() {
 }
 
 void App::on_curse_pos_event(double xpos, double ypos) {
-  glm::vec2 pos = {xpos, ypos};
+  const glm::vec2 pos = {xpos, ypos};
   if (first_mouse_) {
     first_mouse_ = false;
     last_pos_ = pos;
     return;
   }
 
-  glm::vec2 offset = {pos.x - last_pos_.x, last_pos_.y - pos.y};
+  const glm::vec2 offset = {pos.x - last_pos_.x, last_pos_.y - pos.y};
   last_pos_ = pos;
   if (hide_mouse_) {
     camera_.process_mouse(offset);
@@ -169,7 +169,7 @@ void App::on_curse_pos_event(double xpos, double ypos) {
 }
 
 void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
-  bool is_press = action == GLFW_PRESS;
+  const auto is_press = action == GLFW_PRESS;
   if (is_press) {
     if (key == GLFW_KEY_ESCAPE) {
       hide_mouse_ = !hide_mouse_;
@@ -177,6 +177,9 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
     }
     if (key == GLFW_KEY_TAB) {
       window_->set_vsync(!window_->get_vsync());
+    }
+    if (key == GLFW_KEY_G && mods & GLFW_MOD_ALT) {
+      imgui_enabled_ = !imgui_enabled_;
     }
   }
 }

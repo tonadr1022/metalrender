@@ -118,8 +118,8 @@ struct Material {
 };
 
 struct SceneResourcesBuf {
-    array<texture2d<float>, k_max_materials> textures [[id(0)]];
-    device Material* materials [[id(1024)]];
+    array<texture2d<float>, k_max_textures> textures [[id(0)]];
+    device uint64_t* buffers [[id(k_max_textures)]];
 };
 
 [[fragment]]
@@ -129,15 +129,16 @@ float4 basic1_fragment_main(FragmentIn in [[stage_in]],
     // return in.prim.color;
     uint render_mode = uniforms.render_mode;
     float4 out_color = float4(0.0);
-    device const Material& material = scene_buf.materials[in.prim.mat_id];
+    device const Material* mat_buf = (device Material*)scene_buf.buffers[1];
+    device const Material* material = &mat_buf[in.prim.mat_id];
     if (render_mode == RENDER_MODE_DEFAULT) {
-        int albedo_idx = material.albedo_tex;
+        int albedo_idx = material->albedo_tex;
         float4 albedo = scene_buf.textures[albedo_idx].sample(default_texture_sampler, in.vert.uv);
         out_color = albedo;
     } else if (render_mode == RENDER_MODE_NORMALS) {
         out_color = float4(float3(in.vert.normal * 0.5 + 0.5), 1.0);
     } else if (render_mode == RENDER_MODE_NORMAL_MAP) {
-        int normal_tex_idx = material.normal_tex;
+        int normal_tex_idx = material->normal_tex;
         float4 normal = scene_buf.textures[normal_tex_idx].sample(default_texture_sampler, in.vert.uv);
         normal.xyz = normal.xyz * 0.5 + 0.5;
         out_color = normal;
