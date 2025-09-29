@@ -42,6 +42,8 @@ inline MTL::StorageMode convert_storage_mode(rhi::StorageMode mode) {
       return MTL::StorageModeShared;
     case StorageMode::GPUOnly:
       return MTL::StorageModePrivate;
+    case StorageMode::Default:
+      return MTL::StorageModeShared;
     default:
       assert(0 && "invalid storage mode");
       return MTL::StorageModePrivate;

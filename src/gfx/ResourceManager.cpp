@@ -44,13 +44,15 @@ void ResourceManager::free_model(ModelHandle handle) {
   auto *model = model_instance_pool_.get(handle);
   ASSERT(model);
   auto it = model_cache_.find(model_to_resource_cache_key_[handle.get_idx()]);
-  ASSERT(it == model_cache_.end());
+  ASSERT(it != model_cache_.end());
   auto &entry = it->second;
   entry.use_count--;
+  renderer_->free_instance(model->instance_gpu_handle);
+
   if (entry.use_count == 0) {
     renderer_->free_model(entry.gpu_resource_handle);
+    model_cache_.erase(it);
   }
-  model_cache_.erase(it);
 }
 
 ResourceManager::ResourceManager(const CreateInfo &cinfo) : renderer_(cinfo.renderer) {}

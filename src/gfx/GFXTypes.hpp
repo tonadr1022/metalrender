@@ -11,7 +11,7 @@ enum class TextureFormat {
   D32float,
 };
 
-enum class StorageMode { GPUOnly, CPUAndGPU, CPUOnly };
+enum class StorageMode { GPUOnly, CPUAndGPU, CPUOnly, Default };
 
 enum TextureUsage {
   TextureUsageNone,
@@ -29,11 +29,13 @@ struct TextureDesc {
   glm::uvec3 dims{1};
   uint32_t mip_levels{1};
   uint32_t array_length{1};
+  bool alloc_gpu_slot{};
 };
 
 struct BufferDesc {
   StorageMode storage_mode{StorageMode::GPUOnly};
   size_t size{};
+  bool alloc_gpu_slot{false};
 };
 
 }  // namespace rhi

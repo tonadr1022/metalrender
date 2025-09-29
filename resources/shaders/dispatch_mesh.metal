@@ -32,6 +32,9 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
         return;
     }
     device const InstanceData& instance_data = icb_container->obj_infos[object_idx];
+    if (instance_data.instance_id == UINT_MAX) {
+        return;
+    }
     device const MeshData& mesh_data = draw_args.mesh_data_buf[instance_data.mesh_id];
     const uint num_meshlets = mesh_data.meshlet_count;
     const uint threads_per_object_thread_group = 128;

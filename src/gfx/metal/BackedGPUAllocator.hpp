@@ -10,7 +10,7 @@ class BackedGPUAllocator {
  public:
   explicit BackedGPUAllocator(rhi::Device& device, const rhi::BufferDesc& buffer_desc,
                               size_t bytes_per_element)
-      : backing_buffer_(device.create_buffer_h(buffer_desc)),
+      : backing_buffer_(device.create_buf_h(buffer_desc)),
         allocator_(buffer_desc.size / bytes_per_element),
         bytes_per_element_(bytes_per_element),
         device_(device) {}
@@ -37,14 +37,14 @@ class BackedGPUAllocator {
       assert(allocator_.grow(new_cap_elements - old_cap_elements));
 
       // new buffer
-      auto new_buffer_desc = device_.get_buffer(backing_buffer_)->desc();
+      auto new_buffer_desc = device_.get_buf(backing_buffer_)->desc();
       new_buffer_desc.size = new_cap_elements * bytes_per_element_;
-      auto new_buf_handle = device_.create_buffer_h(new_buffer_desc);
-      auto* new_buf = device_.get_buffer(new_buf_handle);
+      auto new_buf_handle = device_.create_buf_h(new_buffer_desc);
+      auto* new_buf = device_.get_buf(new_buf_handle);
       assert(new_buf->contents());
 
       // copy data
-      memcpy(new_buf->contents(), device_.get_buffer(backing_buffer_)->contents(),
+      memcpy(new_buf->contents(), device_.get_buf(backing_buffer_)->contents(),
              old_cap_elements * bytes_per_element_);
 
       // update handle
@@ -58,7 +58,7 @@ class BackedGPUAllocator {
     return alloc;
   }
 
-  [[nodiscard]] rhi::Buffer* get_buffer() const { return device_.get_buffer(backing_buffer_); }
+  [[nodiscard]] rhi::Buffer* get_buffer() const { return device_.get_buf(backing_buffer_); }
   [[nodiscard]] const OffsetAllocator::Allocator& get_allocator() const { return allocator_; }
   [[nodiscard]] uint32_t allocated_element_count() const { return allocated_element_count_; }
   [[nodiscard]] uint32_t allocated_elements_size_bytes() const {

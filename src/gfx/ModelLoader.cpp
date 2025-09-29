@@ -142,18 +142,19 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
                                   .storage_mode = rhi::StorageMode::GPUOnly,
                                   .dims = glm::uvec3{w, h, 1},
                                   .mip_levels = mip_levels,
-                                  .array_length = 1};
-      const TextureWithIdx texture_with_idx = renderer.load_material_image(desc);
+                                  .array_length = 1,
+                                  .alloc_gpu_slot = true};
       texture_uploads.emplace_back(TextureUpload{.data = data,
-                                                 .tex = texture_with_idx.tex,
-                                                 .idx = texture_with_idx.idx,
+                                                 .tex = renderer.get_device()->create_tex_h(desc),
                                                  .dims = desc.dims,
                                                  .bytes_per_row = desc.dims.x * 4});
       if (!data) {
         assert(0);
       }
-      return texture_with_idx.idx;
+
+      return renderer.get_device()->get_tex(texture_uploads.back().tex)->gpu_slot();
     }
+
     assert(0 && "need to handle yet");
     return UINT32_MAX;
   };

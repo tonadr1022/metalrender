@@ -73,8 +73,6 @@ struct DrawBatch {
     uint32_t initial_meshlet_vertex_capacity;
   };
 
-  DrawBatch(DrawBatchType type, rhi::Device& device, const CreateInfo& cinfo);
-
   struct Stats {
     uint32_t vertex_count;
     uint32_t index_count;
@@ -82,7 +80,40 @@ struct DrawBatch {
     uint32_t meshlet_triangle_count;
     uint32_t meshlet_vertex_count;
   };
+
   [[nodiscard]] Stats get_stats() const;
+
+  DrawBatch(DrawBatchType type, rhi::Device& device, const CreateInfo& cinfo);
+
+  struct Alloc {
+    OffsetAllocator::Allocation vertex_alloc;
+    OffsetAllocator::Allocation index_alloc;
+    OffsetAllocator::Allocation meshlet_alloc;
+    OffsetAllocator::Allocation mesh_alloc;
+    OffsetAllocator::Allocation meshlet_triangles_alloc;
+    OffsetAllocator::Allocation meshlet_vertices_alloc;
+  };
+
+  void free(const Alloc& alloc) {
+    if (alloc.mesh_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      mesh_buf.free(alloc.mesh_alloc);
+    }
+    if (alloc.meshlet_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      meshlet_buf.free(alloc.meshlet_alloc);
+    }
+    if (alloc.vertex_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      vertex_buf.free(alloc.vertex_alloc);
+    }
+    if (alloc.index_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      index_buf.free(alloc.index_alloc);
+    }
+    if (alloc.meshlet_triangles_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      meshlet_triangles_buf.free(alloc.meshlet_triangles_alloc);
+    }
+    if (alloc.meshlet_vertices_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      meshlet_vertices_buf.free(alloc.meshlet_vertices_alloc);
+    }
+  }
 
   BackedGPUAllocator vertex_buf;
   BackedGPUAllocator index_buf;
@@ -93,21 +124,13 @@ struct DrawBatch {
   const DrawBatchType type;
 };
 
-struct DrawBatchAlloc {
-  OffsetAllocator::Allocation vertex_alloc;
-  OffsetAllocator::Allocation index_alloc;
-  OffsetAllocator::Allocation meshlet_alloc;
-  OffsetAllocator::Allocation mesh_alloc;
-  OffsetAllocator::Allocation meshlet_triangles_alloc;
-  OffsetAllocator::Allocation meshlet_vertices_alloc;
-};
-
 struct ModelGPUResources {
   OffsetAllocator::Allocation material_alloc;
   // TODO: class lmao
   std::vector<MTL::Texture*> textures;
-  DrawBatchAlloc static_draw_batch_alloc;
+  DrawBatch::Alloc static_draw_batch_alloc;
   std::vector<InstanceData> base_instance_datas;
+  std::vector<uint32_t> instance_id_to_node;
 };
 
 struct ModelInstanceGPUResources {
@@ -116,23 +139,31 @@ struct ModelInstanceGPUResources {
 
 class InstanceDataMgr {
  public:
-  InstanceDataMgr(size_t initial_element_cap, MTL::Device* device);
+  InstanceDataMgr(size_t initial_element_cap, MTL::Device* raw_device, rhi::Device* device);
   [[nodiscard]] MTL::Buffer* model_matrix_buf() const { return model_matrix_buf_.get(); }
-  [[nodiscard]] MTL::Buffer* instance_data_buf() const { return instance_data_buf_.get(); }
+  [[nodiscard]] MTL::Buffer* instance_data_buf() const {
+    return reinterpret_cast<MetalBuffer*>(device_->get_buf(instance_data_buf_))->buffer();
+  }
   OffsetAllocator::Allocation allocate(size_t element_count);
   [[nodiscard]] size_t allocation_size(OffsetAllocator::Allocation alloc) const {
     return allocator_.allocationSize(alloc);
   }
-  void free(OffsetAllocator::Allocation alloc) { allocator_.free(alloc); }
+
+  void free(OffsetAllocator::Allocation alloc) {
+    memset(reinterpret_cast<InstanceData*>(instance_data_buf()->contents()) + alloc.offset,
+           UINT32_MAX, allocator_.allocationSize(alloc) * sizeof(InstanceData));
+    allocator_.free(alloc);
+  }
   [[nodiscard]] uint32_t max_seen_size() const { return max_seen_size_; }
 
  private:
   void allocate_buffers(size_t element_count);
   OffsetAllocator::Allocator allocator_;
   NS::SharedPtr<MTL::Buffer> model_matrix_buf_;
-  NS::SharedPtr<MTL::Buffer> instance_data_buf_;
+  rhi::BufferHandleHolder instance_data_buf_;
   uint32_t max_seen_size_{};
-  MTL::Device* device_;
+  rhi::Device* device_{};
+  MTL::Device* raw_device_{};
 };
 
 class RendererMetal {
@@ -147,6 +178,7 @@ class RendererMetal {
   void init(const CreateInfo& cinfo);
   void shutdown();
   void render(const RenderArgs& render_args);
+  [[nodiscard]] rhi::Device* get_device() const { return device_; }
 
   bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
                   ModelInstance& model, ModelGPUHandle& out_handle);
@@ -154,12 +186,8 @@ class RendererMetal {
   [[nodiscard]] ModelInstanceGPUHandle add_model_instance(const ModelInstance& model,
                                                           ModelGPUHandle model_gpu_handle);
 
-  struct AllModelData {
-    uint32_t max_objects;
-  };
-  AllModelData all_model_data_{};
-
-  void free_model(ModelGPUHandle model);
+  void free_model(ModelGPUHandle handle);
+  void free_instance(ModelInstanceGPUHandle handle);
   void on_imgui();
   TextureWithIdx load_material_image(const rhi::TextureDesc& desc);
 
@@ -178,6 +206,11 @@ class RendererMetal {
   NS::SharedPtr<MTL::Buffer> create_buffer(
       size_t size, void* data, MTL::ResourceOptions options = MTL::ResourceStorageModeShared);
 
+  struct AllModelData {
+    uint32_t max_objects;
+  };
+  AllModelData all_model_data_{};
+
   // TODO: make publically reservable
   Pool<ModelGPUHandle, ModelGPUResources> model_gpu_resource_pool_{20};
   Pool<ModelInstanceGPUHandle, ModelInstanceGPUResources> model_instance_gpu_resource_pool_{100};
@@ -186,16 +219,16 @@ class RendererMetal {
 
   [[maybe_unused]] MetalDevice* device_{};
   WindowApple* window_{};
-  MTL::Texture* depth_tex_{};
+  rhi::TextureHandleHolder depth_tex_;
   MTL::Device* raw_device_{};
   MTL::CommandQueue* main_cmd_queue_{};
   // MTL::RenderPipelineState* main_pso_{};
   MTL::RenderPipelineState* mesh_pso_{};
   MTL::ComputePipelineState* dispatch_mesh_pso_{};
 
-  DrawBatchAlloc upload_geometry(DrawBatchType type, const std::vector<DefaultVertex>& vertices,
-                                 const std::vector<rhi::DefaultIndexT>& indices,
-                                 const MeshletProcessResult& meshlets);
+  DrawBatch::Alloc upload_geometry(DrawBatchType type, const std::vector<DefaultVertex>& vertices,
+                                   const std::vector<rhi::DefaultIndexT>& indices,
+                                   const MeshletProcessResult& meshlets);
 
   std::optional<DrawBatch> static_draw_batch_;
 
@@ -213,7 +246,6 @@ class RendererMetal {
   MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
   std::vector<MTL::Texture*> all_textures_;
-  IndexAllocator texture_index_allocator_{k_max_textures};
 
   std::filesystem::path shader_dir_;
   std::filesystem::path resource_dir_;

@@ -128,9 +128,8 @@ App::App() {
 
 void App::run() {
   ZoneScoped;
-  ResourceManager::get().load_model(config_.initial_model_path);
-  // ResourceManager::get().load_model(config_.initial_model_path,
-  //                                   glm::translate(glm::mat4{1}, glm::vec3{10, 0, 0}));
+  load_model(config_.initial_model_path);
+  // load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, glm::vec3{10, 0, 0}));
 
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
@@ -180,6 +179,10 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
     }
     if (key == GLFW_KEY_G && mods & GLFW_MOD_ALT) {
       imgui_enabled_ = !imgui_enabled_;
+    }
+    if (key == GLFW_KEY_C) {
+      ResourceManager::get().free_model(models_[0]);
+      models_.erase(models_.begin());
     }
   }
 }

@@ -6,6 +6,10 @@ using namespace metal;
 #include "shader_global_uniforms.h"
 #include "mesh_shared.h"
 
+struct FragArgs {
+    uint material_buf_id;
+};
+
 struct MeshletDesc {
     uint vertex_offset;
     uint triangle_offset;
@@ -34,7 +38,6 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
                         device const InstanceData* instance_data [[buffer(0)]],
                         device const MeshData* mesh_datas [[buffer(1)]], // TODO: increase max in icb
                         uint thread_idx [[thread_position_in_threadgroup]],
-                        uint object_idx [[threadgroup_position_in_grid]],
                         mesh_grid_properties grid) {
     if (thread_idx == 0) {
         //out_payload.instance_id = object_idx;
@@ -120,13 +123,14 @@ struct Material {
 struct SceneResourcesBuf {
     array<texture2d<float>, k_max_textures> textures [[id(0)]];
     device uint64_t* buffers [[id(k_max_textures)]];
+//    array<device uint64_t*, k_max_buffers> buffers [[id(k_max_textures)]];
 };
 
 [[fragment]]
 float4 basic1_fragment_main(FragmentIn in [[stage_in]],
                             device const SceneResourcesBuf& scene_buf [[buffer(0)]],
                             constant Uniforms& uniforms [[buffer(1)]]) {
-    // return in.prim.color;
+//     return in.prim.color;
     uint render_mode = uniforms.render_mode;
     float4 out_color = float4(0.0);
     device const Material* mat_buf = (device Material*)scene_buf.buffers[1];

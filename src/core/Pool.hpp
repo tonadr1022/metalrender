@@ -118,6 +118,8 @@ struct Holder {
     return *this;
   }
 
+  [[nodiscard]] bool is_valid() const { return handle.is_valid(); }
+
   ~Holder() { destroy(); }
 
   T handle{};

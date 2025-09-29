@@ -20,9 +20,9 @@ class IndexAllocator {
 
   [[nodiscard]] uint32_t get_capacity() const { return capacity_; }
 
-  uint32_t alloc_idx() {
+  [[nodiscard]] uint32_t alloc_idx() {
     if (free_list_.empty()) {
-      throw new std::runtime_error("index allocator out of space");
+      throw std::runtime_error("index allocator out of space");
     }
     const uint32_t val = free_list_.back();
     free_list_.pop_back();

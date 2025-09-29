@@ -4,7 +4,6 @@
 #include <filesystem>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
-#include <string>
 
 #include "GFXTypes.hpp"
 #include "ModelInstance.hpp"
@@ -19,8 +18,7 @@ class Device;
 
 struct TextureUpload {
   const void *data;
-  MTL::Texture *tex;
-  uint32_t idx;
+  rhi::TextureHandleHolder tex;
   glm::uvec3 dims;
   uint32_t bytes_per_row;
 };
