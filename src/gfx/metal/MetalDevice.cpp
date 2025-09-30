@@ -60,7 +60,6 @@ void MetalDevice::destroy(rhi::BufferHandle handle) {
   if (buf->buffer()) {
     buf->buffer()->release();
   }
-  LINFO("destroying buffer");
   // if (buf->gpu_slot() != rhi::Buffer::k_invalid_gpu_slot) {
   //   texture_allocator_.free(buf->gpu_slot());
   // }

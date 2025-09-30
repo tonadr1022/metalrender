@@ -418,6 +418,42 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
     }
   }
 
+  out_handle = model_gpu_resource_pool_.alloc(
+      ModelGPUResources{.material_alloc = material_alloc,
+                        .static_draw_batch_alloc = draw_batch_alloc,
+                        .base_instance_datas = std::move(base_instance_datas),
+                        .instance_id_to_node = instance_id_to_node});
+  return true;
+}
+
+ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &model,
+                                                         ModelGPUHandle model_gpu_handle) {
+  auto &model_instance_datas = model_gpu_resource_pool_.get(model_gpu_handle)->base_instance_datas;
+  auto &instance_id_to_node = model_gpu_resource_pool_.get(model_gpu_handle)->instance_id_to_node;
+  std::vector<glm::mat4> instance_model_matrices;
+  instance_model_matrices.reserve(model_instance_datas.size());
+  std::vector<InstanceData> instance_datas = {model_instance_datas.begin(),
+                                              model_instance_datas.end()};
+  ASSERT(instance_datas.size() == instance_id_to_node.size());
+
+  const OffsetAllocator::Allocation instance_data_gpu_alloc =
+      instance_data_mgr_->allocate(model_instance_datas.size());
+  all_model_data_.max_objects = instance_data_mgr_->max_seen_size();
+
+  for (size_t i = 0; i < instance_datas.size(); i++) {
+    ASSERT(instance_datas[i].instance_id == i);
+    instance_model_matrices.push_back(model.global_transforms[instance_id_to_node[i]]);
+    instance_datas[i].instance_id += instance_data_gpu_alloc.offset;
+  }
+
+  memcpy(reinterpret_cast<InstanceData *>(instance_data_mgr_->instance_data_buf()->contents()) +
+             instance_data_gpu_alloc.offset,
+         instance_datas.data(), instance_datas.size() * sizeof(InstanceData));
+
+  memcpy(reinterpret_cast<glm::mat4 *>(instance_data_mgr_->model_matrix_buf()->contents()) +
+             instance_data_gpu_alloc.offset,
+         instance_model_matrices.data(), instance_model_matrices.size() * sizeof(glm::mat4));
+
   {  // move this bs
     {
       MTL::ArgumentEncoder *arg_enc = dispatch_mesh_shader_.compute_func->newArgumentEncoder(0);
@@ -461,42 +497,6 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
       arg_enc->release();
     }
   }
-
-  out_handle = model_gpu_resource_pool_.alloc(
-      ModelGPUResources{.material_alloc = material_alloc,
-                        .static_draw_batch_alloc = draw_batch_alloc,
-                        .base_instance_datas = std::move(base_instance_datas),
-                        .instance_id_to_node = instance_id_to_node});
-  return true;
-}
-
-ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &model,
-                                                         ModelGPUHandle model_gpu_handle) {
-  auto &model_instance_datas = model_gpu_resource_pool_.get(model_gpu_handle)->base_instance_datas;
-  auto &instance_id_to_node = model_gpu_resource_pool_.get(model_gpu_handle)->instance_id_to_node;
-  std::vector<glm::mat4> instance_model_matrices;
-  instance_model_matrices.reserve(model_instance_datas.size());
-  std::vector<InstanceData> instance_datas = {model_instance_datas.begin(),
-                                              model_instance_datas.end()};
-  ASSERT(instance_datas.size() == instance_id_to_node.size());
-
-  const OffsetAllocator::Allocation instance_data_gpu_alloc =
-      instance_data_mgr_->allocate(model_instance_datas.size());
-  all_model_data_.max_objects = instance_data_mgr_->max_seen_size();
-
-  for (size_t i = 0; i < instance_datas.size(); i++) {
-    ASSERT(instance_datas[i].instance_id == i);
-    instance_model_matrices.push_back(model.global_transforms[instance_id_to_node[i]]);
-    instance_datas[i].instance_id += instance_data_gpu_alloc.offset;
-  }
-
-  memcpy(reinterpret_cast<InstanceData *>(instance_data_mgr_->instance_data_buf()->contents()) +
-             instance_data_gpu_alloc.offset,
-         instance_datas.data(), instance_datas.size() * sizeof(InstanceData));
-
-  memcpy(reinterpret_cast<glm::mat4 *>(instance_data_mgr_->model_matrix_buf()->contents()) +
-             instance_data_gpu_alloc.offset,
-         instance_model_matrices.data(), instance_model_matrices.size() * sizeof(glm::mat4));
   return model_instance_gpu_resource_pool_.alloc(
       ModelInstanceGPUResources{.instance_data_gpu_alloc = instance_data_gpu_alloc});
 }
