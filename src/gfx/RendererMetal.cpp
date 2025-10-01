@@ -83,7 +83,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   cmd_buf_desc->setInheritPipelineState(true);
   cmd_buf_desc->setMaxFragmentBufferBindCount(2);
   cmd_buf_desc->setMaxMeshBufferBindCount(8);
-  cmd_buf_desc->setMaxObjectBufferBindCount(2);
+  cmd_buf_desc->setMaxObjectBufferBindCount(3);
   ind_cmd_buf_ = NS::TransferPtr(
       raw_device_->newIndirectCommandBuffer(cmd_buf_desc, 1024, MTL::ResourceStorageModePrivate));
   cmd_buf_desc->release();
@@ -191,13 +191,11 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   materials_buf_.emplace(*device_,
                          rhi::BufferDesc{rhi::StorageMode::CPUAndGPU, k_max_textures, true},
                          sizeof(Material));
-  all_buffers_buf_ =
-      raw_device_->newBuffer(sizeof(uint64_t) * k_max_buffers, MTL::ResourceStorageModeShared);
-
-  global_arg_enc_->setBuffer(all_buffers_buf_, 0, k_max_textures);
-  auto material_buf_i = 1;
-  *(reinterpret_cast<uint64_t *>(all_buffers_buf_->contents()) + material_buf_i) =
-      reinterpret_cast<MetalBuffer *>(materials_buf_->get_buffer())->buffer()->gpuAddress();
+  global_arg_enc_->setBuffer(static_cast<MetalBuffer *>(materials_buf_->get_buffer())->buffer(), 0,
+                             k_max_textures);
+  // auto material_buf_i = 1;
+  // *(reinterpret_cast<uint64_t *>(all_buffers_buf_->contents()) + material_buf_i) =
+  //     reinterpret_cast<MetalBuffer *>(materials_buf_->get_buffer())->buffer()->gpuAddress();
 
   MTL::Function *const funcs[] = {forward_pass_shader_.frag_func, forward_mesh_shader_.frag_func};
   for (const auto &func : funcs) {
@@ -244,7 +242,6 @@ void RendererMetal::render(const RenderArgs &render_args) {
         enc->useResource(tex, MTL::ResourceUsageSample);
       }
     }
-    enc->useResource(all_buffers_buf_, MTL::ResourceUsageRead);
     enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
   };
 
@@ -324,15 +321,9 @@ void RendererMetal::render(const RenderArgs &render_args) {
         get_mtl_buf(static_draw_batch_->meshlet_triangles_buf),
         get_curr_frame_data().uniform_buf.get(),
         scene_arg_buffer_.get(),
-        all_buffers_buf_,
         get_mtl_buf(*materials_buf_),
     };
     enc->useResources(resources, ARRAY_SIZE(resources), MTL::ResourceUsageRead);
-
-    // struct {
-    //   uint32_t material_buf_id;
-    // } args{.material_buf_id = materials_buf_->get_buffer()->gpu_slot()};
-    // enc->setFragmentBytes(&args, sizeof(args), 2);
     use_scene_arg_buffer_resources(enc);
     enc->executeCommandsInBuffer(ind_cmd_buf_.get(),
                                  NS::Range::Make(0, all_model_data_.max_objects));
@@ -660,8 +651,8 @@ DrawBatch::DrawBatch(DrawBatchType type, rhi::Device &device, const CreateInfo &
                 sizeof(rhi::DefaultIndexT)),
       meshlet_buf(device,
                   rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
-                                  .size = cinfo.initial_meshlet_capacity * sizeof(meshopt_Meshlet)},
-                  sizeof(meshopt_Meshlet)),
+                                  .size = cinfo.initial_meshlet_capacity * sizeof(Meshlet)},
+                  sizeof(Meshlet)),
       mesh_buf(device,
                rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
                                .size = cinfo.initial_mesh_capacity * sizeof(MeshData)},
@@ -722,9 +713,9 @@ DrawBatch::Alloc RendererMetal::upload_geometry([[maybe_unused]] DrawBatchType t
   size_t meshlet_vertices_offset{};
   size_t mesh_i{};
   for (const auto &meshlet_data : meshlets.meshlet_datas) {
-    memcpy((reinterpret_cast<meshopt_Meshlet *>(draw_batch->meshlet_buf.get_buffer()->contents()) +
+    memcpy((reinterpret_cast<Meshlet *>(draw_batch->meshlet_buf.get_buffer()->contents()) +
             meshlet_alloc.offset + meshlet_offset),
-           meshlet_data.meshlets.data(), meshlet_data.meshlets.size() * sizeof(meshopt_Meshlet));
+           meshlet_data.meshlets.data(), meshlet_data.meshlets.size() * sizeof(Meshlet));
     meshlet_offset += meshlet_data.meshlets.size();
 
     memcpy(

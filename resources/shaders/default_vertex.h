@@ -15,4 +15,21 @@ struct MeshletVertex {
   float3 normal;
 };
 
+// see meshoptimizer.h
+struct Meshlet {
+  uint32_t vertex_offset;
+  uint32_t triangle_offset;
+  uint32_t vertex_count;
+  uint32_t triangle_count;
+
+  // bounding sphere
+  packed_float3 center;
+  float radius;
+
+  // normal cone
+  packed_float3 cone_apex;
+  packed_float3 cone_axis;
+  float cone_cutoff;
+};
+
 #endif

@@ -233,7 +233,6 @@ class RendererMetal {
   std::optional<DrawBatch> static_draw_batch_;
 
   std::optional<BackedGPUAllocator> materials_buf_;
-  MTL::Buffer* all_buffers_buf_{};
   NS::SharedPtr<MTL::Buffer> scene_arg_buffer_;
 
   std::optional<InstanceDataMgr> instance_data_mgr_;

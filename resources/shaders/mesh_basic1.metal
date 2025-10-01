@@ -10,13 +10,6 @@ struct FragArgs {
     uint material_buf_id;
 };
 
-struct MeshletDesc {
-    uint vertex_offset;
-    uint triangle_offset;
-    uint vertex_count;
-    uint triangle_count;
-};
-
 // https://www.ronja-tutorials.com/post/041-hsv-colorspace/
 static float3 hue2rgb(float hue) {
     hue = fract(hue); //only use fractional part of hue, making it loop
@@ -30,20 +23,27 @@ static float3 hue2rgb(float hue) {
 
 
 struct ObjectPayload {
-    uint instance_id;
+    uint meshlet_indices[kMeshThreadgroups];
 };
 
-[[object]]
+[[object, max_total_threadgroups_per_mesh_grid(kMeshThreadgroups)]]
 void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
                         device const InstanceData* instance_data [[buffer(0)]],
-                        device const MeshData* mesh_datas [[buffer(1)]], // TODO: increase max in icb
+                        device const MeshData* mesh_datas [[buffer(1)]],
+                        device const Meshlet* meshlets [[buffer(2)]],
                         uint thread_idx [[thread_position_in_threadgroup]],
+                        uint meshlet_idx [[thread_position_in_grid]],
                         mesh_grid_properties grid) {
+    device const MeshData& mesh_data = mesh_datas[instance_data->mesh_id];
+    if (meshlet_idx >= mesh_data.meshlet_count) {
+        return;
+    }
+    int passed = thread_idx < mesh_data.meshlet_count ? 1 : 0;
+    int payload_idx = simd_prefix_exclusive_sum(passed);
+    out_payload.meshlet_indices[payload_idx] = meshlet_idx;
+    uint visible_count = simd_sum(passed);
     if (thread_idx == 0) {
-        //out_payload.instance_id = object_idx;
-        device const MeshData& mesh_data = mesh_datas[instance_data->mesh_id];
-        out_payload.instance_id = instance_data->instance_id;
-        grid.set_threadgroups_per_grid(uint3(mesh_data.meshlet_count, 1, 1));
+        grid.set_threadgroups_per_grid(uint3(visible_count, 1, 1));
     }
 }
 
@@ -52,7 +52,7 @@ struct MeshletPrimitive {
     uint mat_id [[flat]];
 };
 
-using Meshlet = metal::mesh<MeshletVertex,
+using OutMeshlet = metal::mesh<MeshletVertex,
                             MeshletPrimitive,
                             k_max_vertices_per_meshlet,
                             k_max_triangles_per_meshlet,
@@ -62,7 +62,7 @@ using Meshlet = metal::mesh<MeshletVertex,
 void basic1_mesh_main(object_data const ObjectPayload& payload [[payload]],
                       device const DefaultVertex* vertices [[buffer(0)]],
                       constant Uniforms& uniforms [[buffer(1)]],
-                      device const MeshletDesc* meshlets [[buffer(2)]],
+                      device const Meshlet* meshlets [[buffer(2)]],
                       device const uint* meshlet_vertices [[buffer(3)]],
                       device const uchar* meshlet_triangles [[buffer(4)]],
                       device const float4x4& model [[buffer(5)]],
@@ -70,11 +70,11 @@ void basic1_mesh_main(object_data const ObjectPayload& payload [[payload]],
                       device const MeshData* mesh_datas [[buffer(7)]],
                       uint payload_idx [[threadgroup_position_in_grid]],
                       uint thread_idx [[thread_position_in_threadgroup]],
-                      Meshlet out_mesh) {
-    uint meshlet_idx = payload_idx;
-    uint instance_id = payload.instance_id;
+                      OutMeshlet out_mesh) {
+    uint meshlet_idx = payload.meshlet_indices[payload_idx];
+    uint instance_id = instance_data.instance_id;
     device const MeshData& mesh_data = mesh_datas[instance_data.mesh_id];
-    device const MeshletDesc& meshlet = meshlets[meshlet_idx + mesh_data.meshlet_base];
+    device const Meshlet& meshlet = meshlets[meshlet_idx + mesh_data.meshlet_base];
     if (thread_idx < meshlet.vertex_count) {
         device const DefaultVertex& vert = vertices[meshlet_vertices[meshlet.vertex_offset + thread_idx + mesh_data.meshlet_vertices_offset]];
         MeshletVertex out_vert;
@@ -122,19 +122,16 @@ struct Material {
 
 struct SceneResourcesBuf {
     array<texture2d<float>, k_max_textures> textures [[id(0)]];
-    device uint64_t* buffers [[id(k_max_textures)]];
-//    array<device uint64_t*, k_max_buffers> buffers [[id(k_max_textures)]];
+    device const Material* materials [[id(k_max_textures)]];
 };
 
 [[fragment]]
 float4 basic1_fragment_main(FragmentIn in [[stage_in]],
                             device const SceneResourcesBuf& scene_buf [[buffer(0)]],
                             constant Uniforms& uniforms [[buffer(1)]]) {
-//     return in.prim.color;
     uint render_mode = uniforms.render_mode;
     float4 out_color = float4(0.0);
-    device const Material* mat_buf = (device Material*)scene_buf.buffers[1];
-    device const Material* material = &mat_buf[in.prim.mat_id];
+    device const Material* material = &scene_buf.materials[in.prim.mat_id];
     if (render_mode == RENDER_MODE_DEFAULT) {
         int albedo_idx = material->albedo_tex;
         float4 albedo = scene_buf.textures[albedo_idx].sample(default_texture_sampler, in.vert.uv);

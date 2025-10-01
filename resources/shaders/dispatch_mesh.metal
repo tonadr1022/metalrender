@@ -37,7 +37,7 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
     }
     device const MeshData& mesh_data = draw_args.mesh_data_buf[instance_data.mesh_id];
     const uint num_meshlets = mesh_data.meshlet_count;
-    const uint threads_per_object_thread_group = 128;
+    const uint threads_per_object_thread_group = kMeshThreadgroups;
     const uint thread_groups_per_object =
             (num_meshlets + threads_per_object_thread_group - 1) / threads_per_object_thread_group;
     const uint max_mesh_threads =

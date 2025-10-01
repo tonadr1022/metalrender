@@ -72,27 +72,39 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
   // cone_weight set to a value between 0 and 1 to balance cone culling efficiency with other forms
   // of culling like frustum or occlusion culling (0.25 is a reasonable default).
   const float cone_weight{0.0f};
-  std::vector<meshopt_Meshlet> meshlets(max_meshlets);
+  std::vector<meshopt_Meshlet> meshopt_meshlets(max_meshlets);
   std::vector<uint32_t> meshlet_vertices(indices.size());
   std::vector<uint8_t> meshlet_triangles(indices.size());
 
   const size_t meshlet_count = meshopt_buildMeshlets(
-      meshlets.data(), meshlet_vertices.data(), meshlet_triangles.data(), indices.data(),
+      meshopt_meshlets.data(), meshlet_vertices.data(), meshlet_triangles.data(), indices.data(),
       indices.size(), &vertices[0].pos.x, vertices.size(), sizeof(DefaultVertex),
       k_max_vertices_per_meshlet, k_max_triangles_per_meshlet, cone_weight);
 
-  const meshopt_Meshlet &last = meshlets[meshlet_count - 1];
+  const meshopt_Meshlet &last = meshopt_meshlets[meshlet_count - 1];
   meshlet_vertices.resize(last.vertex_offset + last.vertex_count);
   meshlet_triangles.resize(last.triangle_offset + (last.triangle_count * 3));
-  meshlets.resize(meshlet_count);
+  meshopt_meshlets.resize(meshlet_count);
 
-  for (auto &v : meshlet_vertices) {
-    v += base_vertex;
-  }
-  for (auto &m : meshlets) {
+  std::vector<Meshlet> meshlets;
+  meshlets.reserve(meshopt_meshlets.size());
+  for (auto &m : meshopt_meshlets) {
     meshopt_optimizeMeshlet(&meshlet_vertices[m.vertex_offset],
                             &meshlet_triangles[m.triangle_offset], m.triangle_count,
                             m.vertex_count);
+    const meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+        &meshlet_vertices[m.vertex_offset], &meshlet_triangles[m.triangle_offset], m.triangle_count,
+        &vertices[0].pos.x, vertices.size(), sizeof(DefaultVertex));
+    Meshlet &meshlet = meshlets.emplace_back();
+    meshlet.vertex_offset = m.vertex_offset;
+    meshlet.triangle_offset = m.triangle_offset;
+    meshlet.vertex_count = m.vertex_count;
+    meshlet.triangle_count = m.triangle_count;
+    meshlet.center = {bounds.center[0], bounds.center[1], bounds.center[2]};
+    meshlet.radius = bounds.radius;
+  }
+  for (auto &v : meshlet_vertices) {
+    v += base_vertex;
   }
 
   return MeshletLoadResult{.meshlets = std::move(meshlets),

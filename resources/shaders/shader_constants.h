@@ -20,6 +20,7 @@ SHADER_CONSTANT k_max_textures = 1024;
 SHADER_CONSTANT k_max_buffers = 1024;
 SHADER_CONSTANT k_max_vertices_per_meshlet = 128;
 SHADER_CONSTANT k_max_triangles_per_meshlet = 256;
-SHADER_CONSTANT k_max_total_threads_per_mesh_grid = 32;
+
+#define kMeshThreadgroups 32
 
 #endif

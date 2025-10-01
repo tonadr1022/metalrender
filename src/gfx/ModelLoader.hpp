@@ -38,7 +38,7 @@ struct Mesh {
 };
 
 struct MeshletLoadResult {
-  std::vector<meshopt_Meshlet> meshlets;
+  std::vector<Meshlet> meshlets;
   std::vector<uint32_t> meshlet_vertices;
   std::vector<uint8_t> meshlet_triangles;
   uint32_t meshlet_base{};              // element offset

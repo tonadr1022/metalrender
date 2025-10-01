@@ -20,11 +20,10 @@ rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   auto options = util::mtl::convert_storage_mode(desc.storage_mode);
   auto* mtl_buf = device_->newBuffer(desc.size, options);
   mtl_buf->retain();
-  const uint32_t gpu_slot = rhi::Buffer::k_invalid_gpu_slot;
   // if (desc.alloc_gpu_slot) {
   //   gpu_slot = buffer_allocator_.alloc(mtl_buf);
   // }
-  return buffer_pool_.alloc(desc, gpu_slot, mtl_buf);
+  return buffer_pool_.alloc(desc, mtl_buf);
 }
 
 rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
