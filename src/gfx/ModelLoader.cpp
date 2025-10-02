@@ -95,7 +95,7 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
     const meshopt_Bounds bounds = meshopt_computeMeshletBounds(
         &meshlet_vertices[m.vertex_offset], &meshlet_triangles[m.triangle_offset], m.triangle_count,
         &vertices[0].pos.x, vertices.size(), sizeof(DefaultVertex));
-    Meshlet &meshlet = meshlets.emplace_back();
+    Meshlet &meshlet = meshlets.emplace_back(Meshlet{});
     meshlet.vertex_offset = m.vertex_offset;
     meshlet.triangle_offset = m.triangle_offset;
     meshlet.vertex_count = m.vertex_count;
@@ -146,7 +146,7 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
   auto load_img = [&](uint32_t gltf_img_i) -> uint32_t {
     const cgltf_image &img = gltf->images[gltf_img_i];
     if (!img.buffer_view) {
-      int w, h, comp;
+      int w{}, h{}, comp{};
       const std::filesystem::path full_img_path = directory_path / img.uri;
       const uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
       const uint32_t mip_levels = static_cast<uint32_t>(std::floor(std::log2(std::max(w, h)))) + 1;

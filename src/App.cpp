@@ -129,7 +129,7 @@ App::App() {
 void App::run() {
   ZoneScoped;
   load_model(config_.initial_model_path);
-  load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, glm::vec3{0, 40, 0}));
+  // load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, glm::vec3{0, 40, 0}));
 
   double last_time = glfwGetTime();
   while (!window_->should_close()) {

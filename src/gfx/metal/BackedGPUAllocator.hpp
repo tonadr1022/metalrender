@@ -4,6 +4,7 @@
 #include <bit>
 #include <offsetAllocator.hpp>
 
+#include "core/EAssert.hpp"
 #include "gfx/Device.hpp"
 
 class BackedGPUAllocator {
@@ -34,23 +35,19 @@ class BackedGPUAllocator {
       const auto old_cap_elements = allocator_.capacity();
       const auto required_size = std::bit_ceil(std::max(element_count, allocator_.capacity() * 2));
       const auto new_cap_elements = required_size;
-      assert(allocator_.grow(new_cap_elements - old_cap_elements));
+      ALWAYS_ASSERT(allocator_.grow(new_cap_elements - old_cap_elements));
 
-      // new buffer
       auto new_buffer_desc = device_.get_buf(backing_buffer_)->desc();
       new_buffer_desc.size = new_cap_elements * bytes_per_element_;
       auto new_buf_handle = device_.create_buf_h(new_buffer_desc);
       auto* new_buf = device_.get_buf(new_buf_handle);
-      assert(new_buf->contents());
+      ALWAYS_ASSERT(new_buf->contents());
 
-      // copy data
       memcpy(new_buf->contents(), device_.get_buf(backing_buffer_)->contents(),
              old_cap_elements * bytes_per_element_);
 
-      // update handle
       backing_buffer_ = std::move(new_buf_handle);
 
-      // try again
       return allocate(element_count, resize_occured);
     }
     allocated_element_count_ += element_count;
