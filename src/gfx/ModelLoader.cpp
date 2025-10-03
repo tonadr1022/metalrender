@@ -86,23 +86,31 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
   meshlet_triangles.resize(last.triangle_offset + (last.triangle_count * 3));
   meshopt_meshlets.resize(meshlet_count);
 
+  // TODO: evaluate if this is the problem
   std::vector<Meshlet> meshlets;
-  meshlets.reserve(meshopt_meshlets.size());
-  for (auto &m : meshopt_meshlets) {
-    meshopt_optimizeMeshlet(&meshlet_vertices[m.vertex_offset],
-                            &meshlet_triangles[m.triangle_offset], m.triangle_count,
-                            m.vertex_count);
+  meshlets.resize(meshopt_meshlets.size());
+  for (size_t i = 0; i < meshopt_meshlets.size(); i++) {
+    const auto &m = meshopt_meshlets[i];
     const meshopt_Bounds bounds = meshopt_computeMeshletBounds(
         &meshlet_vertices[m.vertex_offset], &meshlet_triangles[m.triangle_offset], m.triangle_count,
         &vertices[0].pos.x, vertices.size(), sizeof(DefaultVertex));
-    Meshlet &meshlet = meshlets.emplace_back(Meshlet{});
+    Meshlet &meshlet = meshlets[i];
+    meshlet.center = {bounds.center[0], bounds.center[1], bounds.center[2]};
+    meshlet.radius = bounds.radius;
+  }
+
+  for (size_t i = 0; i < meshopt_meshlets.size(); i++) {
+    const auto &m = meshopt_meshlets[i];
+    meshopt_optimizeMeshlet(&meshlet_vertices[m.vertex_offset],
+                            &meshlet_triangles[m.triangle_offset], m.triangle_count,
+                            m.vertex_count);
+    Meshlet &meshlet = meshlets[i];
     meshlet.vertex_offset = m.vertex_offset;
     meshlet.triangle_offset = m.triangle_offset;
     meshlet.vertex_count = m.vertex_count;
     meshlet.triangle_count = m.triangle_count;
-    meshlet.center = {bounds.center[0], bounds.center[1], bounds.center[2]};
-    meshlet.radius = bounds.radius;
   }
+
   for (auto &v : meshlet_vertices) {
     v += base_vertex;
   }

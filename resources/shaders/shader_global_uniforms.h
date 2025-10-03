@@ -5,6 +5,8 @@
 
 struct Uniforms {
   float4x4 vp;
+  float4x4 proj;
+  float4x4 view;
   uint render_mode;
 };
 

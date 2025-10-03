@@ -1,5 +1,6 @@
 #include "RendererMetal.hpp"
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define IMGUI_IMPL_METAL_CPP
 #include <imgui_impl_metal.h>
 
@@ -12,7 +13,6 @@
 #include "QuartzCore/CAMetalDrawable.hpp"
 #include "QuartzCore/CAMetalLayer.hpp"
 #include "WindowApple.hpp"
-#include "core/BitUtil.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
@@ -63,6 +63,15 @@ void InstanceDataMgr::allocate_buffers(size_t element_count) {
       raw_device_->newBuffer(sizeof(glm::mat4) * element_count, MTL::ResourceStorageModeShared));
 }
 
+GPUFrameAllocator::GPUFrameAllocator(rhi::Device *device, size_t size, size_t frames_in_flight)
+    : frames_in_flight_(frames_in_flight), device_(device) {
+  ALWAYS_ASSERT(frames_in_flight < k_max_frames_in_flight);
+  for (size_t i = 0; i < frames_in_flight; i++) {
+    buffers_[i] = device_->create_buf_h(rhi::BufferDesc{
+        .storage_mode = rhi::StorageMode::Default, .size = size, .alloc_gpu_slot = false});
+  }
+}
+
 void RendererMetal::init(const CreateInfo &cinfo) {
   ZoneScoped;
   device_ = cinfo.device;
@@ -73,6 +82,10 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   assert(!shader_dir_.empty());
   raw_device_ = device_->get_device();
   main_cmd_queue_ = raw_device_->newCommandQueue();
+  gpu_frame_allocator_ = GPUFrameAllocator{device_, 256ull * 6, frames_in_flight_};
+
+  gpu_uniform_buf_.emplace(gpu_frame_allocator_->create_buffer<Uniforms>(1));
+  cull_data_buf_.emplace(gpu_frame_allocator_->create_buffer<CullData>(1));
 
   init_imgui();
 
@@ -81,9 +94,9 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   cmd_buf_desc->setCommandTypes(MTL::IndirectCommandTypeDrawMeshThreadgroups);
   cmd_buf_desc->setInheritBuffers(false);
   cmd_buf_desc->setInheritPipelineState(true);
-  cmd_buf_desc->setMaxFragmentBufferBindCount(2);
+  cmd_buf_desc->setMaxFragmentBufferBindCount(3);
   cmd_buf_desc->setMaxMeshBufferBindCount(8);
-  cmd_buf_desc->setMaxObjectBufferBindCount(3);
+  cmd_buf_desc->setMaxObjectBufferBindCount(5);
   ind_cmd_buf_ = NS::TransferPtr(
       raw_device_->newIndirectCommandBuffer(cmd_buf_desc, 1024, MTL::ResourceStorageModePrivate));
   cmd_buf_desc->release();
@@ -106,25 +119,6 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   recreate_render_target_textures();
 
   load_shaders();
-  {
-    // main pipeline
-    // MTL::RenderPipelineDescriptor *pipeline_desc =
-    // MTL::RenderPipelineDescriptor::alloc()->init();
-    // pipeline_desc->setVertexFunction(forward_pass_shader_.vert_func);
-    // pipeline_desc->setFragmentFunction(forward_pass_shader_.frag_func);
-    // pipeline_desc->setLabel(util::mtl::string("basic"));
-    // pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
-    // pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
-
-    // NS::Error *err{};
-    // main_pso_ = raw_device_->newRenderPipelineState(pipeline_desc, &err);
-    // if (err) {
-    //   util::mtl::print_err(err);
-    //   exit(1);
-    // }
-    //
-    // pipeline_desc->release();
-  }
   {
     // mesh shader pipeline
     MTL::MeshRenderPipelineDescriptor *pipeline_desc =
@@ -203,15 +197,6 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     frag_enc->setArgumentBuffer(scene_arg_buffer_.get(), 0);
     frag_enc->release();
   }
-
-  {
-    // per frame uniform buffer
-    for (size_t i = 0; i < frames_in_flight_; i++) {
-      per_frame_datas_.emplace_back(
-          PerFrameData{.uniform_buf = NS::TransferPtr(raw_device_->newBuffer(
-                           util::align_256(sizeof(Uniforms)), MTL::ResourceStorageModeShared))});
-    }
-  }
 }
 
 void RendererMetal::shutdown() { shutdown_imgui(); }
@@ -247,7 +232,9 @@ void RendererMetal::render(const RenderArgs &render_args) {
       enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
     };
 
-    set_global_uniform_data(render_args);
+    const Uniforms cpu_uniforms = set_cpu_global_uniform_data(render_args);
+    gpu_uniform_buf_->fill(cpu_uniforms);
+    cull_data_buf_->fill(set_cpu_cull_data(cpu_uniforms));
 
     {
       MTL::BlitCommandEncoder *reset_blit_enc = buf->blitCommandEncoder();
@@ -256,6 +243,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
                                             NS::Range::Make(0, all_model_data_.max_objects));
       reset_blit_enc->endEncoding();
     }
+
     {
       MTL::ComputePassDescriptor *compute_pass_descriptor =
           MTL::ComputePassDescriptor::computePassDescriptor();
@@ -264,6 +252,10 @@ void RendererMetal::render(const RenderArgs &render_args) {
       compute_enc->setComputePipelineState(dispatch_mesh_pso_);
       compute_enc->setBuffer(dispatch_mesh_icb_container_buf_.get(), 0, 0);
       compute_enc->setBuffer(dispatch_mesh_encode_arg_buf_.get(), 0, 1);
+      compute_enc->setBuffer(reinterpret_cast<MetalBuffer *>(gpu_uniform_buf_->get_buf())->buffer(),
+                             gpu_uniform_buf_->get_offset_bytes(), 3);
+      compute_enc->setBuffer(reinterpret_cast<MetalBuffer *>(cull_data_buf_->get_buf())->buffer(),
+                             cull_data_buf_->get_offset_bytes(), 4);
       compute_enc->useResource(ind_cmd_buf_.get(), MTL::ResourceUsageWrite);
       compute_enc->useResource(instance_data_mgr_->instance_data_buf(), MTL::ResourceUsageRead);
       compute_enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
@@ -321,7 +313,6 @@ void RendererMetal::render(const RenderArgs &render_args) {
           get_mtl_buf(static_draw_batch_->mesh_buf),
           get_mtl_buf(static_draw_batch_->meshlet_vertices_buf),
           get_mtl_buf(static_draw_batch_->meshlet_triangles_buf),
-          get_curr_frame_data().uniform_buf.get(),
           scene_arg_buffer_.get(),
           get_mtl_buf(*materials_buf_),
       };
@@ -485,8 +476,6 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
           reinterpret_cast<MetalBuffer *>(static_draw_batch_->meshlet_triangles_buf.get_buffer())
               ->buffer(),
           0, EncodeMeshDrawArgs_MeshletTrianglesBuf);
-      arg_enc->setBuffer(get_curr_frame_data().uniform_buf.get(), 0,
-                         EncodeMeshDrawArgs_MainUniformBuf);
       arg_enc->setBuffer(scene_arg_buffer_.get(), 0, EncodeMeshDrawArgs_SceneArgBuf);
       arg_enc->release();
     }
@@ -528,6 +517,7 @@ void RendererMetal::on_imgui() {
     ImGui::Text("\tMeshlet Triangle Count: %d", stats.meshlet_triangle_count);
     ImGui::Text("\tMeshlet Vertex Count: %d", stats.meshlet_vertex_count);
   }
+  ImGui::Checkbox("meshlet frustum cull", &meshlet_frustum_cull_);
 }
 
 // TextureWithIdx RendererMetal::load_material_image(const rhi::TextureDesc &desc) {
@@ -582,16 +572,37 @@ void RendererMetal::render_imgui() {
   }
 }
 
-void RendererMetal::set_global_uniform_data(const RenderArgs &render_args) {
-  ZoneScoped;
-  // Uniform data
-  auto &uniform_buf = get_curr_frame_data().uniform_buf;
-  auto *uniform_data = static_cast<Uniforms *>(uniform_buf->contents());
-  auto window_dims = window_->get_window_size();
+Uniforms RendererMetal::set_cpu_global_uniform_data(const RenderArgs &render_args) const {
+  Uniforms uniform_data{};
+  const auto window_dims = window_->get_window_size();
   const float aspect = (window_dims.x != 0) ? float(window_dims.x) / float(window_dims.y) : 1.0f;
-  uniform_data->vp =
-      glm::perspective(glm::radians(70.f), aspect, 0.001f, 10000.f) * render_args.view_mat;
-  uniform_data->render_mode = (uint32_t)RenderMode::Default;
+  uniform_data.view = render_args.view_mat;
+  uniform_data.proj = glm::perspective(glm::radians(70.f), aspect, 0.001f, 10000.f);
+  uniform_data.vp = uniform_data.proj * uniform_data.view;
+  uniform_data.render_mode = (uint32_t)RenderMode::Default;
+  return uniform_data;
+}
+
+CullData RendererMetal::set_cpu_cull_data(const Uniforms &uniforms) const {
+  // https://github.com/zeux/niagara/blob/7fa51801abc258c3cb05e9a615091224f02e11cf/src/niagara.cpp#L128
+  CullData cull_data{};
+  const glm::mat4 projection_transpose = glm::transpose(uniforms.proj);
+  const auto normalize_plane = [](const glm::vec4 &p) {
+    const auto n = glm::vec3(p);
+    const float inv_len = 1.0f / glm::length(n);
+    return glm::vec4(n * inv_len, p.w * inv_len);
+  };
+  const glm::vec4 frustum_x =
+      normalize_plane(projection_transpose[0] + projection_transpose[3]);  // x + w < 0
+  const glm::vec4 frustum_y =
+      normalize_plane(projection_transpose[1] + projection_transpose[3]);  // y + w < 0
+  cull_data.frustum[0] = frustum_x.x;
+  cull_data.frustum[1] = frustum_x.z;
+  cull_data.frustum[2] = frustum_y.y;
+  cull_data.frustum[3] = frustum_y.z;
+  cull_data.view = uniforms.view;
+  cull_data.meshlet_frustum_cull = meshlet_frustum_cull_;
+  return cull_data;
 }
 
 void RendererMetal::flush_pending_texture_uploads() {

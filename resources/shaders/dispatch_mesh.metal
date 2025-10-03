@@ -19,7 +19,6 @@ struct EncodeMeshDrawArgs {
     device const MeshData* mesh_data_buf [[id(EncodeMeshDrawArgs_MeshDataBuf)]];
     device const char* meshlet_vertices_buf [[id(EncodeMeshDrawArgs_MeshletVerticesBuf)]];
     device const char* meshlet_triangles_buf [[id(EncodeMeshDrawArgs_MeshletTrianglesBuf)]];
-    device const char* uniform_buf [[id(EncodeMeshDrawArgs_MainUniformBuf)]];
     device const char* scene_arg_buf [[id(EncodeMeshDrawArgs_SceneArgBuf)]];
 };
 
@@ -27,7 +26,9 @@ kernel
 void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
                         device ICBContainer *icb_container [[buffer(0)]],
                         device const EncodeMeshDrawArgs& draw_args [[buffer(1)]],
-                        constant DispatchMeshParams& params [[buffer(2)]]) {
+                        constant DispatchMeshParams& params [[buffer(2)]],
+                        device const uchar* uniform_buf [[buffer(3)]],
+                        device const uchar* cull_data_buf [[buffer(4)]]) {
     if (object_idx >= params.tot_meshes) {
         return;
     }
@@ -46,7 +47,7 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
     render_command cmd(icb_container->cmd_buf, object_idx);
 
     cmd.set_mesh_buffer(draw_args.main_vertex_buf, 0);
-    cmd.set_mesh_buffer(draw_args.uniform_buf, 1);
+    cmd.set_mesh_buffer(uniform_buf, 1);
     cmd.set_mesh_buffer(draw_args.meshlet_buf, 2);
     cmd.set_mesh_buffer(draw_args.meshlet_vertices_buf, 3);
     cmd.set_mesh_buffer(draw_args.meshlet_triangles_buf, 4);
@@ -56,9 +57,12 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
 
     cmd.set_object_buffer(draw_args.instance_data_buf + object_idx * sizeof(InstanceData), 0);
     cmd.set_object_buffer(draw_args.mesh_data_buf, 1);
+    cmd.set_object_buffer(draw_args.meshlet_buf, 2);
+    cmd.set_object_buffer(cull_data_buf, 3);
+    cmd.set_object_buffer(draw_args.instance_model_matrix_buf + object_idx * sizeof(float4x4), 4);
 
     cmd.set_fragment_buffer(draw_args.scene_arg_buf, 0);
-    cmd.set_fragment_buffer(draw_args.uniform_buf, 1);
+    cmd.set_fragment_buffer(uniform_buf, 1);
 
     cmd.draw_mesh_threadgroups(uint3(thread_groups_per_object, 1, 1),
                                uint3(threads_per_object_thread_group, 1, 1),

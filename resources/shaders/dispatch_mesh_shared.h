@@ -9,8 +9,12 @@ enum EncodeMeshDrawArgsE {
   EncodeMeshDrawArgs_MeshDataBuf,
   EncodeMeshDrawArgs_MeshletVerticesBuf,
   EncodeMeshDrawArgs_MeshletTrianglesBuf,
-  EncodeMeshDrawArgs_MainUniformBuf,
   EncodeMeshDrawArgs_SceneArgBuf,
+};
+
+enum PerFrameArgs {
+  PerFrameArgs_MainUniformBuf,
+  PerFrameArgs_CullDataBuf,
 };
 
 struct DispatchMeshParams {

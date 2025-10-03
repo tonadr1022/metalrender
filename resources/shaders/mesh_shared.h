@@ -16,4 +16,10 @@ struct InstanceData {
   uint32_t mesh_id;
 };
 
+struct CullData {
+  float4x4 view;
+  float frustum[4];
+  bool meshlet_frustum_cull;
+};
+
 #endif

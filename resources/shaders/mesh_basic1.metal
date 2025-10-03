@@ -26,11 +26,14 @@ struct ObjectPayload {
     uint meshlet_indices[kMeshThreadgroups];
 };
 
+
 [[object, max_total_threadgroups_per_mesh_grid(kMeshThreadgroups)]]
 void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
                         device const InstanceData* instance_data [[buffer(0)]],
                         device const MeshData* mesh_datas [[buffer(1)]],
                         device const Meshlet* meshlets [[buffer(2)]],
+                        device const CullData& cull_data [[buffer(3)]],
+                        device const float4x4& model [[buffer(4)]],
                         uint thread_idx [[thread_position_in_threadgroup]],
                         uint meshlet_idx [[thread_position_in_grid]],
                         mesh_grid_properties grid) {
@@ -39,6 +42,21 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
         return;
     }
     int passed = thread_idx < mesh_data.meshlet_count ? 1 : 0;
+    device const Meshlet& meshlet = meshlets[meshlet_idx + mesh_data.meshlet_base];
+
+    // REF: https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
+    float4 center = model * float4(meshlet.center, 1.0);
+    center = cull_data.view * center;
+
+    float3 sx = float3(model[0][0], model[0][1], model[0][2]);
+    float3 sy = float3(model[1][0], model[1][1], model[1][2]);
+    float3 sz = float3(model[2][0], model[2][1], model[2][2]);
+    float max_scale = max(length(sx), max(length(sy), length(sz)));
+    float radius = meshlet.radius * max_scale;
+//    float radius = meshlet.radius * model[0][0];
+    passed &= !cull_data.meshlet_frustum_cull || (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
+    passed &= !cull_data.meshlet_frustum_cull || (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
+
     int payload_idx = simd_prefix_exclusive_sum(passed);
     out_payload.meshlet_indices[payload_idx] = meshlet_idx;
     uint visible_count = simd_sum(passed);
