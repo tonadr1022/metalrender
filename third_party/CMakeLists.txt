@@ -37,7 +37,19 @@ add_subdirectory(meshoptimizer)
 
 option(TRACY_ENABLE "Enable profiling" ON)
 option(TRACY_ONLY_IPV4 "IPv4 only" ON)
+
+if (MSVC)
+    add_compile_options(/wd4996)
+elseif (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    set(_saved_cxx_flags "${CMAKE_CXX_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
+endif()
+
 add_subdirectory(tracy)
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    set(CMAKE_CXX_FLAGS "${_saved_cxx_flags}")
+endif()
 
 add_library(cgltf INTERFACE)
 target_include_directories(cgltf INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/cgltf/include)

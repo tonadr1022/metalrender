@@ -1,5 +1,3 @@
-#pragma once
-
 #include "ModelInstance.hpp"
 
 #include "core/MathUtil.hpp"
