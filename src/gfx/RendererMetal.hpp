@@ -4,13 +4,13 @@
 #include <Metal/MTLIndirectCommandBuffer.hpp>
 #include <filesystem>
 #include <glm/mat4x4.hpp>
+#include <span>
 
 #include "Config.hpp"
 #include "Foundation/NSSharedPtr.hpp"
 #include "GFXTypes.hpp"
 #include "ModelLoader.hpp"
 #include "RendererTypes.hpp"
-#include "core/Allocator.hpp"
 #include "core/BitUtil.hpp"
 #include "core/Handle.hpp"
 #include "core/Pool.hpp"
@@ -150,6 +150,7 @@ class InstanceDataMgr {
   [[nodiscard]] size_t allocation_size(OffsetAllocator::Allocation alloc) const {
     return allocator_.allocationSize(alloc);
   }
+  [[nodiscard]] MTL::IndirectCommandBuffer* icb() const { return ind_cmd_buf_.get(); }
 
   void free(OffsetAllocator::Allocation alloc) {
     memset(reinterpret_cast<InstanceData*>(instance_data_buf()->contents()) + alloc.offset,
@@ -160,11 +161,13 @@ class InstanceDataMgr {
 
  private:
   void allocate_buffers(size_t element_count);
+  void resize_icb(size_t element_count);
   OffsetAllocator::Allocator allocator_;
   rhi::BufferHandleHolder instance_data_buf_;
   uint32_t max_seen_size_{};
   rhi::Device* device_{};
   MTL::Device* raw_device_{};
+  NS::SharedPtr<MTL::IndirectCommandBuffer> ind_cmd_buf_;
 };
 
 class GPUFrameAllocator;
@@ -286,7 +289,7 @@ class RendererMetal {
 
   DrawBatch::Alloc upload_geometry(DrawBatchType type, const std::vector<DefaultVertex>& vertices,
                                    const std::vector<rhi::DefaultIndexT>& indices,
-                                   const MeshletProcessResult& meshlets);
+                                   const MeshletProcessResult& meshlets, std::span<Mesh> meshes);
 
   std::optional<DrawBatch> static_draw_batch_;
 
@@ -300,8 +303,6 @@ class RendererMetal {
   bool meshlet_frustum_cull_{true};
   static constexpr float k_z_near{0.001};
   static constexpr float k_z_far{10'000};
-
-  NS::SharedPtr<MTL::IndirectCommandBuffer> ind_cmd_buf_;
 
   NS::SharedPtr<MTL::Buffer> dispatch_mesh_encode_arg_buf_;
   NS::SharedPtr<MTL::Buffer> dispatch_mesh_icb_container_buf_;

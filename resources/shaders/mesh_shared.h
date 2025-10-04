@@ -8,6 +8,9 @@ struct MeshData {
   uint32_t meshlet_count;
   uint32_t meshlet_vertices_offset;
   uint32_t meshlet_triangles_offset;
+  // bounding sphere
+  packed_float3 center;
+  float radius;
 };
 
 struct InstanceData {

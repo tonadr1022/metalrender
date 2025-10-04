@@ -33,6 +33,9 @@ InstanceDataMgr::InstanceDataMgr(size_t initial_element_cap, MTL::Device *raw_de
                                  rhi::Device *device)
     : allocator_(initial_element_cap), device_(device), raw_device_(raw_device) {
   allocate_buffers(initial_element_cap);
+
+  // TODO: parameterize this or something better?
+  resize_icb(initial_element_cap);
 }
 
 OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
@@ -40,7 +43,8 @@ OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
   if (alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
     auto old_capacity = allocator_.capacity();
     auto new_capacity = old_capacity * 2;
-    assert(allocator_.grow(allocator_.capacity()));
+    allocator_.grow(allocator_.capacity());
+    ASSERT(new_capacity <= allocator_.capacity());
     // TODO: copy contents
     auto old_instance_data_buf = std::move(instance_data_buf_);
     allocate_buffers(new_capacity);
@@ -48,13 +52,31 @@ OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
            old_capacity * sizeof(InstanceData));
     return allocate(element_count);
   }
-  max_seen_size_ = std::max<uint32_t>(max_seen_size_, alloc.offset + element_count);
+  resize_icb(alloc.offset + element_count);
   return alloc;
 }
 
 void InstanceDataMgr::allocate_buffers(size_t element_count) {
   instance_data_buf_ = device_->create_buf_h(rhi::BufferDesc{
       .storage_mode = rhi::StorageMode::Default, .size = sizeof(InstanceData) * element_count});
+}
+
+void InstanceDataMgr::resize_icb(size_t element_count) {
+  if (element_count > max_seen_size_) {
+    max_seen_size_ = std::max<size_t>(max_seen_size_, element_count);
+    MTL::IndirectCommandBufferDescriptor *cmd_buf_desc =
+        MTL::IndirectCommandBufferDescriptor::alloc()->init();
+    cmd_buf_desc->setCommandTypes(MTL::IndirectCommandTypeDrawMeshThreadgroups);
+    cmd_buf_desc->setInheritBuffers(false);
+    cmd_buf_desc->setInheritPipelineState(true);
+    cmd_buf_desc->setMaxFragmentBufferBindCount(3);
+    cmd_buf_desc->setMaxMeshBufferBindCount(8);
+    cmd_buf_desc->setMaxObjectBufferBindCount(5);
+    ASSERT(raw_device_ != nullptr);
+    ind_cmd_buf_ = NS::TransferPtr(raw_device_->newIndirectCommandBuffer(
+        cmd_buf_desc, max_seen_size_, MTL::ResourceStorageModePrivate));
+    cmd_buf_desc->release();
+  }
 }
 
 GPUFrameAllocator::GPUFrameAllocator(rhi::Device *device, size_t size, size_t frames_in_flight)
@@ -82,18 +104,6 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   cull_data_buf_.emplace(gpu_frame_allocator_->create_buffer<CullData>(1));
 
   init_imgui();
-
-  MTL::IndirectCommandBufferDescriptor *cmd_buf_desc =
-      MTL::IndirectCommandBufferDescriptor::alloc()->init();
-  cmd_buf_desc->setCommandTypes(MTL::IndirectCommandTypeDrawMeshThreadgroups);
-  cmd_buf_desc->setInheritBuffers(false);
-  cmd_buf_desc->setInheritPipelineState(true);
-  cmd_buf_desc->setMaxFragmentBufferBindCount(3);
-  cmd_buf_desc->setMaxMeshBufferBindCount(8);
-  cmd_buf_desc->setMaxObjectBufferBindCount(5);
-  ind_cmd_buf_ = NS::TransferPtr(
-      raw_device_->newIndirectCommandBuffer(cmd_buf_desc, 1024, MTL::ResourceStorageModePrivate));
-  cmd_buf_desc->release();
 
   const auto initial_instance_capacity{128};
   instance_data_mgr_.emplace(initial_instance_capacity, raw_device_, device_);
@@ -181,9 +191,6 @@ void RendererMetal::init(const CreateInfo &cinfo) {
                          sizeof(Material));
   global_arg_enc_->setBuffer(static_cast<MetalBuffer *>(materials_buf_->get_buffer())->buffer(), 0,
                              k_max_textures);
-  // auto material_buf_i = 1;
-  // *(reinterpret_cast<uint64_t *>(all_buffers_buf_->contents()) + material_buf_i) =
-  //     reinterpret_cast<MetalBuffer *>(materials_buf_->get_buffer())->buffer()->gpuAddress();
 
   MTL::Function *const funcs[] = {forward_pass_shader_.frag_func, forward_mesh_shader_.frag_func};
   for (const auto &func : funcs) {
@@ -233,7 +240,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
     {
       MTL::BlitCommandEncoder *reset_blit_enc = buf->blitCommandEncoder();
       reset_blit_enc->setLabel(util::mtl::string("Reset ICB Blit Encoder"));
-      reset_blit_enc->resetCommandsInBuffer(ind_cmd_buf_.get(),
+      reset_blit_enc->resetCommandsInBuffer(instance_data_mgr_->icb(),
                                             NS::Range::Make(0, all_model_data_.max_objects));
       reset_blit_enc->endEncoding();
     }
@@ -250,7 +257,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
                              gpu_uniform_buf_->get_offset_bytes(), 3);
       compute_enc->setBuffer(reinterpret_cast<MetalBuffer *>(cull_data_buf_->get_buf())->buffer(),
                              cull_data_buf_->get_offset_bytes(), 4);
-      compute_enc->useResource(ind_cmd_buf_.get(), MTL::ResourceUsageWrite);
+      compute_enc->useResource(instance_data_mgr_->icb(), MTL::ResourceUsageWrite);
       compute_enc->useResource(instance_data_mgr_->instance_data_buf(), MTL::ResourceUsageRead);
       compute_enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
       DispatchMeshParams params{.tot_meshes = all_model_data_.max_objects};
@@ -263,7 +270,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
     {
       MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
       blit_enc->setLabel(util::mtl::string("Optimize ICB Blit Encoder"));
-      blit_enc->optimizeIndirectCommandBuffer(ind_cmd_buf_.get(),
+      blit_enc->optimizeIndirectCommandBuffer(instance_data_mgr_->icb(),
                                               NS::Range::Make(0, all_model_data_.max_objects));
       blit_enc->endEncoding();
     }
@@ -311,7 +318,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
       };
       enc->useResources(resources, ARRAY_SIZE(resources), MTL::ResourceUsageRead);
       use_scene_arg_buffer_resources(enc);
-      enc->executeCommandsInBuffer(ind_cmd_buf_.get(),
+      enc->executeCommandsInBuffer(instance_data_mgr_->icb(),
                                    NS::Range::Make(0, all_model_data_.max_objects));
     }
 
@@ -360,7 +367,7 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
   }
 
   auto draw_batch_alloc = upload_geometry(DrawBatchType::Static, result.vertices, result.indices,
-                                          result.meshlet_process_result);
+                                          result.meshlet_process_result, result.meshes);
 
   std::vector<InstanceData> base_instance_datas;
   std::vector<uint32_t> instance_id_to_node;
@@ -440,7 +447,7 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
       dispatch_mesh_icb_container_buf_ = NS::TransferPtr(
           raw_device_->newBuffer(arg_enc->encodedLength(), MTL::ResourceStorageModeShared));
       arg_enc->setArgumentBuffer(dispatch_mesh_icb_container_buf_.get(), 0);
-      arg_enc->setIndirectCommandBuffer(ind_cmd_buf_.get(), 0);
+      arg_enc->setIndirectCommandBuffer(instance_data_mgr_->icb(), 0);
       arg_enc->setBuffer(instance_data_mgr_->instance_data_buf(), 0, 1);
       arg_enc->release();
     }
@@ -694,7 +701,8 @@ DrawBatch::Stats DrawBatch::get_stats() const {
 DrawBatch::Alloc RendererMetal::upload_geometry([[maybe_unused]] DrawBatchType type,
                                                 const std::vector<DefaultVertex> &vertices,
                                                 const std::vector<rhi::DefaultIndexT> &indices,
-                                                const MeshletProcessResult &meshlets) {
+                                                const MeshletProcessResult &meshlets,
+                                                std::span<Mesh> meshes) {
   auto &draw_batch = static_draw_batch_;
   ALWAYS_ASSERT(!vertices.empty());
   ALWAYS_ASSERT(!meshlets.meshlet_datas.empty());
@@ -749,6 +757,8 @@ DrawBatch::Alloc RendererMetal::upload_geometry([[maybe_unused]] DrawBatchType t
         .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size()),
         .meshlet_vertices_offset = meshlet_data.meshlet_vertices_offset,
         .meshlet_triangles_offset = meshlet_data.meshlet_triangles_offset,
+        .center = meshes[mesh_i].center,
+        .radius = meshes[mesh_i].radius,
     };
     memcpy((reinterpret_cast<MeshData *>(draw_batch->mesh_buf.get_buffer()->contents()) + mesh_i +
             mesh_alloc.offset),

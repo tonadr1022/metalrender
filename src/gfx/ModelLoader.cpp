@@ -6,7 +6,6 @@
 #include <cgltf/cgltf.h>
 
 #include <Metal/Metal.hpp>
-#include <format>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 #include <span>
@@ -249,6 +248,16 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
           }
         }
 
+        glm::vec3 center{};
+        float radius{};
+        for (size_t i = base_vertex; i < base_vertex + vertex_count; i++) {
+          center += all_vertices[i].pos;
+        }
+        center /= vertex_count;
+        for (size_t i = base_vertex; i < base_vertex + vertex_count; i++) {
+          radius = glm::max(radius, glm::distance(glm::vec3{all_vertices[i].pos}, center));
+        }
+
         const uint32_t material_idx =
             primitive.material ? primitive.material - gltf->materials : UINT32_MAX;
         assert(vertex_offset < UINT32_MAX);
@@ -258,9 +267,12 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
             .vertex_count = vertex_count,
             .index_count = index_count,
             .material_id = material_idx,
+            .center = center,
+            .radius = radius,
         });
       }
     }
+
     auto &meshlet_datas = out_load_result.meshlet_process_result.meshlet_datas;
     for (const Mesh &mesh : meshes) {
       const uint32_t base_vertex = mesh.vertex_offset_bytes / sizeof(DefaultVertex);

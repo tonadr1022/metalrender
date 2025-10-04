@@ -1,6 +1,5 @@
 #pragma once
 
-#include <expected>
 #include <filesystem>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
@@ -9,7 +8,6 @@
 #include "ModelInstance.hpp"
 #include "RendererTypes.hpp"
 #include "default_vertex.h"
-#include "meshoptimizer.h"
 
 namespace MTL {
 class Texture;
@@ -30,10 +28,13 @@ struct Material {
 
 struct Mesh {
   uint32_t vertex_offset_bytes;  // element count
-  uint32_t index_offset;   // index count
+  uint32_t index_offset;         // index count
   uint32_t vertex_count;
   uint32_t index_count;
   uint32_t material_id;
+  // bounding sphere
+  glm::vec3 center;
+  float radius;
   constexpr static uint32_t k_invalid_mesh_id = UINT32_MAX;
 };
 

@@ -5,7 +5,9 @@ using namespace metal;
 #include "default_vertex.h"
 #include "shader_global_uniforms.h"
 #include "mesh_shared.h"
-#include "math/math.metal"
+#include "math/math.mtl"
+
+#define MESHLET_CULL 1
 
 struct FragArgs {
     uint material_buf_id;
@@ -42,8 +44,10 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
         return;
     }
 
-    device const Meshlet& meshlet = meshlets[tpg + mesh_data.meshlet_base];
 
+    int passed = 1;
+#ifdef MESHLET_CULL
+    device const Meshlet& meshlet = meshlets[tpg + mesh_data.meshlet_base];
     float3 world_center = rotate_quat(instance_data->scale * meshlet.center, instance_data->rotation)
                           + instance_data->translation;
     float3 center = (cull_data.view * float4(world_center, 1.0)).xyz;
@@ -56,7 +60,6 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     cone_axis = float3x3(float3(cull_data.view[0]), float3(cull_data.view[1]), float3(cull_data.view[2])) * cone_axis;
     float cone_cutoff = int(meshlet.cone_cutoff) / 127.0;
 
-    int passed = 1;
 
     passed = passed && !cone_cull(center, radius, cone_axis, cone_cutoff, float3(0, 0, 0));
 
@@ -66,6 +69,7 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     passed = passed && (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
     // z near/far
     passed = passed && (center.z + radius > cull_data.z_near) || (center.z - radius < cull_data.z_far);
+#endif // MESHLET_CULL
 
     int payload_idx = simd_prefix_exclusive_sum(passed);
     if (passed) {

@@ -128,8 +128,17 @@ App::App() {
 
 void App::run() {
   ZoneScoped;
+  glm::ivec3 iter{};
+  glm::ivec3 dims{1, 1, 1};
+  float dist = 40.0;
+  for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
+    for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
+      glm::vec3 pos = glm::vec3{iter} * dist;
+      load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, pos));
+    }
+  }
+
   load_model(config_.initial_model_path);
-  // load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, glm::vec3{0, 40, 0}));
 
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
