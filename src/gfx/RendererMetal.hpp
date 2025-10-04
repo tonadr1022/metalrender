@@ -56,6 +56,7 @@ struct TextureWithIdx {
 
 struct RenderArgs {
   glm::mat4 view_mat;
+  glm::vec3 camera_pos;
   bool draw_imgui;
 };
 
@@ -142,7 +143,6 @@ struct ModelInstanceGPUResources {
 class InstanceDataMgr {
  public:
   InstanceDataMgr(size_t initial_element_cap, MTL::Device* raw_device, rhi::Device* device);
-  [[nodiscard]] MTL::Buffer* model_matrix_buf() const { return model_matrix_buf_.get(); }
   [[nodiscard]] MTL::Buffer* instance_data_buf() const {
     return reinterpret_cast<MetalBuffer*>(device_->get_buf(instance_data_buf_))->buffer();
   }
@@ -161,7 +161,6 @@ class InstanceDataMgr {
  private:
   void allocate_buffers(size_t element_count);
   OffsetAllocator::Allocator allocator_;
-  NS::SharedPtr<MTL::Buffer> model_matrix_buf_;
   rhi::BufferHandleHolder instance_data_buf_;
   uint32_t max_seen_size_{};
   rhi::Device* device_{};
@@ -256,7 +255,8 @@ class RendererMetal {
   void shutdown_imgui();
   void render_imgui();
   [[nodiscard]] Uniforms set_cpu_global_uniform_data(const RenderArgs& render_args) const;
-  [[nodiscard]] CullData set_cpu_cull_data(const Uniforms& uniforms) const;
+  [[nodiscard]] CullData set_cpu_cull_data(const Uniforms& uniforms,
+                                           const RenderArgs& render_args) const;
   void flush_pending_texture_uploads();
   void recreate_render_target_textures();
   // PerFrameData& get_curr_frame_data() { return per_frame_datas_[curr_frame_ % frames_in_flight_];
@@ -298,6 +298,8 @@ class RendererMetal {
   std::optional<PerFrameBuffer<Uniforms>> gpu_uniform_buf_;
   std::optional<PerFrameBuffer<CullData>> cull_data_buf_;
   bool meshlet_frustum_cull_{true};
+  static constexpr float k_z_near{0.001};
+  static constexpr float k_z_far{10'000};
 
   NS::SharedPtr<MTL::IndirectCommandBuffer> ind_cmd_buf_;
 

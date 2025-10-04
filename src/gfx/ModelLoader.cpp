@@ -13,6 +13,7 @@
 #include <stack>
 
 #include "RendererMetal.hpp"
+#include "core/MathUtil.hpp"
 #include "meshoptimizer.h"
 
 namespace {
@@ -47,21 +48,16 @@ int32_t add_node_to_hierarchy(std::vector<Hierarchy> &hierarchies, int32_t paren
 }
 
 int32_t add_node_to_model(ModelInstance &model, int32_t parent, int32_t level,
-                          const glm::mat4 &local_transform, uint32_t mesh_id) {
+                          const glm::vec3 &translation, const glm::quat &rotation, float scale,
+                          uint32_t mesh_id) {
   const int32_t node = add_node_to_hierarchy(model.nodes, parent, level);
   assert(std::cmp_equal(node, model.global_transforms.size()));
   assert(std::cmp_equal(node, model.local_transforms.size()));
   assert(std::cmp_equal(node, model.mesh_ids.size()));
-  model.global_transforms.emplace_back(1);
-  model.local_transforms.emplace_back(local_transform);
+  model.global_transforms.emplace_back();
+  model.local_transforms.emplace_back(translation, rotation, scale);
   model.mesh_ids.emplace_back(mesh_id);
   return node;
-}
-
-glm::mat4 calc_transform(const glm::vec3 &translation, const glm::quat &rotation,
-                         const glm::vec3 &scale) {
-  return glm::translate(glm::mat4{1}, translation) * glm::mat4_cast(rotation) *
-         glm::scale(glm::mat4{1}, scale);
 }
 
 // Ref: https://github.com/zeux/meshoptimizer
@@ -71,10 +67,10 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
                                                          k_max_triangles_per_meshlet);
   // cone_weight set to a value between 0 and 1 to balance cone culling efficiency with other forms
   // of culling like frustum or occlusion culling (0.25 is a reasonable default).
-  const float cone_weight{0.0f};
+  const float cone_weight{0.25f};
   std::vector<meshopt_Meshlet> meshopt_meshlets(max_meshlets);
-  std::vector<uint32_t> meshlet_vertices(indices.size());
-  std::vector<uint8_t> meshlet_triangles(indices.size());
+  std::vector<uint32_t> meshlet_vertices(max_meshlets * k_max_vertices_per_meshlet);
+  std::vector<uint8_t> meshlet_triangles(max_meshlets * k_max_vertices_per_meshlet * 3);
 
   const size_t meshlet_count = meshopt_buildMeshlets(
       meshopt_meshlets.data(), meshlet_vertices.data(), meshlet_triangles.data(), indices.data(),
@@ -91,30 +87,27 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
   meshlets.resize(meshopt_meshlets.size());
   for (size_t i = 0; i < meshopt_meshlets.size(); i++) {
     const auto &m = meshopt_meshlets[i];
-    const meshopt_Bounds bounds = meshopt_computeMeshletBounds(
-        &meshlet_vertices[m.vertex_offset], &meshlet_triangles[m.triangle_offset], m.triangle_count,
-        &vertices[0].pos.x, vertices.size(), sizeof(DefaultVertex));
-    Meshlet &meshlet = meshlets[i];
-    meshlet.center = {bounds.center[0], bounds.center[1], bounds.center[2]};
-    meshlet.radius = bounds.radius;
-  }
-
-  for (size_t i = 0; i < meshopt_meshlets.size(); i++) {
-    const auto &m = meshopt_meshlets[i];
     meshopt_optimizeMeshlet(&meshlet_vertices[m.vertex_offset],
                             &meshlet_triangles[m.triangle_offset], m.triangle_count,
                             m.vertex_count);
+    const meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+        &meshlet_vertices[m.vertex_offset], &meshlet_triangles[m.triangle_offset], m.triangle_count,
+        &vertices[0].pos.x, vertices.size(), sizeof(DefaultVertex));
     Meshlet &meshlet = meshlets[i];
     meshlet.vertex_offset = m.vertex_offset;
     meshlet.triangle_offset = m.triangle_offset;
     meshlet.vertex_count = m.vertex_count;
     meshlet.triangle_count = m.triangle_count;
+    meshlet.center = {bounds.center[0], bounds.center[1], bounds.center[2]};
+    meshlet.radius = bounds.radius;
+    meshlet.cone_axis =
+        glm::i8vec3{bounds.cone_axis_s8[0], bounds.cone_axis_s8[1], bounds.cone_axis_s8[2]};
+    meshlet.cone_cutoff = bounds.cone_cutoff_s8;
   }
 
   for (auto &v : meshlet_vertices) {
     v += base_vertex;
   }
-
   return MeshletLoadResult{.meshlets = std::move(meshlets),
                            .meshlet_vertices = std::move(meshlet_vertices),
                            .meshlet_triangles = std::move(meshlet_triangles)};
@@ -260,7 +253,7 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
             primitive.material ? primitive.material - gltf->materials : UINT32_MAX;
         assert(vertex_offset < UINT32_MAX);
         meshes.push_back(Mesh{
-            .vertex_offset = static_cast<uint32_t>(vertex_offset),
+            .vertex_offset_bytes = static_cast<uint32_t>(vertex_offset),
             .index_offset = index_offset,
             .vertex_count = vertex_count,
             .index_count = index_count,
@@ -270,7 +263,7 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
     }
     auto &meshlet_datas = out_load_result.meshlet_process_result.meshlet_datas;
     for (const Mesh &mesh : meshes) {
-      const uint32_t base_vertex = mesh.vertex_offset / sizeof(DefaultVertex);
+      const uint32_t base_vertex = mesh.vertex_offset_bytes / sizeof(DefaultVertex);
       meshlet_datas.emplace_back(load_meshlet_data(
           std::span(&all_vertices[base_vertex], mesh.vertex_count),
           std::span(&all_indices[mesh.index_offset / sizeof(rhi::DefaultIndexT)], mesh.index_count),
@@ -289,8 +282,14 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
     assert(gltf->scenes_count == 1);
     const auto *scene = &gltf->scenes[0];
     // add root node
-    const auto root_node = add_node_to_model(model, Hierarchy::k_invalid_node_id, 0, root_transform,
-                                             Mesh::k_invalid_mesh_id);
+    glm::vec3 root_translation;
+    glm::quat root_rotation;
+    glm::vec3 root_scale_vec;
+    math::decompose_matrix(&root_transform[0][0], root_translation, root_rotation, root_scale_vec);
+    float root_scale = glm::max(root_scale_vec.x, glm::max(root_scale_vec.y, root_scale_vec.z));
+    const auto root_node =
+        add_node_to_model(model, Hierarchy::k_invalid_node_id, 0, root_translation, root_rotation,
+                          root_scale, Mesh::k_invalid_mesh_id);
 
     std::stack<AddNodeStackItem> gltf_node_stack;
     for (uint32_t i = 0; i < scene->nodes_count; i++) {
@@ -304,29 +303,31 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
       auto [gltf_node_i, parent_node] = gltf_node_stack.top();
       gltf_node_stack.pop();
       const cgltf_node &gltf_node = gltf->nodes[gltf_node_i];
-
-      const glm::vec3 translation =
-          gltf_node.has_translation ? glm::vec3{gltf_node.translation[0], gltf_node.translation[1],
-                                                gltf_node.translation[2]}
-                                    : glm::vec3{};
-      const glm::quat rotation = gltf_node.has_rotation
-                                     ? glm::quat{gltf_node.rotation[3], gltf_node.rotation[0],
-                                                 gltf_node.rotation[1], gltf_node.rotation[2]}
-                                     : glm::identity<glm::quat>();
-      const glm::vec3 scale =
-          gltf_node.has_scale
-              ? glm::vec3{gltf_node.scale[0], gltf_node.scale[1], gltf_node.scale[2]}
-              : glm::vec3{1};
+      glm::vec3 translation;
+      glm::quat rotation;
+      glm::vec3 scale_vec;
+      if (gltf_node.has_matrix) {
+        math::decompose_matrix(gltf_node.matrix, translation, rotation, scale_vec);
+      } else {
+        translation = {gltf_node.translation[0], gltf_node.translation[1],
+                       gltf_node.translation[2]};
+        // TODO: is this flipped
+        rotation = {gltf_node.rotation[3], gltf_node.rotation[0], gltf_node.rotation[1],
+                    gltf_node.rotation[2]};
+        scale_vec = {gltf_node.scale[0], gltf_node.scale[1], gltf_node.scale[2]};
+      }
+      float scale = glm::max(scale_vec.x, glm::max(scale_vec.y, scale_vec.z));
       const int32_t new_node =
-          add_node_to_model(model, parent_node, model.nodes[parent_node].level + 1,
-                            calc_transform(translation, rotation, scale), Mesh::k_invalid_mesh_id);
+          add_node_to_model(model, parent_node, model.nodes[parent_node].level + 1, translation,
+                            rotation, scale, Mesh::k_invalid_mesh_id);
       gltf_node_to_node_i[gltf_node_i] = new_node;
 
       if (gltf_node.mesh) {
         const int32_t child_level = model.nodes[parent_node].level + 1;
         const auto mesh_id = gltf_node.mesh - gltf->meshes;
         for (auto prim_mesh_id : primitive_mesh_indices_per_mesh[mesh_id]) {
-          add_node_to_model(model, new_node, child_level, glm::mat4{1}, prim_mesh_id);
+          add_node_to_model(model, new_node, child_level, glm::vec3{}, glm::identity<glm::quat>(),
+                            1.0, prim_mesh_id);
           tot_mesh_nodes++;
         }
       }

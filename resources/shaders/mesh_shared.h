@@ -14,12 +14,18 @@ struct InstanceData {
   uint32_t instance_id;
   uint32_t mat_id;
   uint32_t mesh_id;
+  packed_float3 translation;
+  float scale;
+  packed_float4 rotation;
 };
 
 struct CullData {
   float4x4 view;
   float frustum[4];
   bool meshlet_frustum_cull;
+  float z_near;
+  float z_far;
+  packed_float3 camera_pos;
 };
 
 #endif

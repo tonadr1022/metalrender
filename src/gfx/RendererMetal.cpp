@@ -6,7 +6,6 @@
 
 #include <Metal/Metal.hpp>
 #include <glm/mat4x4.hpp>
-#include <span>
 #include <tracy/Tracy.hpp>
 
 #include "ModelLoader.hpp"
@@ -44,12 +43,9 @@ OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
     assert(allocator_.grow(allocator_.capacity()));
     // TODO: copy contents
     auto old_instance_data_buf = std::move(instance_data_buf_);
-    auto old_model_matrix_buf = model_matrix_buf_;
     allocate_buffers(new_capacity);
     memcpy(instance_data_buf()->contents(), device_->get_buf(old_instance_data_buf)->contents(),
            old_capacity * sizeof(InstanceData));
-    memcpy(model_matrix_buf_->contents(), old_model_matrix_buf->contents(),
-           old_capacity * sizeof(glm::mat4));
     return allocate(element_count);
   }
   max_seen_size_ = std::max<uint32_t>(max_seen_size_, alloc.offset + element_count);
@@ -59,8 +55,6 @@ OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
 void InstanceDataMgr::allocate_buffers(size_t element_count) {
   instance_data_buf_ = device_->create_buf_h(rhi::BufferDesc{
       .storage_mode = rhi::StorageMode::Default, .size = sizeof(InstanceData) * element_count});
-  model_matrix_buf_ = NS::TransferPtr(
-      raw_device_->newBuffer(sizeof(glm::mat4) * element_count, MTL::ResourceStorageModeShared));
 }
 
 GPUFrameAllocator::GPUFrameAllocator(rhi::Device *device, size_t size, size_t frames_in_flight)
@@ -234,7 +228,7 @@ void RendererMetal::render(const RenderArgs &render_args) {
 
     const Uniforms cpu_uniforms = set_cpu_global_uniform_data(render_args);
     gpu_uniform_buf_->fill(cpu_uniforms);
-    cull_data_buf_->fill(set_cpu_cull_data(cpu_uniforms));
+    cull_data_buf_->fill(set_cpu_cull_data(cpu_uniforms, render_args));
 
     {
       MTL::BlitCommandEncoder *reset_blit_enc = buf->blitCommandEncoder();
@@ -307,7 +301,6 @@ void RendererMetal::render(const RenderArgs &render_args) {
       enc->setRenderPipelineState(mesh_pso_);
       const MTL::Resource *const resources[] = {
           instance_data_mgr_->instance_data_buf(),
-          instance_data_mgr_->model_matrix_buf(),
           get_mtl_buf(static_draw_batch_->vertex_buf),
           get_mtl_buf(static_draw_batch_->meshlet_buf),
           get_mtl_buf(static_draw_batch_->mesh_buf),
@@ -415,8 +408,8 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
                                                          ModelGPUHandle model_gpu_handle) {
   auto &model_instance_datas = model_gpu_resource_pool_.get(model_gpu_handle)->base_instance_datas;
   auto &instance_id_to_node = model_gpu_resource_pool_.get(model_gpu_handle)->instance_id_to_node;
-  std::vector<glm::mat4> instance_model_matrices;
-  instance_model_matrices.reserve(model_instance_datas.size());
+  std::vector<TRS> instance_transforms;
+  instance_transforms.reserve(model_instance_datas.size());
   std::vector<InstanceData> instance_datas = {model_instance_datas.begin(),
                                               model_instance_datas.end()};
   ASSERT(instance_datas.size() == instance_id_to_node.size());
@@ -427,17 +420,19 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
 
   for (size_t i = 0; i < instance_datas.size(); i++) {
     ASSERT(instance_datas[i].instance_id == i);
-    instance_model_matrices.push_back(model.global_transforms[instance_id_to_node[i]]);
+    instance_transforms.push_back(model.global_transforms[instance_id_to_node[i]]);
+    const auto &transform = model.global_transforms[instance_id_to_node[i]];
+    const auto rot = transform.rotation;
+    // TODO: do this initially?
+    instance_datas[i].translation = transform.translation;
+    instance_datas[i].rotation = glm::vec4{rot[0], rot[1], rot[2], rot[3]};
+    instance_datas[i].scale = transform.scale;
     instance_datas[i].instance_id += instance_data_gpu_alloc.offset;
   }
 
   memcpy(reinterpret_cast<InstanceData *>(instance_data_mgr_->instance_data_buf()->contents()) +
              instance_data_gpu_alloc.offset,
          instance_datas.data(), instance_datas.size() * sizeof(InstanceData));
-
-  memcpy(reinterpret_cast<glm::mat4 *>(instance_data_mgr_->model_matrix_buf()->contents()) +
-             instance_data_gpu_alloc.offset,
-         instance_model_matrices.data(), instance_model_matrices.size() * sizeof(glm::mat4));
 
   {  // move this bs
     {
@@ -464,8 +459,6 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
           0, EncodeMeshDrawArgs_MeshletBuf);
       arg_enc->setBuffer(get_mtl_buf(static_draw_batch_->mesh_buf), 0,
                          EncodeMeshDrawArgs_MeshDataBuf);
-      arg_enc->setBuffer(instance_data_mgr_->model_matrix_buf(), 0,
-                         EncodeMeshDrawArgs_InstanceModelMatrixBuf);
       arg_enc->setBuffer(instance_data_mgr_->instance_data_buf(), 0,
                          EncodeMeshDrawArgs_InstanceDataBuf);
       arg_enc->setBuffer(
@@ -577,14 +570,16 @@ Uniforms RendererMetal::set_cpu_global_uniform_data(const RenderArgs &render_arg
   const auto window_dims = window_->get_window_size();
   const float aspect = (window_dims.x != 0) ? float(window_dims.x) / float(window_dims.y) : 1.0f;
   uniform_data.view = render_args.view_mat;
-  uniform_data.proj = glm::perspective(glm::radians(70.f), aspect, 0.001f, 10000.f);
-  uniform_data.vp = uniform_data.proj * uniform_data.view;
+  uniform_data.proj = glm::perspective(glm::radians(70.f), aspect, k_z_near, k_z_far);
+  uniform_data.vp =
+      glm::perspective(glm::radians(70.f), aspect, k_z_near, k_z_far) * uniform_data.view;
   uniform_data.render_mode = (uint32_t)RenderMode::Default;
   return uniform_data;
 }
 
-CullData RendererMetal::set_cpu_cull_data(const Uniforms &uniforms) const {
-  // https://github.com/zeux/niagara/blob/7fa51801abc258c3cb05e9a615091224f02e11cf/src/niagara.cpp#L128
+CullData RendererMetal::set_cpu_cull_data(const Uniforms &uniforms,
+                                          const RenderArgs &render_args) const {
+  // https:github.com/zeux/niagara/blob/7fa51801abc258c3cb05e9a615091224f02e11cf/src/niagara.cpp#L128
   CullData cull_data{};
   const glm::mat4 projection_transpose = glm::transpose(uniforms.proj);
   const auto normalize_plane = [](const glm::vec4 &p) {
@@ -602,6 +597,9 @@ CullData RendererMetal::set_cpu_cull_data(const Uniforms &uniforms) const {
   cull_data.frustum[3] = frustum_y.z;
   cull_data.view = uniforms.view;
   cull_data.meshlet_frustum_cull = meshlet_frustum_cull_;
+  cull_data.camera_pos = render_args.camera_pos;
+  cull_data.z_near = k_z_near;
+  cull_data.z_far = k_z_far;
   return cull_data;
 }
 

@@ -29,7 +29,7 @@ struct Material {
 };
 
 struct Mesh {
-  uint32_t vertex_offset;  // element count
+  uint32_t vertex_offset_bytes;  // element count
   uint32_t index_offset;   // index count
   uint32_t vertex_count;
   uint32_t index_count;

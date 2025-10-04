@@ -143,7 +143,9 @@ void App::run() {
     for (const auto model : models_) {
       ResourceManager::get().get_model(model)->update_transforms();
     }
-    const RenderArgs args{.view_mat = camera_.get_view_mat(), .draw_imgui = imgui_enabled_};
+    const RenderArgs args{.view_mat = camera_.get_view_mat(),
+                          .camera_pos = camera_.pos,
+                          .draw_imgui = imgui_enabled_};
     renderer_.render(args);
   }
 

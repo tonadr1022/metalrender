@@ -1,5 +1,6 @@
 #pragma once
 
+#include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 #include <vector>
 
@@ -12,11 +13,19 @@ struct Hierarchy {
   constexpr static int32_t k_invalid_node_id = -1;
 };
 
+struct TRS {
+  glm::vec3 translation{};
+  glm::quat rotation{glm::identity<glm::quat>()};
+  float scale{1.f};
+};
+
+static_assert(sizeof(TRS) == sizeof(float) * 8);
+
 struct ModelInstance {
   constexpr static uint32_t invalid_id = UINT32_MAX;
   std::vector<Hierarchy> nodes;
-  std::vector<glm::mat4> local_transforms;
-  std::vector<glm::mat4> global_transforms;
+  std::vector<TRS> local_transforms;
+  std::vector<TRS> global_transforms;
   std::vector<uint32_t> mesh_ids;
   std::vector<std::vector<int32_t>> changed_this_frame;
   uint32_t tot_mesh_nodes{};

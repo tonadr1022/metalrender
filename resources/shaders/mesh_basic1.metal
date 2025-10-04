@@ -5,6 +5,7 @@ using namespace metal;
 #include "default_vertex.h"
 #include "shader_global_uniforms.h"
 #include "mesh_shared.h"
+#include "math/math.metal"
 
 struct FragArgs {
     uint material_buf_id;
@@ -33,32 +34,43 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
                         device const MeshData* mesh_datas [[buffer(1)]],
                         device const Meshlet* meshlets [[buffer(2)]],
                         device const CullData& cull_data [[buffer(3)]],
-                        device const float4x4& model [[buffer(4)]],
                         uint thread_idx [[thread_position_in_threadgroup]],
-                        uint meshlet_idx [[thread_position_in_grid]],
+                        uint tpg [[thread_position_in_grid]],
                         mesh_grid_properties grid) {
     device const MeshData& mesh_data = mesh_datas[instance_data->mesh_id];
-    if (meshlet_idx >= mesh_data.meshlet_count) {
+    if (tpg >= mesh_data.meshlet_count) {
         return;
     }
-    int passed = thread_idx < mesh_data.meshlet_count ? 1 : 0;
-    device const Meshlet& meshlet = meshlets[meshlet_idx + mesh_data.meshlet_base];
 
-    // REF: https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
-    float4 center = model * float4(meshlet.center, 1.0);
-    center = cull_data.view * center;
+    device const Meshlet& meshlet = meshlets[tpg + mesh_data.meshlet_base];
 
-    float3 sx = float3(model[0][0], model[0][1], model[0][2]);
-    float3 sy = float3(model[1][0], model[1][1], model[1][2]);
-    float3 sz = float3(model[2][0], model[2][1], model[2][2]);
-    float max_scale = max(length(sx), max(length(sy), length(sz)));
-    float radius = meshlet.radius * max_scale;
-//    float radius = meshlet.radius * model[0][0];
-    passed &= !cull_data.meshlet_frustum_cull || (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
-    passed &= !cull_data.meshlet_frustum_cull || (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
+    float3 world_center = rotate_quat(instance_data->scale * meshlet.center, instance_data->rotation)
+                          + instance_data->translation;
+    float3 center = (cull_data.view * float4(world_center, 1.0)).xyz;
+    float radius = meshlet.radius * instance_data->scale;
+
+    // normal cone culling
+    // 8-bit SNORM quantized
+    float3 cone_axis = float3(int(meshlet.cone_axis[0]) / 127.0, int(meshlet.cone_axis[1]) / 127.0, int(meshlet.cone_axis[2]) / 127.0);
+    cone_axis = rotate_quat(cone_axis, instance_data->rotation);
+    cone_axis = float3x3(float3(cull_data.view[0]), float3(cull_data.view[1]), float3(cull_data.view[2])) * cone_axis;
+    float cone_cutoff = int(meshlet.cone_cutoff) / 127.0;
+
+    int passed = 1;
+
+    passed = passed && !cone_cull(center, radius, cone_axis, cone_cutoff, float3(0, 0, 0));
+
+    // Ref: https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
+    // frustum cull, plane symmetry 
+    passed = passed && (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
+    passed = passed && (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
+    // z near/far
+    passed = passed && (center.z + radius > cull_data.z_near) || (center.z - radius < cull_data.z_far);
 
     int payload_idx = simd_prefix_exclusive_sum(passed);
-    out_payload.meshlet_indices[payload_idx] = meshlet_idx;
+    if (passed) {
+        out_payload.meshlet_indices[payload_idx] = tpg;
+    }
     uint visible_count = simd_sum(passed);
     if (thread_idx == 0) {
         grid.set_threadgroups_per_grid(uint3(visible_count, 1, 1));
@@ -83,7 +95,6 @@ void basic1_mesh_main(object_data const ObjectPayload& payload [[payload]],
                       device const Meshlet* meshlets [[buffer(2)]],
                       device const uint* meshlet_vertices [[buffer(3)]],
                       device const uchar* meshlet_triangles [[buffer(4)]],
-                      device const float4x4& model [[buffer(5)]],
                       device const InstanceData& instance_data [[buffer(6)]],
                       device const MeshData* mesh_datas [[buffer(7)]],
                       uint payload_idx [[threadgroup_position_in_grid]],
@@ -96,7 +107,10 @@ void basic1_mesh_main(object_data const ObjectPayload& payload [[payload]],
     if (thread_idx < meshlet.vertex_count) {
         device const DefaultVertex& vert = vertices[meshlet_vertices[meshlet.vertex_offset + thread_idx + mesh_data.meshlet_vertices_offset]];
         MeshletVertex out_vert;
-        out_vert.pos = uniforms.vp * model * float4(vert.pos.xyz, 1.0);
+
+        float3 world_pos = rotate_quat(instance_data.scale * vert.pos.xyz, instance_data.rotation)
+                          + instance_data.translation;
+        out_vert.pos = uniforms.vp * float4(world_pos, 1.0);
         out_vert.uv = vert.uv;
         out_vert.normal = vert.normal;
         out_mesh.set_vertex(thread_idx, out_vert);
@@ -147,6 +161,7 @@ struct SceneResourcesBuf {
 float4 basic1_fragment_main(FragmentIn in [[stage_in]],
                             device const SceneResourcesBuf& scene_buf [[buffer(0)]],
                             constant Uniforms& uniforms [[buffer(1)]]) {
+//   return in.prim.color;
     uint render_mode = uniforms.render_mode;
     float4 out_color = float4(0.0);
     device const Material* material = &scene_buf.materials[in.prim.mat_id];

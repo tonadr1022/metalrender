@@ -26,10 +26,9 @@ struct Meshlet {
   packed_float3 center;
   float radius;
 
-  // normal cone
-  packed_float3 cone_apex;
-  packed_float3 cone_axis;
-  float cone_cutoff;
+  // stored in 8-bit SNORM format
+  packed_char3 cone_axis;
+  char cone_cutoff;
 };
 
 #endif
