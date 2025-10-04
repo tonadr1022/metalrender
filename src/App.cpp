@@ -2,6 +2,8 @@
 
 #include <fstream>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/random.hpp>
+#include <random>
 
 #include "WindowApple.hpp"
 #include "core/Logger.hpp"
@@ -125,16 +127,43 @@ App::App() {
                                            .resource_dir = resource_dir_,
                                            .render_imgui_callback = [this]() { on_imgui(); }});
 }
+namespace {
+
+float rand_float(float min, float max) {
+  std::uniform_real_distribution<float> dist{min, max};
+  static std::random_device rd;
+  static std::mt19937 gen(rd());
+  return dist(gen);
+}
+
+}  // namespace
 
 void App::run() {
   ZoneScoped;
-  glm::ivec3 iter{};
-  glm::ivec3 dims{1, 1, 1};
-  float dist = 40.0;
-  for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
-    for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
-      glm::vec3 pos = glm::vec3{iter} * dist;
-      load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, pos));
+  int scene = 1;
+  if (scene == 0) {
+    glm::ivec3 iter{};
+    glm::ivec3 dims{1, 1, 1};
+    float dist = 40.0;
+    for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
+      for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
+        glm::vec3 pos = glm::vec3{iter} * dist;
+        load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, pos));
+      }
+    }
+  } else if (scene == 1) {
+    size_t count = 1000;
+    float scale = 2;
+
+    for (size_t i = 0; i < count; i++) {
+      auto rand_f = []() { return rand_float(-100, 100); };
+      auto pos = glm::vec3{rand_f(), rand_f(), rand_f()};
+      glm::vec3 randomAxis = glm::linearRand(glm::vec3(-1.0f), glm::vec3(1.0f));
+      float randomAngle = glm::linearRand(0.0f, glm::two_pi<float>());
+      auto rot = glm::angleAxis(randomAngle, glm::normalize(randomAxis));
+      load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, pos) *
+                                                 glm::mat4_cast(rot) *
+                                                 glm::scale(glm::mat4{1}, glm::vec3{scale}));
     }
   }
 

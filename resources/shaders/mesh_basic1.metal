@@ -165,7 +165,7 @@ struct SceneResourcesBuf {
 float4 basic1_fragment_main(FragmentIn in [[stage_in]],
                             device const SceneResourcesBuf& scene_buf [[buffer(0)]],
                             constant Uniforms& uniforms [[buffer(1)]]) {
-//   return in.prim.color;
+   return in.prim.color;
     uint render_mode = uniforms.render_mode;
     float4 out_color = float4(0.0);
     device const Material* material = &scene_buf.materials[in.prim.mat_id];

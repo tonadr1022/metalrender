@@ -63,7 +63,7 @@ void InstanceDataMgr::allocate_buffers(size_t element_count) {
 
 void InstanceDataMgr::resize_icb(size_t element_count) {
   if (element_count > max_seen_size_) {
-    max_seen_size_ = std::max<size_t>(max_seen_size_, element_count);
+    max_seen_size_ = std::max<size_t>(max_seen_size_ * 2ull, element_count);
     MTL::IndirectCommandBufferDescriptor *cmd_buf_desc =
         MTL::IndirectCommandBufferDescriptor::alloc()->init();
     cmd_buf_desc->setCommandTypes(MTL::IndirectCommandTypeDrawMeshThreadgroups);
@@ -413,6 +413,7 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
 
 ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &model,
                                                          ModelGPUHandle model_gpu_handle) {
+  ZoneScoped;
   auto &model_instance_datas = model_gpu_resource_pool_.get(model_gpu_handle)->base_instance_datas;
   auto &instance_id_to_node = model_gpu_resource_pool_.get(model_gpu_handle)->instance_id_to_node;
   std::vector<TRS> instance_transforms;

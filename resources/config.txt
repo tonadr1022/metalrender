@@ -1,4 +1,4 @@
+/Users/tony/models/glTF-Sample-Assets/Models/Suzanne/glTF/Suzanne.gltf
 /Users/tony/models/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf
 /Users/tony/models/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf
-/Users/tony/models/glTF-Sample-Assets/Models/Suzanne/glTF/Suzanne.gltf
 /Users/tony/models/glTF-Sample-Assets/Models/Cube/glTF/Cube.gltf

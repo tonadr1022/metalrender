@@ -1,10 +1,13 @@
 #include "ResourceManager.hpp"
 
+#include <tracy/Tracy.hpp>
+
 #include "RendererMetal.hpp"
 #include "core/EAssert.hpp"
 
 ModelHandle ResourceManager::load_model(const std::filesystem::path &path,
                                         const glm::mat4 &root_transform) {
+  ZoneScoped;
   auto path_hash = std::hash<std::string>{}(path.string());
   auto model_resources_it = model_cache_.find(path_hash);
   ModelCacheEntry *cache_entry{};
@@ -33,8 +36,10 @@ ModelHandle ResourceManager::load_model(const std::filesystem::path &path,
   ModelHandle handle =
       model_instance_pool_.alloc(std::move(new_instance), model_instance_gpu_handle);
 
-  model_to_resource_cache_key_.resize(
-      std::max<size_t>(model_instance_pool_.size(), model_to_resource_cache_key_.size() * 2));
+  if (handle.get_idx() >= model_to_resource_cache_key_.size()) {
+    model_to_resource_cache_key_.resize(
+        std::max<size_t>(model_instance_pool_.size(), model_to_resource_cache_key_.size() * 2));
+  }
   model_to_resource_cache_key_[handle.get_idx()] = path_hash;
 
   return handle;

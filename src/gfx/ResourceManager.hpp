@@ -36,7 +36,7 @@ class ResourceManager {
   }
 
   ModelInstance *get_model(ModelHandle handle) {
-    auto entry = model_instance_pool_.get(handle);
+    auto *entry = model_instance_pool_.get(handle);
     return entry ? &entry->instance : nullptr;
   }
 

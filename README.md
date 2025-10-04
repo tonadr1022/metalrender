@@ -1,5 +1,11 @@
 # Metal Renderer (maybe minecraft 2)
 
+I've been working on this renderer to enlighten myself on the wonders
+of the Metal API while I don't have access to a desktop.
+So far, it's been focused on meshlet rendering, with the possibility to expand it into Minecraft 2 (LOL).
+
+![Suzanne Meshlets](./screenshots/suzanne_meshlets.png "Suzanne_Meshlets")
+
 ## Running locally
 
 ```bash
@@ -15,7 +21,9 @@ cmake --build build/Release
 
 ## Current Features
 
--
+- meshlets
+- meshlet frustum and cone culling
+- dynamic model loading
 
 ## References
 
@@ -25,3 +33,4 @@ cmake --build build/Release
 ## TODO
 
 - reserve sizes in model load
+- meshlet occlusion culling
