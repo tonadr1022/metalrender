@@ -9,9 +9,4 @@ enum DispatchVertexShaderArgs {
   DispatchVertexShaderArgs_InstanceDataBuf,
 };
 
-struct DispatchVertexShaderParams {
-  uint32_t tot_meshes;
-  bool frustum_cull;
-};
-
 #endif

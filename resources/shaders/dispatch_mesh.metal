@@ -6,8 +6,8 @@ using namespace metal;
 #include "dispatch_mesh_shared.h"
 #include "mesh_shared.h"
 #include "math/math.mtl"
+#include "dispatch_shader_shared.h"
 
-// #define FRUSTUM_CULL 1
 
 struct ICBContainer {
     command_buffer cmd_buf [[id(0)]];
@@ -39,19 +39,20 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
     }
     device const MeshData& mesh_data = draw_args.mesh_data_buf[instance_data.mesh_id];
 
-#ifdef FRUSTUM_CULL
-    // frustum cull
-    float3 world_center = rotate_quat(instance_data.scale * mesh_data.center, instance_data.rotation)
-                          + instance_data.translation;
-    float3 center = (cull_data->view * float4(world_center, 1.0)).xyz;
-    float radius = mesh_data.radius * instance_data.scale;
     int passed = 1;
-    passed = passed && (center.z * cull_data->frustum[1] - abs(center.x) * cull_data->frustum[0]) > -radius;
-    passed = passed && (center.z * cull_data->frustum[3] - abs(center.y) * cull_data->frustum[2]) > -radius;
+    if (params.frustum_cull) {
+        // frustum cull
+        float3 world_center = rotate_quat(instance_data.scale * mesh_data.center, instance_data.rotation)
+                            + instance_data.translation;
+        float3 center = (cull_data->view * float4(world_center, 1.0)).xyz;
+        float radius = mesh_data.radius * instance_data.scale;
+        passed = passed && (center.z * cull_data->frustum[1] - abs(center.x) * cull_data->frustum[0]) > -radius;
+        passed = passed && (center.z * cull_data->frustum[3] - abs(center.y) * cull_data->frustum[2]) > -radius;
+    }
+
     if (!passed) {
             return;
     }
-#endif // FRUSTUM_CULL
 
     render_command cmd(icb_container->cmd_buf, object_idx);
 

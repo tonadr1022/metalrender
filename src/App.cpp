@@ -127,19 +127,27 @@ App::App() {
                                            .resource_dir = resource_dir_,
                                            .render_imgui_callback = [this]() { on_imgui(); }});
 }
+namespace rando {
+
 namespace {
 
-float rand_float(float min, float max) {
+std::random_device rd{};
+std::default_random_engine eng{rd()};
+
+void seed(int seed) { eng.seed(seed); }
+
+float get_float(float min, float max) {
   std::uniform_real_distribution<float> dist{min, max};
-  static std::random_device rd;
-  static std::mt19937 gen(rd());
-  return dist(gen);
+  return dist(eng);
 }
 
 }  // namespace
 
+}  // namespace rando
+
 void App::run() {
   ZoneScoped;
+  rando::seed(10000000);
   int scene = 1;
   if (scene == 0) {
     glm::ivec3 iter{};
@@ -152,11 +160,11 @@ void App::run() {
       }
     }
   } else if (scene == 1) {
-    size_t count = 1000;
-    float scale = 8;
+    size_t count = 100;
+    float scale = 300;
 
     for (size_t i = 0; i < count; i++) {
-      auto rand_f = []() { return rand_float(-100, 100); };
+      auto rand_f = []() { return rando::get_float(-100, 100); };
       auto pos = glm::vec3{rand_f(), rand_f(), rand_f()};
       glm::vec3 randomAxis = glm::linearRand(glm::vec3(-1.0f), glm::vec3(1.0f));
       float randomAngle = glm::linearRand(0.0f, glm::two_pi<float>());

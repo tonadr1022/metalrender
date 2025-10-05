@@ -151,7 +151,7 @@ class InstanceDataMgr {
   [[nodiscard]] size_t allocation_size(OffsetAllocator::Allocation alloc) const {
     return allocator_.allocationSize(alloc);
   }
-  [[nodiscard]] MTL::IndirectCommandBuffer* icb() const { return ind_cmd_buf_.get(); }
+  [[nodiscard]] MTL::IndirectCommandBuffer* icb() const { return main_icb_.get(); }
 
   void free(OffsetAllocator::Allocation alloc) {
     auto element_count = allocator_.allocationSize(alloc);
@@ -172,7 +172,7 @@ class InstanceDataMgr {
   uint32_t curr_element_count_{};
   rhi::Device* device_{};
   MTL::Device* raw_device_{};
-  NS::SharedPtr<MTL::IndirectCommandBuffer> ind_cmd_buf_;
+  NS::SharedPtr<MTL::IndirectCommandBuffer> main_icb_;
 };
 
 class GPUFrameAllocator;
@@ -287,6 +287,7 @@ class RendererMetal {
   [[maybe_unused]] MetalDevice* device_{};
   WindowApple* window_{};
   rhi::TextureHandleHolder depth_tex_;
+  rhi::TextureHandleHolder hzb_tex_;
   MTL::Device* raw_device_{};
   MTL::CommandQueue* main_cmd_queue_{};
   // MTL::RenderPipelineState* main_pso_{};
@@ -330,7 +331,6 @@ class RendererMetal {
 
   size_t curr_frame_;
   size_t frames_in_flight_{2};
-  static constexpr bool use_mesh_shader{true};
 
   // std::vector<PerFrameData> per_frame_datas_;
 

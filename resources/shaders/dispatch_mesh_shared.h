@@ -16,7 +16,4 @@ enum PerFrameArgs {
   PerFrameArgs_CullDataBuf,
 };
 
-struct DispatchMeshParams {
-  uint32_t tot_meshes;
-};
 #endif

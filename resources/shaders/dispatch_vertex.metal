@@ -5,6 +5,7 @@ using namespace metal;
 #include "dispatch_vertex_shared.h"
 #include "math/math.mtl"
 #include "mesh_shared.h"
+#include "dispatch_shader_shared.h"
 
 struct ICBContainer {
     command_buffer cmd_buf [[id(0)]];
@@ -22,7 +23,7 @@ kernel
 void dispatch_vertex_main(uint tp_grid [[thread_position_in_grid]],
                           device ICBContainer *icb_container [[buffer(0)]],
                           device const DispatchVertexShaderArguments& draw_args [[buffer(1)]],
-                          constant DispatchVertexShaderParams& params [[buffer(2)]],
+                          constant DispatchMeshParams& params [[buffer(2)]],
                           device const uchar* uniform_buf [[buffer(3)]],
                           device const CullData* cull_data [[buffer(4)]]) {
     // TODO: less branching
