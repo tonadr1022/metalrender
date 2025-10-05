@@ -50,10 +50,6 @@ enum ShaderStage {
   ShaderStage_Count,
 };
 
-struct Shader {
-  std::array<MTL::Function*, ShaderStage_Count> funcs{};
-};
-
 struct TextureWithIdx {
   MTL::Texture* tex;
   uint32_t idx;
@@ -263,6 +259,7 @@ class RendererMetal {
   //   NS::SharedPtr<MTL::Buffer> uniform_buf;
   // };
   void load_shaders();
+  void load_pipelines();
   void init_imgui();
   void shutdown_imgui();
   void render_imgui();
@@ -294,6 +291,7 @@ class RendererMetal {
   MTL::CommandQueue* main_cmd_queue_{};
   // MTL::RenderPipelineState* main_pso_{};
   MTL::RenderPipelineState* mesh_pso_{};
+  MTL::RenderPipelineState* vertex_pso_{};
   MTL::ComputePipelineState* dispatch_mesh_pso_{};
   MTL::ComputePipelineState* dispatch_vertex_pso_{};
 
@@ -316,6 +314,8 @@ class RendererMetal {
 
   NS::SharedPtr<MTL::Buffer> dispatch_mesh_encode_arg_buf_;
   MTL::ArgumentEncoder* dispatch_mesh_encode_arg_enc_{};
+  NS::SharedPtr<MTL::Buffer> dispatch_vertex_encode_arg_buf_;
+  MTL::ArgumentEncoder* dispatch_vertex_encode_arg_enc_{};
 
   rhi::BufferHandleHolder main_icb_container_buf_;
   MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
@@ -326,16 +326,15 @@ class RendererMetal {
 
   std::filesystem::path shader_dir_;
   std::filesystem::path resource_dir_;
-  Shader forward_pass_shader_;
-  Shader forward_mesh_shader_;
-  Shader dispatch_mesh_shader_;
-  Shader dispatch_vertex_shader_;
+  std::unordered_map<const char*, MTL::Function*> shader_funcs_;
+
   size_t curr_frame_;
   size_t frames_in_flight_{2};
   static constexpr bool use_mesh_shader{true};
 
   // std::vector<PerFrameData> per_frame_datas_;
 
+  MTL::Function* get_function(const char* name);
   MTL::Buffer* get_mtl_buf(BackedGPUAllocator& allocator) {
     return reinterpret_cast<MetalBuffer*>(allocator.get_buffer())->buffer();
   }

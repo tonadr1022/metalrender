@@ -22,6 +22,7 @@
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "dispatch_mesh_shared.h"
+#include "dispatch_vertex_shared.h"
 #include "glm/ext/matrix_clip_space.hpp"
 #include "imgui_impl_glfw.h"
 #include "mesh_shared.h"
@@ -135,51 +136,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   recreate_render_target_textures();
 
   load_shaders();
-  {
-    // mesh shader pipeline
-    MTL::MeshRenderPipelineDescriptor *pipeline_desc =
-        MTL::MeshRenderPipelineDescriptor::alloc()->init();
-    pipeline_desc->setMeshFunction(forward_mesh_shader_.funcs[ShaderStage_Mesh]);
-    pipeline_desc->setObjectFunction(forward_mesh_shader_.funcs[ShaderStage_Object]);
-    pipeline_desc->setFragmentFunction(forward_mesh_shader_.funcs[ShaderStage_Fragment]);
-    pipeline_desc->setLabel(util::mtl::string("basic mesh shader"));
-    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
-    pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
-    pipeline_desc->setSupportIndirectCommandBuffers(true);
-
-    NS::Error *err{};
-    mesh_pso_ =
-        raw_device_->newRenderPipelineState(pipeline_desc, MTL::PipelineOptionNone, nullptr, &err);
-    if (err) {
-      util::mtl::print_err(err);
-      exit(1);
-    }
-
-    pipeline_desc->release();
-  }
-
-  {
-    auto create_compute_pipeline = [this](Shader &shader, const char *name) {
-      MTL::ComputePipelineDescriptor *pipeline_desc =
-          MTL::ComputePipelineDescriptor::alloc()->init();
-      pipeline_desc->setComputeFunction(shader.funcs[ShaderStage_Compute]);
-      if (name) {
-        pipeline_desc->setLabel(util::mtl::string(name));
-      }
-      NS::Error *err{};
-      auto *pso = raw_device_->newComputePipelineState(pipeline_desc, MTL::PipelineOptionNone,
-                                                       nullptr, &err);
-      if (err) {
-        util::mtl::print_err(err);
-        exit(1);
-      }
-      pipeline_desc->release();
-      return pso;
-    };
-
-    dispatch_mesh_pso_ = create_compute_pipeline(dispatch_mesh_shader_, "dispatch mesh");
-    dispatch_vertex_pso_ = create_compute_pipeline(dispatch_vertex_shader_, "dispatch vertex");
-  }
+  load_pipelines();
 
   // TODO: better size management this is awful
   scene_arg_buffer_ = NS::TransferPtr(raw_device_->newBuffer(
@@ -222,11 +179,16 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     main_icb_container_arg_enc_->setArgumentBuffer(get_mtl_buf(main_icb_container_buf_), 0);
   }
   {
-    dispatch_mesh_encode_arg_enc_ =
-        dispatch_mesh_shader_.funcs[ShaderStage_Compute]->newArgumentEncoder(1);
+    dispatch_mesh_encode_arg_enc_ = get_function("dispatch_mesh_main")->newArgumentEncoder(1);
     dispatch_mesh_encode_arg_buf_ = NS::TransferPtr(raw_device_->newBuffer(
         dispatch_mesh_encode_arg_enc_->encodedLength(), MTL::ResourceStorageModeShared));
     dispatch_mesh_encode_arg_enc_->setArgumentBuffer(dispatch_mesh_encode_arg_buf_.get(), 0);
+  }
+  {
+    dispatch_vertex_encode_arg_enc_ = get_function("dispatch_vertex_main")->newArgumentEncoder(1);
+    dispatch_vertex_encode_arg_buf_ = NS::TransferPtr(raw_device_->newBuffer(
+        dispatch_vertex_encode_arg_enc_->encodedLength(), MTL::ResourceStorageModeShared));
+    dispatch_vertex_encode_arg_enc_->setArgumentBuffer(dispatch_vertex_encode_arg_buf_.get(), 0);
   }
 
   materials_buf_.emplace(*device_,
@@ -500,6 +462,17 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
                                              0, EncodeMeshDrawArgs_MeshletTrianglesBuf);
     dispatch_mesh_encode_arg_enc_->setBuffer(scene_arg_buffer_.get(), 0,
                                              EncodeMeshDrawArgs_SceneArgBuf);
+  } else {
+    dispatch_vertex_encode_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->vertex_buf), 0,
+                                               DispatchVertexShaderArgs_MainVertexBuf);
+    dispatch_vertex_encode_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->index_buf), 0,
+                                               DispatchVertexShaderArgs_MainIndexBuf);
+    dispatch_vertex_encode_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->mesh_buf), 0,
+                                               DispatchVertexShaderArgs_MeshDataBuf);
+    dispatch_vertex_encode_arg_enc_->setBuffer(scene_arg_buffer_.get(), 0,
+                                               DispatchVertexShaderArgs_SceneArgBuf);
+    dispatch_vertex_encode_arg_enc_->setBuffer(instance_data_mgr_->instance_data_buf(), 0,
+                                               DispatchVertexShaderArgs_InstanceDataBuf);
   }
 
   return model_instance_gpu_resource_pool_.alloc(
@@ -557,21 +530,16 @@ void RendererMetal::load_shaders() {
   }
 
   {
-    forward_pass_shader_.funcs[ShaderStage_Vertex] =
-        shader_lib->newFunction(util::mtl::string("vertexMain"));
-    forward_pass_shader_.funcs[ShaderStage_Fragment] =
-        shader_lib->newFunction(util::mtl::string("fragmentMain"));
-
-    forward_mesh_shader_.funcs[ShaderStage_Mesh] =
-        shader_lib->newFunction(util::mtl::string("basic1_mesh_main"));
-    forward_mesh_shader_.funcs[ShaderStage_Object] =
-        shader_lib->newFunction(util::mtl::string("basic1_object_main"));
-    forward_mesh_shader_.funcs[ShaderStage_Fragment] =
-        shader_lib->newFunction(util::mtl::string("basic1_fragment_main"));
-    dispatch_mesh_shader_.funcs[ShaderStage_Compute] =
-        shader_lib->newFunction(util::mtl::string("dispatch_mesh_main"));
-    dispatch_vertex_shader_.funcs[ShaderStage_Compute] =
-        shader_lib->newFunction(util::mtl::string("dispatch_vertex_main"));
+    auto add_func = [this, &shader_lib](const char *name) {
+      shader_funcs_.emplace(name, shader_lib->newFunction(util::mtl::string(name)));
+    };
+    add_func("vertexMain");
+    add_func("fragmentMain");
+    add_func("basic1_mesh_main");
+    add_func("basic1_object_main");
+    add_func("basic1_fragment_main");
+    add_func("dispatch_mesh_main");
+    add_func("dispatch_vertex_main");
   }
   shader_lib->release();
 }
@@ -811,4 +779,72 @@ DrawBatch::Alloc RendererMetal::upload_geometry([[maybe_unused]] DrawBatchType t
                           .mesh_alloc = mesh_alloc,
                           .meshlet_triangles_alloc = meshlet_triangles_alloc,
                           .meshlet_vertices_alloc = meshlet_vertices_alloc};
+}
+
+void RendererMetal::load_pipelines() {
+  auto load_pipeline = [this](auto *desc) {
+    NS::Error *err{};
+    auto *result =
+        raw_device_->newRenderPipelineState(desc, MTL::PipelineOptionNone, nullptr, &err);
+    if (err) {
+      util::mtl::print_err(err);
+      exit(1);
+    }
+
+    desc->release();
+    return result;
+  };
+
+  {
+    MTL::MeshRenderPipelineDescriptor *pipeline_desc =
+        MTL::MeshRenderPipelineDescriptor::alloc()->init();
+    pipeline_desc->setMeshFunction(get_function("basic1_mesh_main"));
+    pipeline_desc->setObjectFunction(get_function("basic1_object_main"));
+    // TODO: consolidate fragment shader PLEASEEEEEEEE!
+    pipeline_desc->setFragmentFunction(get_function("basic1_fragment_main"));
+    pipeline_desc->setLabel(util::mtl::string("basic mesh pipeline"));
+    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
+    pipeline_desc->setSupportIndirectCommandBuffers(true);
+    mesh_pso_ = load_pipeline(pipeline_desc);
+  }
+  {
+    MTL::RenderPipelineDescriptor *pipeline_desc = MTL::RenderPipelineDescriptor::alloc()->init();
+    pipeline_desc->setVertexFunction(get_function("vertexMain"));
+    pipeline_desc->setFragmentFunction(get_function("fragmentMain"));
+    pipeline_desc->setLabel(util::mtl::string("basic vert pipeline"));
+    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
+    pipeline_desc->setSupportIndirectCommandBuffers(true);
+    vertex_pso_ = load_pipeline(pipeline_desc);
+  }
+
+  {
+    auto create_compute_pipeline = [this](const char *name) {
+      MTL::ComputePipelineDescriptor *pipeline_desc =
+          MTL::ComputePipelineDescriptor::alloc()->init();
+      pipeline_desc->setComputeFunction(get_function(name));
+      pipeline_desc->setLabel(util::mtl::string(name));
+      NS::Error *err{};
+      auto *pso = raw_device_->newComputePipelineState(pipeline_desc, MTL::PipelineOptionNone,
+                                                       nullptr, &err);
+      if (err) {
+        util::mtl::print_err(err);
+        exit(1);
+      }
+      pipeline_desc->release();
+      return pso;
+    };
+
+    dispatch_mesh_pso_ = create_compute_pipeline("dispatch_mesh_main");
+    dispatch_vertex_pso_ = create_compute_pipeline("dispatch_vertex_main");
+  }
+}
+MTL::Function *RendererMetal::get_function(const char *name) {
+  auto it = shader_funcs_.find(name);
+  if (it == shader_funcs_.end()) {
+    LERROR("shader function not found: {}", name);
+    return nullptr;
+  }
+  return it->second;
 }
