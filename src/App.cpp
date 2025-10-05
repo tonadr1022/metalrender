@@ -153,7 +153,7 @@ void App::run() {
     }
   } else if (scene == 1) {
     size_t count = 1000;
-    float scale = 2;
+    float scale = 8;
 
     for (size_t i = 0; i < count; i++) {
       auto rand_f = []() { return rand_float(-100, 100); };
@@ -167,7 +167,7 @@ void App::run() {
     }
   }
 
-  load_model(config_.initial_model_path);
+  // load_model(config_.initial_model_path);
 
   double last_time = glfwGetTime();
   while (!window_->should_close()) {

@@ -41,12 +41,17 @@ class RenderPipelineState;
 
 }  // namespace MTL
 
+enum ShaderStage {
+  ShaderStage_Vertex,
+  ShaderStage_Fragment,
+  ShaderStage_Object,
+  ShaderStage_Mesh,
+  ShaderStage_Compute,
+  ShaderStage_Count,
+};
+
 struct Shader {
-  MTL::Function* object_func{};
-  MTL::Function* mesh_func{};
-  MTL::Function* vert_func{};
-  MTL::Function* frag_func{};
-  MTL::Function* compute_func{};
+  std::array<MTL::Function*, ShaderStage_Count> funcs{};
 };
 
 struct TextureWithIdx {
@@ -153,9 +158,11 @@ class InstanceDataMgr {
   [[nodiscard]] MTL::IndirectCommandBuffer* icb() const { return ind_cmd_buf_.get(); }
 
   void free(OffsetAllocator::Allocation alloc) {
+    auto element_count = allocator_.allocationSize(alloc);
     memset(reinterpret_cast<InstanceData*>(instance_data_buf()->contents()) + alloc.offset,
-           UINT32_MAX, allocator_.allocationSize(alloc) * sizeof(InstanceData));
+           UINT32_MAX, element_count * sizeof(InstanceData));
     allocator_.free(alloc);
+    curr_element_count_ -= element_count;
   }
   [[nodiscard]] uint32_t max_seen_size() const { return max_seen_size_; }
 
@@ -165,6 +172,8 @@ class InstanceDataMgr {
   OffsetAllocator::Allocator allocator_;
   rhi::BufferHandleHolder instance_data_buf_;
   uint32_t max_seen_size_{};
+  uint32_t icb_element_count_{};
+  uint32_t curr_element_count_{};
   rhi::Device* device_{};
   MTL::Device* raw_device_{};
   NS::SharedPtr<MTL::IndirectCommandBuffer> ind_cmd_buf_;
@@ -286,6 +295,7 @@ class RendererMetal {
   // MTL::RenderPipelineState* main_pso_{};
   MTL::RenderPipelineState* mesh_pso_{};
   MTL::ComputePipelineState* dispatch_mesh_pso_{};
+  MTL::ComputePipelineState* dispatch_vertex_pso_{};
 
   DrawBatch::Alloc upload_geometry(DrawBatchType type, const std::vector<DefaultVertex>& vertices,
                                    const std::vector<rhi::DefaultIndexT>& indices,
@@ -305,7 +315,10 @@ class RendererMetal {
   static constexpr float k_z_far{10'000};
 
   NS::SharedPtr<MTL::Buffer> dispatch_mesh_encode_arg_buf_;
-  NS::SharedPtr<MTL::Buffer> dispatch_mesh_icb_container_buf_;
+  MTL::ArgumentEncoder* dispatch_mesh_encode_arg_enc_{};
+
+  rhi::BufferHandleHolder main_icb_container_buf_;
+  MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
 
   MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
@@ -316,12 +329,17 @@ class RendererMetal {
   Shader forward_pass_shader_;
   Shader forward_mesh_shader_;
   Shader dispatch_mesh_shader_;
+  Shader dispatch_vertex_shader_;
   size_t curr_frame_;
   size_t frames_in_flight_{2};
+  static constexpr bool use_mesh_shader{true};
 
   // std::vector<PerFrameData> per_frame_datas_;
 
   MTL::Buffer* get_mtl_buf(BackedGPUAllocator& allocator) {
     return reinterpret_cast<MetalBuffer*>(allocator.get_buffer())->buffer();
+  }
+  MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
+    return reinterpret_cast<MetalBuffer*>(device_->get_buf(handle))->buffer();
   }
 };

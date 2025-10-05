@@ -4,7 +4,6 @@
 enum EncodeMeshDrawArgsE {
   EncodeMeshDrawArgs_MainVertexBuf,
   EncodeMeshDrawArgs_MeshletBuf,
-  EncodeMeshDrawArgs_InstanceModelMatrixBuf,
   EncodeMeshDrawArgs_InstanceDataBuf,
   EncodeMeshDrawArgs_MeshDataBuf,
   EncodeMeshDrawArgs_MeshletVerticesBuf,
