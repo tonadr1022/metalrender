@@ -268,10 +268,6 @@ class RendererMetal {
                                            const RenderArgs& render_args) const;
   void flush_pending_texture_uploads();
   void recreate_render_target_textures();
-  // PerFrameData& get_curr_frame_data() { return per_frame_datas_[curr_frame_ % frames_in_flight_];
-  // }
-  NS::SharedPtr<MTL::Buffer> create_buffer(
-      size_t size, void* data, MTL::ResourceOptions options = MTL::ResourceStorageModeShared);
 
   struct AllModelData {
     uint32_t max_objects;
@@ -286,15 +282,18 @@ class RendererMetal {
 
   [[maybe_unused]] MetalDevice* device_{};
   WindowApple* window_{};
-  rhi::TextureHandleHolder depth_tex_;
-  rhi::TextureHandleHolder hzb_tex_;
+
   MTL::Device* raw_device_{};
   MTL::CommandQueue* main_cmd_queue_{};
-  // MTL::RenderPipelineState* main_pso_{};
   MTL::RenderPipelineState* mesh_pso_{};
   MTL::RenderPipelineState* vertex_pso_{};
   MTL::ComputePipelineState* dispatch_mesh_pso_{};
   MTL::ComputePipelineState* dispatch_vertex_pso_{};
+
+  rhi::TextureHandleHolder depth_tex_;
+  rhi::TextureHandleHolder hzb_tex_;
+  rhi::BufferHandleHolder meshlet_vis_buf_;
+  rhi::TextureHandleHolder default_white_tex_;
 
   DrawBatch::Alloc upload_geometry(DrawBatchType type, const std::vector<DefaultVertex>& vertices,
                                    const std::vector<rhi::DefaultIndexT>& indices,
@@ -323,7 +322,7 @@ class RendererMetal {
 
   MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
-  std::vector<MTL::Texture*> all_textures_;
+  std::vector<rhi::TextureHandleHolder> all_textures_;
 
   std::filesystem::path shader_dir_;
   std::filesystem::path resource_dir_;

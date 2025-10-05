@@ -6,6 +6,7 @@
 
 #include "gfx/Config.hpp"
 #include "gfx/GFXTypes.hpp"
+#include "gfx/metal/MetalTexture.hpp"
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define IMGUI_IMPL_METAL_CPP
@@ -123,6 +124,24 @@ void RendererMetal::init(const CreateInfo &cinfo) {
 
   gpu_uniform_buf_.emplace(gpu_frame_allocator_->create_buffer<Uniforms>(1));
   cull_data_buf_.emplace(gpu_frame_allocator_->create_buffer<CullData>(1));
+
+  {
+    default_white_tex_ =
+        device_->create_tex_h(rhi::TextureDesc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
+                                               .storage_mode = rhi::StorageMode::GPUOnly,
+                                               .dims = glm::uvec3{1, 1, 1},
+                                               .mip_levels = 1,
+                                               .array_length = 1,
+                                               .alloc_gpu_slot = true});
+    ALWAYS_ASSERT(device_->get_tex(default_white_tex_)->gpu_slot() == 0);
+    auto *data = reinterpret_cast<uint64_t *>(malloc(sizeof(uint64_t)));
+    *data = 0xFFFFFFFF;
+    std::unique_ptr<void, void (*)(void *)> data_ptr{data, free};
+    pending_texture_uploads_.push_back(TextureUpload{.data = std::move(data_ptr),
+                                                     .tex = std::move(default_white_tex_),
+                                                     .dims = glm::uvec3{1, 1, 1},
+                                                     .bytes_per_row = 4});
+  }
 
   init_imgui();
 
@@ -335,12 +354,14 @@ void RendererMetal::render(const RenderArgs &render_args) {
         enc->useResources(resources, ARRAY_SIZE(resources), MTL::ResourceUsageRead);
       }
 
-      for (const MTL::Texture *tex : all_textures_) {
-        if (tex) {
-          enc->useResource(tex, MTL::ResourceUsageSample);
+      for (const auto &handle : all_textures_) {
+        if (auto *tex = device_->get_tex(handle)) {
+          enc->useResource(reinterpret_cast<MetalTexture *>(tex)->texture(),
+                           MTL::ResourceUsageSample);
         }
       }
       enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
+
       enc->executeCommandsInBuffer(instance_data_mgr_->icb(),
                                    NS::Range::Make(0, all_model_data_.max_objects));
     }
@@ -537,10 +558,6 @@ void RendererMetal::on_imgui() {
   ImGui::Checkbox("meshlet frustum cull", &meshlet_frustum_cull_);
 }
 
-// TextureWithIdx RendererMetal::load_material_image(const rhi::TextureDesc &desc) {
-//   return {.tex = device_->create_texture(desc), .idx = texture_index_allocator_.alloc_idx()};
-// }
-
 void RendererMetal::load_shaders() {
   NS::Error *err{};
   MTL::Library *shader_lib = raw_device_->newLibrary(
@@ -597,7 +614,7 @@ Uniforms RendererMetal::set_cpu_global_uniform_data(const RenderArgs &render_arg
   uniform_data.proj = glm::perspective(glm::radians(70.f), aspect, k_z_near, k_z_far);
   uniform_data.vp =
       glm::perspective(glm::radians(70.f), aspect, k_z_near, k_z_far) * uniform_data.view;
-  uniform_data.render_mode = (uint32_t)RenderMode::Normals;
+  uniform_data.render_mode = (uint32_t)RenderMode::Default;
   return uniform_data;
 }
 
@@ -635,7 +652,7 @@ void RendererMetal::flush_pending_texture_uploads() {
       const auto src_img_size = static_cast<size_t>(upload.bytes_per_row) * upload.dims.y;
       MTL::Buffer *upload_buf =
           raw_device_->newBuffer(src_img_size, MTL::ResourceStorageModeShared);
-      memcpy(upload_buf->contents(), upload.data, src_img_size);
+      memcpy(upload_buf->contents(), upload.data.get(), src_img_size);
       const MTL::Origin origin = MTL::Origin::Make(0, 0, 0);
       const MTL::Size img_size = MTL::Size::Make(upload.dims.x, upload.dims.y, upload.dims.z);
       auto *tex = reinterpret_cast<MetalTexture *>(device_->get_tex(upload.tex));
@@ -645,7 +662,7 @@ void RendererMetal::flush_pending_texture_uploads() {
       blit_enc->generateMipmaps(mtl_tex);
       global_arg_enc_->setTexture(mtl_tex, tex->gpu_slot());
       // mtl_tex->retain();
-      all_textures_[tex->gpu_slot()] = mtl_tex;
+      all_textures_[tex->gpu_slot()] = std::move(upload.tex);
     }
     blit_enc->endEncoding();
     pending_texture_uploads_.clear();
@@ -668,13 +685,6 @@ void RendererMetal::recreate_render_target_textures() {
       .dims = glm::uvec3{dims, 1},
       .mip_levels = get_mip_levels(dims.x, dims.y),
   });
-}
-
-NS::SharedPtr<MTL::Buffer> RendererMetal::create_buffer(size_t size, void *data,
-                                                        MTL::ResourceOptions options) {
-  NS::SharedPtr<MTL::Buffer> buf = NS::TransferPtr(raw_device_->newBuffer(size, options));
-  memcpy(buf->contents(), data, size);
-  return buf;
 }
 
 const char *draw_batch_type_to_string(DrawBatchType type) {

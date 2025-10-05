@@ -148,7 +148,7 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
     if (!img.buffer_view) {
       int w{}, h{}, comp{};
       const std::filesystem::path full_img_path = directory_path / img.uri;
-      const uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
+      uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
       const uint32_t mip_levels = static_cast<uint32_t>(std::floor(std::log2(std::max(w, h)))) + 1;
       const rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
                                   .storage_mode = rhi::StorageMode::GPUOnly,
@@ -156,7 +156,9 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
                                   .mip_levels = mip_levels,
                                   .array_length = 1,
                                   .alloc_gpu_slot = true};
-      texture_uploads.emplace_back(TextureUpload{.data = data,
+      std::unique_ptr<void, void (*)(void *)> data_ptr{reinterpret_cast<void *>(data),
+                                                       stbi_image_free};
+      texture_uploads.emplace_back(TextureUpload{.data = std::move(data_ptr),
                                                  .tex = renderer.get_device()->create_tex_h(desc),
                                                  .dims = desc.dims,
                                                  .bytes_per_row = desc.dims.x * 4});

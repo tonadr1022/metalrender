@@ -54,13 +54,13 @@ float4 fragment fragmentMain(v2f in [[stage_in]],
                             device const SceneResourcesBuf& scene_buf [[buffer(0)]],
                             constant Uniforms& uniforms [[buffer(1)]]) {
     float4 out_color = float4(0.0);
-    out_color = float4(float3(in.normal * 0.5 + 0.5), 1.0);
-    return out_color;
     uint render_mode = uniforms.render_mode;
     device const Material& material = scene_buf.materials[in.material_id];
     if (render_mode == RENDER_MODE_DEFAULT) {
-        int albedo_idx = material.albedo_tex;
-        float4 albedo = scene_buf.textures[albedo_idx].sample(default_texture_sampler, in.uv);
+        float4 albedo = float4(1.0);
+        if (material.albedo_tex != 0) {
+            albedo = scene_buf.textures[material.albedo_tex].sample(default_texture_sampler, in.uv);
+        }
         out_color = albedo;
     } else if (render_mode == RENDER_MODE_NORMALS) {
         out_color = float4(float3(in.normal * 0.5 + 0.5), 1.0);

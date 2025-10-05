@@ -15,15 +15,15 @@ class Device;
 }  // namespace MTL
 
 struct TextureUpload {
-  const void *data;
+  std::unique_ptr<void, void (*)(void *)> data;
   rhi::TextureHandleHolder tex;
   glm::uvec3 dims;
   uint32_t bytes_per_row;
 };
 
 struct Material {
-  uint32_t albedo_tex{UINT32_MAX};
-  uint32_t normal_tex{UINT32_MAX};
+  uint32_t albedo_tex{};
+  uint32_t normal_tex{};
 };
 
 struct Mesh {
