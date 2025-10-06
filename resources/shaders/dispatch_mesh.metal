@@ -31,7 +31,6 @@ void dispatch_mesh_main(uint object_idx [[thread_position_in_grid]],
                         device const uchar* uniform_buf [[buffer(3)]],
                         device const CullData* cull_data [[buffer(4)]],
                         device const uchar* object_arg_buffer [[buffer(5)]]) {
-                        
     if (object_idx >= params.tot_meshes) {
         return;
     }

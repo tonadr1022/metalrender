@@ -14,10 +14,8 @@ cd metalrender
 git submodule update --init --recursive
 cmake --preset Release
 cmake --build build/Release
-./bin/Release/metalrender
+./build/bin/Release/metalrender
 ```
-
-- Use CMake presets
 
 ## Current Features
 

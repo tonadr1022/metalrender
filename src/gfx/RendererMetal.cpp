@@ -168,7 +168,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
                                  .initial_meshlet_triangle_capacity = 1'00'000,
                                  .initial_meshlet_vertex_capacity = 1'000'00,
                              });
-  meshlet_vis_buf_.emplace(*device_, rhi::BufferDesc{.size = 100'000}, sizeof(uint8_t));
+  meshlet_vis_buf_.emplace(*device_, rhi::BufferDesc{.size = 100'000}, sizeof(uint32_t));
 
   // TODO: rethink
   all_textures_.resize(k_max_textures);
@@ -321,6 +321,7 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
 
   {
     uint32_t instance_copy_idx = 0;
+    uint32_t curr_meshlet_vis_buf_offset = 0;
     for (size_t node = 0; node < model.nodes.size(); node++) {
       auto mesh_id = model.mesh_ids[node];
       if (model.mesh_ids[node] == Mesh::k_invalid_mesh_id) {
@@ -329,9 +330,12 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
       base_instance_datas.emplace_back(
           InstanceData{.instance_id = instance_copy_idx,
                        .mat_id = result.meshes[mesh_id].material_id,
-                       .mesh_id = draw_batch_alloc.mesh_alloc.offset + mesh_id});
+                       .mesh_id = draw_batch_alloc.mesh_alloc.offset + mesh_id,
+                       .meshlet_vis_base = curr_meshlet_vis_buf_offset});
       instance_id_to_node.push_back(node);
       instance_copy_idx++;
+      curr_meshlet_vis_buf_offset +=
+          result.meshlet_process_result.meshlet_datas[mesh_id].meshlets.size();
     }
   }
 
@@ -391,7 +395,7 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
     instance_datas[i].rotation = glm::vec4{rot[0], rot[1], rot[2], rot[3]};
     instance_datas[i].scale = transform.scale;
     instance_datas[i].instance_id += instance_data_gpu_alloc.offset;
-    instance_datas[i].meshlet_vis_base = meshlet_vis_buf_alloc.offset;
+    instance_datas[i].meshlet_vis_base += meshlet_vis_buf_alloc.offset;
   }
 
   memcpy(reinterpret_cast<InstanceData *>(instance_data_mgr_->instance_data_buf()->contents()) +
@@ -1068,7 +1072,7 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     MTL::RenderPassDescriptor *pass_desc = MTL::RenderPassDescriptor::renderPassDescriptor();
     MTL::RenderPassDepthAttachmentDescriptor *desc =
         MTL::RenderPassDepthAttachmentDescriptor::alloc()->init();
-    desc->setTexture(reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_))->texture());
+    desc->setTexture(get_mtl_tex(depth_tex_));
     desc->setLoadAction(MTL::LoadActionLoad);
     desc->setStoreAction(MTL::StoreActionStore);
     pass_desc->setDepthAttachment(desc);

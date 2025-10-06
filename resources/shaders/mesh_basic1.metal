@@ -34,7 +34,7 @@ constant bool is_late_pass [[function_constant(0)]];
 struct MainObjectArguments {
     device const MeshData* mesh_datas [[id(0)]];
     device const Meshlet* meshlets [[id(1)]];
-    device uchar* meshlet_vis_buf [[id(2)]];
+    device uint* meshlet_vis_buf [[id(2)]];
     texture2d<float, access::read> depth_pyramid_tex [[id(3)]];
 
 };
@@ -52,10 +52,17 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
         return;
     }
 
+
     int visible_last_frame = args->meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base];
-
-
-    int passed = is_late_pass ? !visible_last_frame : visible_last_frame;
+    int visible = 1;
+    int skip = 0;
+    if (!is_late_pass && visible_last_frame == 0) {
+        visible = 0;
+    }
+    if (is_late_pass && visible_last_frame != 0) {
+        skip = 1;
+    }
+   // int passed = is_late_pass ? !visible_last_frame : visible_last_frame;
 
     device const Meshlet& meshlet = args->meshlets[tp_grid + mesh_data.meshlet_base];
     float3 world_center = rotate_quat(instance_data->scale * meshlet.center, instance_data->rotation)
@@ -71,28 +78,34 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     float cone_cutoff = int(meshlet.cone_cutoff) / 127.0;
 
 
-    passed = passed && !cone_cull(center, radius, cone_axis, cone_cutoff, float3(0, 0, 0));
+    visible = visible && !cone_cull(center, radius, cone_axis, cone_cutoff, float3(0, 0, 0));
 
     // Ref: https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
     // frustum cull, plane symmetry 
-    passed = passed && (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
-    passed = passed && (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
+    visible = visible && (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
+    visible = visible && (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
     // z near/far
-    passed = passed && ((center.z + radius > cull_data.z_near) || (center.z - radius < cull_data.z_far));
+    visible = visible && ((center.z + radius > cull_data.z_near) || (center.z - radius < cull_data.z_far));
 
-    if (is_late_pass && passed) {
+    if (is_late_pass && visible) {
+        /*
         float4 aabb;
         if (project_sphere(center, radius, cull_data.z_near, cull_data.p00, cull_data.p11, aabb)) {
             passed = 1;
         }
+        */
     }
 
-    int payload_idx = simd_prefix_exclusive_sum(passed);
-    args->meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base] = passed;
-    if (passed) {
+    int draw = visible && !skip;
+    int payload_idx = simd_prefix_exclusive_sum(draw);
+    if (is_late_pass) {
+        args->meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base] = visible;
+    }
+
+    if (draw) {
         out_payload.meshlet_indices[payload_idx] = tp_grid;
     }
-    uint visible_count = simd_sum(passed);
+    uint visible_count = simd_sum(draw);
     if (thread_idx == 0) {
         grid.set_threadgroups_per_grid(uint3(visible_count, 1, 1));
     }
