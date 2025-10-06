@@ -34,6 +34,15 @@ struct CullData {
   float z_near;
   float z_far;
   packed_float3 camera_pos;
+  float p00;
+  float p11;
+};
+
+enum MainObjectArgs {
+  MainObjectArgs_MeshDataBuf,
+  MainObjectArgs_MeshletBuf,
+  MainObjectArgs_MeshletVisBuf,
+  MainObjectArgs_DepthPyramidTex,
 };
 
 #endif

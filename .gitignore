@@ -4,3 +4,5 @@ build/
 shader_out/
 .zed/
 .vscode/
+imgui.ini
+config.txt

@@ -148,17 +148,18 @@ float get_float(float min, float max) {
 void App::run() {
   ZoneScoped;
   rando::seed(10000000);
-  int scene = 1;
+  int scene = 0;
   if (scene == 0) {
-    glm::ivec3 iter{};
-    glm::ivec3 dims{1, 1, 1};
-    float dist = 40.0;
-    for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
-      for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
-        glm::vec3 pos = glm::vec3{iter} * dist;
-        load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, pos));
-      }
-    }
+    // glm::ivec3 iter{};
+    // glm::ivec3 dims{1, 1, 1};
+    // float dist = 40.0;
+    // for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
+    //   for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
+    //     glm::vec3 pos = glm::vec3{iter} * dist;
+    // load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, pos));
+    //   }
+    // }
+    load_model(config_.initial_model_path);
   } else if (scene == 1) {
     /*
     size_t count = 100;
@@ -178,8 +179,6 @@ void App::run() {
                                                  glm::scale(glm::mat4{1}, glm::vec3{scale}));
     }
   }
-
-  // load_model(config_.initial_model_path);
 
   double last_time = glfwGetTime();
   while (!window_->should_close()) {

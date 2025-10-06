@@ -1,12 +1,16 @@
 #include "RendererMetal.hpp"
 
+#include <Foundation/NSSharedPtr.hpp>
 #include <Metal/MTLArgumentEncoder.hpp>
 #include <Metal/MTLCommandBuffer.hpp>
 #include <Metal/MTLDevice.hpp>
+#include <Metal/MTLRenderCommandEncoder.hpp>
+#include <Metal/MTLRenderPass.hpp>
 
 #include "gfx/Config.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/metal/MetalTexture.hpp"
+#include "imgui.h"
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define IMGUI_IMPL_METAL_CPP
@@ -169,8 +173,6 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   // TODO: rethink
   all_textures_.resize(k_max_textures);
 
-  recreate_render_target_textures();
-
   load_shaders();
   load_pipelines();
 
@@ -216,16 +218,25 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   }
   {
     dispatch_mesh_encode_arg_enc_ = get_function("dispatch_mesh_main")->newArgumentEncoder(1);
-    dispatch_mesh_encode_arg_buf_ = NS::TransferPtr(raw_device_->newBuffer(
-        dispatch_mesh_encode_arg_enc_->encodedLength(), MTL::ResourceStorageModeShared));
+    dispatch_mesh_encode_arg_buf_ =
+        NS::TransferPtr(raw_device_->newBuffer(dispatch_mesh_encode_arg_enc_->encodedLength(), 0));
     dispatch_mesh_encode_arg_enc_->setArgumentBuffer(dispatch_mesh_encode_arg_buf_.get(), 0);
   }
   {
     dispatch_vertex_encode_arg_enc_ = get_function("dispatch_vertex_main")->newArgumentEncoder(1);
-    dispatch_vertex_encode_arg_buf_ = NS::TransferPtr(raw_device_->newBuffer(
-        dispatch_vertex_encode_arg_enc_->encodedLength(), MTL::ResourceStorageModeShared));
+    dispatch_vertex_encode_arg_buf_ = NS::TransferPtr(
+        raw_device_->newBuffer(dispatch_vertex_encode_arg_enc_->encodedLength(), 0));
     dispatch_vertex_encode_arg_enc_->setArgumentBuffer(dispatch_vertex_encode_arg_buf_.get(), 0);
   }
+
+  {
+    main_object_arg_enc_ = get_function("basic1_object_main_late_pass")->newArgumentEncoder(2);
+    main_object_arg_buf_ =
+        NS::TransferPtr(raw_device_->newBuffer(main_object_arg_enc_->encodedLength(), 0));
+    main_object_arg_enc_->setArgumentBuffer(main_object_arg_buf_.get(), 0);
+  }
+
+  recreate_render_target_textures();
 
   materials_buf_.emplace(*device_,
                          rhi::BufferDesc{rhi::StorageMode::CPUAndGPU, k_max_textures, true},
@@ -254,236 +265,38 @@ void RendererMetal::render(const RenderArgs &render_args) {
   }
 
   MTL::CommandBuffer *buf = main_cmd_queue_->commandBuffer();
+  encode_regular_frame(render_args, buf, drawable);
 
-  {
-    ZoneScopedN("encode and commit commands");
-
-    const Uniforms cpu_uniforms = set_cpu_global_uniform_data(render_args);
-    gpu_uniform_buf_->fill(cpu_uniforms);
-    cull_data_buf_->fill(set_cpu_cull_data(cpu_uniforms, render_args));
-
-    {
-      MTL::BlitCommandEncoder *reset_blit_enc = buf->blitCommandEncoder();
-      reset_blit_enc->setLabel(util::mtl::string("Reset ICB Blit Encoder"));
-      reset_blit_enc->resetCommandsInBuffer(instance_data_mgr_->icb(),
-                                            NS::Range::Make(0, all_model_data_.max_objects));
-
-      if (k_use_mesh_shader && meshlet_vis_buf_dirty_) {
-        meshlet_vis_buf_dirty_ = false;
-        reset_blit_enc->fillBuffer(get_mtl_buf(*meshlet_vis_buf_),
-                                   NS::Range::Make(0, meshlet_vis_buf_->get_buffer()->size()), 0);
-      }
-
-      reset_blit_enc->endEncoding();
-    }
-    auto begin_compute_enc = [&buf]() {
-      MTL::ComputePassDescriptor *compute_pass_descriptor =
-          MTL::ComputePassDescriptor::computePassDescriptor();
-      compute_pass_descriptor->setDispatchType(MTL::DispatchTypeConcurrent);
-      return buf->computeCommandEncoder(compute_pass_descriptor);
-    };
-
-    {  // fill ICB
-
-      auto *compute_enc = begin_compute_enc();
-      if (k_use_mesh_shader) {
-        compute_enc->setComputePipelineState(dispatch_mesh_pso_);
-        compute_enc->setBuffer(dispatch_mesh_encode_arg_buf_.get(), 0, 1);
-      } else {
-        compute_enc->setComputePipelineState(dispatch_vertex_pso_);
-        compute_enc->setBuffer(dispatch_vertex_encode_arg_buf_.get(), 0, 1);
-      }
-
-      compute_enc->setBuffer(get_mtl_buf(main_icb_container_buf_), 0, 0);
-      compute_enc->setBuffer(reinterpret_cast<MetalBuffer *>(gpu_uniform_buf_->get_buf())->buffer(),
-                             gpu_uniform_buf_->get_offset_bytes(), 3);
-      compute_enc->setBuffer(reinterpret_cast<MetalBuffer *>(cull_data_buf_->get_buf())->buffer(),
-                             cull_data_buf_->get_offset_bytes(), 4);
-
-      compute_enc->useResource(instance_data_mgr_->icb(), MTL::ResourceUsageWrite);
-      compute_enc->useResource(instance_data_mgr_->instance_data_buf(), MTL::ResourceUsageRead);
-      compute_enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
-      DispatchMeshParams params{.tot_meshes = all_model_data_.max_objects, .frustum_cull = true};
-      compute_enc->setBytes(&params, sizeof(DispatchMeshParams), 2);
-      compute_enc->dispatchThreads(MTL::Size::Make(all_model_data_.max_objects, 1, 1),
-                                   MTL::Size::Make(32, 1, 1));
-      compute_enc->endEncoding();
-    }
-
-    {
-      MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
-      blit_enc->setLabel(util::mtl::string("Optimize ICB Blit Encoder"));
-      blit_enc->optimizeIndirectCommandBuffer(instance_data_mgr_->icb(),
-                                              NS::Range::Make(0, all_model_data_.max_objects));
-      blit_enc->endEncoding();
-    }
-
-    auto set_depth_stencil_state = [this](MTL::RenderCommandEncoder *enc) {
-      // TODO: don't recreate this is cringe.
-      MTL::DepthStencilDescriptor *depth_stencil_desc =
-          MTL::DepthStencilDescriptor::alloc()->init();
-      depth_stencil_desc->setDepthCompareFunction(MTL::CompareFunctionLess);
-      depth_stencil_desc->setDepthWriteEnabled(true);
-      enc->setDepthStencilState(raw_device_->newDepthStencilState(depth_stencil_desc));
-    };
-    auto set_cull_mode_wind_order = [](MTL::RenderCommandEncoder *enc) {
-      enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
-      enc->setCullMode(MTL::CullModeBack);
-    };
-
-    auto use_mesh_shader_resources = [this](MTL::RenderCommandEncoder *enc) {
-      const MTL::Resource *const resources[] = {
-          instance_data_mgr_->instance_data_buf(),
-          get_mtl_buf(static_draw_batch_->vertex_buf),
-          get_mtl_buf(static_draw_batch_->meshlet_buf),
-          get_mtl_buf(static_draw_batch_->mesh_buf),
-          get_mtl_buf(static_draw_batch_->meshlet_vertices_buf),
-          get_mtl_buf(static_draw_batch_->meshlet_triangles_buf),
-          scene_arg_buffer_.get(),
-      };
-      enc->useResources(resources, ARRAY_SIZE(resources), MTL::ResourceUsageRead);
-      enc->useResource(get_mtl_buf(*meshlet_vis_buf_),
-                       MTL::ResourceUsageRead | MTL::ResourceUsageWrite);
-    };
-
-    auto use_fragment_resources = [this](MTL::RenderCommandEncoder *enc) {
-      for (const auto &handle : all_textures_) {
-        if (auto *tex = device_->get_tex(handle)) {
-          enc->useResource(reinterpret_cast<MetalTexture *>(tex)->texture(),
-                           MTL::ResourceUsageSample);
-        }
-      }
-      enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
-    };
-
-    {
-      ZoneScopedN("encode forward pass cmds");
-      MTL::RenderPassDescriptor *forward_render_pass_desc =
-          MTL::RenderPassDescriptor::renderPassDescriptor();
-      MTL::RenderPassDepthAttachmentDescriptor *desc =
-          MTL::RenderPassDepthAttachmentDescriptor::alloc()->init();
-      desc->setTexture(reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_))->texture());
-      desc->setClearDepth(1.0);
-      desc->setLoadAction(MTL::LoadActionClear);
-      desc->setStoreAction(MTL::StoreActionStore);
-      forward_render_pass_desc->setDepthAttachment(desc);
-      {
-        auto *color0 = forward_render_pass_desc->colorAttachments()->object(0);
-        color0->setTexture(drawable->texture());
-        color0->setLoadAction(MTL::LoadActionClear);
-        color0->setClearColor(MTL::ClearColor::Make(0.5, 0.1, 0.12, 1.0));
-        color0->setStoreAction(MTL::StoreActionStore);
-      }
-
-      MTL::RenderCommandEncoder *enc = buf->renderCommandEncoder(forward_render_pass_desc);
-
-      set_depth_stencil_state(enc);
-      set_cull_mode_wind_order(enc);
-
-      use_fragment_resources(enc);
-      if (k_use_mesh_shader) {
-        enc->setRenderPipelineState(mesh_pso_);
-        use_mesh_shader_resources(enc);
-      } else {
-        enc->setRenderPipelineState(vertex_pso_);
-        const MTL::Resource *const resources[] = {
-            instance_data_mgr_->instance_data_buf(),
-            get_mtl_buf(static_draw_batch_->vertex_buf),
-            get_mtl_buf(static_draw_batch_->index_buf),
-            get_mtl_buf(static_draw_batch_->mesh_buf),
-            scene_arg_buffer_.get(),
-            get_mtl_buf(*materials_buf_),
-        };
-        enc->useResources(resources, ARRAY_SIZE(resources), MTL::ResourceUsageRead);
-      }
-
-      enc->executeCommandsInBuffer(instance_data_mgr_->icb(),
-                                   NS::Range::Make(0, all_model_data_.max_objects));
-
-      enc->endEncoding();
-    }
-
-    {
-      auto *enc = begin_compute_enc();
-      enc->setComputePipelineState(depth_reduce_pso_);
-      auto *main_tex = reinterpret_cast<MetalTexture *>(device_->get_tex(depth_pyramid_tex_));
-      auto dp_dims = main_tex->desc().dims;
-      for (size_t i = 0; i < main_tex->desc().mip_levels; i++) {
-        MTL::Texture *input_view =
-            i == 0 ? reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_))->texture()
-                   : depth_pyramid_tex_views_[i - 1].get();
-        MTL::Texture *output_view = depth_pyramid_tex_views_[i].get();
-
-        enc->setTexture(input_view, 0);
-        enc->setTexture(output_view, 1);
-
-        struct {
-          glm::uvec2 dims;
-        } args{.dims = {dp_dims.x >> i, dp_dims.y >> i}};
-
-        enc->setBytes(&args, sizeof(args), 0);
-
-        enc->dispatchThreadgroups(MTL::Size::Make((dims.x + 31) / 32, (dims.x + 31) / 32, 1),
-                                  MTL::Size::Make(32, 32, 1));
-      }
-      enc->endEncoding();
-    }
-
-    {  // late pass
-      MTL::RenderPassDescriptor *pass_desc = MTL::RenderPassDescriptor::renderPassDescriptor();
-      MTL::RenderPassDepthAttachmentDescriptor *desc =
-          MTL::RenderPassDepthAttachmentDescriptor::alloc()->init();
-      desc->setTexture(reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_))->texture());
-      desc->setLoadAction(MTL::LoadActionLoad);
-      desc->setStoreAction(MTL::StoreActionStore);
-      pass_desc->setDepthAttachment(desc);
-      {
-        auto *color0 = pass_desc->colorAttachments()->object(0);
-        color0->setTexture(drawable->texture());
-        color0->setLoadAction(MTL::LoadActionLoad);
-        color0->setStoreAction(MTL::StoreActionStore);
-      }
-      MTL::RenderCommandEncoder *enc = buf->renderCommandEncoder(pass_desc);
-      enc->setRenderPipelineState(mesh_late_pso_);
-
-      set_depth_stencil_state(enc);
-      set_cull_mode_wind_order(enc);
-      use_fragment_resources(enc);
-      use_mesh_shader_resources(enc);
-
-      enc->executeCommandsInBuffer(instance_data_mgr_->icb(),
-                                   NS::Range::Make(0, all_model_data_.max_objects));
-      enc->endEncoding();
-    }
-
-    if (render_args.draw_imgui) {
-      MTL::RenderPassDescriptor *forward_render_pass_desc =
-          MTL::RenderPassDescriptor::renderPassDescriptor();
-      auto *color0 = forward_render_pass_desc->colorAttachments()->object(0);
-      color0->setTexture(drawable->texture());
-      color0->setLoadAction(MTL::LoadActionLoad);
-      color0->setStoreAction(MTL::StoreActionStore);
-      MTL::RenderCommandEncoder *enc = buf->renderCommandEncoder(forward_render_pass_desc);
-
-      ImGui_ImplMetal_NewFrame(forward_render_pass_desc);
-      ImGui_ImplGlfw_NewFrame();
-      ImGui::NewFrame();
-
-      render_imgui();
-
-      ImGui::Render();
-
-      ImGui_ImplMetal_RenderDrawData(ImGui::GetDrawData(), buf, enc);
-      enc->endEncoding();
-      ImGui::EndFrame();
-    }
-
-    buf->presentDrawable(drawable);
-    buf->commit();
-
-    curr_frame_++;
-    frame_ar_pool->release();
+  if (debug_render_view_ == DebugRenderView::DepthPyramidTex) {
+    encode_debug_depth_pyramid_view(buf, drawable);
   }
+  if (render_args.draw_imgui) {
+    MTL::RenderPassDescriptor *forward_render_pass_desc =
+        MTL::RenderPassDescriptor::renderPassDescriptor();
+    auto *color0 = forward_render_pass_desc->colorAttachments()->object(0);
+    color0->setTexture(drawable->texture());
+    color0->setLoadAction(MTL::LoadActionLoad);
+    color0->setStoreAction(MTL::StoreActionStore);
+    MTL::RenderCommandEncoder *enc = buf->renderCommandEncoder(forward_render_pass_desc);
+
+    ImGui_ImplMetal_NewFrame(forward_render_pass_desc);
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    render_imgui();
+
+    ImGui::Render();
+
+    ImGui_ImplMetal_RenderDrawData(ImGui::GetDrawData(), buf, enc);
+    enc->endEncoding();
+    ImGui::EndFrame();
+  }
+
+  buf->presentDrawable(drawable);
+  buf->commit();
+
+  curr_frame_++;
+  frame_ar_pool->release();
 }
 
 bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat4 &root_transform,
@@ -591,9 +404,8 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
     // on main vertex buffer resize at beginning of frame
     dispatch_mesh_encode_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->vertex_buf), 0,
                                              EncodeMeshDrawArgs_MainVertexBuf);
-    dispatch_mesh_encode_arg_enc_->setBuffer(
-        reinterpret_cast<MetalBuffer *>(static_draw_batch_->meshlet_buf.get_buffer())->buffer(), 0,
-        EncodeMeshDrawArgs_MeshletBuf);
+    dispatch_mesh_encode_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->meshlet_buf), 0,
+                                             EncodeMeshDrawArgs_MeshletBuf);
     dispatch_mesh_encode_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->mesh_buf), 0,
                                              EncodeMeshDrawArgs_MeshDataBuf);
     dispatch_mesh_encode_arg_enc_->setBuffer(instance_data_mgr_->instance_data_buf(), 0,
@@ -604,8 +416,15 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
                                              0, EncodeMeshDrawArgs_MeshletTrianglesBuf);
     dispatch_mesh_encode_arg_enc_->setBuffer(scene_arg_buffer_.get(), 0,
                                              EncodeMeshDrawArgs_SceneArgBuf);
-    dispatch_mesh_encode_arg_enc_->setBuffer(get_mtl_buf(*meshlet_vis_buf_), 0,
-                                             EncodeMeshDrawArgs_MeshletVisBuf);
+
+    main_object_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->mesh_buf), 0,
+                                    MainObjectArgs_MeshDataBuf);
+    main_object_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->meshlet_buf), 0,
+                                    MainObjectArgs_MeshletBuf);
+    ASSERT(meshlet_vis_buf_->get_buffer());
+    main_object_arg_enc_->setBuffer(get_mtl_buf(*meshlet_vis_buf_), 0,
+                                    MainObjectArgs_MeshletVisBuf);
+
   } else {
     dispatch_vertex_encode_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->vertex_buf), 0,
                                                DispatchVertexShaderArgs_MainVertexBuf);
@@ -658,6 +477,16 @@ void RendererMetal::on_imgui() {
     ImGui::Text("\tMeshlet Vertex Count: %d", stats.meshlet_vertex_count);
   }
   ImGui::Checkbox("meshlet frustum cull", &meshlet_frustum_cull_);
+  const char *items[] = {debug_render_view_to_str(DebugRenderView::None),
+                         debug_render_view_to_str(DebugRenderView::DepthPyramidTex)};
+  int curr = (int)debug_render_view_;
+  if (ImGui::Combo("Debug View Mode", &curr, items, ARRAY_SIZE(items))) {
+    debug_render_view_ = (DebugRenderView)curr;
+  }
+  if (debug_render_view_ == DebugRenderView::DepthPyramidTex) {
+    ImGui::SliderInt("Depth Pyramid Mip Level", &debug_depth_pyramid_mip_level_, 0,
+                     device_->get_tex(depth_pyramid_tex_)->desc().mip_levels - 1);
+  }
 }
 
 void RendererMetal::load_shaders() {
@@ -742,6 +571,8 @@ CullData RendererMetal::set_cpu_cull_data(const Uniforms &uniforms,
   cull_data.camera_pos = render_args.camera_pos;
   cull_data.z_near = k_z_near;
   cull_data.z_far = k_z_far;
+  cull_data.p00 = uniforms.proj[0][0];
+  cull_data.p11 = uniforms.proj[1][1];
   return cull_data;
 }
 
@@ -797,6 +628,9 @@ void RendererMetal::recreate_render_target_textures() {
         tex->texture()->newTextureView(MTL::PixelFormatR32Float, MTL::TextureType2D,
                                        NS::Range::Make(i, 1), NS::Range::Make(0, 1)));
   }
+
+  ALWAYS_ASSERT(main_object_arg_enc_);
+  main_object_arg_enc_->setTexture(tex->texture(), MainObjectArgs_DepthPyramidTex);
 }
 
 const char *draw_batch_type_to_string(DrawBatchType type) {
@@ -945,7 +779,8 @@ void RendererMetal::load_pipelines() {
         MTL::MeshRenderPipelineDescriptor::alloc()->init();
     pipeline_desc->setMeshFunction(get_function("basic1_mesh_main"));
     pipeline_desc->setObjectFunction(create_function(
-        "basic1_object_main", is_late_pass ? "basic1_object_late_pass" : "basic1_object_early_pass",
+        "basic1_object_main",
+        is_late_pass ? "basic1_object_main_late_pass" : "basic1_object_main_early_pass",
         object_func_consts));
     pipeline_desc->setFragmentFunction(get_function("basic1_fragment_main"));
     pipeline_desc->setLabel(util::mtl::string("basic mesh pipeline"));
@@ -968,6 +803,14 @@ void RendererMetal::load_pipelines() {
     pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
     pipeline_desc->setSupportIndirectCommandBuffers(true);
     vertex_pso_ = load_pipeline(pipeline_desc);
+  }
+  {
+    MTL::RenderPipelineDescriptor *pipeline_desc = MTL::RenderPipelineDescriptor::alloc()->init();
+    pipeline_desc->setVertexFunction(get_function("full_screen_tex_vertex_main"));
+    pipeline_desc->setFragmentFunction(get_function("full_screen_tex_frag_main"));
+    pipeline_desc->setLabel(util::mtl::string("full screen texture pipeline"));
+    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    full_screen_tex_pso_ = load_pipeline(pipeline_desc);
   }
 
   {
@@ -992,9 +835,16 @@ void RendererMetal::load_pipelines() {
     depth_reduce_pso_ = create_compute_pipeline("depth_reduce_main");
   }
 }
-MTL::Function *RendererMetal::get_function(const char *name) {
+MTL::Function *RendererMetal::get_function(const char *name, bool load) {
   auto it = shader_funcs_.find(name);
   if (it == shader_funcs_.end()) {
+    if (load) {
+      MTL::Function *func = default_shader_lib_->newFunction(util::mtl::string(name));
+      ALWAYS_ASSERT(func != nullptr);
+      shader_funcs_.emplace(name, func);
+      return func;
+    }
+
     LERROR("shader function not found: {}", name);
     return nullptr;
   }
@@ -1034,5 +884,231 @@ MTL::Function *RendererMetal::create_function(const std::string &name,
     ALWAYS_ASSERT(0 && "failed to create function");
     return nullptr;
   }
+  shader_funcs_.emplace(!specialized_name.empty() ? specialized_name : name, func);
   return func;
+}
+void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::CommandBuffer *buf,
+                                         const CA::MetalDrawable *drawable) {
+  ZoneScoped;
+
+  const Uniforms cpu_uniforms = set_cpu_global_uniform_data(render_args);
+  gpu_uniform_buf_->fill(cpu_uniforms);
+  cull_data_buf_->fill(set_cpu_cull_data(cpu_uniforms, render_args));
+
+  {
+    MTL::BlitCommandEncoder *reset_blit_enc = buf->blitCommandEncoder();
+    reset_blit_enc->setLabel(util::mtl::string("Reset ICB Blit Encoder"));
+    reset_blit_enc->resetCommandsInBuffer(instance_data_mgr_->icb(),
+                                          NS::Range::Make(0, all_model_data_.max_objects));
+
+    if (k_use_mesh_shader && meshlet_vis_buf_dirty_) {
+      meshlet_vis_buf_dirty_ = false;
+      reset_blit_enc->fillBuffer(get_mtl_buf(*meshlet_vis_buf_),
+                                 NS::Range::Make(0, meshlet_vis_buf_->get_buffer()->size()), 0);
+    }
+
+    reset_blit_enc->endEncoding();
+  }
+  auto begin_compute_enc = [&buf]() {
+    MTL::ComputePassDescriptor *compute_pass_descriptor =
+        MTL::ComputePassDescriptor::computePassDescriptor();
+    compute_pass_descriptor->setDispatchType(MTL::DispatchTypeConcurrent);
+    return buf->computeCommandEncoder(compute_pass_descriptor);
+  };
+
+  {  // fill ICB
+
+    auto *compute_enc = begin_compute_enc();
+    if (k_use_mesh_shader) {
+      compute_enc->setComputePipelineState(dispatch_mesh_pso_);
+      compute_enc->setBuffer(dispatch_mesh_encode_arg_buf_.get(), 0, 1);
+    } else {
+      compute_enc->setComputePipelineState(dispatch_vertex_pso_);
+      compute_enc->setBuffer(dispatch_vertex_encode_arg_buf_.get(), 0, 1);
+    }
+
+    compute_enc->setBuffer(get_mtl_buf(main_icb_container_buf_), 0, 0);
+    compute_enc->setBuffer(reinterpret_cast<MetalBuffer *>(gpu_uniform_buf_->get_buf())->buffer(),
+                           gpu_uniform_buf_->get_offset_bytes(), 3);
+    compute_enc->setBuffer(reinterpret_cast<MetalBuffer *>(cull_data_buf_->get_buf())->buffer(),
+                           cull_data_buf_->get_offset_bytes(), 4);
+    ASSERT(main_object_arg_buf_);
+    compute_enc->setBuffer(main_object_arg_buf_.get(), 0, 5);
+
+    compute_enc->useResource(instance_data_mgr_->icb(), MTL::ResourceUsageWrite);
+    compute_enc->useResource(instance_data_mgr_->instance_data_buf(), MTL::ResourceUsageRead);
+    compute_enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
+    DispatchMeshParams params{.tot_meshes = all_model_data_.max_objects, .frustum_cull = true};
+    compute_enc->setBytes(&params, sizeof(DispatchMeshParams), 2);
+    compute_enc->dispatchThreads(MTL::Size::Make(all_model_data_.max_objects, 1, 1),
+                                 MTL::Size::Make(32, 1, 1));
+    compute_enc->endEncoding();
+  }
+
+  {
+    MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
+    blit_enc->setLabel(util::mtl::string("Optimize ICB Blit Encoder"));
+    blit_enc->optimizeIndirectCommandBuffer(instance_data_mgr_->icb(),
+                                            NS::Range::Make(0, all_model_data_.max_objects));
+    blit_enc->endEncoding();
+  }
+
+  auto set_depth_stencil_state = [this](MTL::RenderCommandEncoder *enc) {
+    // TODO: don't recreate this is cringe.
+    MTL::DepthStencilDescriptor *depth_stencil_desc = MTL::DepthStencilDescriptor::alloc()->init();
+    depth_stencil_desc->setDepthCompareFunction(MTL::CompareFunctionLess);
+    depth_stencil_desc->setDepthWriteEnabled(true);
+    enc->setDepthStencilState(raw_device_->newDepthStencilState(depth_stencil_desc));
+  };
+  auto set_cull_mode_wind_order = [](MTL::RenderCommandEncoder *enc) {
+    enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
+    enc->setCullMode(MTL::CullModeBack);
+  };
+
+  auto use_mesh_shader_resources = [this](MTL::RenderCommandEncoder *enc) {
+    const MTL::Resource *const resources[] = {
+        instance_data_mgr_->instance_data_buf(),
+        get_mtl_buf(static_draw_batch_->vertex_buf),
+        get_mtl_buf(static_draw_batch_->meshlet_buf),
+        get_mtl_buf(static_draw_batch_->mesh_buf),
+        get_mtl_buf(static_draw_batch_->meshlet_vertices_buf),
+        get_mtl_buf(static_draw_batch_->meshlet_triangles_buf),
+        scene_arg_buffer_.get(),
+    };
+    enc->useResources(resources, ARRAY_SIZE(resources), MTL::ResourceUsageRead);
+    enc->useResource(get_mtl_buf(*meshlet_vis_buf_),
+                     MTL::ResourceUsageRead | MTL::ResourceUsageWrite);
+  };
+
+  auto use_fragment_resources = [this](MTL::RenderCommandEncoder *enc) {
+    for (const auto &handle : all_textures_) {
+      if (auto *tex = device_->get_tex(handle)) {
+        enc->useResource(reinterpret_cast<MetalTexture *>(tex)->texture(),
+                         MTL::ResourceUsageSample);
+      }
+    }
+    enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
+  };
+
+  {
+    ZoneScopedN("encode forward pass cmds");
+    MTL::RenderPassDescriptor *forward_render_pass_desc =
+        MTL::RenderPassDescriptor::renderPassDescriptor();
+    MTL::RenderPassDepthAttachmentDescriptor *desc =
+        MTL::RenderPassDepthAttachmentDescriptor::alloc()->init();
+    desc->setTexture(reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_))->texture());
+    desc->setClearDepth(1.0);
+    desc->setLoadAction(MTL::LoadActionClear);
+    desc->setStoreAction(MTL::StoreActionStore);
+    forward_render_pass_desc->setDepthAttachment(desc);
+    {
+      auto *color0 = forward_render_pass_desc->colorAttachments()->object(0);
+      color0->setTexture(drawable->texture());
+      color0->setLoadAction(MTL::LoadActionClear);
+      color0->setClearColor(MTL::ClearColor::Make(0.5, 0.1, 0.12, 1.0));
+      color0->setStoreAction(MTL::StoreActionStore);
+    }
+
+    MTL::RenderCommandEncoder *enc = buf->renderCommandEncoder(forward_render_pass_desc);
+
+    set_depth_stencil_state(enc);
+    set_cull_mode_wind_order(enc);
+
+    use_fragment_resources(enc);
+    if (k_use_mesh_shader) {
+      enc->setRenderPipelineState(mesh_pso_);
+      use_mesh_shader_resources(enc);
+    } else {
+      enc->setRenderPipelineState(vertex_pso_);
+      const MTL::Resource *const resources[] = {
+          instance_data_mgr_->instance_data_buf(),
+          get_mtl_buf(static_draw_batch_->vertex_buf),
+          get_mtl_buf(static_draw_batch_->index_buf),
+          get_mtl_buf(static_draw_batch_->mesh_buf),
+          scene_arg_buffer_.get(),
+          get_mtl_buf(*materials_buf_),
+      };
+      enc->useResources(resources, ARRAY_SIZE(resources), MTL::ResourceUsageRead);
+    }
+
+    enc->executeCommandsInBuffer(instance_data_mgr_->icb(),
+                                 NS::Range::Make(0, all_model_data_.max_objects));
+
+    enc->endEncoding();
+  }
+
+  {
+    auto *enc = begin_compute_enc();
+    enc->setComputePipelineState(depth_reduce_pso_);
+    auto *main_tex = reinterpret_cast<MetalTexture *>(device_->get_tex(depth_pyramid_tex_));
+    auto dp_dims = main_tex->desc().dims;
+    for (size_t i = 0; i < main_tex->desc().mip_levels; i++) {
+      MTL::Texture *input_view =
+          i == 0 ? reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_))->texture()
+                 : depth_pyramid_tex_views_[i - 1].get();
+      MTL::Texture *output_view = depth_pyramid_tex_views_[i].get();
+
+      enc->setTexture(input_view, 0);
+      enc->setTexture(output_view, 1);
+
+      struct {
+        glm::uvec2 dims;
+      } args{.dims = {dp_dims.x >> i, dp_dims.y >> i}};
+
+      enc->setBytes(&args, sizeof(args), 0);
+
+      enc->dispatchThreadgroups(
+          MTL::Size::Make((args.dims.x + 31) / 32, (args.dims.x + 31) / 32, 1),
+          MTL::Size::Make(32, 32, 1));
+    }
+    enc->endEncoding();
+  }
+
+  {  // late pass
+    MTL::RenderPassDescriptor *pass_desc = MTL::RenderPassDescriptor::renderPassDescriptor();
+    MTL::RenderPassDepthAttachmentDescriptor *desc =
+        MTL::RenderPassDepthAttachmentDescriptor::alloc()->init();
+    desc->setTexture(reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_))->texture());
+    desc->setLoadAction(MTL::LoadActionLoad);
+    desc->setStoreAction(MTL::StoreActionStore);
+    pass_desc->setDepthAttachment(desc);
+    {
+      auto *color0 = pass_desc->colorAttachments()->object(0);
+      color0->setTexture(drawable->texture());
+      color0->setLoadAction(MTL::LoadActionLoad);
+      color0->setStoreAction(MTL::StoreActionStore);
+    }
+    MTL::RenderCommandEncoder *enc = buf->renderCommandEncoder(pass_desc);
+    enc->setRenderPipelineState(mesh_late_pso_);
+
+    set_depth_stencil_state(enc);
+    set_cull_mode_wind_order(enc);
+    use_fragment_resources(enc);
+    use_mesh_shader_resources(enc);
+
+    enc->executeCommandsInBuffer(instance_data_mgr_->icb(),
+                                 NS::Range::Make(0, all_model_data_.max_objects));
+    enc->endEncoding();
+  }
+}
+
+void RendererMetal::encode_debug_depth_pyramid_view(MTL::CommandBuffer *buf,
+                                                    const CA::MetalDrawable *drawable) {
+  MTL::RenderPassDescriptor *desc = MTL::RenderPassDescriptor::alloc()->init();
+  auto *color0 = desc->colorAttachments()->object(0);
+  color0->setTexture(drawable->texture());
+  color0->setLoadAction(MTL::LoadActionDontCare);
+  color0->setStoreAction(MTL::StoreActionStore);
+  MTL::RenderCommandEncoder *enc = buf->renderCommandEncoder(desc);
+  enc->setRenderPipelineState(full_screen_tex_pso_);
+
+  struct {
+    int mip_level;
+  } args{debug_depth_pyramid_mip_level_};
+  enc->setFragmentBytes(&args, sizeof(args), 0);
+
+  enc->setFragmentTexture(get_mtl_tex(depth_pyramid_tex_), 0);
+  enc->drawPrimitives(MTL::PrimitiveTypeTriangle, 0, 3, 1);
+
+  enc->endEncoding();
 }

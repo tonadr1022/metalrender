@@ -31,27 +31,33 @@ struct ObjectPayload {
 
 constant bool is_late_pass [[function_constant(0)]];
 
+struct MainObjectArguments {
+    device const MeshData* mesh_datas [[id(0)]];
+    device const Meshlet* meshlets [[id(1)]];
+    device uchar* meshlet_vis_buf [[id(2)]];
+    texture2d<float, access::read> depth_pyramid_tex [[id(3)]];
+
+};
+
 [[object, max_total_threadgroups_per_mesh_grid(kMeshThreadgroups)]]
 void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
                         device const InstanceData* instance_data [[buffer(0)]],
-                        device const MeshData* mesh_datas [[buffer(1)]],
-                        device const Meshlet* meshlets [[buffer(2)]],
-                        device const CullData& cull_data [[buffer(3)]],
-                        device uchar* meshlet_vis_buf [[buffer(4)]],
+                        device const CullData& cull_data [[buffer(1)]],
+                        device const MainObjectArguments* args [[buffer(2)]],
                         uint thread_idx [[thread_position_in_threadgroup]],
                         uint tp_grid [[thread_position_in_grid]],
                         mesh_grid_properties grid) {
-    device const MeshData& mesh_data = mesh_datas[instance_data->mesh_id];
+    device const MeshData& mesh_data = args->mesh_datas[instance_data->mesh_id];
     if (tp_grid >= mesh_data.meshlet_count) {
         return;
     }
 
-    int visible_last_frame = meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base];
+    int visible_last_frame = args->meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base];
 
 
     int passed = is_late_pass ? !visible_last_frame : visible_last_frame;
 
-    device const Meshlet& meshlet = meshlets[tp_grid + mesh_data.meshlet_base];
+    device const Meshlet& meshlet = args->meshlets[tp_grid + mesh_data.meshlet_base];
     float3 world_center = rotate_quat(instance_data->scale * meshlet.center, instance_data->rotation)
                           + instance_data->translation;
     float3 center = (cull_data.view * float4(world_center, 1.0)).xyz;
@@ -74,8 +80,15 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     // z near/far
     passed = passed && ((center.z + radius > cull_data.z_near) || (center.z - radius < cull_data.z_far));
 
+    if (is_late_pass && passed) {
+        float4 aabb;
+        if (project_sphere(center, radius, cull_data.z_near, cull_data.p00, cull_data.p11, aabb)) {
+            passed = 1;
+        }
+    }
+
     int payload_idx = simd_prefix_exclusive_sum(passed);
-    meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base] = passed;
+    args->meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base] = passed;
     if (passed) {
         out_payload.meshlet_indices[payload_idx] = tp_grid;
     }

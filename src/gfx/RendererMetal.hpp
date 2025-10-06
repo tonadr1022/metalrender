@@ -23,6 +23,12 @@
 class MetalDevice;
 class WindowApple;
 
+namespace CA {
+
+class MetalDrawable;
+
+}
+
 namespace NS {
 
 class AutoreleasePool;
@@ -31,6 +37,7 @@ class AutoreleasePool;
 
 namespace MTL {
 
+class CommandBuffer;
 class Library;
 class ComputePipelineState;
 class IndirectCommandBuffer;
@@ -300,6 +307,7 @@ class RendererMetal {
   MTL::RenderPipelineState* mesh_pso_{};
   MTL::RenderPipelineState* mesh_late_pso_{};
   MTL::RenderPipelineState* vertex_pso_{};
+  MTL::RenderPipelineState* full_screen_tex_pso_{};
   MTL::ComputePipelineState* dispatch_mesh_pso_{};
   MTL::ComputePipelineState* dispatch_vertex_pso_{};
   MTL::ComputePipelineState* depth_reduce_pso_{};
@@ -307,6 +315,22 @@ class RendererMetal {
   rhi::TextureHandleHolder depth_tex_;
   rhi::TextureHandleHolder depth_pyramid_tex_;
   std::array<NS::SharedPtr<MTL::Texture>, 16> depth_pyramid_tex_views_{};
+  enum class DebugRenderView {
+    None,
+    DepthPyramidTex,
+    Count,
+  };
+  const char* debug_render_view_to_str(DebugRenderView view) {
+    switch (view) {
+      case DebugRenderView::DepthPyramidTex:
+        return "Depth Pyramid Texture";
+      default:
+        return "None";
+    }
+  }
+
+  DebugRenderView debug_render_view_{DebugRenderView::None};
+  int debug_depth_pyramid_mip_level_{};
 
   std::optional<BackedGPUAllocator> meshlet_vis_buf_;
   rhi::TextureHandleHolder default_white_tex_;
@@ -332,6 +356,8 @@ class RendererMetal {
   MTL::ArgumentEncoder* dispatch_mesh_encode_arg_enc_{};
   NS::SharedPtr<MTL::Buffer> dispatch_vertex_encode_arg_buf_;
   MTL::ArgumentEncoder* dispatch_vertex_encode_arg_enc_{};
+  NS::SharedPtr<MTL::Buffer> main_object_arg_buf_;
+  MTL::ArgumentEncoder* main_object_arg_enc_{};
 
   rhi::BufferHandleHolder main_icb_container_buf_;
   MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
@@ -342,7 +368,7 @@ class RendererMetal {
 
   std::filesystem::path shader_dir_;
   std::filesystem::path resource_dir_;
-  std::unordered_map<const char*, MTL::Function*> shader_funcs_;
+  std::unordered_map<std::string, MTL::Function*> shader_funcs_;
 
   size_t curr_frame_;
   size_t frames_in_flight_{2};
@@ -350,7 +376,7 @@ class RendererMetal {
 
   // std::vector<PerFrameData> per_frame_datas_;
 
-  MTL::Function* get_function(const char* name);
+  MTL::Function* get_function(const char* name, bool load = true);
   MTL::Library* default_shader_lib_;
   MTL::Function* create_function(const std::string& name, const std::string& specialized_name,
                                  std::span<FuncConst> consts);
@@ -358,7 +384,16 @@ class RendererMetal {
   MTL::Buffer* get_mtl_buf(BackedGPUAllocator& allocator) {
     return reinterpret_cast<MetalBuffer*>(allocator.get_buffer())->buffer();
   }
+
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
     return reinterpret_cast<MetalBuffer*>(device_->get_buf(handle))->buffer();
   }
+
+  MTL::Texture* get_mtl_tex(const rhi::TextureHandleHolder& handle) {
+    return reinterpret_cast<MetalTexture*>(device_->get_tex(handle))->texture();
+  }
+
+  void encode_regular_frame(const RenderArgs& render_args, MTL::CommandBuffer* buf,
+                            const CA::MetalDrawable* drawable);
+  void encode_debug_depth_pyramid_view(MTL::CommandBuffer* buf, const CA::MetalDrawable* drawable);
 };

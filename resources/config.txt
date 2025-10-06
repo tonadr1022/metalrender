@@ -1,6 +1,6 @@
+/Users/tony/models/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf
+/Users/tony/models/glTF-Sample-Assets/Models/Suzanne/glTF/Suzanne.gltf
 /Users/tony/Downloads/ImageToStl.com_bun_zipper/bun_zipper.gltf
 /Users/tony/Downloads/bunny/result.gltf
-/Users/tony/models/glTF-Sample-Assets/Models/Suzanne/glTF/Suzanne.gltf
-/Users/tony/models/glTF-Sample-Assets/Models/Sponza/glTF/Sponza.gltf
 /Users/tony/models/glTF-Sample-Assets/Models/ABeautifulGame/glTF/ABeautifulGame.gltf
 /Users/tony/models/glTF-Sample-Assets/Models/Cube/glTF/Cube.gltf
