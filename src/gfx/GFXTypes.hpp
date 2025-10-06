@@ -9,6 +9,7 @@ enum class TextureFormat {
   R8G8B8A8Srgb,
   R8G8B8A8Unorm,
   D32float,
+  R32float,
 };
 
 enum class StorageMode { GPUOnly, CPUAndGPU, CPUOnly, Default };
@@ -33,7 +34,7 @@ struct TextureDesc {
 };
 
 struct BufferDesc {
-  StorageMode storage_mode{StorageMode::GPUOnly};
+  StorageMode storage_mode{StorageMode::Default};
   size_t size{};
   bool alloc_gpu_slot{false};
 };

@@ -9,6 +9,7 @@ enum EncodeMeshDrawArgsE {
   EncodeMeshDrawArgs_MeshletVerticesBuf,
   EncodeMeshDrawArgs_MeshletTrianglesBuf,
   EncodeMeshDrawArgs_SceneArgBuf,
+  EncodeMeshDrawArgs_MeshletVisBuf,
 };
 
 enum PerFrameArgs {

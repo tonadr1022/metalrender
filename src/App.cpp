@@ -160,8 +160,12 @@ void App::run() {
       }
     }
   } else if (scene == 1) {
+    /*
     size_t count = 100;
     float scale = 300;
+      */
+    size_t count = 1000;
+    float scale = 10;
 
     for (size_t i = 0; i < count; i++) {
       auto rand_f = []() { return rando::get_float(-100, 100); };

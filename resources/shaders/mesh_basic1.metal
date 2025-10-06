@@ -29,6 +29,7 @@ struct ObjectPayload {
     uint meshlet_indices[kMeshThreadgroups];
 };
 
+constant bool is_late_pass [[function_constant(0)]];
 
 [[object, max_total_threadgroups_per_mesh_grid(kMeshThreadgroups)]]
 void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
@@ -36,18 +37,21 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
                         device const MeshData* mesh_datas [[buffer(1)]],
                         device const Meshlet* meshlets [[buffer(2)]],
                         device const CullData& cull_data [[buffer(3)]],
+                        device uchar* meshlet_vis_buf [[buffer(4)]],
                         uint thread_idx [[thread_position_in_threadgroup]],
-                        uint tpg [[thread_position_in_grid]],
+                        uint tp_grid [[thread_position_in_grid]],
                         mesh_grid_properties grid) {
     device const MeshData& mesh_data = mesh_datas[instance_data->mesh_id];
-    if (tpg >= mesh_data.meshlet_count) {
+    if (tp_grid >= mesh_data.meshlet_count) {
         return;
     }
 
+    int visible_last_frame = meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base];
 
-    int passed = 1;
-#ifdef MESHLET_CULL
-    device const Meshlet& meshlet = meshlets[tpg + mesh_data.meshlet_base];
+
+    int passed = is_late_pass ? !visible_last_frame : visible_last_frame;
+
+    device const Meshlet& meshlet = meshlets[tp_grid + mesh_data.meshlet_base];
     float3 world_center = rotate_quat(instance_data->scale * meshlet.center, instance_data->rotation)
                           + instance_data->translation;
     float3 center = (cull_data.view * float4(world_center, 1.0)).xyz;
@@ -68,12 +72,12 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     passed = passed && (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
     passed = passed && (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
     // z near/far
-    passed = passed && (center.z + radius > cull_data.z_near) || (center.z - radius < cull_data.z_far);
-#endif // MESHLET_CULL
+    passed = passed && ((center.z + radius > cull_data.z_near) || (center.z - radius < cull_data.z_far));
 
     int payload_idx = simd_prefix_exclusive_sum(passed);
+    meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base] = passed;
     if (passed) {
-        out_payload.meshlet_indices[payload_idx] = tpg;
+        out_payload.meshlet_indices[payload_idx] = tp_grid;
     }
     uint visible_count = simd_sum(passed);
     if (thread_idx == 0) {

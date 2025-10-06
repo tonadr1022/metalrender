@@ -61,6 +61,8 @@ inline MTL::PixelFormat convert_format(rhi::TextureFormat format) {
       return MTL::PixelFormatRGBA8Unorm;
     case TextureFormat::D32float:
       return MTL::PixelFormatDepth32Float;
+    case TextureFormat::R32float:
+      return MTL::PixelFormatR32Float;
     default:
       assert(0 && "unhandled texture format");
       return MTL::PixelFormatInvalid;

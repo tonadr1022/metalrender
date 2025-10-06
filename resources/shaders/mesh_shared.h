@@ -21,6 +21,7 @@ struct InstanceData {
   uint32_t instance_id;
   uint32_t mat_id;
   uint32_t mesh_id;
+  uint32_t meshlet_vis_base;
   packed_float3 translation;
   float scale;
   packed_float4 rotation;

@@ -31,6 +31,7 @@ class AutoreleasePool;
 
 namespace MTL {
 
+class Library;
 class ComputePipelineState;
 class IndirectCommandBuffer;
 class CommandQueue;
@@ -40,6 +41,15 @@ class ArgumentEncoder;
 class RenderPipelineState;
 
 }  // namespace MTL
+
+struct FuncConst {
+  std::string name;
+  void* val;
+  enum class Type {
+    Bool,
+  };
+  Type type;
+};
 
 enum ShaderStage {
   ShaderStage_Vertex,
@@ -135,10 +145,12 @@ struct ModelGPUResources {
   DrawBatch::Alloc static_draw_batch_alloc;
   std::vector<InstanceData> base_instance_datas;
   std::vector<uint32_t> instance_id_to_node;
+  size_t tot_meshlet_count{};
 };
 
 struct ModelInstanceGPUResources {
   OffsetAllocator::Allocation instance_data_gpu_alloc;
+  OffsetAllocator::Allocation meshlet_vis_buf_alloc;
 };
 
 class InstanceDataMgr {
@@ -286,13 +298,17 @@ class RendererMetal {
   MTL::Device* raw_device_{};
   MTL::CommandQueue* main_cmd_queue_{};
   MTL::RenderPipelineState* mesh_pso_{};
+  MTL::RenderPipelineState* mesh_late_pso_{};
   MTL::RenderPipelineState* vertex_pso_{};
   MTL::ComputePipelineState* dispatch_mesh_pso_{};
   MTL::ComputePipelineState* dispatch_vertex_pso_{};
+  MTL::ComputePipelineState* depth_reduce_pso_{};
 
   rhi::TextureHandleHolder depth_tex_;
-  rhi::TextureHandleHolder hzb_tex_;
-  rhi::BufferHandleHolder meshlet_vis_buf_;
+  rhi::TextureHandleHolder depth_pyramid_tex_;
+  std::array<NS::SharedPtr<MTL::Texture>, 16> depth_pyramid_tex_views_{};
+
+  std::optional<BackedGPUAllocator> meshlet_vis_buf_;
   rhi::TextureHandleHolder default_white_tex_;
 
   DrawBatch::Alloc upload_geometry(DrawBatchType type, const std::vector<DefaultVertex>& vertices,
@@ -330,10 +346,15 @@ class RendererMetal {
 
   size_t curr_frame_;
   size_t frames_in_flight_{2};
+  bool meshlet_vis_buf_dirty_{};
 
   // std::vector<PerFrameData> per_frame_datas_;
 
   MTL::Function* get_function(const char* name);
+  MTL::Library* default_shader_lib_;
+  MTL::Function* create_function(const std::string& name, const std::string& specialized_name,
+                                 std::span<FuncConst> consts);
+
   MTL::Buffer* get_mtl_buf(BackedGPUAllocator& allocator) {
     return reinterpret_cast<MetalBuffer*>(allocator.get_buffer())->buffer();
   }
