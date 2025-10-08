@@ -314,7 +314,9 @@ class RendererMetal {
 
   rhi::TextureHandleHolder depth_tex_;
   rhi::TextureHandleHolder depth_pyramid_tex_;
+  // TODO: refactor
   std::array<NS::SharedPtr<MTL::Texture>, 16> depth_pyramid_tex_views_{};
+  static constexpr bool k_reverse_z = true;
   enum class DebugRenderView {
     None,
     DepthPyramidTex,

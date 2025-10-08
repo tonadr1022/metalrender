@@ -6,6 +6,8 @@
 #include <Metal/MTLDevice.hpp>
 #include <Metal/MTLRenderCommandEncoder.hpp>
 #include <Metal/MTLRenderPass.hpp>
+#include <Metal/MTLSampler.hpp>
+#include <Metal/MTLTexture.hpp>
 
 #include "gfx/Config.hpp"
 #include "gfx/GFXTypes.hpp"
@@ -543,11 +545,17 @@ void RendererMetal::render_imgui() {
 Uniforms RendererMetal::set_cpu_global_uniform_data(const RenderArgs &render_args) const {
   Uniforms uniform_data{};
   const auto window_dims = window_->get_window_size();
-  const float aspect = (window_dims.x != 0) ? float(window_dims.x) / float(window_dims.y) : 1.0f;
   uniform_data.view = render_args.view_mat;
-  uniform_data.proj = glm::perspective(glm::radians(70.f), aspect, k_z_near, k_z_far);
-  uniform_data.vp =
-      glm::perspective(glm::radians(70.f), aspect, k_z_near, k_z_far) * uniform_data.view;
+
+  float far = k_z_far;
+  float near = k_z_near;
+  if (k_reverse_z) {
+    std::swap(far, near);
+  }
+  uniform_data.proj = glm::perspectiveFovRH_ZO(glm::radians(70.0f), (float)window_dims.x,
+                                               (float)window_dims.y, near, far);
+
+  uniform_data.vp = uniform_data.proj * uniform_data.view;
   uniform_data.render_mode = (uint32_t)RenderMode::Normals;
   return uniform_data;
 }
@@ -611,12 +619,13 @@ void RendererMetal::flush_pending_texture_uploads() {
 
 void RendererMetal::recreate_render_target_textures() {
   auto dims = window_->get_window_size();
-  depth_tex_ = device_->create_tex_h(
-      rhi::TextureDesc{.format = rhi::TextureFormat::D32float,
-                       .storage_mode = rhi::StorageMode::GPUOnly,
-                       .usage = static_cast<rhi::TextureUsage>(rhi::TextureUsageRenderTarget |
-                                                               rhi::TextureUsageShaderRead),
-                       .dims = glm::uvec3{dims, 1}});
+  depth_tex_ = device_->create_tex_h(rhi::TextureDesc{
+      .format = rhi::TextureFormat::D32float,
+      .storage_mode = rhi::StorageMode::GPUOnly,
+      .usage = static_cast<rhi::TextureUsage>(rhi::TextureUsageRenderTarget |
+                                              rhi::TextureUsageShaderRead),
+      .dims = glm::uvec3{dims, 1},
+  });
   auto depth_pyramid_dims = glm::uvec3{prev_pow2(dims.x), prev_pow2(dims.y), 1};
   depth_pyramid_tex_ = device_->create_tex_h(rhi::TextureDesc{
       .format = rhi::TextureFormat::R32float,
@@ -960,10 +969,12 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
   auto set_depth_stencil_state = [this](MTL::RenderCommandEncoder *enc) {
     // TODO: don't recreate this is cringe.
     MTL::DepthStencilDescriptor *depth_stencil_desc = MTL::DepthStencilDescriptor::alloc()->init();
-    depth_stencil_desc->setDepthCompareFunction(MTL::CompareFunctionLess);
+    depth_stencil_desc->setDepthCompareFunction(k_reverse_z ? MTL::CompareFunctionGreaterEqual
+                                                            : MTL::CompareFunctionLess);
     depth_stencil_desc->setDepthWriteEnabled(true);
     enc->setDepthStencilState(raw_device_->newDepthStencilState(depth_stencil_desc));
   };
+
   auto set_cull_mode_wind_order = [](MTL::RenderCommandEncoder *enc) {
     enc->setFrontFacingWinding(MTL::WindingCounterClockwise);
     enc->setCullMode(MTL::CullModeBack);
@@ -1000,8 +1011,8 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
         MTL::RenderPassDescriptor::renderPassDescriptor();
     MTL::RenderPassDepthAttachmentDescriptor *desc =
         MTL::RenderPassDepthAttachmentDescriptor::alloc()->init();
-    desc->setTexture(reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_))->texture());
-    desc->setClearDepth(1.0);
+    desc->setTexture(get_mtl_tex(depth_tex_));
+    desc->setClearDepth(k_reverse_z ? 0.0 : 1.0);
     desc->setLoadAction(MTL::LoadActionClear);
     desc->setStoreAction(MTL::StoreActionStore);
     forward_render_pass_desc->setDepthAttachment(desc);
@@ -1046,6 +1057,8 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     enc->setComputePipelineState(depth_reduce_pso_);
     auto *main_tex = reinterpret_cast<MetalTexture *>(device_->get_tex(depth_pyramid_tex_));
     auto dp_dims = main_tex->desc().dims;
+    auto *depth_tex = reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_));
+    auto depth_dims = depth_tex->desc().dims;
     for (size_t i = 0; i < main_tex->desc().mip_levels; i++) {
       MTL::Texture *input_view =
           i == 0 ? reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_))->texture()
@@ -1055,14 +1068,17 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
       enc->setTexture(input_view, 0);
       enc->setTexture(output_view, 1);
 
+      auto in_dims = i == 0 ? depth_dims : glm::uvec2{dp_dims.x >> (i - 1), dp_dims.y >> (i - 1)};
       struct {
-        glm::uvec2 dims;
-      } args{.dims = {dp_dims.x >> i, dp_dims.y >> i}};
+        glm::uvec2 in_dims;
+        glm::uvec2 out_dims;
+      } args{.in_dims = in_dims, .out_dims = {dp_dims.x >> i, dp_dims.y >> i}};
+      ASSERT(args.out_dims.x > 0 && args.out_dims.y > 0);
+      ASSERT(args.in_dims.x > 0 && args.in_dims.y > 0);
 
       enc->setBytes(&args, sizeof(args), 0);
-
       enc->dispatchThreadgroups(
-          MTL::Size::Make((args.dims.x + 31) / 32, (args.dims.x + 31) / 32, 1),
+          MTL::Size::Make((args.out_dims.x + 31) / 32, (args.out_dims.y + 31) / 32, 1),
           MTL::Size::Make(32, 32, 1));
     }
     enc->endEncoding();

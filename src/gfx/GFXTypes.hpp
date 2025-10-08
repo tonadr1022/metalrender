@@ -23,6 +23,8 @@ enum TextureUsage {
 
 using DefaultIndexT = uint32_t;
 
+enum TextureDescFlags { TextureDescFlags_None, TextureDescFlags_PixelFormatView };
+
 struct TextureDesc {
   TextureFormat format{TextureFormat::Undefined};
   StorageMode storage_mode{StorageMode::GPUOnly};
@@ -31,6 +33,7 @@ struct TextureDesc {
   uint32_t mip_levels{1};
   uint32_t array_length{1};
   bool alloc_gpu_slot{};
+  TextureDescFlags flags{};
 };
 
 struct BufferDesc {

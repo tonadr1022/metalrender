@@ -20,9 +20,6 @@ rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   auto options = util::mtl::convert_storage_mode(desc.storage_mode);
   auto* mtl_buf = device_->newBuffer(desc.size, options);
   mtl_buf->retain();
-  // if (desc.alloc_gpu_slot) {
-  //   gpu_slot = buffer_allocator_.alloc(mtl_buf);
-  // }
   return buffer_pool_.alloc(desc, mtl_buf);
 }
 
@@ -37,7 +34,11 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   texture_desc->setArrayLength(desc.array_length);
   // TODO: parameterize this?
   texture_desc->setAllowGPUOptimizedContents(true);
-  texture_desc->setUsage(util::mtl::convert_texture_usage(desc.usage));
+  auto usage = util::mtl::convert_texture_usage(desc.usage);
+  if (desc.flags & rhi::TextureDescFlags_PixelFormatView) {
+    usage |= MTL::TextureUsagePixelFormatView;
+  }
+  texture_desc->setUsage(usage);
   auto* tex = device_->newTexture(texture_desc);
   tex->retain();
   texture_desc->release();
@@ -59,9 +60,6 @@ void MetalDevice::destroy(rhi::BufferHandle handle) {
   if (buf->buffer()) {
     buf->buffer()->release();
   }
-  // if (buf->gpu_slot() != rhi::Buffer::k_invalid_gpu_slot) {
-  //   texture_allocator_.free(buf->gpu_slot());
-  // }
   buffer_pool_.destroy(handle);
 }
 
@@ -75,13 +73,7 @@ void MetalDevice::destroy(rhi::TextureHandle handle) {
   if (tex->texture()) {
     tex->texture()->release();
   }
-  // if (tex->gpu_slot() != rhi::Texture::k_invalid_gpu_slot) {
-  //   texture_allocator_.free(tex->gpu_slot());
-  // }
   texture_pool_.destroy(handle);
 }
 
-// void MetalDevice::use_bindless_buffer(MTL::RenderCommandEncoder* enc) {
-//   enc->useResource(buffer_allocator_.get_buffer(), MTL::ResourceUsageRead);
-// }
 std::unique_ptr<MetalDevice> create_metal_device() { return std::make_unique<MetalDevice>(); }
