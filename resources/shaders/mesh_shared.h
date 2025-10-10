@@ -36,6 +36,11 @@ struct CullData {
   packed_float3 camera_pos;
   float p00;
   float p11;
+  uint32_t pyramid_width;
+  uint32_t pyramid_height;
+  float pyramid_mip_count;
+  bool meshlet_occlusion_culling_enabled;
+  bool paused;
 };
 
 enum MainObjectArgs {

@@ -493,6 +493,8 @@ void RendererMetal::on_imgui() {
     ImGui::SliderInt("Depth Pyramid Mip Level", &debug_depth_pyramid_mip_level_, 0,
                      device_->get_tex(depth_pyramid_tex_)->desc().mip_levels - 1);
   }
+  ImGui::Checkbox("Occlusion culling", &meshlet_occlusion_culling_enabled_);
+  ImGui::Checkbox("Pause Culling", &culling_paused_);
 }
 
 void RendererMetal::load_shaders() {
@@ -555,7 +557,9 @@ Uniforms RendererMetal::set_cpu_global_uniform_data(const RenderArgs &render_arg
   uniform_data.proj = glm::perspectiveFovRH_ZO(glm::radians(70.0f), (float)window_dims.x,
                                                (float)window_dims.y, near, far);
 
-  uniform_data.vp = uniform_data.proj * uniform_data.view;
+  uniform_data.vp = glm::perspectiveFovRH_ZO(glm::radians(70.0f), (float)window_dims.x,
+                                             (float)window_dims.y, near, far) *
+                    uniform_data.view;
   uniform_data.render_mode = (uint32_t)RenderMode::Normals;
   return uniform_data;
 }
@@ -585,6 +589,14 @@ CullData RendererMetal::set_cpu_cull_data(const Uniforms &uniforms,
   cull_data.z_far = k_z_far;
   cull_data.p00 = uniforms.proj[0][0];
   cull_data.p11 = uniforms.proj[1][1];
+
+  auto pyramid_dims = device_->get_tex(depth_pyramid_tex_)->desc().dims;
+  cull_data.pyramid_width = pyramid_dims.x;
+  cull_data.pyramid_height = pyramid_dims.y;
+  cull_data.pyramid_mip_count = device_->get_tex(depth_pyramid_tex_)->desc().mip_levels;
+  cull_data.meshlet_occlusion_culling_enabled = meshlet_occlusion_culling_enabled_;
+  cull_data.paused = culling_paused_;
+
   return cull_data;
 }
 
@@ -951,7 +963,8 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     compute_enc->useResource(instance_data_mgr_->icb(), MTL::ResourceUsageWrite);
     compute_enc->useResource(instance_data_mgr_->instance_data_buf(), MTL::ResourceUsageRead);
     compute_enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
-    DispatchMeshParams params{.tot_meshes = all_model_data_.max_objects, .frustum_cull = true};
+    DispatchMeshParams params{.tot_meshes = all_model_data_.max_objects,
+                              .frustum_cull = !culling_paused_};
     compute_enc->setBytes(&params, sizeof(DispatchMeshParams), 2);
     compute_enc->dispatchThreads(MTL::Size::Make(all_model_data_.max_objects, 1, 1),
                                  MTL::Size::Make(32, 1, 1));
@@ -1073,8 +1086,6 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
         glm::uvec2 in_dims;
         glm::uvec2 out_dims;
       } args{.in_dims = in_dims, .out_dims = {dp_dims.x >> i, dp_dims.y >> i}};
-      ASSERT(args.out_dims.x > 0 && args.out_dims.y > 0);
-      ASSERT(args.in_dims.x > 0 && args.in_dims.y > 0);
 
       enc->setBytes(&args, sizeof(args), 0);
       enc->dispatchThreadgroups(
@@ -1084,7 +1095,7 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     enc->endEncoding();
   }
 
-  {  // late pass
+  if (!culling_paused_) {  // late pass
     MTL::RenderPassDescriptor *pass_desc = MTL::RenderPassDescriptor::renderPassDescriptor();
     MTL::RenderPassDepthAttachmentDescriptor *desc =
         MTL::RenderPassDepthAttachmentDescriptor::alloc()->init();
@@ -1100,6 +1111,7 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     }
     MTL::RenderCommandEncoder *enc = buf->renderCommandEncoder(pass_desc);
     enc->setRenderPipelineState(mesh_late_pso_);
+    enc->useResource(get_mtl_tex(depth_pyramid_tex_), MTL::ResourceUsageSample);
 
     set_depth_stencil_state(enc);
     set_cull_mode_wind_order(enc);
@@ -1124,10 +1136,12 @@ void RendererMetal::encode_debug_depth_pyramid_view(MTL::CommandBuffer *buf,
 
   struct {
     int mip_level;
-  } args{debug_depth_pyramid_mip_level_};
+    glm::vec4 mult;
+  } args{debug_depth_pyramid_mip_level_, glm::vec4{glm::vec3{1000}, 1.0}};
   enc->setFragmentBytes(&args, sizeof(args), 0);
 
-  enc->setFragmentTexture(get_mtl_tex(depth_pyramid_tex_), 0);
+  enc->setFragmentTexture(get_mtl_tex(depth_tex_), 0);
+  // enc->setFragmentTexture(depth_pyramid_tex_views_[debug_depth_pyramid_mip_level_].get(), 0);
   enc->drawPrimitives(MTL::PrimitiveTypeTriangle, 0, 3, 1);
 
   enc->endEncoding();

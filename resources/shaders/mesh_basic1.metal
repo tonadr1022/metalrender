@@ -35,8 +35,7 @@ struct MainObjectArguments {
     device const MeshData* mesh_datas [[id(0)]];
     device const Meshlet* meshlets [[id(1)]];
     device uint* meshlet_vis_buf [[id(2)]];
-    texture2d<float, access::read> depth_pyramid_tex [[id(3)]];
-
+    texture2d<float, access::sample> depth_pyramid_tex [[id(3)]];
 };
 
 [[object, max_total_threadgroups_per_mesh_grid(kMeshThreadgroups)]]
@@ -62,7 +61,6 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     if (is_late_pass && visible_last_frame != 0) {
         skip = 1;
     }
-   // int passed = is_late_pass ? !visible_last_frame : visible_last_frame;
 
     device const Meshlet& meshlet = args->meshlets[tp_grid + mesh_data.meshlet_base];
     float3 world_center = rotate_quat(instance_data->scale * meshlet.center, instance_data->rotation)
@@ -87,21 +85,40 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     // z near/far
     visible = visible && ((center.z + radius > cull_data.z_near) || (center.z - radius < cull_data.z_far));
 
-    if (is_late_pass && visible) {
-        /*
+    constexpr sampler samp(
+        mag_filter::nearest,
+        min_filter::nearest,
+        address::clamp_to_edge
+    );
+    if (is_late_pass && cull_data.meshlet_occlusion_culling_enabled && visible) {
         float4 aabb;
+        center.z *= -1; // flip so z is positive
         if (project_sphere(center, radius, cull_data.z_near, cull_data.p00, cull_data.p11, aabb)) {
-            passed = 1;
+            float width = (aabb.z - aabb.x) * cull_data.pyramid_width;
+            float height = (aabb.w - aabb.y) * cull_data.pyramid_height;
+            const uint lod = ceil(log2(max(width, height)));
+            const uint2 texSize = uint2(args->depth_pyramid_tex.get_width(0), args->depth_pyramid_tex.get_height(0));
+            const uint2 lodSizeInLod0Pixels = texSize & (0xFFFFFFFF << lod);
+            const float2 lodScale = float2(texSize) / float2(lodSizeInLod0Pixels);
+            const float2 sampleLocationMin = aabb.xy * lodScale;
+            const float2 sampleLocationMax = aabb.zw * lodScale;
+
+            const float d0 = args->depth_pyramid_tex.sample(samp, float2(sampleLocationMin.x, sampleLocationMin.y), level(lod)).x;
+            const float d1 = args->depth_pyramid_tex.sample(samp, float2(sampleLocationMin.x, sampleLocationMax.y), level(lod)).x;
+            const float d2 = args->depth_pyramid_tex.sample(samp, float2(sampleLocationMax.x, sampleLocationMin.y), level(lod)).x;
+            const float d3 = args->depth_pyramid_tex.sample(samp, float2(sampleLocationMax.x, sampleLocationMax.y), level(lod)).x;
+            float depth = min(min(d0, d1), min(d2, d3));
+            float depth_sphere = cull_data.z_near / (center.z - radius);
+            visible = visible && depth_sphere > depth;
         }
-        */
     }
+    visible = visible || (cull_data.paused && visible_last_frame);
 
     int draw = visible && !skip;
     int payload_idx = simd_prefix_exclusive_sum(draw);
     if (is_late_pass) {
         args->meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base] = visible;
     }
-        args->meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base] = 1;
 
     if (draw) {
         out_payload.meshlet_indices[payload_idx] = tp_grid;

@@ -375,6 +375,8 @@ class RendererMetal {
   size_t curr_frame_;
   size_t frames_in_flight_{2};
   bool meshlet_vis_buf_dirty_{};
+  bool meshlet_occlusion_culling_enabled_{true};
+  bool culling_paused_{false};
 
   // std::vector<PerFrameData> per_frame_datas_;
 

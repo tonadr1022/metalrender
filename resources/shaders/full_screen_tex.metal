@@ -27,15 +27,16 @@ v2f vertex full_screen_tex_vertex_main(uint vertex_id [[vertex_id]]) {
 
 struct Args {
     int mip_level;
+    packed_float4 mult;
 };
 
 float4 fragment full_screen_tex_frag_main(v2f in [[stage_in]],
                                           texture2d<float, access::sample> tex [[texture(0)]],
                                           constant Args& args [[buffer(0)]]) {
     constexpr sampler samp(
-        mag_filter::linear,
-        min_filter::linear
+        mag_filter::nearest,
+        min_filter::nearest
     );
 
-    return tex.sample(samp, in.uv, level(args.mip_level));
+    return tex.sample(samp, in.uv, args.mip_level) * args.mult;
 }

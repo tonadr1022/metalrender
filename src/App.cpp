@@ -148,7 +148,7 @@ float get_float(float min, float max) {
 void App::run() {
   ZoneScoped;
   rando::seed(10000000);
-  int scene = 0;
+  int scene = 1;
   if (scene == 0) {
     // glm::ivec3 iter{};
     // glm::ivec3 dims{1, 1, 1};
