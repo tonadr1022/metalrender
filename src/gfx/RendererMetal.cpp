@@ -15,6 +15,7 @@
 #include "imgui.h"
 
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_LEFT_HANDED
 #define IMGUI_IMPL_METAL_CPP
 #include <imgui_impl_metal.h>
 
@@ -47,10 +48,10 @@ uint32_t get_mip_levels(uint32_t width, uint32_t height) {
 
 uint32_t prev_pow2(uint32_t val) {
   uint32_t v = 1;
-  while (v < val) {
+  while (v * 2 < val) {
     v *= 2;
   }
-  return v;
+  return v / 2;
 }
 
 enum class RenderMode : uint32_t { Default, Normals, NormalMap };
@@ -554,11 +555,11 @@ Uniforms RendererMetal::set_cpu_global_uniform_data(const RenderArgs &render_arg
   if (k_reverse_z) {
     std::swap(far, near);
   }
-  uniform_data.proj = glm::perspectiveFovRH_ZO(glm::radians(70.0f), (float)window_dims.x,
-                                               (float)window_dims.y, near, far);
+  uniform_data.proj = glm::perspectiveFovZO(glm::radians(70.0f), (float)window_dims.x,
+                                            (float)window_dims.y, near, far);
 
-  uniform_data.vp = glm::perspectiveFovRH_ZO(glm::radians(70.0f), (float)window_dims.x,
-                                             (float)window_dims.y, near, far) *
+  uniform_data.vp = glm::perspectiveFovZO(glm::radians(70.0f), (float)window_dims.x,
+                                          (float)window_dims.y, near, far) *
                     uniform_data.view;
   uniform_data.render_mode = (uint32_t)RenderMode::Normals;
   return uniform_data;
@@ -1137,11 +1138,11 @@ void RendererMetal::encode_debug_depth_pyramid_view(MTL::CommandBuffer *buf,
   struct {
     int mip_level;
     glm::vec4 mult;
-  } args{debug_depth_pyramid_mip_level_, glm::vec4{glm::vec3{1000}, 1.0}};
+  } args{0, glm::vec4{glm::vec3{1000}, 1.0}};
   enc->setFragmentBytes(&args, sizeof(args), 0);
 
-  enc->setFragmentTexture(get_mtl_tex(depth_tex_), 0);
-  // enc->setFragmentTexture(depth_pyramid_tex_views_[debug_depth_pyramid_mip_level_].get(), 0);
+  // enc->setFragmentTexture(get_mtl_tex(depth_tex_), 0);
+  enc->setFragmentTexture(depth_pyramid_tex_views_[debug_depth_pyramid_mip_level_].get(), 0);
   enc->drawPrimitives(MTL::PrimitiveTypeTriangle, 0, 3, 1);
 
   enc->endEncoding();

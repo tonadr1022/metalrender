@@ -82,8 +82,6 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     // frustum cull, plane symmetry 
     visible = visible && (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
     visible = visible && (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
-    // z near/far
-    visible = visible && ((center.z + radius > cull_data.z_near) || (center.z - radius < cull_data.z_far));
 
     constexpr sampler samp(
         mag_filter::nearest,
@@ -92,12 +90,11 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     );
     if (is_late_pass && cull_data.meshlet_occlusion_culling_enabled && visible) {
         float4 aabb;
-        center.z *= -1; // flip so z is positive
+        center.z *= -1;
         if (project_sphere(center, radius, cull_data.z_near, cull_data.p00, cull_data.p11, aabb)) {
-            float width = (aabb.z - aabb.x) * cull_data.pyramid_width;
-            float height = (aabb.w - aabb.y) * cull_data.pyramid_height;
-            const uint lod = ceil(log2(max(width, height)));
-            const uint2 texSize = uint2(args->depth_pyramid_tex.get_width(0), args->depth_pyramid_tex.get_height(0));
+            const uint2 texSize = uint2(cull_data.pyramid_width, cull_data.pyramid_height);
+            float2 aabb_dims_tex_space = (aabb.zw - aabb.xy) * float2(texSize);
+            const uint lod = floor(log2(max(aabb_dims_tex_space.x, aabb_dims_tex_space.y)));
             const uint2 lodSizeInLod0Pixels = texSize & (0xFFFFFFFF << lod);
             const float2 lodScale = float2(texSize) / float2(lodSizeInLod0Pixels);
             const float2 sampleLocationMin = aabb.xy * lodScale;
@@ -108,7 +105,10 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
             const float d2 = args->depth_pyramid_tex.sample(samp, float2(sampleLocationMax.x, sampleLocationMin.y), level(lod)).x;
             const float d3 = args->depth_pyramid_tex.sample(samp, float2(sampleLocationMax.x, sampleLocationMax.y), level(lod)).x;
             float depth = min(min(d0, d1), min(d2, d3));
-            float depth_sphere = cull_data.z_near / (center.z - radius);
+
+            float view_z = center.z - radius;
+            float depth_sphere = (cull_data.z_far * cull_data.z_near) / (cull_data.z_near - cull_data.z_far + view_z * (cull_data.z_far - cull_data.z_near));
+
             visible = visible && depth_sphere > depth;
         }
     }
@@ -213,7 +213,7 @@ struct SceneResourcesBuf {
 float4 basic1_fragment_main(FragmentIn in [[stage_in]],
                             device const SceneResourcesBuf& scene_buf [[buffer(0)]],
                             constant Uniforms& uniforms [[buffer(1)]]) {
-//    return in.prim.color;
+    //return in.prim.color;
     uint render_mode = uniforms.render_mode;
     float4 out_color = float4(0.0);
     device const Material* material = &scene_buf.materials[in.prim.mat_id];

@@ -7,6 +7,7 @@
 
 #include "WindowApple.hpp"
 #include "core/Logger.hpp"
+#include "core/Util.hpp"
 #include "gfx/ResourceManager.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "glm/ext/matrix_transform.hpp"
@@ -148,7 +149,7 @@ float get_float(float min, float max) {
 void App::run() {
   ZoneScoped;
   rando::seed(10000000);
-  int scene = 1;
+  int scene = 0;
   if (scene == 0) {
     // glm::ivec3 iter{};
     // glm::ivec3 dims{1, 1, 1};
@@ -177,6 +178,14 @@ void App::run() {
       load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, pos) *
                                                  glm::mat4_cast(rot) *
                                                  glm::scale(glm::mat4{1}, glm::vec3{scale}));
+    }
+  } else if (scene == 2) {
+    glm::vec3 positions[] = {glm::vec3{0, 0, 0}, glm::vec3{-10, 0, 0}};
+    float scales[] = {3, 1};
+    for (size_t i = 0; i < ARRAY_SIZE(scales); i++) {
+      auto p = positions[i];
+      load_model(config_.initial_model_path,
+                 glm::translate(glm::mat4{1}, p) * glm::scale(glm::mat4{1}, glm::vec3{scales[i]}));
     }
   }
 
