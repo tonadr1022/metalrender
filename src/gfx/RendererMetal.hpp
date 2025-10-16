@@ -283,8 +283,7 @@ class RendererMetal {
   void shutdown_imgui();
   void render_imgui();
   [[nodiscard]] Uniforms set_cpu_global_uniform_data(const RenderArgs& render_args) const;
-  [[nodiscard]] CullData set_cpu_cull_data(const Uniforms& uniforms,
-                                           const RenderArgs& render_args) const;
+  [[nodiscard]] CullData set_cpu_cull_data(const Uniforms& uniforms, const RenderArgs& render_args);
   void flush_pending_texture_uploads();
   void recreate_render_target_textures();
 
@@ -377,6 +376,9 @@ class RendererMetal {
   bool meshlet_vis_buf_dirty_{};
   bool meshlet_occlusion_culling_enabled_{true};
   bool culling_paused_{false};
+  bool write_vis_buf_{true};
+  bool skip_late_{};
+  int i_ = 0;
 
   // std::vector<PerFrameData> per_frame_datas_;
 

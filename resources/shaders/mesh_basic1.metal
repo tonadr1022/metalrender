@@ -8,6 +8,7 @@ using namespace metal;
 #include "math/math.mtl"
 
 #define MESHLET_CULL 1
+#define REVERSE_Z 1
 
 struct FragArgs {
     uint material_buf_id;
@@ -75,7 +76,6 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     cone_axis = float3x3(float3(cull_data.view[0]), float3(cull_data.view[1]), float3(cull_data.view[2])) * cone_axis;
     float cone_cutoff = int(meshlet.cone_cutoff) / 127.0;
 
-
     visible = visible && !cone_cull(center, radius, cone_axis, cone_cutoff, float3(0, 0, 0));
 
     // Ref: https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
@@ -86,32 +86,34 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     constexpr sampler samp(
         mag_filter::nearest,
         min_filter::nearest,
+        mip_filter::nearest,  
         address::clamp_to_edge
     );
+
     if (is_late_pass && cull_data.meshlet_occlusion_culling_enabled && visible) {
-        float4 aabb;
-        center.z *= -1;
-        if (project_sphere(center, radius, cull_data.z_near, cull_data.p00, cull_data.p11, aabb)) {
+        ProjectSphereResult proj_res = project_sphere(center, radius, cull_data.z_near, cull_data.p00, cull_data.p11);
+        if (proj_res.success) {
+            float4 aabb = proj_res.aabb;
             const uint2 texSize = uint2(cull_data.pyramid_width, cull_data.pyramid_height);
             float2 aabb_dims_tex_space = (aabb.zw - aabb.xy) * float2(texSize);
-            const uint lod = floor(log2(max(aabb_dims_tex_space.x, aabb_dims_tex_space.y)));
-            const uint2 lodSizeInLod0Pixels = texSize & (0xFFFFFFFF << lod);
-            const float2 lodScale = float2(texSize) / float2(lodSizeInLod0Pixels);
-            const float2 sampleLocationMin = aabb.xy * lodScale;
-            const float2 sampleLocationMax = aabb.zw * lodScale;
-
-            const float d0 = args->depth_pyramid_tex.sample(samp, float2(sampleLocationMin.x, sampleLocationMin.y), level(lod)).x;
-            const float d1 = args->depth_pyramid_tex.sample(samp, float2(sampleLocationMin.x, sampleLocationMax.y), level(lod)).x;
-            const float d2 = args->depth_pyramid_tex.sample(samp, float2(sampleLocationMax.x, sampleLocationMin.y), level(lod)).x;
-            const float d3 = args->depth_pyramid_tex.sample(samp, float2(sampleLocationMax.x, sampleLocationMax.y), level(lod)).x;
+            float lod = ceil(log2(max(aabb_dims_tex_space.x, aabb_dims_tex_space.y)));
+            lod = clamp(lod, 0.0, float(cull_data.pyramid_mip_count) - 1.0);
+            float2 texelSizeAtLod = float2(1.0) / float2(texSize >> uint(lod));
+            float2 halfTexel = texelSizeAtLod * 0.5f;
+            float2 smid = (aabb.xy + aabb.zw) * 0.5f;
+            float d0 = args->depth_pyramid_tex.sample(samp, smid + float2(-halfTexel.x, -halfTexel.y), level(lod)).x;
+            float d1 = args->depth_pyramid_tex.sample(samp, smid + float2(-halfTexel.x, halfTexel.y), level(lod)).x;
+            float d2 = args->depth_pyramid_tex.sample(samp, smid + float2(halfTexel.x, -halfTexel.y), level(lod)).x;
+            float d3 = args->depth_pyramid_tex.sample(samp, smid + float2(halfTexel.x, halfTexel.y), level(lod)).x;
             float depth = min(min(d0, d1), min(d2, d3));
 
-            float view_z = center.z - radius;
-            float depth_sphere = (cull_data.z_far * cull_data.z_near) / (cull_data.z_near - cull_data.z_far + view_z * (cull_data.z_far - cull_data.z_near));
-
-            visible = visible && depth_sphere > depth;
+            float view_z = center.z + radius;
+            float near = cull_data.z_near;
+            float depth_sphere = near / -view_z;
+            visible = visible && depth_sphere >= depth;
         }
     }
+
     visible = visible || (cull_data.paused && visible_last_frame);
 
     int draw = visible && !skip;
@@ -213,7 +215,7 @@ struct SceneResourcesBuf {
 float4 basic1_fragment_main(FragmentIn in [[stage_in]],
                             device const SceneResourcesBuf& scene_buf [[buffer(0)]],
                             constant Uniforms& uniforms [[buffer(1)]]) {
-    //return in.prim.color;
+    // return in.prim.color;
     uint render_mode = uniforms.render_mode;
     float4 out_color = float4(0.0);
     device const Material* material = &scene_buf.materials[in.prim.mat_id];

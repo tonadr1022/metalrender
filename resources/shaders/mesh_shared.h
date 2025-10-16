@@ -29,6 +29,7 @@ struct InstanceData {
 
 struct CullData {
   float4x4 view;
+  float4x4 proj;
   float frustum[4];
   bool meshlet_frustum_cull;
   float z_near;
@@ -38,7 +39,7 @@ struct CullData {
   float p11;
   uint32_t pyramid_width;
   uint32_t pyramid_height;
-  float pyramid_mip_count;
+  uint32_t pyramid_mip_count;
   bool meshlet_occlusion_culling_enabled;
   bool paused;
 };

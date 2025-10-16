@@ -13,7 +13,6 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
 #include "tracy/Tracy.hpp"
-
 namespace {
 
 std::filesystem::path get_resource_dir() {

@@ -16,7 +16,7 @@ void WindowApple::init(rhi::Device* device, KeyCallbackFn key_callback_fn,
   glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_FALSE);
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  window_ = glfwCreateWindow(1050, 1050, "Metal Engine", nullptr, nullptr);
+  window_ = glfwCreateWindow(1024, 1024, "Metal Engine", nullptr, nullptr);
   if (!window_) {
     std::println("Failed to create glfw window");
     glfwTerminate();
