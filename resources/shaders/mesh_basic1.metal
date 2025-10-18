@@ -55,12 +55,12 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
 
     int visible_last_frame = args->meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base];
     int visible = 1;
-    int skip = 0;
+    int skip_draw = 0;
     if (!is_late_pass && visible_last_frame == 0) {
         visible = 0;
     }
     if (is_late_pass && visible_last_frame != 0) {
-        skip = 1;
+        skip_draw = 1;
     }
 
     device const Meshlet& meshlet = args->meshlets[tp_grid + mesh_data.meshlet_base];
@@ -76,12 +76,13 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     cone_axis = float3x3(float3(cull_data.view[0]), float3(cull_data.view[1]), float3(cull_data.view[2])) * cone_axis;
     float cone_cutoff = int(meshlet.cone_cutoff) / 127.0;
 
-    visible = visible && !cone_cull(center, radius, cone_axis, cone_cutoff, float3(0, 0, 0));
+    visible = visible && !cone_cull(center, radius, cone_axis, cone_cutoff, float3(0.0));
 
     // Ref: https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
     // frustum cull, plane symmetry 
     visible = visible && (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
     visible = visible && (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
+    visible = visible && (-center.z + radius) > cull_data.z_near && (-center.z - radius) < cull_data.z_far;
 
     constexpr sampler samp(
         mag_filter::nearest,
@@ -92,15 +93,18 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
 
     if (is_late_pass && cull_data.meshlet_occlusion_culling_enabled && visible) {
         ProjectSphereResult proj_res = project_sphere(center, radius, cull_data.z_near, cull_data.p00, cull_data.p11);
-        if (proj_res.success) {
+        if (proj_res.success && !(any(isnan(proj_res.aabb)) || any(isinf(proj_res.aabb)))) {
             float4 aabb = proj_res.aabb;
             const uint2 texSize = uint2(cull_data.pyramid_width, cull_data.pyramid_height);
             float2 aabb_dims_tex_space = (aabb.zw - aabb.xy) * float2(texSize);
-            float lod = ceil(log2(max(aabb_dims_tex_space.x, aabb_dims_tex_space.y)));
+            float lod = floor(log2(max(aabb_dims_tex_space.x, aabb_dims_tex_space.y)));
             lod = clamp(lod, 0.0, float(cull_data.pyramid_mip_count) - 1.0);
-            float2 texelSizeAtLod = float2(1.0) / float2(texSize >> uint(lod));
+            uint2 mipDims = uint2(max(1u, cull_data.pyramid_width  >> uint(lod)),
+                                max(1u, cull_data.pyramid_height >> uint(lod)));
+            float2 texelSizeAtLod = float2(1.0) / float2(mipDims);
             float2 halfTexel = texelSizeAtLod * 0.5f;
             float2 smid = (aabb.xy + aabb.zw) * 0.5f;
+            smid = clamp(smid, float2(0.0f), float2(1.0f));
             float d0 = args->depth_pyramid_tex.sample(samp, smid + float2(-halfTexel.x, -halfTexel.y), level(lod)).x;
             float d1 = args->depth_pyramid_tex.sample(samp, smid + float2(-halfTexel.x, halfTexel.y), level(lod)).x;
             float d2 = args->depth_pyramid_tex.sample(samp, smid + float2(halfTexel.x, -halfTexel.y), level(lod)).x;
@@ -116,7 +120,7 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
 
     visible = visible || (cull_data.paused && visible_last_frame);
 
-    int draw = visible && !skip;
+    int draw = visible && !skip_draw;
     int payload_idx = simd_prefix_exclusive_sum(draw);
     if (is_late_pass) {
         args->meshlet_vis_buf[tp_grid + instance_data->meshlet_vis_base] = visible;

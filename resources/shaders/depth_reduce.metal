@@ -11,7 +11,7 @@ struct DepthReduceArgs {
 
 #ifdef REVERSE_Z
 #define COMP_FUNC min
-#define INVALID_DEPTH 0.0
+#define INVALID_DEPTH 1.0
 #else 
 #define COMP_FUNC max
 #define INVALID_DEPTH 1.0
@@ -22,7 +22,8 @@ void depth_reduce_main(uint2 ti_grid [[thread_position_in_grid]],
                        texture2d<float, access::write> out_tex [[texture(1)]],
                        constant DepthReduceArgs& args [[buffer(0)]]) {
     uint2 in_dims = args.in_dims;
-    if (ti_grid.x >= in_dims.x || ti_grid.y >= in_dims.y) {
+    uint2 out_dims = args.out_dims;
+    if (ti_grid.x >= out_dims.x || ti_grid.y >= out_dims.y) {
         return;
     }
     int2 base = int2(ti_grid * 2u);

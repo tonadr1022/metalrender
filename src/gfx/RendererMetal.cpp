@@ -3,6 +3,7 @@
 #include <Foundation/NSSharedPtr.hpp>
 #include <Metal/MTLArgumentEncoder.hpp>
 #include <Metal/MTLCommandBuffer.hpp>
+#include <Metal/MTLCommandEncoder.hpp>
 #include <Metal/MTLDevice.hpp>
 #include <Metal/MTLRenderCommandEncoder.hpp>
 #include <Metal/MTLRenderPass.hpp>
@@ -11,6 +12,7 @@
 
 #include "gfx/Config.hpp"
 #include "gfx/GFXTypes.hpp"
+#include "gfx/metal/MetalBuffer.hpp"
 #include "gfx/metal/MetalTexture.hpp"
 #include "imgui.h"
 
@@ -145,6 +147,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   assert(!shader_dir_.empty());
   raw_device_ = device_->get_device();
   main_cmd_queue_ = raw_device_->newCommandQueue();
+
   gpu_frame_allocator_ = GPUFrameAllocator{device_, 256ull * 6, frames_in_flight_};
 
   gpu_uniform_buf_.emplace(gpu_frame_allocator_->create_buffer<Uniforms>(1));
@@ -181,7 +184,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
                                  .initial_meshlet_triangle_capacity = 1'00'000,
                                  .initial_meshlet_vertex_capacity = 1'000'00,
                              });
-  meshlet_vis_buf_.emplace(*device_, rhi::BufferDesc{.size = 100'000}, sizeof(uint32_t));
+  meshlet_vis_buf_.emplace(*device_, rhi::BufferDesc{.size = 100'0000}, sizeof(uint32_t));
 
   // TODO: rethink
   all_textures_.resize(k_max_textures);
@@ -262,13 +265,8 @@ void RendererMetal::shutdown() { shutdown_imgui(); }
 
 void RendererMetal::render(const RenderArgs &render_args) {
   ZoneScoped;
-  // if (write_vis_buf_ && i_ > 144) {
-  //   i_ = 0;
-  //   write_vis_buf_ = false;
-  // } else {
-  //   i_++;
-  // }
   flush_pending_texture_uploads();
+  gpu_frame_allocator_->switch_to_next_buffer();
   auto *frame_ar_pool = NS::AutoreleasePool::alloc()->init();
 
   auto dims = window_->get_window_size();
@@ -512,8 +510,7 @@ void RendererMetal::on_imgui() {
   }
   ImGui::Checkbox("Occlusion culling", &meshlet_occlusion_culling_enabled_);
   ImGui::Checkbox("Pause Culling", &culling_paused_);
-  ImGui::Checkbox("write vis buf", &write_vis_buf_);
-  ImGui::Checkbox("skip late", &skip_late_);
+  ImGui::Checkbox("Object Frustum Culling", &object_frust_cull_enabled_);
 }
 
 void RendererMetal::load_shaders() {
@@ -585,16 +582,6 @@ Uniforms RendererMetal::set_cpu_global_uniform_data(const RenderArgs &render_arg
 CullData RendererMetal::set_cpu_cull_data(const Uniforms &uniforms, const RenderArgs &render_args) {
   // https:github.com/zeux/niagara/blob/7fa51801abc258c3cb05e9a615091224f02e11cf/src/niagara.cpp#L128
   CullData cull_data{};
-  // static int i = 0;
-  // if (i == 0) {
-  //   culling_paused_ = false;
-  // }
-  // int n = 30;
-  // cull_data.write_vis_buf = i++ != n;
-  // if (i > n) {
-  //   i = 0;
-  //   culling_paused_ = true;
-  // }
   const glm::mat4 projection_transpose = glm::transpose(uniforms.proj);
   const auto normalize_plane = [](const glm::vec4 &p) {
     const auto n = glm::vec3(p);
@@ -666,16 +653,22 @@ void RendererMetal::recreate_render_target_textures() {
                                               rhi::TextureUsageShaderRead),
       .dims = glm::uvec3{dims, 1},
   });
+  recreate_depth_pyramid_tex();
+}
+
+void RendererMetal::recreate_depth_pyramid_tex() {
+  auto dims = window_->get_window_size();
   auto depth_pyramid_dims = glm::uvec3{prev_pow2(dims.x), prev_pow2(dims.y), 1};
   depth_pyramid_tex_ = device_->create_tex_h(rhi::TextureDesc{
       .format = rhi::TextureFormat::R32float,
       .storage_mode = rhi::StorageMode::GPUOnly,
       .usage = static_cast<rhi::TextureUsage>(rhi::TextureUsageShaderWrite |
+                                              rhi::TextureUsageRenderTarget |
                                               rhi::TextureUsageShaderRead),
       .dims = depth_pyramid_dims,
       .mip_levels = get_mip_levels(depth_pyramid_dims.x, depth_pyramid_dims.y),
   });
-  LINFO("{} {} {} {}", dims.x, dims.y, depth_pyramid_dims.x, depth_pyramid_dims.y);
+
   auto *tex = reinterpret_cast<MetalTexture *>(device_->get_tex(depth_pyramid_tex_));
   for (size_t i = 0; i < tex->desc().mip_levels; i++) {
     depth_pyramid_tex_views_[i] = NS::TransferPtr(
@@ -941,6 +934,7 @@ MTL::Function *RendererMetal::create_function(const std::string &name,
   shader_funcs_.emplace(!specialized_name.empty() ? specialized_name : name, func);
   return func;
 }
+
 void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::CommandBuffer *buf,
                                          const CA::MetalDrawable *drawable) {
   ZoneScoped;
@@ -963,16 +957,17 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
 
     reset_blit_enc->endEncoding();
   }
-  auto begin_compute_enc = [&buf]() {
+  auto begin_compute_enc = [&buf](bool concurrent) {
     MTL::ComputePassDescriptor *compute_pass_descriptor =
         MTL::ComputePassDescriptor::computePassDescriptor();
-    compute_pass_descriptor->setDispatchType(MTL::DispatchTypeConcurrent);
+    compute_pass_descriptor->setDispatchType(concurrent ? MTL::DispatchTypeConcurrent
+                                                        : MTL::DispatchTypeSerial);
     return buf->computeCommandEncoder(compute_pass_descriptor);
   };
 
   {  // fill ICB
 
-    auto *compute_enc = begin_compute_enc();
+    auto *compute_enc = begin_compute_enc(false);
     if (k_use_mesh_shader) {
       compute_enc->setComputePipelineState(dispatch_mesh_pso_);
       compute_enc->setBuffer(dispatch_mesh_encode_arg_buf_.get(), 0, 1);
@@ -988,12 +983,13 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
                            cull_data_buf_->get_offset_bytes(), 4);
     ASSERT(main_object_arg_buf_);
     compute_enc->setBuffer(main_object_arg_buf_.get(), 0, 5);
+    compute_enc->useResource(get_mtl_buf(*meshlet_vis_buf_),
+                             MTL::ResourceUsageRead | MTL::ResourceUsageWrite);
 
     compute_enc->useResource(instance_data_mgr_->icb(), MTL::ResourceUsageWrite);
     compute_enc->useResource(instance_data_mgr_->instance_data_buf(), MTL::ResourceUsageRead);
-    compute_enc->useResource(get_mtl_buf(*materials_buf_), MTL::ResourceUsageRead);
     DispatchMeshParams params{.tot_meshes = all_model_data_.max_objects,
-                              .frustum_cull = !culling_paused_};
+                              .frustum_cull = !culling_paused_ && object_frust_cull_enabled_};
     compute_enc->setBytes(&params, sizeof(DispatchMeshParams), 2);
     compute_enc->dispatchThreads(MTL::Size::Make(all_model_data_.max_objects, 1, 1),
                                  MTL::Size::Make(32, 1, 1));
@@ -1073,7 +1069,8 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     if (k_use_mesh_shader) {
       enc->setRenderPipelineState(mesh_pso_);
       use_mesh_shader_resources(enc);
-      enc->useResource(get_mtl_buf(*meshlet_vis_buf_), MTL::ResourceUsageRead);
+      enc->useResource(get_mtl_buf(*meshlet_vis_buf_),
+                       MTL::ResourceUsageRead | MTL::ResourceUsageWrite);
     } else {
       enc->setRenderPipelineState(vertex_pso_);
       const MTL::Resource *const resources[] = {
@@ -1094,22 +1091,29 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
   }
 
   {
-    auto *enc = begin_compute_enc();
+    auto *enc = begin_compute_enc(false);
     enc->setComputePipelineState(depth_reduce_pso_);
     auto *main_tex = reinterpret_cast<MetalTexture *>(device_->get_tex(depth_pyramid_tex_));
     auto dp_dims = main_tex->desc().dims;
     auto *depth_tex = reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_));
     auto depth_dims = depth_tex->desc().dims;
     for (size_t i = 0; i < main_tex->desc().mip_levels; i++) {
+      depth_pyramid_tex_views_[i] = NS::TransferPtr(
+          main_tex->texture()->newTextureView(MTL::PixelFormatR32Float, MTL::TextureType2D,
+                                              NS::Range::Make(i, 1), NS::Range::Make(0, 1)));
       MTL::Texture *input_view =
           i == 0 ? reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_))->texture()
                  : depth_pyramid_tex_views_[i - 1].get();
       MTL::Texture *output_view = depth_pyramid_tex_views_[i].get();
+      enc->useResource(input_view, MTL::ResourceUsageSample);
+      enc->useResource(output_view, MTL::ResourceUsageWrite);
 
       enc->setTexture(input_view, 0);
       enc->setTexture(output_view, 1);
 
-      auto in_dims = i == 0 ? depth_dims : glm::uvec2{dp_dims.x >> (i - 1), dp_dims.y >> (i - 1)};
+      glm::uvec2 in_dims = (i == 0) ? depth_dims
+                                    : glm::uvec2{std::max(1u, dp_dims.x >> (i - 1)),
+                                                 std::max(1u, dp_dims.y >> (i - 1))};
       struct {
         glm::uvec2 in_dims;
         glm::uvec2 out_dims;
@@ -1118,15 +1122,16 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
           .out_dims = {dp_dims.x >> i, dp_dims.y >> i},
       };
 
+      constexpr int n = 16;
       enc->setBytes(&args, sizeof(args), 0);
       enc->dispatchThreadgroups(
-          MTL::Size::Make((args.out_dims.x + 31) / 32, (args.out_dims.y + 31) / 32, 1),
-          MTL::Size::Make(32, 32, 1));
+          MTL::Size::Make((args.out_dims.x + n - 1) / n, (args.out_dims.y + n - 1) / n, 1),
+          MTL::Size::Make(n, n, 1));
     }
     enc->endEncoding();
   }
 
-  if (!culling_paused_) {  // late pass
+  if (!culling_paused_ && k_use_mesh_shader) {  // late pass
     MTL::RenderPassDescriptor *pass_desc = MTL::RenderPassDescriptor::renderPassDescriptor();
     MTL::RenderPassDepthAttachmentDescriptor *desc =
         MTL::RenderPassDepthAttachmentDescriptor::alloc()->init();

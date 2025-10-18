@@ -30,18 +30,20 @@ struct InstanceData {
 struct CullData {
   float4x4 view;
   float4x4 proj;
+  packed_float3 camera_pos;
   float frustum[4];
-  bool meshlet_frustum_cull;
   float z_near;
   float z_far;
-  packed_float3 camera_pos;
   float p00;
   float p11;
   uint32_t pyramid_width;
   uint32_t pyramid_height;
   uint32_t pyramid_mip_count;
+  uint32_t pad;
   bool meshlet_occlusion_culling_enabled;
+  bool meshlet_frustum_cull;
   bool paused;
+  uint8_t _pad[1];
 };
 
 enum MainObjectArgs {

@@ -286,6 +286,7 @@ class RendererMetal {
   [[nodiscard]] CullData set_cpu_cull_data(const Uniforms& uniforms, const RenderArgs& render_args);
   void flush_pending_texture_uploads();
   void recreate_render_target_textures();
+  void recreate_depth_pyramid_tex();
 
   struct AllModelData {
     uint32_t max_objects;
@@ -349,6 +350,7 @@ class RendererMetal {
   std::optional<GPUFrameAllocator> gpu_frame_allocator_;
   std::optional<PerFrameBuffer<Uniforms>> gpu_uniform_buf_;
   std::optional<PerFrameBuffer<CullData>> cull_data_buf_;
+
   bool meshlet_frustum_cull_{true};
   static constexpr float k_z_near{0.001};
   static constexpr float k_z_far{10'000};
@@ -371,14 +373,13 @@ class RendererMetal {
   std::filesystem::path resource_dir_;
   std::unordered_map<std::string, MTL::Function*> shader_funcs_;
 
+  [[nodiscard]] size_t curr_frame_in_flight() const { return curr_frame_ % frames_in_flight_; }
   size_t curr_frame_;
   size_t frames_in_flight_{2};
   bool meshlet_vis_buf_dirty_{};
   bool meshlet_occlusion_culling_enabled_{true};
   bool culling_paused_{false};
-  bool write_vis_buf_{true};
-  bool skip_late_{};
-  int i_ = 0;
+  bool object_frust_cull_enabled_{true};
 
   // std::vector<PerFrameData> per_frame_datas_;
 
