@@ -361,6 +361,8 @@ class RendererMetal {
   MTL::ArgumentEncoder* dispatch_vertex_encode_arg_enc_{};
   NS::SharedPtr<MTL::Buffer> main_object_arg_buf_;
   MTL::ArgumentEncoder* main_object_arg_enc_{};
+  rhi::BufferHandleHolder final_meshlet_draw_count_buf_;
+  rhi::BufferHandleHolder final_meshlet_draw_count_cpu_buf_;
 
   rhi::BufferHandleHolder main_icb_container_buf_;
   MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
@@ -403,4 +405,10 @@ class RendererMetal {
   void encode_regular_frame(const RenderArgs& render_args, MTL::CommandBuffer* buf,
                             const CA::MetalDrawable* drawable);
   void encode_debug_depth_pyramid_view(MTL::CommandBuffer* buf, const CA::MetalDrawable* drawable);
+  struct Stats {
+    uint32_t total_meshlets{};
+    uint32_t total_drawn_meshlets{};
+  };
+
+  Stats stats_;
 };

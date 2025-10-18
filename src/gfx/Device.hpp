@@ -3,8 +3,6 @@
 #include "Buffer.hpp"
 #include "RendererTypes.hpp"
 #include "Texture.hpp"
-#include "core/Handle.hpp"
-#include "core/Pool.hpp"
 
 namespace MTL {
 class Texture;

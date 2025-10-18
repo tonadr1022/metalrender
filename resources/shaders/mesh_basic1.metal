@@ -37,6 +37,7 @@ struct MainObjectArguments {
     device const Meshlet* meshlets [[id(1)]];
     device uint* meshlet_vis_buf [[id(2)]];
     texture2d<float, access::sample> depth_pyramid_tex [[id(3)]];
+    device atomic<uint>* final_meshlet_draw_count_buf [[id(4)]];
 };
 
 [[object, max_total_threadgroups_per_mesh_grid(kMeshThreadgroups)]]
@@ -128,6 +129,7 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
 
     if (draw) {
         out_payload.meshlet_indices[payload_idx] = tp_grid;
+        atomic_fetch_add_explicit(args->final_meshlet_draw_count_buf, 1ull, memory_order_relaxed);
     }
     uint visible_count = simd_sum(draw);
     if (thread_idx == 0) {

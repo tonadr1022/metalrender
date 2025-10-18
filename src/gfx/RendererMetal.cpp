@@ -245,11 +245,16 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     dispatch_vertex_encode_arg_enc_->setArgumentBuffer(dispatch_vertex_encode_arg_buf_.get(), 0);
   }
 
+  final_meshlet_draw_count_buf_ = device_->create_buf_h(rhi::BufferDesc{.size = sizeof(uint64_t)});
+  final_meshlet_draw_count_cpu_buf_ = device_->create_buf_h(
+      rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUOnly, .size = sizeof(uint64_t)});
+
   {
     main_object_arg_enc_ = get_function("basic1_object_main_late_pass")->newArgumentEncoder(2);
     main_object_arg_buf_ =
         NS::TransferPtr(raw_device_->newBuffer(main_object_arg_enc_->encodedLength(), 0));
     main_object_arg_enc_->setArgumentBuffer(main_object_arg_buf_.get(), 0);
+    main_object_arg_enc_->setBuffer(get_mtl_buf(final_meshlet_draw_count_buf_), 0, 4);
   }
 
   recreate_render_target_textures();
@@ -395,6 +400,7 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
       instance_data_mgr_->allocate(model_instance_datas.size());
   all_model_data_.max_objects = instance_data_mgr_->max_seen_size();
 
+  stats_.total_meshlets += model_resources->tot_meshlet_count;
   OffsetAllocator::Allocation meshlet_vis_buf_alloc{};
   if (k_use_mesh_shader) {
     bool resized{};
@@ -488,6 +494,10 @@ void RendererMetal::free_instance(ModelInstanceGPUHandle handle) {
 
 void RendererMetal::on_imgui() {
   const DrawBatch *const draw_batches[] = {&static_draw_batch_.value()};
+  ImGui::Text("Stats");
+  ImGui::Text("%d meshlets drawn of %d, (%.2f%%)", stats_.total_drawn_meshlets,
+              stats_.total_meshlets,
+              static_cast<float>(stats_.total_drawn_meshlets) / stats_.total_meshlets * 100);
   for (const auto &batch : draw_batches) {
     ImGui::Text("Draw Batch: %s", draw_batch_type_to_string(batch->type));
     auto stats = batch->get_stats();
@@ -1159,6 +1169,16 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     enc->executeCommandsInBuffer(instance_data_mgr_->icb(),
                                  NS::Range::Make(0, all_model_data_.max_objects));
     enc->endEncoding();
+  }
+  {
+    MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
+    blit_enc->copyFromBuffer(get_mtl_buf(final_meshlet_draw_count_buf_), 0,
+                             get_mtl_buf(final_meshlet_draw_count_cpu_buf_), 0, sizeof(uint32_t));
+    stats_.total_drawn_meshlets =
+        *((uint32_t *)device_->get_buf(final_meshlet_draw_count_cpu_buf_)->contents());
+    blit_enc->fillBuffer(get_mtl_buf(final_meshlet_draw_count_buf_),
+                         NS::Range::Make(0, sizeof(uint64_t)), 0);
+    blit_enc->endEncoding();
   }
 }
 
