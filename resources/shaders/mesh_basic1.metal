@@ -130,6 +130,7 @@ void basic1_object_main(object_data ObjectPayload& out_payload [[payload]],
     if (draw) {
         out_payload.meshlet_indices[payload_idx] = tp_grid;
         atomic_fetch_add_explicit(args->final_meshlet_draw_count_buf, 1ull, memory_order_relaxed);
+        atomic_fetch_add_explicit(args->final_meshlet_draw_count_buf + 1, meshlet.vertex_count, memory_order_relaxed);
     }
     uint visible_count = simd_sum(draw);
     if (thread_idx == 0) {

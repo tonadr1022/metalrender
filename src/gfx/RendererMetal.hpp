@@ -151,8 +151,14 @@ struct ModelGPUResources {
   std::vector<MTL::Texture*> textures;
   DrawBatch::Alloc static_draw_batch_alloc;
   std::vector<InstanceData> base_instance_datas;
+  std::vector<Mesh> meshes;
   std::vector<uint32_t> instance_id_to_node;
-  size_t tot_meshlet_count{};
+  struct Totals {
+    uint32_t meshlets;
+    uint32_t vertices;
+    uint32_t instance_vertices;
+  };
+  Totals totals{};
 };
 
 struct ModelInstanceGPUResources {
@@ -405,9 +411,15 @@ class RendererMetal {
   void encode_regular_frame(const RenderArgs& render_args, MTL::CommandBuffer* buf,
                             const CA::MetalDrawable* drawable);
   void encode_debug_depth_pyramid_view(MTL::CommandBuffer* buf, const CA::MetalDrawable* drawable);
+
+  struct FinalDrawResults {
+    uint32_t drawn_meshlets;
+    uint32_t drawn_vertices;
+  };
   struct Stats {
-    uint32_t total_meshlets{};
-    uint32_t total_drawn_meshlets{};
+    uint32_t total_instance_meshlets{};
+    uint32_t total_instance_vertices{};
+    FinalDrawResults draw_results{};
   };
 
   Stats stats_;

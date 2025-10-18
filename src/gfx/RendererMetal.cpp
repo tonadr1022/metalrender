@@ -245,9 +245,10 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     dispatch_vertex_encode_arg_enc_->setArgumentBuffer(dispatch_vertex_encode_arg_buf_.get(), 0);
   }
 
-  final_meshlet_draw_count_buf_ = device_->create_buf_h(rhi::BufferDesc{.size = sizeof(uint64_t)});
+  final_meshlet_draw_count_buf_ =
+      device_->create_buf_h(rhi::BufferDesc{.size = sizeof(FinalDrawResults)});
   final_meshlet_draw_count_cpu_buf_ = device_->create_buf_h(
-      rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUOnly, .size = sizeof(uint64_t)});
+      rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUOnly, .size = sizeof(FinalDrawResults)});
 
   {
     main_object_arg_enc_ = get_function("basic1_object_main_late_pass")->newArgumentEncoder(2);
@@ -333,6 +334,9 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
     pending_texture_uploads_.push_back(std::move(u));
   }
 
+  if (k_use_mesh_shader) {
+    result.indices.clear();
+  }
   auto draw_batch_alloc = upload_geometry(DrawBatchType::Static, result.vertices, result.indices,
                                           result.meshlet_process_result, result.meshes);
 
@@ -341,6 +345,7 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
   base_instance_datas.reserve(model.tot_mesh_nodes);
   instance_id_to_node.reserve(model.tot_mesh_nodes);
 
+  uint32_t total_instance_vertices{};
   {
     uint32_t instance_copy_idx = 0;
     uint32_t curr_meshlet_vis_buf_offset = 0;
@@ -358,6 +363,7 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
       instance_copy_idx++;
       curr_meshlet_vis_buf_offset +=
           result.meshlet_process_result.meshlet_datas[mesh_id].meshlets.size();
+      total_instance_vertices += result.meshes[mesh_id].vertex_count;
     }
   }
 
@@ -374,12 +380,17 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
     }
   }
 
-  out_handle = model_gpu_resource_pool_.alloc(
-      ModelGPUResources{.material_alloc = material_alloc,
-                        .static_draw_batch_alloc = draw_batch_alloc,
-                        .base_instance_datas = std::move(base_instance_datas),
-                        .instance_id_to_node = instance_id_to_node,
-                        .tot_meshlet_count = result.meshlet_process_result.tot_meshlet_count});
+  out_handle = model_gpu_resource_pool_.alloc(ModelGPUResources{
+      .material_alloc = material_alloc,
+      .static_draw_batch_alloc = draw_batch_alloc,
+      .base_instance_datas = std::move(base_instance_datas),
+      .meshes = std::move(result.meshes),
+      .instance_id_to_node = instance_id_to_node,
+      .totals = ModelGPUResources::Totals{.meshlets = static_cast<uint32_t>(
+                                              result.meshlet_process_result.tot_meshlet_count),
+                                          .vertices = static_cast<uint32_t>(result.vertices.size()),
+                                          .instance_vertices = total_instance_vertices},
+  });
   return true;
 }
 
@@ -400,11 +411,12 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
       instance_data_mgr_->allocate(model_instance_datas.size());
   all_model_data_.max_objects = instance_data_mgr_->max_seen_size();
 
-  stats_.total_meshlets += model_resources->tot_meshlet_count;
+  stats_.total_instance_meshlets += model_resources->totals.meshlets;
+  stats_.total_instance_vertices += model_resources->totals.instance_vertices;
   OffsetAllocator::Allocation meshlet_vis_buf_alloc{};
   if (k_use_mesh_shader) {
     bool resized{};
-    meshlet_vis_buf_alloc = meshlet_vis_buf_->allocate(model_resources->tot_meshlet_count, resized);
+    meshlet_vis_buf_alloc = meshlet_vis_buf_->allocate(model_resources->totals.meshlets, resized);
     meshlet_vis_buf_dirty_ = true;
   }
 
@@ -495,9 +507,14 @@ void RendererMetal::free_instance(ModelInstanceGPUHandle handle) {
 void RendererMetal::on_imgui() {
   const DrawBatch *const draw_batches[] = {&static_draw_batch_.value()};
   ImGui::Text("Stats");
-  ImGui::Text("%d meshlets drawn of %d, (%.2f%%)", stats_.total_drawn_meshlets,
-              stats_.total_meshlets,
-              static_cast<float>(stats_.total_drawn_meshlets) / stats_.total_meshlets * 100);
+  ImGui::Text("%u meshlets drawn of %d, (%.2f%%)", stats_.draw_results.drawn_meshlets,
+              stats_.total_instance_meshlets,
+              static_cast<float>(stats_.draw_results.drawn_meshlets) /
+                  stats_.total_instance_meshlets * 100);
+  ImGui::Text("%u vertices drawn of %d, (%.2f%%)", stats_.draw_results.drawn_vertices,
+              stats_.total_instance_vertices,
+              static_cast<float>(stats_.draw_results.drawn_vertices) /
+                  stats_.total_instance_vertices * 100);
   for (const auto &batch : draw_batches) {
     ImGui::Text("Draw Batch: %s", draw_batch_type_to_string(batch->type));
     auto stats = batch->get_stats();
@@ -742,8 +759,8 @@ DrawBatch::Alloc RendererMetal::upload_geometry([[maybe_unused]] DrawBatchType t
                                                 const MeshletProcessResult &meshlets,
                                                 std::span<Mesh> meshes) {
   auto &draw_batch = static_draw_batch_;
-  ALWAYS_ASSERT(!vertices.empty());
-  ALWAYS_ASSERT(!meshlets.meshlet_datas.empty());
+  ASSERT(!vertices.empty());
+  ASSERT(!meshlets.meshlet_datas.empty());
 
   bool resized{};
   const auto vertex_alloc = draw_batch->vertex_buf.allocate(vertices.size(), resized);
@@ -1173,11 +1190,13 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
   {
     MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
     blit_enc->copyFromBuffer(get_mtl_buf(final_meshlet_draw_count_buf_), 0,
-                             get_mtl_buf(final_meshlet_draw_count_cpu_buf_), 0, sizeof(uint32_t));
-    stats_.total_drawn_meshlets =
-        *((uint32_t *)device_->get_buf(final_meshlet_draw_count_cpu_buf_)->contents());
-    blit_enc->fillBuffer(get_mtl_buf(final_meshlet_draw_count_buf_),
-                         NS::Range::Make(0, sizeof(uint64_t)), 0);
+                             get_mtl_buf(final_meshlet_draw_count_cpu_buf_), 0,
+                             device_->get_buf(final_meshlet_draw_count_buf_)->size());
+    stats_.draw_results =
+        *((FinalDrawResults *)device_->get_buf(final_meshlet_draw_count_cpu_buf_)->contents());
+    blit_enc->fillBuffer(
+        get_mtl_buf(final_meshlet_draw_count_buf_),
+        NS::Range::Make(0, device_->get_buf(final_meshlet_draw_count_buf_)->desc().size), 0);
     blit_enc->endEncoding();
   }
 }
