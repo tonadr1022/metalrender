@@ -1,5 +1,7 @@
 #include "ModelLoader.hpp"
 
+#include "gfx/GFXTypes.hpp"
+
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image/stb_image.h>
 #define CGLTF_IMPLEMENTATION
@@ -53,6 +55,9 @@ int32_t add_node_to_model(ModelInstance &model, int32_t parent, int32_t level,
   assert(std::cmp_equal(node, model.global_transforms.size()));
   assert(std::cmp_equal(node, model.local_transforms.size()));
   assert(std::cmp_equal(node, model.mesh_ids.size()));
+  if (level >= static_cast<int32_t>(model.changed_this_frame.size())) {
+    model.changed_this_frame.resize(level + 1);
+  }
   model.global_transforms.emplace_back();
   model.local_transforms.emplace_back(translation, rotation, scale);
   model.mesh_ids.emplace_back(mesh_id);
@@ -174,6 +179,7 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
   };
 
   auto &materials = out_load_result.materials;
+  materials.reserve(gltf->materials_count);
   for (size_t material_i = 0; material_i < gltf->materials_count; material_i++) {
     const cgltf_material *gltf_mat = &gltf->materials[material_i];
     Material material{};
@@ -193,14 +199,38 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
     materials.push_back(material);
   }
 
-  auto &all_vertices = out_load_result.vertices;
-  auto &all_indices = out_load_result.indices;
-  auto &meshes = out_load_result.meshes;
+  std::vector<DefaultVertex> &all_vertices = out_load_result.vertices;
+  std::vector<rhi::DefaultIndexT> &all_indices = out_load_result.indices;
+
+  size_t model_vertex_count{};
+  size_t model_index_count{};
+  size_t model_mesh_count{};
+  for (uint32_t mesh_i = 0; mesh_i < gltf->meshes_count; mesh_i++) {
+    const cgltf_mesh &mesh = gltf->meshes[mesh_i];
+    model_mesh_count += mesh.primitives_count;
+    for (uint32_t prim_i = 0; prim_i < mesh.primitives_count; prim_i++) {
+      const cgltf_primitive &prim = mesh.primitives[prim_i];
+      model_vertex_count += prim.attributes[0].data->count;
+      if (prim.indices) {
+        model_index_count += prim.indices->count;
+      }
+    }
+  }
+
+  all_vertices.reserve(model_vertex_count);
+  all_indices.reserve(model_index_count);
+
+  std::vector<Mesh> &meshes = out_load_result.meshes;
+  meshes.reserve(model_mesh_count);
+
   std::vector<uint32_t> gltf_node_to_node_i;
   gltf_node_to_node_i.resize(gltf->nodes_count, UINT32_MAX);
 
   std::vector<std::vector<uint32_t>> primitive_mesh_indices_per_mesh;
   primitive_mesh_indices_per_mesh.resize(gltf->meshes_count);
+  std::vector<MeshletLoadResult> &meshlet_datas =
+      out_load_result.meshlet_process_result.meshlet_datas;
+  meshlet_datas.reserve(model_vertex_count / k_max_vertices_per_meshlet);
 
   {  // process mesh/primitive
     uint32_t overall_mesh_i = 0;
@@ -275,7 +305,6 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
       }
     }
 
-    auto &meshlet_datas = out_load_result.meshlet_process_result.meshlet_datas;
     for (const Mesh &mesh : meshes) {
       const uint32_t base_vertex = mesh.vertex_offset_bytes / sizeof(DefaultVertex);
       meshlet_datas.emplace_back(load_meshlet_data(
@@ -286,7 +315,11 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
   }
   {
     auto &model = out_model;
-    model.changed_this_frame.resize(ModelInstance::k_max_hierarchy_depth);
+    model.global_transforms.reserve(gltf->nodes_count);
+    model.local_transforms.reserve(gltf->nodes_count);
+    model.nodes.reserve(gltf->nodes_count);
+    model.mesh_ids.reserve(gltf->nodes_count);
+    // model.changed_this_frame.resize(ModelInstance::k_max_hierarchy_depth);
     // process nodes
     struct AddNodeStackItem {
       uint32_t gltf_node_i;
@@ -354,6 +387,7 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
     }
 
     model.tot_mesh_nodes = tot_mesh_nodes;
+    ASSERT(model.changed_this_frame.size() > 0);
     model.mark_changed(0);
     model.update_transforms();
   }

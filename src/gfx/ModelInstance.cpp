@@ -1,5 +1,6 @@
 #include "ModelInstance.hpp"
 
+#include "core/EAssert.hpp"
 #include "core/MathUtil.hpp"
 #include "glm/gtc/type_ptr.hpp"
 
@@ -23,6 +24,7 @@ void ModelInstance::set_transform(int32_t node, const glm::mat4& transform) {
 void ModelInstance::mark_changed(int32_t node) {
   assert(node >= 0 && node < static_cast<int32_t>(nodes.size()));
   const auto level = nodes[node].level;
+  ASSERT(level < static_cast<int32_t>(changed_this_frame.size()));
   changed_this_frame[level].push_back(node);
   for (int32_t child_node = nodes[node].first_child; child_node != Hierarchy::k_invalid_node_id;
        child_node = nodes[child_node].next_sibling) {
@@ -32,6 +34,7 @@ void ModelInstance::mark_changed(int32_t node) {
 
 bool ModelInstance::update_transforms() {
   bool dirty = false;
+  ASSERT(changed_this_frame.size() > 0);
 
   // process level 0 separately to avoid if-check for parent existence
   for (const auto node : changed_this_frame[0]) {
@@ -40,7 +43,7 @@ bool ModelInstance::update_transforms() {
   }
   changed_this_frame[0].clear();
 
-  for (size_t level = 1; level < ModelInstance::k_max_hierarchy_depth; level++) {
+  for (size_t level = 1; level < changed_this_frame.size(); level++) {
     auto& level_changed_nodes = changed_this_frame[level];
     dirty |= !level_changed_nodes.empty();
     for (const auto node : level_changed_nodes) {

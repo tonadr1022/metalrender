@@ -4,6 +4,7 @@
 #include <Metal/MTLArgumentEncoder.hpp>
 #include <Metal/MTLCommandBuffer.hpp>
 #include <Metal/MTLCommandEncoder.hpp>
+#include <Metal/MTLCounters.hpp>
 #include <Metal/MTLDevice.hpp>
 #include <Metal/MTLRenderCommandEncoder.hpp>
 #include <Metal/MTLRenderPass.hpp>
@@ -47,14 +48,14 @@ uint32_t get_mip_levels(uint32_t width, uint32_t height) {
   return static_cast<uint32_t>(std::floor(std::log2(std::max(width, height)))) + 1;
 }
 
-glm::mat4 perspective_proj(float fov_y, float aspect, float z_near) {
+glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
   // clang-format off
-	float f = 1.0f / tanf(fov_y / 2.0f);
-	return {
-	    f / aspect, 0.0f, 0.0f, 0.0f,
-	    0.0f, f, 0.0f, 0.0f,
-	    0.0f, 0.0f, 0.0f, -1.0f,
-	    0.0f, 0.0f, z_near, 0.0f};
+  float f = 1.0f / tanf(fov_y / 2.0f);
+  return {
+    f / aspect, 0.0f, 0.0f, 0.0f,
+    0.0f, f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, -1.0f,
+    0.0f, 0.0f, z_near, 0.0f};
   // clang-format on
 }
 
@@ -65,8 +66,6 @@ uint32_t prev_pow2(uint32_t val) {
   }
   return v;
 }
-
-enum class RenderMode : uint32_t { Default, Normals, NormalMap };
 
 }  // namespace
 
@@ -316,6 +315,9 @@ void RendererMetal::render(const RenderArgs &render_args) {
   }
 
   buf->presentDrawable(drawable);
+  buf->addCompletedHandler([this](MTL::CommandBuffer *b) {
+    frame_times_.add((b->GPUEndTime() - b->GPUStartTime()) * 1'000);
+  });
   buf->commit();
 
   curr_frame_++;
@@ -503,10 +505,32 @@ void RendererMetal::free_instance(ModelInstanceGPUHandle handle) {
   }
   instance_data_mgr_->free(gpu_resources->instance_data_gpu_alloc);
 }
+namespace {
+
+template <typename T>
+  requires(std::is_scoped_enum_v<T> || std::is_enum_v<T>)
+void imgui_enum_select(T &curr_val, const char *title, const auto &items) {
+  int curr = static_cast<int>(curr_val);
+  if (ImGui::Combo(title, &curr, items.data(), items.size())) {
+    curr_val = static_cast<T>(curr);
+  }
+}
+
+template <typename T, typename F>
+auto get_enum_strings(F &&to_string) {
+  std::array<const char *, static_cast<size_t>(T::Count)> is{};
+  for (size_t i = 0; i < static_cast<size_t>(T::Count); i++) {
+    is[i] = to_string(static_cast<T>(i));
+  }
+  return is;
+}
+
+}  // namespace
 
 void RendererMetal::on_imgui() {
   const DrawBatch *const draw_batches[] = {&static_draw_batch_.value()};
   ImGui::Text("Stats");
+  ImGui::Text("Frame time avg %f ms", frame_times_.avg());
   ImGui::Text("%u meshlets drawn of %d, (%.2f%%)", stats_.draw_results.drawn_meshlets,
               stats_.total_instance_meshlets,
               static_cast<float>(stats_.draw_results.drawn_meshlets) /
@@ -525,12 +549,15 @@ void RendererMetal::on_imgui() {
     ImGui::Text("\tMeshlet Vertex Count: %d", stats.meshlet_vertex_count);
   }
   ImGui::Checkbox("meshlet frustum cull", &meshlet_frustum_cull_);
-  const char *items[] = {debug_render_view_to_str(DebugRenderView::None),
-                         debug_render_view_to_str(DebugRenderView::DepthPyramidTex)};
-  int curr = (int)debug_render_view_;
-  if (ImGui::Combo("Debug View Mode", &curr, items, ARRAY_SIZE(items))) {
-    debug_render_view_ = (DebugRenderView)curr;
-  }
+
+  static const auto debug_render_view_strings =
+      get_enum_strings<DebugRenderView>([this](DebugRenderView v) { return to_string(v); });
+  imgui_enum_select(debug_render_view_, "Debug View Mode", debug_render_view_strings);
+
+  static const auto render_mode_strings =
+      get_enum_strings<RenderMode>([this](RenderMode m) { return to_string(m); });
+  imgui_enum_select(render_mode_, "Render Mode", render_mode_strings);
+
   if (debug_render_view_ == DebugRenderView::DepthPyramidTex) {
     ImGui::SliderInt("Depth Pyramid Mip Level", &debug_depth_pyramid_mip_level_, 0,
                      device_->get_tex(depth_pyramid_tex_)->desc().mip_levels - 1);
@@ -600,9 +627,9 @@ Uniforms RendererMetal::set_cpu_global_uniform_data(const RenderArgs &render_arg
   // uniform_data.proj = glm::perspectiveFovZO(glm::radians(70.0f), (float)window_dims.x,
   //                                           (float)window_dims.y, near, far);
   float aspect = (float)window_dims.x / (float)window_dims.y;
-  uniform_data.proj = perspective_proj(glm::radians(70.f), aspect, k_z_near);
+  uniform_data.proj = infinite_perspective_proj(glm::radians(70.f), aspect, k_z_near);
   uniform_data.vp = uniform_data.proj * uniform_data.view;
-  uniform_data.render_mode = (uint32_t)RenderMode::Normals;
+  uniform_data.render_mode = static_cast<uint32_t>(render_mode_);
   return uniform_data;
 }
 
@@ -1222,4 +1249,19 @@ void RendererMetal::encode_debug_depth_pyramid_view(MTL::CommandBuffer *buf,
   enc->drawPrimitives(MTL::PrimitiveTypeTriangle, 0, 3, 1);
 
   enc->endEncoding();
+}
+
+const constexpr char *RendererMetal::to_string(RendererMetal::RenderMode mode) {
+  using RenderMode = RendererMetal::RenderMode;
+  switch (mode) {
+    case RenderMode::Default:
+      return "Default";
+    case RenderMode::NormalMap:
+      return "NormalMap";
+    case RenderMode::Normals:
+      return "Normals";
+    default:
+      ALWAYS_ASSERT(0);
+      return "";
+  }
 }

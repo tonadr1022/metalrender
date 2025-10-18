@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "Foundation/NSString.hpp"
 #include "Metal/MTLPixelFormat.hpp"
 #include "Metal/MTLResource.hpp"

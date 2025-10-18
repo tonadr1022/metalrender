@@ -35,8 +35,6 @@ void WindowApple::init(rhi::Device* device, KeyCallbackFn key_callback_fn,
   mtl_layer.minificationFilter = kCAFilterNearest;
   mtl_layer.device = (__bridge id<MTLDevice>)device->get_native_device();
   mtl_layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-  // [mtl_layer setFramebufferOnly:NO];
-  // [mtl_layer removeAllAnimations];
 
   CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
   CGFloat bg_color[] = {0.0, 0.0, 1.0, 1.0};

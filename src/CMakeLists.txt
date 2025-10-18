@@ -16,6 +16,7 @@ add_executable(${target_name}
     voxels/Chunk.hpp
     voxels/TerrainGenerator.hpp
     voxels/VoxelRenderer.cpp
+    util/Stats.cpp
 )
 
 add_custom_target(compile_shaders ALL

@@ -1,6 +1,7 @@
 #include "FileUtil.hpp"
 
 #include <fstream>
+#include <print>
 #include <sstream>
 
 std::string util::load_file_to_string(const std::filesystem::path& path) {

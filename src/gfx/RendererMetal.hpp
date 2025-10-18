@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Metal/MTLBuffer.hpp>
+#include <Metal/MTLDevice.hpp>
 #include <Metal/MTLIndirectCommandBuffer.hpp>
 #include <filesystem>
 #include <glm/mat4x4.hpp>
@@ -19,6 +20,7 @@
 #include "metal/MetalDevice.hpp"
 #include "offsetAllocator.hpp"
 #include "shader_global_uniforms.h"
+#include "util/Stats.hpp"
 
 class MetalDevice;
 class WindowApple;
@@ -279,6 +281,9 @@ class RendererMetal {
   void on_imgui();
   TextureWithIdx load_material_image(const rhi::TextureDesc& desc);
 
+  enum class RenderMode { Default, Normals, NormalMap, Count };
+  const constexpr char* to_string(RendererMetal::RenderMode mode);
+
  private:
   // struct PerFrameData {
   //   NS::SharedPtr<MTL::Buffer> uniform_buf;
@@ -328,11 +333,14 @@ class RendererMetal {
     DepthPyramidTex,
     Count,
   };
-  const char* debug_render_view_to_str(DebugRenderView view) {
+
+  const char* to_string(DebugRenderView view) {
     switch (view) {
       case DebugRenderView::DepthPyramidTex:
         return "Depth Pyramid Texture";
+      case DebugRenderView::None:
       default:
+        return "None";
         return "None";
     }
   }
@@ -389,6 +397,8 @@ class RendererMetal {
   bool culling_paused_{false};
   bool object_frust_cull_enabled_{true};
 
+  RenderMode render_mode_{RenderMode::Default};
+
   // std::vector<PerFrameData> per_frame_datas_;
 
   MTL::Function* get_function(const char* name, bool load = true);
@@ -423,4 +433,7 @@ class RendererMetal {
   };
 
   Stats stats_;
+  util::RollingAvgCtr frame_times_{128};
 };
+
+static constexpr const char* to_string(RendererMetal::RenderMode mode);
