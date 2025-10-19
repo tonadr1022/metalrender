@@ -10,7 +10,11 @@ struct PerChunkUniforms {
 };
 
 struct VoxelVertex {
-  float4 pos;
+  uint32_t vert;
+};
+
+struct VoxelMaterial {
+  packed_float3 color;
 };
 
 #endif

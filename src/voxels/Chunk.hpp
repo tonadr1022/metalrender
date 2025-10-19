@@ -67,14 +67,8 @@ struct Chunk {
   void set(int idx, VoxelId vox) { blocks.set(idx, vox); }
 };
 
-using PaddedChunkVoxArr = std::array<VoxelId, k_chunk_len_padded_cu>;
+using PaddedChunkVoxArr = std::vector<VoxelId>;
 
-struct MeshResult {
-  std::vector<VoxelVertex>& vertices;
-  uint32_t index_count;
-  uint32_t vertex_count;
-};
-
-void populate_mesh(const PaddedChunkVoxArr& voxels, MeshResult& result);
+void populate_mesh(const PaddedChunkVoxArr& voxels, ChunkUploadData& result);
 
 }  // namespace vox

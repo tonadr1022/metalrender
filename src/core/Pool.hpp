@@ -103,10 +103,12 @@ template <typename HandleT, typename ObjectT>
 struct BlockPool {
   static_assert(std::is_default_constructible_v<ObjectT>, "ObjectT must be default constructible");
 
-  BlockPool() : element_count_per_block_(64) { init(1); }
+  explicit BlockPool(bool do_destroy) : element_count_per_block_(64), do_destroy_(do_destroy) {
+    init(1);
+  }
 
-  BlockPool(uint16_t element_count_per_block, uint16_t initial_blocks)
-      : element_count_per_block_(element_count_per_block) {
+  BlockPool(uint16_t element_count_per_block, uint16_t initial_blocks, bool do_destroy)
+      : element_count_per_block_(element_count_per_block), do_destroy_(do_destroy) {
     init(initial_blocks);
   }
 
@@ -235,6 +237,7 @@ struct BlockPool {
   size_t num_created_{};
   size_t num_destroyed_{};
   uint16_t element_count_per_block_{};
+  bool do_destroy_{};
 
   Entry& get_entry(EntryKey key) { return all_entries_[key.block][key.idx]; }
   const Entry& get_entry(EntryKey key) const { return all_entries_[key.block][key.idx]; }

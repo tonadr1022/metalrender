@@ -1,10 +1,5 @@
 #include "Chunk.hpp"
 
-#include <iostream>
-
-#include "core/EAssert.hpp"
-#include "core/Logger.hpp"
-#include "core/Util.hpp"
 #include "voxels/Types.hpp"
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -70,9 +65,21 @@ constexpr std::array<std::array<glm::vec3, 4>, 6> vertex_offsets = {{
     },
 }};
 
+constexpr uint32_t encode_vertex(int x, int y, int z, uint8_t material) {
+  return (x) | (y << 7) | (z << 14) | (material << 21);
+}
+
+constexpr uint32_t encode_vertex(glm::ivec3 p, uint8_t material) {
+  return encode_vertex(p.x, p.y, p.z, material);
+}
+
+constexpr uint8_t encode_color_216(uint8_t r_scaled, uint8_t g_scaled, uint8_t b_scaled) {
+  return 16 + (36 * r_scaled) + (6 * g_scaled) + b_scaled;
+}
+
 }  // namespace
 
-void vox::populate_mesh(const PaddedChunkVoxArr& voxels, MeshResult& result) {
+void vox::populate_mesh(const PaddedChunkVoxArr& voxels, ChunkUploadData& result) {
   auto& out_vertices = result.vertices;
   glm::ivec3 chunk_pos{};
   uint32_t index_count = 0;
@@ -80,9 +87,22 @@ void vox::populate_mesh(const PaddedChunkVoxArr& voxels, MeshResult& result) {
   for (chunk_pos.y = 0; chunk_pos.y < k_chunk_len; chunk_pos.y++) {
     for (chunk_pos.z = 0; chunk_pos.z < k_chunk_len; chunk_pos.z++) {
       for (chunk_pos.x = 0; chunk_pos.x < k_chunk_len; chunk_pos.x++) {
-        if (!voxels[regular_idx_to_padded(chunk_pos)]) {
+        VoxelId vox = voxels[regular_idx_to_padded(chunk_pos)];
+        if (!vox) {
           continue;
         }
+        uint8_t r{}, g{}, b{};
+        if (vox == 1) {
+          g = 3;
+        }
+        if (vox == 2) {
+          r = 3;
+        }
+        if (vox == 3) {
+          b = 3;
+        }
+
+        uint8_t material = encode_color_216(r, g, b);
 
         for (int face = 0; face < 6; face++) {
           const glm::ivec3 nei_pos = face_offsets[face] + chunk_pos;
@@ -91,15 +111,15 @@ void vox::populate_mesh(const PaddedChunkVoxArr& voxels, MeshResult& result) {
           }
           glm::vec3 base_pos = glm::vec3{chunk_pos};
           // add block, neighbor is air
-          glm::vec3 p_v0 = base_pos + vertex_offsets[face][0];
-          glm::vec3 p_v1 = base_pos + vertex_offsets[face][1];
-          glm::vec3 p_v2 = base_pos + vertex_offsets[face][2];
-          glm::vec3 p_v3 = base_pos + vertex_offsets[face][3];
+          glm::ivec3 p_v0 = base_pos + vertex_offsets[face][0];
+          glm::ivec3 p_v1 = base_pos + vertex_offsets[face][1];
+          glm::ivec3 p_v2 = base_pos + vertex_offsets[face][2];
+          glm::ivec3 p_v3 = base_pos + vertex_offsets[face][3];
 
-          out_vertices.emplace_back(VoxelVertex{glm::vec4{p_v0, 0.0}});
-          out_vertices.emplace_back(VoxelVertex{glm::vec4{p_v1, 0.0}});
-          out_vertices.emplace_back(VoxelVertex{glm::vec4{p_v2, 0.0}});
-          out_vertices.emplace_back(VoxelVertex{glm::vec4{p_v3, 0.0}});
+          out_vertices.emplace_back(encode_vertex(p_v0, material));
+          out_vertices.emplace_back(encode_vertex(p_v1, material));
+          out_vertices.emplace_back(encode_vertex(p_v2, material));
+          out_vertices.emplace_back(encode_vertex(p_v3, material));
           vertex_count += 4;
           index_count += 6;
         }

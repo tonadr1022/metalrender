@@ -1,9 +1,13 @@
 add_subdirectory(metal-cpp)
 add_subdirectory(glfw)
 add_subdirectory(glm)
+add_subdirectory(concurrentqueue)
 
 set(FASTNOISE2_NOISETOOL OFF CACHE BOOL "Build Noise Tool" FORCE)
 add_subdirectory(FastNoise2)
+
+add_library(bs_thread_pool INTERFACE)
+target_include_directories(bs_thread_pool INTERFACE thread-pool/include)
 
 add_library(lib_imgui STATIC
     imgui/imgui.cpp

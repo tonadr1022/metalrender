@@ -27,8 +27,7 @@ class Renderer {
   Renderer() = default;
   void init(RendererMetal* renderer);
 
-  void upload_chunk(ChunkHandle handle, ChunkKey key, Chunk& chunk,
-                    const PaddedChunkVoxArr& padded_blocks);
+  void upload_chunk(const ChunkUploadData& upload_data);
   void encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf);
 
  private:

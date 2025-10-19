@@ -39,4 +39,6 @@ target_link_libraries(${target_name} PRIVATE
     lib_imgui
     offsetAllocator
     FastNoise
+    bs_thread_pool
+    concurrentqueue
 )

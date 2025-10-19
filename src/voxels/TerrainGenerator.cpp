@@ -39,8 +39,18 @@ void TerrainGenerator::generate_world_chunk(const glm::ivec3& chunk_key, Chunk& 
     for (int z = 0; z < k_chunk_len; z++) {
       for (int x = 0; x < k_chunk_len; x++, i++) {
         float world_y = chunk_world_pos.y + y;
-        if (world_y < (noise[get_idx_2d(x, z)] * .5 + .5) * k_world_height) {
-          chunk.set(i, 1);
+        int noise_height = (noise[get_idx_2d(x, z)] * .5 + .5) * k_world_height;
+        if (world_y < noise_height) {
+          uint32_t color{};
+          auto diff = noise_height - world_y;
+          if (diff == 1) {
+            color = 1;
+          } else if (diff == 2) {
+            color = 2;
+          } else {
+            color = 3;
+          }
+          chunk.set(i, color);
         }
       }
     }

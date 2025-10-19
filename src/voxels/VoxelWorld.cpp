@@ -2,6 +2,7 @@
 
 #include <tracy/Tracy.hpp>
 
+#include "core/ThreadPool.hpp"
 #include "voxels/Chunk.hpp"
 #include "voxels/TerrainGenerator.hpp"
 #include "voxels/VoxelRenderer.hpp"
@@ -14,14 +15,18 @@ void World::init(Renderer* renderer) {
   auto nei_chunks = std::make_unique<NeiChunksArr>();
   {
     glm::vec3 key{};
-    int radius = 3;
-    for (key.y = -radius; key.y <= radius; key.y++) {
+    int radius = 10;
+    for (key.y = -1; key.y <= 2; key.y++) {
       for (key.x = -radius; key.x <= radius; key.x++) {
         for (key.z = -radius; key.z <= radius; key.z++) {
           ChunkHandle chunk_handle = create_chunk(key);
-          Chunk& chunk = *get(chunk_handle);
-          terrain_generator_.generate_world_chunk(key, chunk);
-          ready_for_mesh_queue_.emplace(key);
+          ThreadPool::get().detach_task([this, key, chunk_handle]() {
+            Chunk* chunk = get(chunk_handle);
+            if (chunk) {
+              terrain_generator_.generate_world_chunk(key, *chunk);
+              ready_for_mesh_q_.enqueue(key);
+            }
+          });
         }
       }
     }
@@ -30,6 +35,7 @@ void World::init(Renderer* renderer) {
 
 void World::fill_padded_chunk_blocks(const NeiChunksArr& nei_chunks,
                                      PaddedChunkVoxArr& result) const {
+  result.resize(k_chunk_len_padded_cu);
   ZoneScoped;
   auto get_chunk = [&nei_chunks](int x, int y, int z) -> const ChunkVoxArr& {
     return nei_chunks[get_nei_chunk_idx(x, y, z)];
@@ -163,25 +169,46 @@ void World::update(float) {
   if (!nei_chunks_tmp_) {
     nei_chunks_tmp_ = std::make_unique<NeiChunksArr>();
   }
-  while (!ready_for_mesh_queue_.empty()) {
-    auto key = ready_for_mesh_queue_.front();
-    ready_for_mesh_queue_.pop();
-    if (!is_meshable(key)) {
-      continue;
+
+  {
+    ChunkKey key;
+    while (ready_for_mesh_q_.try_dequeue(key)) {
+      if (!is_meshable(key)) {
+        continue;
+      }
+
+      auto handle = get_handle(key);
+      if (!handle.is_valid()) {
+        continue;
+      }
+
+      fill_nei_chunks_block_arrays(key, *nei_chunks_tmp_);
+
+      // TODO: no malloc
+
+      // TODO: race condition with get();
+
+      ThreadPool::get().detach_task([this, key, handle]() {
+        ChunkUploadData gpu_upload_data{
+            .key = key,
+            .handle = handle,
+        };
+        PaddedChunkVoxArrHandle padded_chunk_block_handle = padded_chunk_voxel_arr_pool_.alloc();
+        fill_padded_chunk_blocks(*nei_chunks_tmp_,
+                                 *padded_chunk_voxel_arr_pool_.get(padded_chunk_block_handle));
+        populate_mesh(*padded_chunk_voxel_arr_pool_.get(padded_chunk_block_handle),
+                      gpu_upload_data);
+        padded_chunk_voxel_arr_pool_.destroy(padded_chunk_block_handle);
+        chunk_gpu_upload_q_.enqueue(std::move(gpu_upload_data));
+      });
     }
+  }
 
-    auto handle = get_handle(key);
-    if (!handle.is_valid()) {
-      continue;
+  {
+    ChunkUploadData gpu_upload_data;
+    while (chunk_gpu_upload_q_.try_dequeue(gpu_upload_data)) {
+      renderer_->upload_chunk(gpu_upload_data);
     }
-    fill_nei_chunks_block_arrays(key, *nei_chunks_tmp_);
-
-    std::unique_ptr<PaddedChunkVoxArr> padded_chunk_blocks = std::make_unique<PaddedChunkVoxArr>();
-
-    fill_padded_chunk_blocks(*nei_chunks_tmp_, *padded_chunk_blocks);
-
-    // TODO: race condition with get();
-    renderer_->upload_chunk(handle, key, *get(handle), *padded_chunk_blocks);
   }
 }
 

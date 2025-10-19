@@ -1,12 +1,12 @@
 #pragma once
 
-#include <queue>
 #include <unordered_map>
 
 #include "core/Pool.hpp"
 #include "voxels/Chunk.hpp"
 #include "voxels/TerrainGenerator.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
+#include "concurrentqueue.h"
 #include "glm/gtx/hash.hpp"  // IWYU pragma: keep
 
 namespace vox {
@@ -63,17 +63,22 @@ class World {
  private:
   Renderer* renderer_{};
   std::unordered_map<ChunkKey, ChunkHandle> chunks_;
-  BlockPool<ChunkHandle, Chunk> chunk_pool_;
+  BlockPool<ChunkHandle, Chunk> chunk_pool_{16, 1, false};
+  using PaddedChunkVoxArrHandle = GenerationalHandle<PaddedChunkVoxArr>;
+  inline static uint16_t num_threads = std::thread::hardware_concurrency();
+  BlockPool<PaddedChunkVoxArrHandle, PaddedChunkVoxArr> padded_chunk_voxel_arr_pool_{num_threads, 1,
+                                                                                     false};
 
   ChunkHandle create_chunk(glm::ivec3 key) {
     auto handle = chunk_pool_.alloc();
     chunks_.emplace(key, handle);
     return handle;
   }
-  std::queue<ChunkKey> ready_for_mesh_queue_;
   // TODO: move
   std::unique_ptr<NeiChunksArr> nei_chunks_tmp_;
   TerrainGenerator terrain_generator_;
+  moodycamel::ConcurrentQueue<ChunkUploadData> chunk_gpu_upload_q_;
+  moodycamel::ConcurrentQueue<ChunkKey> ready_for_mesh_q_;
 };
 
 }  // namespace vox
