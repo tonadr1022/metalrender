@@ -21,6 +21,12 @@ struct GenerationalHandle {
 
   template <typename, typename>
   friend struct Pool;
+  template <typename, typename>
+  friend struct BlockPool;
+
+  [[nodiscard]] uint64_t to64() const {
+    return static_cast<uint64_t>(gen_) << 32 | static_cast<uint64_t>(idx_);
+  }
 
  private:
   uint32_t idx_{};

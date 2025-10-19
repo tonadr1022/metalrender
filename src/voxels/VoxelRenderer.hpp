@@ -1,30 +1,53 @@
 #pragma once
 
-#include <span>
-
-#include "Types.hpp"
+#include "gfx/Device.hpp"
+#include "gfx/RendererTypes.hpp"
+#include "gfx/metal/MetalBuffer.hpp"
 #include "voxels/Chunk.hpp"
+
+class RendererMetal;
+
+class MetalBuffer;
+
+namespace rhi {
+class Device;
+}
+
+namespace MTL {
+class CommandBuffer;
+class RenderCommandEncoder;
+class RenderPipelineState;
+class Buffer;
+}  // namespace MTL
 
 namespace vox {
 
 class Renderer {
  public:
-  void init() {
-    indices_.reserve(static_cast<size_t>(k_chunk_len_cu) * 6 * 6);
-    for (int i = 0; i < k_chunk_len_cu * 6; i++) {
-      size_t start_idx = indices_.size();
-      indices_.emplace_back(start_idx + 0);
-      indices_.emplace_back(start_idx + 1);
-      indices_.emplace_back(start_idx + 2);
-      indices_.emplace_back(start_idx + 1);
-      indices_.emplace_back(start_idx + 3);
-      indices_.emplace_back(start_idx + 2);
-    }
-  }
-  void upload_chunk(std::span<VoxelVertex> vertices, std::span<uint32_t> indices);
+  Renderer() = default;
+  void init(RendererMetal* renderer);
+
+  void upload_chunk(ChunkHandle handle, ChunkKey key, Chunk& chunk,
+                    const PaddedChunkVoxArr& padded_blocks);
+  void encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf);
 
  private:
-  std::vector<uint32_t> indices_;  // todo: move
+  struct ChunkRenderData {
+    rhi::BufferHandleHolder vertex_handle;
+    uint32_t vertex_count;
+    uint32_t index_count;
+    glm::vec3 chunk_world_pos;
+  };
+
+  std::unordered_map<uint64_t, ChunkRenderData> chunk_render_datas_;
+  rhi::BufferHandleHolder index_buf_;
+  RendererMetal* renderer_{};
+  rhi::Device* device_;
+  MTL::RenderPipelineState* main_pso_{};
+
+  MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
+    return reinterpret_cast<MetalBuffer*>(device_->get_buf(handle))->buffer();
+  }
 };
 
 }  // namespace vox

@@ -1,4 +1,4 @@
-Models/Sponza/glTF/Sponza.gltf
 Models/Suzanne/glTF/Suzanne.gltf
+Models/Sponza/glTF/Sponza.gltf
 Models/ABeautifulGame/glTF/ABeautifulGame.gltf
 Models/Cube/glTF/Cube.gltf

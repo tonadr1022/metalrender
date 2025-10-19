@@ -13,9 +13,10 @@ add_executable(${target_name}
     gfx/ModelInstance.cpp
     gfx/ResourceManager.cpp
     WindowApple.cpp
-    voxels/Chunk.hpp
-    voxels/TerrainGenerator.hpp
+    voxels/Chunk.cpp
+    voxels/TerrainGenerator.cpp
     voxels/VoxelRenderer.cpp
+    voxels/VoxelWorld.cpp
     util/Stats.cpp
 )
 
@@ -37,4 +38,5 @@ target_link_libraries(${target_name} PRIVATE
     Tracy::TracyClient
     lib_imgui
     offsetAllocator
+    FastNoise
 )

@@ -69,9 +69,11 @@ uint32_t prev_pow2(uint32_t val) {
 
 }  // namespace
 
-InstanceDataMgr::InstanceDataMgr(size_t initial_element_cap, MTL::Device *raw_device,
-                                 rhi::Device *device)
-    : allocator_(initial_element_cap), device_(device), raw_device_(raw_device) {
+void InstanceDataMgr::init(size_t initial_element_cap, MTL::Device *raw_device,
+                           rhi::Device *device) {
+  allocator_.emplace(initial_element_cap);
+  device_ = device;
+  raw_device_ = raw_device;
   allocate_buffers(initial_element_cap);
 
   // TODO: parameterize this or something better?
@@ -79,12 +81,12 @@ InstanceDataMgr::InstanceDataMgr(size_t initial_element_cap, MTL::Device *raw_de
 }
 
 OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
-  const OffsetAllocator::Allocation alloc = allocator_.allocate(element_count);
+  const OffsetAllocator::Allocation alloc = allocator_->allocate(element_count);
   if (alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
-    auto old_capacity = allocator_.capacity();
+    auto old_capacity = allocator_->capacity();
     auto new_capacity = old_capacity * 2;
-    allocator_.grow(allocator_.capacity());
-    ASSERT(new_capacity <= allocator_.capacity());
+    allocator_->grow(allocator_->capacity());
+    ASSERT(new_capacity <= allocator_->capacity());
     // TODO: copy contents
     auto old_instance_data_buf = std::move(instance_data_buf_);
     allocate_buffers(new_capacity);
@@ -104,6 +106,7 @@ void InstanceDataMgr::allocate_buffers(size_t element_count) {
 }
 
 void InstanceDataMgr::resize_icb(size_t element_count) {
+  ASSERT(raw_device_ != nullptr);
   if (element_count > icb_element_count_) {
     icb_element_count_ = std::max<size_t>(icb_element_count_ * 2ull, element_count);
     MTL::IndirectCommandBufferDescriptor *desc =
@@ -121,8 +124,9 @@ void InstanceDataMgr::resize_icb(size_t element_count) {
       desc->setMaxVertexBufferBindCount(3);
     }
     ASSERT(raw_device_ != nullptr);
-    main_icb_ = NS::TransferPtr(raw_device_->newIndirectCommandBuffer(
-        desc, icb_element_count_, MTL::ResourceStorageModePrivate));
+    ASSERT(icb_element_count_ > 0);
+    main_icb_ = raw_device_->newIndirectCommandBuffer(desc, icb_element_count_,
+                                                      MTL::ResourceStorageModePrivate);
     desc->release();
   }
 }
@@ -173,7 +177,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   init_imgui();
 
   const auto initial_instance_capacity{128};
-  instance_data_mgr_.emplace(initial_instance_capacity, raw_device_, device_);
+  instance_data_mgr_.init(initial_instance_capacity, raw_device_, device_);
   static_draw_batch_.emplace(DrawBatchType::Static, *device_,
                              DrawBatch::CreateInfo{
                                  .initial_vertex_capacity = 1'000'00,
@@ -192,8 +196,8 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   load_pipelines();
 
   // TODO: better size management this is awful
-  scene_arg_buffer_ = NS::TransferPtr(raw_device_->newBuffer(
-      (sizeof(uint64_t) * k_max_textures) + (sizeof(uint64_t) * k_max_buffers), 0));
+  scene_arg_buffer_ = raw_device_->newBuffer(
+      (sizeof(uint64_t) * k_max_textures) + (sizeof(uint64_t) * k_max_buffers), 0);
   {
     MTL::ArgumentDescriptor *arg0 = MTL::ArgumentDescriptor::alloc()->init();
     size_t curr_idx = 0;
@@ -212,7 +216,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     std::array<NS::Object *, 2> args_arr{arg0, arg1};
     const NS::Array *args = NS::Array::array(args_arr.data(), args_arr.size());
     global_arg_enc_ = raw_device_->newArgumentEncoder(args);
-    global_arg_enc_->setArgumentBuffer(scene_arg_buffer_.get(), 0);
+    global_arg_enc_->setArgumentBuffer(scene_arg_buffer_, 0);
     for (auto &i : args_arr) {
       i->release();
     }
@@ -234,14 +238,14 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   {
     dispatch_mesh_encode_arg_enc_ = get_function("dispatch_mesh_main")->newArgumentEncoder(1);
     dispatch_mesh_encode_arg_buf_ =
-        NS::TransferPtr(raw_device_->newBuffer(dispatch_mesh_encode_arg_enc_->encodedLength(), 0));
-    dispatch_mesh_encode_arg_enc_->setArgumentBuffer(dispatch_mesh_encode_arg_buf_.get(), 0);
+        raw_device_->newBuffer(dispatch_mesh_encode_arg_enc_->encodedLength(), 0);
+    dispatch_mesh_encode_arg_enc_->setArgumentBuffer(dispatch_mesh_encode_arg_buf_, 0);
   }
   {
     dispatch_vertex_encode_arg_enc_ = get_function("dispatch_vertex_main")->newArgumentEncoder(1);
-    dispatch_vertex_encode_arg_buf_ = NS::TransferPtr(
-        raw_device_->newBuffer(dispatch_vertex_encode_arg_enc_->encodedLength(), 0));
-    dispatch_vertex_encode_arg_enc_->setArgumentBuffer(dispatch_vertex_encode_arg_buf_.get(), 0);
+    dispatch_vertex_encode_arg_buf_ =
+        raw_device_->newBuffer(dispatch_vertex_encode_arg_enc_->encodedLength(), 0);
+    dispatch_vertex_encode_arg_enc_->setArgumentBuffer(dispatch_vertex_encode_arg_buf_, 0);
   }
 
   final_meshlet_draw_count_buf_ =
@@ -251,9 +255,8 @@ void RendererMetal::init(const CreateInfo &cinfo) {
 
   {
     main_object_arg_enc_ = get_function("basic1_object_main_late_pass")->newArgumentEncoder(2);
-    main_object_arg_buf_ =
-        NS::TransferPtr(raw_device_->newBuffer(main_object_arg_enc_->encodedLength(), 0));
-    main_object_arg_enc_->setArgumentBuffer(main_object_arg_buf_.get(), 0);
+    main_object_arg_buf_ = raw_device_->newBuffer(main_object_arg_enc_->encodedLength(), 0);
+    main_object_arg_enc_->setArgumentBuffer(main_object_arg_buf_, 0);
     main_object_arg_enc_->setBuffer(get_mtl_buf(final_meshlet_draw_count_buf_), 0, 4);
   }
 
@@ -410,8 +413,8 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
   ASSERT(instance_datas.size() == instance_id_to_node.size());
 
   const OffsetAllocator::Allocation instance_data_gpu_alloc =
-      instance_data_mgr_->allocate(model_instance_datas.size());
-  all_model_data_.max_objects = instance_data_mgr_->max_seen_size();
+      instance_data_mgr_.allocate(model_instance_datas.size());
+  all_model_data_.max_objects = instance_data_mgr_.max_seen_size();
 
   stats_.total_instance_meshlets += model_resources->totals.meshlets;
   stats_.total_instance_vertices += model_resources->totals.instance_vertices;
@@ -435,11 +438,11 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
     instance_datas[i].meshlet_vis_base += meshlet_vis_buf_alloc.offset;
   }
 
-  memcpy(reinterpret_cast<InstanceData *>(instance_data_mgr_->instance_data_buf()->contents()) +
+  memcpy(reinterpret_cast<InstanceData *>(instance_data_mgr_.instance_data_buf()->contents()) +
              instance_data_gpu_alloc.offset,
          instance_datas.data(), instance_datas.size() * sizeof(InstanceData));
 
-  main_icb_container_arg_enc_->setIndirectCommandBuffer(instance_data_mgr_->icb(), 0);
+  main_icb_container_arg_enc_->setIndirectCommandBuffer(instance_data_mgr_.icb(), 0);
 
   if (k_use_mesh_shader) {  // move this bs
     // on main vertex buffer resize at beginning of frame
@@ -449,14 +452,13 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
                                              EncodeMeshDrawArgs_MeshletBuf);
     dispatch_mesh_encode_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->mesh_buf), 0,
                                              EncodeMeshDrawArgs_MeshDataBuf);
-    dispatch_mesh_encode_arg_enc_->setBuffer(instance_data_mgr_->instance_data_buf(), 0,
+    dispatch_mesh_encode_arg_enc_->setBuffer(instance_data_mgr_.instance_data_buf(), 0,
                                              EncodeMeshDrawArgs_InstanceDataBuf);
     dispatch_mesh_encode_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->meshlet_vertices_buf),
                                              0, EncodeMeshDrawArgs_MeshletVerticesBuf);
     dispatch_mesh_encode_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->meshlet_triangles_buf),
                                              0, EncodeMeshDrawArgs_MeshletTrianglesBuf);
-    dispatch_mesh_encode_arg_enc_->setBuffer(scene_arg_buffer_.get(), 0,
-                                             EncodeMeshDrawArgs_SceneArgBuf);
+    dispatch_mesh_encode_arg_enc_->setBuffer(scene_arg_buffer_, 0, EncodeMeshDrawArgs_SceneArgBuf);
 
     main_object_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->mesh_buf), 0,
                                     MainObjectArgs_MeshDataBuf);
@@ -473,9 +475,9 @@ ModelInstanceGPUHandle RendererMetal::add_model_instance(const ModelInstance &mo
                                                DispatchVertexShaderArgs_MainIndexBuf);
     dispatch_vertex_encode_arg_enc_->setBuffer(get_mtl_buf(static_draw_batch_->mesh_buf), 0,
                                                DispatchVertexShaderArgs_MeshDataBuf);
-    dispatch_vertex_encode_arg_enc_->setBuffer(scene_arg_buffer_.get(), 0,
+    dispatch_vertex_encode_arg_enc_->setBuffer(scene_arg_buffer_, 0,
                                                DispatchVertexShaderArgs_SceneArgBuf);
-    dispatch_vertex_encode_arg_enc_->setBuffer(instance_data_mgr_->instance_data_buf(), 0,
+    dispatch_vertex_encode_arg_enc_->setBuffer(instance_data_mgr_.instance_data_buf(), 0,
                                                DispatchVertexShaderArgs_InstanceDataBuf);
   }
 
@@ -503,7 +505,7 @@ void RendererMetal::free_instance(ModelInstanceGPUHandle handle) {
   if (!gpu_resources) {
     return;
   }
-  instance_data_mgr_->free(gpu_resources->instance_data_gpu_alloc);
+  instance_data_mgr_.free(gpu_resources->instance_data_gpu_alloc);
 }
 namespace {
 
@@ -724,10 +726,16 @@ void RendererMetal::recreate_depth_pyramid_tex() {
   });
 
   auto *tex = reinterpret_cast<MetalTexture *>(device_->get_tex(depth_pyramid_tex_));
+  for (auto &depth_pyramid_tex_view : depth_pyramid_tex_views_) {
+    if (depth_pyramid_tex_view) {
+      depth_pyramid_tex_view->release();
+      depth_pyramid_tex_view = nullptr;
+    }
+  }
+
   for (size_t i = 0; i < tex->desc().mip_levels; i++) {
-    depth_pyramid_tex_views_[i] = NS::TransferPtr(
-        tex->texture()->newTextureView(MTL::PixelFormatR32Float, MTL::TextureType2D,
-                                       NS::Range::Make(i, 1), NS::Range::Make(0, 1)));
+    depth_pyramid_tex_views_[i] = tex->texture()->newTextureView(
+        MTL::PixelFormatR32Float, MTL::TextureType2D, NS::Range::Make(i, 1), NS::Range::Make(0, 1));
   }
 
   ALWAYS_ASSERT(main_object_arg_enc_);
@@ -861,19 +869,6 @@ DrawBatch::Alloc RendererMetal::upload_geometry([[maybe_unused]] DrawBatchType t
 }
 
 void RendererMetal::load_pipelines() {
-  auto load_pipeline = [this](const auto &desc) {
-    NS::Error *err{};
-    auto *result =
-        raw_device_->newRenderPipelineState(desc, MTL::PipelineOptionNone, nullptr, &err);
-    if (err) {
-      util::mtl::print_err(err);
-      exit(1);
-    }
-
-    desc->release();
-    return result;
-  };
-
   for (int is_late_pass = 0; is_late_pass < 2; is_late_pass++) {
     FuncConst object_func_consts[] = {{"is_late_pass", &is_late_pass, FuncConst::Type::Bool}};
     MTL::MeshRenderPipelineDescriptor *pipeline_desc =
@@ -885,7 +880,7 @@ void RendererMetal::load_pipelines() {
         object_func_consts));
     pipeline_desc->setFragmentFunction(get_function("basic1_fragment_main"));
     pipeline_desc->setLabel(util::mtl::string("basic mesh pipeline"));
-    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(main_pixel_format);
     pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
     pipeline_desc->setSupportIndirectCommandBuffers(true);
     if (is_late_pass) {
@@ -900,7 +895,7 @@ void RendererMetal::load_pipelines() {
     pipeline_desc->setVertexFunction(get_function("vertexMain"));
     pipeline_desc->setFragmentFunction(get_function("fragmentMain"));
     pipeline_desc->setLabel(util::mtl::string("basic vert pipeline"));
-    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(main_pixel_format);
     pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
     pipeline_desc->setSupportIndirectCommandBuffers(true);
     vertex_pso_ = load_pipeline(pipeline_desc);
@@ -910,7 +905,7 @@ void RendererMetal::load_pipelines() {
     pipeline_desc->setVertexFunction(get_function("full_screen_tex_vertex_main"));
     pipeline_desc->setFragmentFunction(get_function("full_screen_tex_frag_main"));
     pipeline_desc->setLabel(util::mtl::string("full screen texture pipeline"));
-    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    pipeline_desc->colorAttachments()->object(0)->setPixelFormat(main_pixel_format);
     full_screen_tex_pso_ = load_pipeline(pipeline_desc);
   }
 
@@ -936,6 +931,7 @@ void RendererMetal::load_pipelines() {
     depth_reduce_pso_ = create_compute_pipeline("depth_reduce_main");
   }
 }
+
 MTL::Function *RendererMetal::get_function(const char *name, bool load) {
   auto it = shader_funcs_.find(name);
   if (it == shader_funcs_.end()) {
@@ -1000,7 +996,7 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
   {
     MTL::BlitCommandEncoder *reset_blit_enc = buf->blitCommandEncoder();
     reset_blit_enc->setLabel(util::mtl::string("Reset ICB Blit Encoder"));
-    reset_blit_enc->resetCommandsInBuffer(instance_data_mgr_->icb(),
+    reset_blit_enc->resetCommandsInBuffer(instance_data_mgr_.icb(),
                                           NS::Range::Make(0, all_model_data_.max_objects));
 
     if (k_use_mesh_shader && meshlet_vis_buf_dirty_) {
@@ -1024,10 +1020,10 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     auto *compute_enc = begin_compute_enc(false);
     if (k_use_mesh_shader) {
       compute_enc->setComputePipelineState(dispatch_mesh_pso_);
-      compute_enc->setBuffer(dispatch_mesh_encode_arg_buf_.get(), 0, 1);
+      compute_enc->setBuffer(dispatch_mesh_encode_arg_buf_, 0, 1);
     } else {
       compute_enc->setComputePipelineState(dispatch_vertex_pso_);
-      compute_enc->setBuffer(dispatch_vertex_encode_arg_buf_.get(), 0, 1);
+      compute_enc->setBuffer(dispatch_vertex_encode_arg_buf_, 0, 1);
     }
 
     compute_enc->setBuffer(get_mtl_buf(main_icb_container_buf_), 0, 0);
@@ -1036,12 +1032,12 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     compute_enc->setBuffer(reinterpret_cast<MetalBuffer *>(cull_data_buf_->get_buf())->buffer(),
                            cull_data_buf_->get_offset_bytes(), 4);
     ASSERT(main_object_arg_buf_);
-    compute_enc->setBuffer(main_object_arg_buf_.get(), 0, 5);
+    compute_enc->setBuffer(main_object_arg_buf_, 0, 5);
     compute_enc->useResource(get_mtl_buf(*meshlet_vis_buf_),
                              MTL::ResourceUsageRead | MTL::ResourceUsageWrite);
 
-    compute_enc->useResource(instance_data_mgr_->icb(), MTL::ResourceUsageWrite);
-    compute_enc->useResource(instance_data_mgr_->instance_data_buf(), MTL::ResourceUsageRead);
+    compute_enc->useResource(instance_data_mgr_.icb(), MTL::ResourceUsageWrite);
+    compute_enc->useResource(instance_data_mgr_.instance_data_buf(), MTL::ResourceUsageRead);
     DispatchMeshParams params{.tot_meshes = all_model_data_.max_objects,
                               .frustum_cull = !culling_paused_ && object_frust_cull_enabled_};
     compute_enc->setBytes(&params, sizeof(DispatchMeshParams), 2);
@@ -1053,7 +1049,7 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
   {
     MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
     blit_enc->setLabel(util::mtl::string("Optimize ICB Blit Encoder"));
-    blit_enc->optimizeIndirectCommandBuffer(instance_data_mgr_->icb(),
+    blit_enc->optimizeIndirectCommandBuffer(instance_data_mgr_.icb(),
                                             NS::Range::Make(0, all_model_data_.max_objects));
     blit_enc->endEncoding();
   }
@@ -1074,13 +1070,13 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
 
   auto use_mesh_shader_resources = [this](MTL::RenderCommandEncoder *enc) {
     const MTL::Resource *const resources[] = {
-        instance_data_mgr_->instance_data_buf(),
+        instance_data_mgr_.instance_data_buf(),
         get_mtl_buf(static_draw_batch_->vertex_buf),
         get_mtl_buf(static_draw_batch_->meshlet_buf),
         get_mtl_buf(static_draw_batch_->mesh_buf),
         get_mtl_buf(static_draw_batch_->meshlet_vertices_buf),
         get_mtl_buf(static_draw_batch_->meshlet_triangles_buf),
-        scene_arg_buffer_.get(),
+        scene_arg_buffer_,
     };
     enc->useResources(resources, ARRAY_SIZE(resources), MTL::ResourceUsageRead);
   };
@@ -1119,6 +1115,9 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     set_depth_stencil_state(enc);
     set_cull_mode_wind_order(enc);
 
+    for (auto &cb : main_render_pass_callbacks_) {
+      cb(enc, reinterpret_cast<MetalBuffer *>(gpu_uniform_buf_->get_buf())->buffer());
+    }
     use_fragment_resources(enc);
     if (k_use_mesh_shader) {
       enc->setRenderPipelineState(mesh_pso_);
@@ -1128,17 +1127,17 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     } else {
       enc->setRenderPipelineState(vertex_pso_);
       const MTL::Resource *const resources[] = {
-          instance_data_mgr_->instance_data_buf(),
+          instance_data_mgr_.instance_data_buf(),
           get_mtl_buf(static_draw_batch_->vertex_buf),
           get_mtl_buf(static_draw_batch_->index_buf),
           get_mtl_buf(static_draw_batch_->mesh_buf),
-          scene_arg_buffer_.get(),
+          scene_arg_buffer_,
           get_mtl_buf(*materials_buf_),
       };
       enc->useResources(resources, ARRAY_SIZE(resources), MTL::ResourceUsageRead);
     }
 
-    enc->executeCommandsInBuffer(instance_data_mgr_->icb(),
+    enc->executeCommandsInBuffer(instance_data_mgr_.icb(),
                                  NS::Range::Make(0, all_model_data_.max_objects));
 
     enc->endEncoding();
@@ -1151,14 +1150,12 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     auto dp_dims = main_tex->desc().dims;
     auto *depth_tex = reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_));
     auto depth_dims = depth_tex->desc().dims;
+
     for (size_t i = 0; i < main_tex->desc().mip_levels; i++) {
-      depth_pyramid_tex_views_[i] = NS::TransferPtr(
-          main_tex->texture()->newTextureView(MTL::PixelFormatR32Float, MTL::TextureType2D,
-                                              NS::Range::Make(i, 1), NS::Range::Make(0, 1)));
       MTL::Texture *input_view =
           i == 0 ? reinterpret_cast<MetalTexture *>(device_->get_tex(depth_tex_))->texture()
-                 : depth_pyramid_tex_views_[i - 1].get();
-      MTL::Texture *output_view = depth_pyramid_tex_views_[i].get();
+                 : depth_pyramid_tex_views_[i - 1];
+      MTL::Texture *output_view = depth_pyramid_tex_views_[i];
       enc->useResource(input_view, MTL::ResourceUsageSample);
       enc->useResource(output_view, MTL::ResourceUsageWrite);
 
@@ -1210,7 +1207,7 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     enc->useResource(get_mtl_buf(*meshlet_vis_buf_),
                      MTL::ResourceUsageRead | MTL::ResourceUsageWrite);
 
-    enc->executeCommandsInBuffer(instance_data_mgr_->icb(),
+    enc->executeCommandsInBuffer(instance_data_mgr_.icb(),
                                  NS::Range::Make(0, all_model_data_.max_objects));
     enc->endEncoding();
   }
@@ -1245,7 +1242,7 @@ void RendererMetal::encode_debug_depth_pyramid_view(MTL::CommandBuffer *buf,
   enc->setFragmentBytes(&args, sizeof(args), 0);
 
   // enc->setFragmentTexture(get_mtl_tex(depth_tex_), 0);
-  enc->setFragmentTexture(depth_pyramid_tex_views_[debug_depth_pyramid_mip_level_].get(), 0);
+  enc->setFragmentTexture(depth_pyramid_tex_views_[debug_depth_pyramid_mip_level_], 0);
   enc->drawPrimitives(MTL::PrimitiveTypeTriangle, 0, 3, 1);
 
   enc->endEncoding();
@@ -1264,4 +1261,28 @@ const constexpr char *RendererMetal::to_string(RendererMetal::RenderMode mode) {
       ALWAYS_ASSERT(0);
       return "";
   }
+}
+
+MTL::RenderPipelineState *RendererMetal::load_pipeline(MTL::RenderPipelineDescriptor *desc) {
+  NS::Error *err{};
+  auto *result = raw_device_->newRenderPipelineState(desc, MTL::PipelineOptionNone, nullptr, &err);
+  if (err) {
+    util::mtl::print_err(err);
+    exit(1);
+  }
+
+  desc->release();
+  return result;
+}
+
+MTL::RenderPipelineState *RendererMetal::load_pipeline(MTL::MeshRenderPipelineDescriptor *desc) {
+  NS::Error *err{};
+  auto *result = raw_device_->newRenderPipelineState(desc, MTL::PipelineOptionNone, nullptr, &err);
+  if (err) {
+    util::mtl::print_err(err);
+    exit(1);
+  }
+
+  desc->release();
+  return result;
 }

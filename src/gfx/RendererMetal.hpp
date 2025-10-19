@@ -8,7 +8,6 @@
 #include <span>
 
 #include "Config.hpp"
-#include "Foundation/NSSharedPtr.hpp"
 #include "GFXTypes.hpp"
 #include "ModelLoader.hpp"
 #include "RendererTypes.hpp"
@@ -39,6 +38,8 @@ class AutoreleasePool;
 
 namespace MTL {
 
+class MeshRenderPipelineDescriptor;
+class RenderPipelineDescriptor;
 class CommandBuffer;
 class Library;
 class ComputePipelineState;
@@ -170,21 +171,21 @@ struct ModelInstanceGPUResources {
 
 class InstanceDataMgr {
  public:
-  InstanceDataMgr(size_t initial_element_cap, MTL::Device* raw_device, rhi::Device* device);
+  void init(size_t initial_element_cap, MTL::Device* raw_device, rhi::Device* device);
   [[nodiscard]] MTL::Buffer* instance_data_buf() const {
     return reinterpret_cast<MetalBuffer*>(device_->get_buf(instance_data_buf_))->buffer();
   }
   OffsetAllocator::Allocation allocate(size_t element_count);
   [[nodiscard]] size_t allocation_size(OffsetAllocator::Allocation alloc) const {
-    return allocator_.allocationSize(alloc);
+    return allocator_->allocationSize(alloc);
   }
-  [[nodiscard]] MTL::IndirectCommandBuffer* icb() const { return main_icb_.get(); }
+  [[nodiscard]] MTL::IndirectCommandBuffer* icb() const { return main_icb_; }
 
   void free(OffsetAllocator::Allocation alloc) {
-    auto element_count = allocator_.allocationSize(alloc);
+    auto element_count = allocator_->allocationSize(alloc);
     memset(reinterpret_cast<InstanceData*>(instance_data_buf()->contents()) + alloc.offset,
            UINT32_MAX, element_count * sizeof(InstanceData));
-    allocator_.free(alloc);
+    allocator_->free(alloc);
     curr_element_count_ -= element_count;
   }
   [[nodiscard]] uint32_t max_seen_size() const { return max_seen_size_; }
@@ -192,14 +193,14 @@ class InstanceDataMgr {
  private:
   void allocate_buffers(size_t element_count);
   void resize_icb(size_t element_count);
-  OffsetAllocator::Allocator allocator_;
+  std::optional<OffsetAllocator::Allocator> allocator_;
   rhi::BufferHandleHolder instance_data_buf_;
   uint32_t max_seen_size_{};
   uint32_t icb_element_count_{};
   uint32_t curr_element_count_{};
   rhi::Device* device_{};
   MTL::Device* raw_device_{};
-  NS::SharedPtr<MTL::IndirectCommandBuffer> main_icb_;
+  MTL::IndirectCommandBuffer* main_icb_ = nullptr;
 };
 
 class GPUFrameAllocator;
@@ -264,6 +265,12 @@ class RendererMetal {
     std::filesystem::path resource_dir;
     std::function<void()> render_imgui_callback;
   };
+  using MainRenderPassCallback =
+      std::function<void(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf)>;
+
+  void add_main_render_pass_callback(MainRenderPassCallback&& cb) {
+    main_render_pass_callbacks_.emplace_back(cb);
+  }
 
   void init(const CreateInfo& cinfo);
   void shutdown();
@@ -283,6 +290,12 @@ class RendererMetal {
 
   enum class RenderMode { Default, Normals, NormalMap, Count };
   const constexpr char* to_string(RendererMetal::RenderMode mode);
+
+  MTL::RenderPipelineState* load_pipeline(MTL::RenderPipelineDescriptor* desc);
+  MTL::RenderPipelineState* load_pipeline(MTL::MeshRenderPipelineDescriptor* desc);
+  MTL::Function* get_function(const char* name, bool load = true);
+
+  const MTL::PixelFormat main_pixel_format{MTL::PixelFormatBGRA8Unorm};
 
  private:
   // struct PerFrameData {
@@ -326,7 +339,7 @@ class RendererMetal {
   rhi::TextureHandleHolder depth_tex_;
   rhi::TextureHandleHolder depth_pyramid_tex_;
   // TODO: refactor
-  std::array<NS::SharedPtr<MTL::Texture>, 16> depth_pyramid_tex_views_{};
+  std::array<MTL::Texture*, 16> depth_pyramid_tex_views_{};
   static constexpr bool k_reverse_z = true;
   enum class DebugRenderView {
     None,
@@ -358,9 +371,9 @@ class RendererMetal {
   std::optional<DrawBatch> static_draw_batch_;
 
   std::optional<BackedGPUAllocator> materials_buf_;
-  NS::SharedPtr<MTL::Buffer> scene_arg_buffer_;
+  MTL::Buffer* scene_arg_buffer_;
 
-  std::optional<InstanceDataMgr> instance_data_mgr_;
+  InstanceDataMgr instance_data_mgr_;
   std::optional<GPUFrameAllocator> gpu_frame_allocator_;
   std::optional<PerFrameBuffer<Uniforms>> gpu_uniform_buf_;
   std::optional<PerFrameBuffer<CullData>> cull_data_buf_;
@@ -369,11 +382,11 @@ class RendererMetal {
   static constexpr float k_z_near{0.001};
   static constexpr float k_z_far{10'000};
 
-  NS::SharedPtr<MTL::Buffer> dispatch_mesh_encode_arg_buf_;
+  MTL::Buffer* dispatch_mesh_encode_arg_buf_;
   MTL::ArgumentEncoder* dispatch_mesh_encode_arg_enc_{};
-  NS::SharedPtr<MTL::Buffer> dispatch_vertex_encode_arg_buf_;
+  MTL::Buffer* dispatch_vertex_encode_arg_buf_;
   MTL::ArgumentEncoder* dispatch_vertex_encode_arg_enc_{};
-  NS::SharedPtr<MTL::Buffer> main_object_arg_buf_;
+  MTL::Buffer* main_object_arg_buf_;
   MTL::ArgumentEncoder* main_object_arg_enc_{};
   rhi::BufferHandleHolder final_meshlet_draw_count_buf_;
   rhi::BufferHandleHolder final_meshlet_draw_count_cpu_buf_;
@@ -401,7 +414,6 @@ class RendererMetal {
 
   // std::vector<PerFrameData> per_frame_datas_;
 
-  MTL::Function* get_function(const char* name, bool load = true);
   MTL::Library* default_shader_lib_;
   MTL::Function* create_function(const std::string& name, const std::string& specialized_name,
                                  std::span<FuncConst> consts);
@@ -434,6 +446,8 @@ class RendererMetal {
 
   Stats stats_;
   util::RollingAvgCtr frame_times_{128};
+
+  std::vector<MainRenderPassCallback> main_render_pass_callbacks_;
 };
 
 static constexpr const char* to_string(RendererMetal::RenderMode mode);

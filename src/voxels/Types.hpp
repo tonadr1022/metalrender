@@ -1,7 +1,8 @@
 #pragma once
 
+#include "core/Handle.hpp"
 #include "core/Math.hpp"
 
-struct VoxelVertex {
-  glm::vec3 pos;
-};
+class Chunk;
+using ChunkKey = glm::ivec3;
+using ChunkHandle = GenerationalHandle<Chunk>;

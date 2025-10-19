@@ -16,3 +16,6 @@
 [submodule "third_party/OffsetAllocator"]
 	path = third_party/OffsetAllocator
 	url = git@github.com:sebbbi/OffsetAllocator.git
+[submodule "third_party/FastNoise2"]
+	path = third_party/FastNoise2
+	url = git@github.com:Auburn/FastNoise2.git

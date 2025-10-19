@@ -5,6 +5,14 @@
 
 // Credit: ChatGPT 5.0 (I was too lazy)
 
+#define ALL_ASSERTS_ENABLED 1
+
+#ifndef NDEBUG
+#ifndef ALL_ASSERTS_ENABLED
+#define ALL_ASSERTS_ENABLED 1
+#endif
+#endif
+
 class AlwaysAssert {
  public:
   static void fail(const char* expr, const char* file, int line) {
@@ -25,7 +33,7 @@ class AlwaysAssert {
     }                                                                          \
   } while (0)
 
-#ifndef NDEBUG
+#ifdef ALL_ASSERTS_ENABLED
 #define ASSERT(expr, ...)                                                      \
   do {                                                                         \
     if (!(expr)) {                                                             \

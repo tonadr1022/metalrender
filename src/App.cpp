@@ -13,6 +13,7 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
 #include "tracy/Tracy.hpp"
+#include "voxels/VoxelWorld.hpp"
 namespace {
 
 std::filesystem::path get_resource_dir() {
@@ -126,7 +127,12 @@ App::App() {
                                            .window = window_.get(),
                                            .resource_dir = resource_dir_,
                                            .render_imgui_callback = [this]() { on_imgui(); }});
+  voxel_renderer_ = std::make_unique<vox::Renderer>();
+  voxel_renderer_->init(&renderer_);
+  voxel_world_ = std::make_unique<vox::World>();
+  voxel_world_->init(voxel_renderer_.get());
 }
+
 namespace rando {
 
 namespace {
@@ -148,7 +154,7 @@ float get_float(float min, float max) {
 void App::run() {
   ZoneScoped;
   rando::seed(10000000);
-  int scene = 0;
+  int scene = 1;
   if (scene == 0) {
     glm::ivec3 iter{};
     int n = 0;
@@ -162,7 +168,7 @@ void App::run() {
     }
     // load_model(config_.initial_model_path);
   } else if (scene == 1) {
-    size_t count = 1000;
+    size_t count = 100;
     float scale = 10;
 
     for (size_t i = 0; i < count; i++) {
@@ -193,6 +199,10 @@ void App::run() {
     auto dt = static_cast<float>(curr_time - last_time);
     last_time = curr_time;
     camera_.update_pos(window_->get_handle(), dt);
+
+    if (voxels_on_) {  // TODO: std optional
+      voxel_world_->update(dt);
+    }
 
     for (const auto model : models_) {
       ResourceManager::get().get_model(model)->update_transforms();
@@ -272,6 +282,5 @@ void App::on_imgui() {
 void App::load_model(const std::filesystem::path& path, const glm::mat4& transform) {
   auto full_path =
       path.string().starts_with("Models") ? resource_dir_ / "models" / "gltf" / path : path;
-  LINFO("{}", full_path.string());
   models_.push_back(ResourceManager::get().load_model(full_path, transform));
 }

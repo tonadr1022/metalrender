@@ -5,6 +5,8 @@
 #include "gfx/RendererMetal.hpp"
 #include "gfx/ResourceManager.hpp"
 #include "gfx/metal/MetalDevice.hpp"
+#include "voxels/VoxelRenderer.hpp"
+#include "voxels/VoxelWorld.hpp"
 
 class Camera {
  public:
@@ -58,4 +60,7 @@ struct App {
   glm::vec2 last_pos_{};
   // TODO: ptr for impl/RHI
   RendererMetal renderer_;
+  std::unique_ptr<vox::Renderer> voxel_renderer_;
+  std::unique_ptr<vox::World> voxel_world_;
+  bool voxels_on_{true};
 };

@@ -2,6 +2,9 @@ add_subdirectory(metal-cpp)
 add_subdirectory(glfw)
 add_subdirectory(glm)
 
+set(FASTNOISE2_NOISETOOL OFF CACHE BOOL "Build Noise Tool" FORCE)
+add_subdirectory(FastNoise2)
+
 add_library(lib_imgui STATIC
     imgui/imgui.cpp
     imgui/imgui_demo.cpp
@@ -11,6 +14,7 @@ add_library(lib_imgui STATIC
     imgui/misc/cpp/imgui_stdlib.cpp
     imgui/backends/imgui_impl_glfw.cpp
     imgui/backends/imgui_impl_metal.mm)
+
 set_source_files_properties(
     imgui/backends/imgui_impl_metal.mm
     PROPERTIES
@@ -20,12 +24,6 @@ set_source_files_properties(
 target_link_libraries(lib_imgui PUBLIC METAL_CPP glfw)
 
 add_subdirectory(OffsetAllocator)
-#add_library(offset_allocator
-#    OffsetAllocator/offsetAllocator.cpp
-#)
-#target_include_directories(offset_allocator PUBLIC
-#    OffsetAllocator
-#)
 
 target_include_directories(lib_imgui PUBLIC
     imgui
