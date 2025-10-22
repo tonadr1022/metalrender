@@ -14,6 +14,7 @@ add_executable(${target_name}
     gfx/ResourceManager.cpp
     WindowApple.cpp
     voxels/Chunk.cpp
+    voxels/Mesher.cpp
     voxels/TerrainGenerator.cpp
     voxels/VoxelRenderer.cpp
     voxels/VoxelWorld.cpp

@@ -118,9 +118,12 @@ struct BlockPool {
   BlockPool(BlockPool&& other) = delete;
 
   void clear() {
+    std::unique_lock lock(mtx_);
     all_entries_.clear();
+    free_list_.clear();
     size_ = 0;
-    // TODO: anything else?
+    num_created_ = 0;
+    num_destroyed_ = 0;
   }
 
   struct Entry {
@@ -145,40 +148,24 @@ struct BlockPool {
   HandleT alloc(Args&&... args) {
     std::unique_lock lock(mtx_);
     HandleT handle;
-    auto alloc = [&]() {
-      EntryKey entry_key = free_list_.back();
-      auto combined_key =
-          static_cast<uint32_t>(entry_key.block << 16) | static_cast<uint32_t>(entry_key.idx);
-      handle.idx_ = combined_key;
-      free_list_.pop_back();
-      ::new (std::addressof(all_entries_[entry_key.block][entry_key.idx].object))
-          ObjectT{std::forward<Args>(args)...};
-    };
-    if (!free_list_.empty()) {
-      alloc();
-    } else {
+    if (free_list_.empty()) {
       add_block();
       ASSERT(!free_list_.empty());
-      alloc();
     }
 
-    EntryKey new_entry_key = get_entry_key(handle.idx_);
-    handle.gen_ = all_entries_[new_entry_key.block][new_entry_key.idx].gen_;
+    EntryKey entry_key = free_list_.back();
+    free_list_.pop_back();
+    auto combined_key =
+        static_cast<uint32_t>(entry_key.block << 16) | static_cast<uint32_t>(entry_key.idx);
+    handle.idx_ = combined_key;
+    ::new (std::addressof(all_entries_[entry_key.block][entry_key.idx].object))
+        ObjectT{std::forward<Args>(args)...};
+
+    handle.gen_ = all_entries_[entry_key.block][entry_key.idx].gen_;
     num_created_++;
     size_++;
-    all_entries_[new_entry_key.block][new_entry_key.idx].live_ = true;
+    all_entries_[entry_key.block][entry_key.idx].live_ = true;
     return handle;
-  }
-
-  void add_block() {
-    if (all_entries_.size() >= std::numeric_limits<uint16_t>::max()) {
-      throw std::runtime_error("max number of blocks reached");
-    }
-    auto block = static_cast<uint16_t>(all_entries_.size());
-    for (uint16_t i = 0; i < element_count_per_block_; i++) {
-      free_list_.emplace_back(EntryKey{.block = block, .idx = i});
-    }
-    all_entries_.emplace_back(std::vector<Entry>(element_count_per_block_));
   }
 
   [[nodiscard]] size_t size() const { return size_; }
@@ -192,18 +179,22 @@ struct BlockPool {
     if (!entry_key_valid(entry_key)) {
       return;
     }
-    if (get_entry(entry_key).gen_ != handle.gen_) {
+    Entry& entry = get_entry(entry_key);
+    if (entry.gen_ != handle.gen_) {
       return;
     }
-    get_entry(entry_key).gen_++;
-    get_entry(entry_key).object = {};
-    get_entry(entry_key).live_ = false;
+    entry.gen_++;
+    if (do_destroy_) {
+      if (do_destroy_) entry.object.~ObjectT();
+    }
+    entry.live_ = false;
     free_list_.emplace_back(entry_key);
     size_--;
     num_destroyed_++;
   }
 
   ObjectT* get(HandleT handle) {
+    std::shared_lock lock(mtx_);
     if (!handle.gen_) return nullptr;
     const EntryKey entry_key = get_entry_key(handle.idx_);
     if (!entry_key_valid(entry_key)) {
@@ -216,6 +207,7 @@ struct BlockPool {
   }
 
   const ObjectT* get(HandleT handle) const {
+    std::shared_lock lock(mtx_);
     if (!handle.gen_) return nullptr;
     const EntryKey entry_key = get_entry_key(handle.idx_);
     if (!entry_key_valid(entry_key)) {
@@ -230,7 +222,7 @@ struct BlockPool {
   [[nodiscard]] size_t num_blocks() const { return all_entries_.size(); }
 
  private:
-  std::shared_mutex mtx_;
+  mutable std::shared_mutex mtx_;
   std::vector<EntryKey> free_list_;
   std::vector<std::vector<Entry>> all_entries_;
   size_t size_{};
@@ -255,6 +247,17 @@ struct BlockPool {
         free_list_.emplace_back(EntryKey{.block = i, .idx = j});
       }
     }
+  }
+
+  void add_block() {
+    if (all_entries_.size() >= std::numeric_limits<uint16_t>::max()) {
+      throw std::runtime_error("max number of blocks reached");
+    }
+    auto block = static_cast<uint16_t>(all_entries_.size());
+    for (uint16_t i = 0; i < element_count_per_block_; i++) {
+      free_list_.emplace_back(EntryKey{.block = block, .idx = i});
+    }
+    all_entries_.emplace_back(std::vector<Entry>(element_count_per_block_));
   }
 };
 

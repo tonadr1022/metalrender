@@ -3,14 +3,10 @@
 
 #include "shader_core.h"
 
-#define k_chunk_len 64
+#define k_chunk_len 62
 
 struct PerChunkUniforms {
-  float3 chunk_pos;
-};
-
-struct VoxelVertex {
-  uint32_t vert;
+  int4 chunk_pos;
 };
 
 struct VoxelMaterial {

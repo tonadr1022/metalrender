@@ -27,15 +27,16 @@ class Renderer {
   Renderer() = default;
   void init(RendererMetal* renderer);
 
-  void upload_chunk(const ChunkUploadData& upload_data);
+  void upload_chunk(const ChunkUploadData& upload_data, const std::vector<uint64_t>& vertices);
   void encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf);
 
  private:
   struct ChunkRenderData {
     rhi::BufferHandleHolder vertex_handle;
-    uint32_t vertex_count;
-    uint32_t index_count;
-    glm::vec3 chunk_world_pos;
+    glm::ivec3 chunk_world_pos;
+    uint32_t quad_count;
+    std::array<uint32_t, 6> face_vert_begin{};
+    std::array<uint32_t, 6> face_vert_length{};
   };
 
   std::unordered_map<uint64_t, ChunkRenderData> chunk_render_datas_;

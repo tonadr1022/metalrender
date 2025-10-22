@@ -6,5 +6,6 @@ shader_out/
 .vscode/
 imgui.ini
 .clangd
+build-debug
 # ignore local models
 resources/models/gltf

@@ -20,6 +20,8 @@
 #define float2 glm::vec2
 #define float3 glm::vec3
 #define float4 glm::vec4
+#define int3 glm::ivec3
+#define int4 glm::ivec4
 
 #define ATTR_POSITION
 #endif

@@ -1,9 +1,12 @@
 #pragma once
 
+#include <queue>
 #include <unordered_map>
 
+#include "core/Handle.hpp"
 #include "core/Pool.hpp"
 #include "voxels/Chunk.hpp"
+#include "voxels/Mesher.hpp"
 #include "voxels/TerrainGenerator.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "concurrentqueue.h"
@@ -12,6 +15,20 @@
 namespace vox {
 
 class Renderer;
+
+#define GREEDY_MESHING_ENABLED 1
+
+void iterate_in_radius(glm::ivec3 iter, int radius, auto&& f) {
+  auto end = iter + radius;
+  auto begin = iter - radius;
+  for (iter.y = begin.y; iter.y <= end.y; iter.y++) {
+    for (iter.x = begin.x; iter.x <= end.x; iter.x++) {
+      for (iter.z = begin.z; iter.z <= end.z; iter.z++) {
+        f(iter);
+      }
+    }
+  }
+}
 
 class World {
  public:
@@ -36,17 +53,17 @@ class World {
   Chunk* get(ChunkHandle handle) { return chunk_pool_.get(handle); }
 
   static constexpr int get_nei_chunk_idx(int x, int y, int z) {
-    return (x + 1) + ((z + 1) * 3) + ((y + 1) * 9);
+    return (z + 1) + ((x + 1) * 3) + ((y + 1) * 9);
   }
 
   static constexpr int get_nei_chunk_idx(glm::ivec3 key) {
-    return get_nei_chunk_idx(key.x, key.y, key.z);
+    return get_nei_chunk_idx(key.y, key.y, key.z);
   }
 
   bool is_meshable(ChunkKey key) {
     for (int y = -1; y <= 1; y++) {
-      for (int z = -1; z <= 1; z++) {
-        for (int x = -1; x <= 1; x++) {
+      for (int x = -1; x <= 1; x++) {
+        for (int z = -1; z <= 1; z++) {
           if (!get(key + glm::ivec3(x, y, z))) return false;
         }
       }
@@ -64,10 +81,15 @@ class World {
   Renderer* renderer_{};
   std::unordered_map<ChunkKey, ChunkHandle> chunks_;
   BlockPool<ChunkHandle, Chunk> chunk_pool_{16, 1, false};
-  using PaddedChunkVoxArrHandle = GenerationalHandle<PaddedChunkVoxArr>;
   inline static uint16_t num_threads = std::thread::hardware_concurrency();
+
+  using PaddedChunkVoxArrHandle = GenerationalHandle<PaddedChunkVoxArr>;
   BlockPool<PaddedChunkVoxArrHandle, PaddedChunkVoxArr> padded_chunk_voxel_arr_pool_{num_threads, 1,
                                                                                      false};
+  using NeiChunksArrHandle = GenerationalHandle<NeiChunksArr>;
+  BlockPool<NeiChunksArrHandle, NeiChunksArr> nei_chunks_arr_pool_{num_threads, 1, false};
+  using MesherDataHandle = GenerationalHandle<greedy_mesher::MeshData>;
+  BlockPool<MesherDataHandle, greedy_mesher::MeshData> mesher_data_pool_{num_threads, 1, false};
 
   ChunkHandle create_chunk(glm::ivec3 key) {
     auto handle = chunk_pool_.alloc();
@@ -75,10 +97,17 @@ class World {
     return handle;
   }
   // TODO: move
-  std::unique_ptr<NeiChunksArr> nei_chunks_tmp_;
   TerrainGenerator terrain_generator_;
+  struct TerrainGenTask {
+    ChunkKey key;
+    ChunkHandle handle;
+  };
+  std::queue<TerrainGenTask> to_terrain_gen_q_;
   moodycamel::ConcurrentQueue<ChunkUploadData> chunk_gpu_upload_q_;
   moodycamel::ConcurrentQueue<ChunkKey> ready_for_mesh_q_;
+  size_t meshes_in_flight_{};
+  std::atomic<size_t> terrain_tasks_in_flight_;
+  size_t tasks_{};
 };
 
 }  // namespace vox

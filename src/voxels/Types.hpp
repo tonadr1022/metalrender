@@ -11,7 +11,8 @@ using ChunkHandle = GenerationalHandle<Chunk>;
 struct ChunkUploadData {
   ChunkKey key;
   ChunkHandle handle;
-  std::vector<VoxelVertex> vertices;
-  uint32_t index_count;
-  uint32_t vertex_count;
+  std::vector<uint64_t> vertices;
+  uint32_t quad_count;
+  std::array<uint32_t, 6> face_vert_begin{};
+  std::array<uint32_t, 6> face_vert_length{};
 };
