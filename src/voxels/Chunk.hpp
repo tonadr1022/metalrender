@@ -60,9 +60,12 @@ struct Chunk {
 
  public:
   [[nodiscard]] const ChunkVoxArr& get_blocks() const { return blocks; }
-  MeshId mesh_id;
-  constexpr static MeshId k_invalid_mesh_id = UINT32_MAX;
   int non_air_block_count{};
+  bool has_terrain{};
+  bool has_mesh{};
+  bool is_meshing{};
+
+  constexpr static MeshId k_invalid_mesh_id = UINT32_MAX;
 
   [[nodiscard]] VoxelId get(int x, int y, int z) const { return blocks.get(x, y, z); }
   [[nodiscard]] VoxelId get(int i) const { return blocks.get(i); }

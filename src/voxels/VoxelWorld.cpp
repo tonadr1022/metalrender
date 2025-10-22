@@ -3,15 +3,24 @@
 #include <tracy/Tracy.hpp>
 
 #include "core/EAssert.hpp"
+#include "core/Logger.hpp"
 #include "core/ThreadPool.hpp"
 #include "voxels/Chunk.hpp"
 #include "voxels/TerrainGenerator.hpp"
 #include "voxels/Types.hpp"
 #include "voxels/VoxelRenderer.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/string_cast.hpp>
 
 #define BM_IMPEMENTATION
 #include "Mesher.hpp"
 
+namespace {
+
+constexpr int radius = 10;
+constexpr glm::ivec2 y_chunk_range = {-1, 2};
+
+}  // namespace
 namespace vox {
 
 void World::init(Renderer* renderer) {
@@ -19,8 +28,7 @@ void World::init(Renderer* renderer) {
   renderer_ = renderer;
   {
     glm::vec3 key{};
-    int radius = 10;
-    for (key.y = -1; key.y <= 2; key.y++) {
+    for (key.y = y_chunk_range.x; key.y <= y_chunk_range.y; key.y++) {
       for (key.x = -radius; key.x <= radius; key.x++) {
         for (key.z = -radius; key.z <= radius; key.z++) {
           to_terrain_gen_q_.emplace(key, create_chunk(key));
@@ -184,68 +192,25 @@ void World::update(float) {
   }
 
   {
-    ChunkKey key;
-    while (ready_for_mesh_q_.try_dequeue(key) && meshes_in_flight_ < 32) {
-      if (!is_meshable(key)) {
-        continue;
-      }
-
-      auto handle = get_handle(key);
-      if (!handle.is_valid()) {
-        continue;
-      }
-
-      const NeiChunksArrHandle nei_chunk_arr_handle = nei_chunks_arr_pool_.alloc();
-      fill_nei_chunks_block_arrays(key, *nei_chunks_arr_pool_.get(nei_chunk_arr_handle));
-
-      meshes_in_flight_++;
-
-      ThreadPool::get().detach_task([this, key, handle, nei_chunk_arr_handle]() {
-        // TODO: vertices are malloced here
-        ChunkUploadData gpu_upload_data{
-            .key = key,
-            .handle = handle,
-        };
-        const PaddedChunkVoxArrHandle padded_chunk_block_handle =
-            padded_chunk_voxel_arr_pool_.alloc();
-        PaddedChunkVoxArr& padded_blocks =
-            *padded_chunk_voxel_arr_pool_.get(padded_chunk_block_handle);
-        fill_padded_chunk_blocks(*nei_chunks_arr_pool_.get(nei_chunk_arr_handle), padded_blocks);
-        const MesherDataHandle md_handle = mesher_data_pool_.alloc();
-        greedy_mesher::MeshData& mesh_data = *mesher_data_pool_.get(md_handle);
-        mesh_data.vertices = &gpu_upload_data.vertices;
-        mesh_data.resize();
-
-        // TODO: thread safe?
-        const Chunk* chunk = chunk_pool_.get(handle);
-        ASSERT(chunk);
-        // TODO: improve
-        mesh_data.opaqueMask.assign(mesh_data.opaqueMask.size(), 0);
-        mesh_data.forwardMerged.assign(mesh_data.forwardMerged.size(), 0);
-        mesh_data.rightMerged.assign(mesh_data.rightMerged.size(), 0);
-        mesh_data.faceMasks.assign(mesh_data.faceMasks.size(), 0);
-        mesh_data.vertices->clear();
-        for (int y = 0, i = 0; y < k_chunk_len_padded; y++) {
-          for (int x = 0; x < k_chunk_len_padded; x++) {
-            for (int z = 0; z < k_chunk_len_padded; z++, i++) {
-              if (padded_blocks[i]) {
-                mesh_data.opaqueMask[(y * k_chunk_len_padded) + x] |= 1ull << z;
-              }
-            }
+    auto pos = glm::ivec3{};
+    auto begin = pos + glm::ivec3{-radius, y_chunk_range.x, -radius};
+    auto end = pos + glm::ivec3{radius, y_chunk_range.y, radius};
+    glm::ivec3 iter;
+    for (iter.y = begin.y; iter.y <= end.y; iter.y++) {
+      for (iter.x = begin.x; iter.x <= end.x; iter.x++) {
+        for (iter.z = begin.z; iter.z <= end.z; iter.z++) {
+          if (meshes_in_flight_ > 32) {
+            break;
+          }
+          Chunk* chunk = get(iter);
+          ASSERT(chunk);
+          if (chunk->has_terrain && chunk->non_air_block_count > 0 && !chunk->has_mesh &&
+              !chunk->is_meshing && is_meshable(iter)) {
+            chunk->is_meshing = true;
+            send_chunk_task(iter);
           }
         }
-        greedy_mesher::mesh(padded_blocks.data(), mesh_data);
-        mesh_data.vertices = nullptr;
-        padded_chunk_voxel_arr_pool_.destroy(padded_chunk_block_handle);
-        nei_chunks_arr_pool_.destroy(nei_chunk_arr_handle);
-        gpu_upload_data.face_vert_begin = mesh_data.faceVertexBegin;
-        gpu_upload_data.face_vert_length = mesh_data.faceVertexLength;
-        gpu_upload_data.quad_count = mesh_data.vertexCount;
-
-        chunk_gpu_upload_q_.enqueue(std::move(gpu_upload_data));
-
-        mesher_data_pool_.destroy(md_handle);
-      });
+      }
     }
   }
 
@@ -259,4 +224,62 @@ void World::update(float) {
   }
 }
 
+void World::send_chunk_task(ChunkKey key) {
+  auto handle = get_handle(key);
+  if (!handle.is_valid()) {
+    return;
+  }
+
+  const NeiChunksArrHandle nei_chunk_arr_handle = nei_chunks_arr_pool_.alloc();
+  fill_nei_chunks_block_arrays(key, *nei_chunks_arr_pool_.get(nei_chunk_arr_handle));
+
+  meshes_in_flight_++;
+
+  ThreadPool::get().detach_task([this, key, handle, nei_chunk_arr_handle]() {
+    // TODO: vertices are malloced here
+    ChunkUploadData gpu_upload_data{
+        .key = key,
+        .handle = handle,
+    };
+    const PaddedChunkVoxArrHandle padded_chunk_block_handle = padded_chunk_voxel_arr_pool_.alloc();
+    PaddedChunkVoxArr& padded_blocks = *padded_chunk_voxel_arr_pool_.get(padded_chunk_block_handle);
+    fill_padded_chunk_blocks(*nei_chunks_arr_pool_.get(nei_chunk_arr_handle), padded_blocks);
+    const MesherDataHandle md_handle = mesher_data_pool_.alloc();
+    greedy_mesher::MeshData& mesh_data = *mesher_data_pool_.get(md_handle);
+    mesh_data.vertices = &gpu_upload_data.vertices;
+    mesh_data.resize();
+
+    // TODO: thread safe?
+    Chunk* chunk = chunk_pool_.get(handle);
+    ASSERT(chunk);
+    // TODO: improve
+    mesh_data.opaqueMask.assign(mesh_data.opaqueMask.size(), 0);
+    mesh_data.forwardMerged.assign(mesh_data.forwardMerged.size(), 0);
+    mesh_data.rightMerged.assign(mesh_data.rightMerged.size(), 0);
+    mesh_data.faceMasks.assign(mesh_data.faceMasks.size(), 0);
+    mesh_data.vertices->clear();
+    for (int y = 0, i = 0; y < k_chunk_len_padded; y++) {
+      for (int x = 0; x < k_chunk_len_padded; x++) {
+        for (int z = 0; z < k_chunk_len_padded; z++, i++) {
+          if (padded_blocks[i]) {
+            mesh_data.opaqueMask[(y * k_chunk_len_padded) + x] |= 1ull << z;
+          }
+        }
+      }
+    }
+    greedy_mesher::mesh(padded_blocks.data(), mesh_data);
+    LINFO("{} {} {}", chunk->has_terrain, chunk->non_air_block_count, mesh_data.vertexCount);
+    mesh_data.vertices = nullptr;
+    padded_chunk_voxel_arr_pool_.destroy(padded_chunk_block_handle);
+    nei_chunks_arr_pool_.destroy(nei_chunk_arr_handle);
+    gpu_upload_data.face_vert_begin = mesh_data.faceVertexBegin;
+    gpu_upload_data.face_vert_length = mesh_data.faceVertexLength;
+    gpu_upload_data.quad_count = mesh_data.vertexCount;
+    chunk->has_mesh = true;
+
+    chunk_gpu_upload_q_.enqueue(std::move(gpu_upload_data));
+
+    mesher_data_pool_.destroy(md_handle);
+  });
+}
 }  // namespace vox

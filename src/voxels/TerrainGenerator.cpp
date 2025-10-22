@@ -63,6 +63,10 @@ void TerrainGenerator::generate_world_chunk(const glm::ivec3& chunk_key, Chunk& 
     }
   }
   chunk.non_air_block_count = non_air_count;
+  ASSERT(!chunk.has_terrain);
+  chunk.has_terrain = true;
+  ASSERT(!chunk.is_meshing);
+  ASSERT(!chunk.has_mesh);  // TODO: questionable
 }
 
 }  // namespace vox

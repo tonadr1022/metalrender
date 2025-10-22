@@ -64,7 +64,8 @@ class World {
     for (int y = -1; y <= 1; y++) {
       for (int x = -1; x <= 1; x++) {
         for (int z = -1; z <= 1; z++) {
-          if (!get(key + glm::ivec3(x, y, z))) return false;
+          Chunk* chunk = get(key + glm::ivec3(x, y, z));
+          if (!chunk || !chunk->has_terrain) return false;
         }
       }
     }
@@ -108,6 +109,8 @@ class World {
   size_t meshes_in_flight_{};
   std::atomic<size_t> terrain_tasks_in_flight_;
   size_t tasks_{};
+
+  void send_chunk_task(ChunkKey key);
 };
 
 }  // namespace vox

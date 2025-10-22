@@ -1,10 +1,13 @@
 #include "Mesher.hpp"
 
+#include <tracy/Tracy.hpp>
+
 #include "core/Logger.hpp"
 
 namespace greedy_mesher {
 
 void mesh(const uint8_t* voxels, MeshData& meshData) {
+  ZoneScoped;
   meshData.vertexCount = 0;
   size_t vertexI = 0;
 
