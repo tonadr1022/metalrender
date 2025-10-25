@@ -67,8 +67,8 @@ class MetalDevice : public rhi::Device {
   void use_bindless_buffer(MTL::RenderCommandEncoder* enc);
 
  private:
-  Pool<rhi::BufferHandle, MetalBuffer> buffer_pool_{128};
-  Pool<rhi::TextureHandle, MetalTexture> texture_pool_{128};
+  BlockPool<rhi::BufferHandle, MetalBuffer> buffer_pool_{128, 1, true};
+  BlockPool<rhi::TextureHandle, MetalTexture> texture_pool_{128, 1, true};
   IndexAllocator texture_index_allocator_{k_max_textures};
   NS::AutoreleasePool* ar_pool_{};
   MTL::Device* device_{};

@@ -32,7 +32,7 @@ class Renderer {
   void init(RendererMetal* renderer);
   void on_imgui();
 
-  void upload_chunk(const ChunkUploadData& upload_data, const std::vector<uint64_t>& vertices);
+  void upload_chunk(const ChunkUploadData& upload_data);
   void encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf);
   void load_voxel_resources(VoxelDB& vdb, const std::filesystem::path& block_tex_dir);
 
@@ -40,9 +40,13 @@ class Renderer {
   struct ChunkRenderData {
     rhi::BufferHandleHolder vertex_handle;
     glm::ivec3 chunk_world_pos;
-    uint32_t quad_count;
-    std::array<uint32_t, 6> face_vert_begin{};
-    std::array<uint32_t, 6> face_vert_length{};
+    struct PerLod {
+      uint32_t quad_count;
+      std::array<uint32_t, 6> face_vert_begin{};
+      std::array<uint32_t, 6> face_vert_length{};
+      size_t vert_begin_bytes{};
+    };
+    std::array<PerLod, k_chunk_bits + 1> lods;
   };
 
   std::unordered_map<uint64_t, ChunkRenderData> chunk_render_datas_;
@@ -58,6 +62,7 @@ class Renderer {
   rhi::TextureHandleHolder voxel_tex_arr_;
   rhi::BufferHandleHolder voxel_material_buf_;
   bool normal_map_enabled_{true};
+  int curr_render_lod_{0};
 };
 
 }  // namespace vox

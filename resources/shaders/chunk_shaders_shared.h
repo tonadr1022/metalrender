@@ -8,6 +8,7 @@
 
 struct PerChunkUniforms {
   int4 chunk_pos;
+  int4 data;
 };
 
 struct VoxelMaterial {

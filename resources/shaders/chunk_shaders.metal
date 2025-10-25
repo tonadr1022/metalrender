@@ -52,9 +52,10 @@ v2f vertex chunk_vertex_main(uint vertexId [[vertex_id]],
     int3 chunk_world_pos = per_chunk_uniforms.chunk_pos.xyz;
     v2f o;
     const Data vert = vertices[vertexId >> 2];
-    int3 i_vertex_pos = int3(vert.d1, vert.d1 >> 6u, vert.d1 >> 12u) & 63;
+    int lod = per_chunk_uniforms.data.x;
+    int3 i_vertex_pos =(int3(vert.d1, vert.d1 >> 6u, vert.d1 >> 12u) & 63) * (1<<lod);
     int face = per_chunk_uniforms.chunk_pos.w;
-    int w = int((vert.d1 >> 18u) & 63u), h = int((vert.d1 >> 24u) & 63u);
+    int w = int((vert.d1 >> 18u) & 63u) * (1<<lod), h = int((vert.d1 >> 24u) & 63u) * (1<<lod);
     uint wDir = (face & 2) >> 1, hDir = 2 - (face >> 2);
     int wMod = v_id >> 1, hMod = v_id & 1;
     i_vertex_pos[wDir] += (w * wMod * flipLookup[face]);

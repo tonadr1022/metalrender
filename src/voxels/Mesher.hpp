@@ -62,6 +62,11 @@ struct MeshData {
   }
 };
 
+struct MeshDataAllLods {
+  // 0 , 1 4096, 2 512, 3 64, 4 8, 5 1
+  std::array<MeshData, k_chunk_bits + 1> lod_mesh_datas;
+};
+
 // @param[in] voxels: The input data includes duplicate edge data from neighboring chunks which is
 // used for visibility culling. For optimal performance, your world data should already be
 // structured this way so that you can feed the data straight into this algorithm. Input data is

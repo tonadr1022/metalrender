@@ -43,6 +43,7 @@ inline int get_idx_in_lod(int x, int y, int z, int lod) {
   return z + (x * k_chunk_len >> lod) + (y * (k_chunk_len >> lod) * (k_chunk_len >> lod));
 }
 
+// TODO: use binary
 inline constexpr int lod_array_pref_sums[k_chunk_bits] = {
     0, 4096, 4096 + 512, 4096 + 512 + 64, 4096 + 512 + 64 + 8,
 };
@@ -115,6 +116,6 @@ struct Chunk {
 
 using PaddedChunkVoxArr = std::vector<VoxelId>;
 
-void populate_mesh(const PaddedChunkVoxArr& voxels, ChunkUploadData& result);
+// void populate_mesh(const PaddedChunkVoxArr& voxels, ChunkUploadData& result);
 
 }  // namespace vox

@@ -99,8 +99,9 @@ class World {
                                                                                      false};
   using NeiChunksArrHandle = GenerationalHandle<NeiChunksArr>;
   BlockPool<NeiChunksArrHandle, NeiChunksArr> nei_chunks_arr_pool_{num_threads, 1, false};
-  using MesherDataHandle = GenerationalHandle<greedy_mesher::MeshData>;
-  BlockPool<MesherDataHandle, greedy_mesher::MeshData> mesher_data_pool_{num_threads, 1, false};
+  using MesherDataHandle = GenerationalHandle<greedy_mesher::MeshDataAllLods>;
+  BlockPool<MesherDataHandle, greedy_mesher::MeshDataAllLods> mesher_data_pool_{num_threads, 1,
+                                                                                false};
 
   ChunkHandle create_chunk(glm::ivec3 key) {
     auto handle = chunk_pool_.alloc();

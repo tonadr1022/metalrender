@@ -190,8 +190,12 @@ void World::fill_padded_chunk_blocks_lod(const NeiChunksArr& nei_chunks, int lod
   for (int y = 0; y < cs; y++) {
     for (int x = 0; x < cs; x++) {
       for (int z = 0; z < cs; z++) {
-        result[get_idx_cs(x + 1, y + 1, z + 1, cs_p)] =
-            main_chunk.lod_blocks[get_idx_lod(x, y, z, lod)];
+        if (lod == 0) {
+          result[get_idx_cs(x + 1, y + 1, z + 1, cs_p)] = main_chunk.blocks[get_idx(x, y, z)];
+        } else {
+          result[get_idx_cs(x + 1, y + 1, z + 1, cs_p)] =
+              main_chunk.lod_blocks[get_idx_lod(x, y, z, lod)];
+        }
       }
     }
   }
@@ -258,7 +262,7 @@ void World::update(float) {
     while (chunk_gpu_upload_q_.try_dequeue(gpu_upload_data)) {
       meshes_in_flight_--;
       // TODO: refactor
-      renderer_->upload_chunk(gpu_upload_data, gpu_upload_data.vertices);
+      renderer_->upload_chunk(gpu_upload_data);
     }
   }
 }
@@ -281,43 +285,49 @@ void World::send_chunk_task(ChunkKey key) {
         .handle = handle,
     };
     const PaddedChunkVoxArrHandle padded_chunk_block_handle = padded_chunk_voxel_arr_pool_.alloc();
-    PaddedChunkVoxArr& padded_blocks = *padded_chunk_voxel_arr_pool_.get(padded_chunk_block_handle);
-    auto& nei_chunks_arr = *nei_chunks_arr_pool_.get(nei_chunk_arr_handle);
-    fill_padded_chunk_blocks(nei_chunks_arr, padded_blocks);
     // PaddedChunkVoxArr pb2;
     // fill_padded_chunk_blocks_lod(nei_chunks_arr, 1, pb2);
 
     const MesherDataHandle md_handle = mesher_data_pool_.alloc();
     ASSERT(mesher_data_pool_.get(md_handle));
-    greedy_mesher::MeshData& mesh_data = *mesher_data_pool_.get(md_handle);
-    mesh_data.vertices = &gpu_upload_data.vertices;
-    mesh_data.resize();
+    greedy_mesher::MeshDataAllLods& mesh_data = *mesher_data_pool_.get(md_handle);
 
-    // TODO: thread safe?
+    // TODO: thread safe? what about deletions
     Chunk* chunk = chunk_pool_.get(handle);
     ASSERT(chunk);
-    // TODO: improve, don't do this?
-    mesh_data.opaqueMask.assign(mesh_data.opaqueMask.size(), 0);
-    mesh_data.forwardMerged.assign(mesh_data.forwardMerged.size(), 0);
-    mesh_data.rightMerged.assign(mesh_data.rightMerged.size(), 0);
-    mesh_data.faceMasks.assign(mesh_data.faceMasks.size(), 0);
-    mesh_data.vertices->clear();
-    for (int y = 0, i = 0; y < k_chunk_len_padded; y++) {
-      for (int x = 0; x < k_chunk_len_padded; x++) {
-        for (int z = 0; z < k_chunk_len_padded; z++, i++) {
-          if (padded_blocks[i]) {
-            mesh_data.opaqueMask[(y * k_chunk_len_padded) + x] |= 1ull << z;
+
+    PaddedChunkVoxArr& padded_blocks = *padded_chunk_voxel_arr_pool_.get(padded_chunk_block_handle);
+    auto& nei_chunks_arr = *nei_chunks_arr_pool_.get(nei_chunk_arr_handle);
+    for (int lod = 0; lod <= k_chunk_bits; lod++) {
+      auto& md = mesh_data.lod_mesh_datas[lod];
+      md.vertices = &gpu_upload_data.lods[lod].vertices;
+      int cs = k_chunk_len >> lod;
+      md.resize(cs);
+      md.vertices->clear();
+
+      padded_blocks.clear();
+      fill_padded_chunk_blocks_lod(nei_chunks_arr, lod, padded_blocks);
+
+      // TODO: move lol
+      int cs_p = cs + 2;
+      for (int y = 0, i = 0; y < cs_p; y++) {
+        for (int x = 0; x < cs_p; x++) {
+          for (int z = 0; z < cs_p; z++, i++) {
+            if (padded_blocks[i]) {
+              md.opaqueMask[(y * cs_p) + x] |= 1ull << z;
+            }
           }
         }
       }
+      greedy_mesher::mesh(padded_blocks.data(), md, lod);
+      md.vertices = nullptr;
+      gpu_upload_data.lods[lod].face_vert_begin = md.faceVertexBegin;
+      gpu_upload_data.lods[lod].face_vert_length = md.faceVertexLength;
+      gpu_upload_data.lods[lod].quad_count = md.vertexCount;
     }
-    greedy_mesher::mesh(padded_blocks.data(), mesh_data, 0);
-    mesh_data.vertices = nullptr;
+
     padded_chunk_voxel_arr_pool_.destroy(padded_chunk_block_handle);
     nei_chunks_arr_pool_.destroy(nei_chunk_arr_handle);
-    gpu_upload_data.face_vert_begin = mesh_data.faceVertexBegin;
-    gpu_upload_data.face_vert_length = mesh_data.faceVertexLength;
-    gpu_upload_data.quad_count = mesh_data.vertexCount;
     chunk->has_mesh = true;
 
     chunk_gpu_upload_q_.enqueue(std::move(gpu_upload_data));

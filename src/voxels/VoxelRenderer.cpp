@@ -19,26 +19,52 @@
 
 namespace vox {
 
-void vox::Renderer::upload_chunk(const ChunkUploadData& upload_data,
-                                 const std::vector<uint64_t>& vertices) {
+void vox::Renderer::upload_chunk(const ChunkUploadData& upload_data) {
   ChunkKey key = upload_data.key;
   auto handle = upload_data.handle;
   NS::SharedPtr<MTL::Buffer> vertex_buf;
-  if (!vertices.size()) {
+
+  bool has_vertices = false;
+  for (const auto& l : upload_data.lods) {
+    has_vertices |= l.quad_count > 0;
+  }
+  if (!has_vertices) {
     return;
   }
+  size_t tot_quads = 0;
+  for (const auto& l : upload_data.lods) {
+    tot_quads += l.quad_count;
+  }
+
   glm::vec3 chunk_world_pos = glm::vec3{key} * glm::vec3{k_chunk_len};
-  size_t quads_size_bytes = sizeof(uint64_t) * upload_data.quad_count;
+  size_t quads_size_bytes = sizeof(uint64_t) * tot_quads;
+  ASSERT(tot_quads > 0);
   auto vertex_handle = device_->create_buf_h(
       rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default, .size = quads_size_bytes});
-  memcpy(device_->get_buf(vertex_handle)->contents(), vertices.data(), quads_size_bytes);
-  chunk_render_datas_.emplace(handle.to64(), ChunkRenderData{
-                                                 .vertex_handle = std::move(vertex_handle),
-                                                 .chunk_world_pos = chunk_world_pos,
-                                                 .quad_count = upload_data.quad_count,
-                                                 .face_vert_begin = upload_data.face_vert_begin,
-                                                 .face_vert_length = upload_data.face_vert_length,
-                                             });
+  size_t offset = 0;
+  ChunkRenderData render_data{
+      .chunk_world_pos = chunk_world_pos,
+  };
+  auto* vert_buf = device_->get_buf(vertex_handle);
+  for (size_t lod = 0; lod < upload_data.lods.size(); lod++) {
+    const auto& l = upload_data.lods[lod];
+    size_t copy_size = l.quad_count * sizeof(uint64_t);
+    if (copy_size) {
+      // if (copy_size + offset >= quads_size_bytes) {
+      //   LINFO("{} {} {}", copy_size, offset, quads_size_bytes);
+      // }
+      // ASSERT(copy_size + offset < quads_size_bytes);
+      memcpy((uint8_t*)vert_buf->contents() + offset, l.vertices.data(), copy_size);
+      render_data.lods[lod];
+    }
+    render_data.lods[lod].vert_begin_bytes = offset;
+    offset += copy_size;
+    render_data.lods[lod].face_vert_begin = upload_data.lods[lod].face_vert_begin;
+    render_data.lods[lod].face_vert_length = upload_data.lods[lod].face_vert_length;
+  }
+  render_data.vertex_handle = std::move(vertex_handle);
+
+  chunk_render_datas_.emplace(handle.to64(), std::move(render_data));
 }
 
 void Renderer::encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf) {
@@ -54,14 +80,17 @@ void Renderer::encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* 
     VoxelFragmentUniforms u{.normal_map_enabled = normal_map_enabled_};
     enc->setFragmentBytes(&u, sizeof(u), 1);
   }
-  for (const auto& [key, val] : chunk_render_datas_) {
-    auto* buf = get_mtl_buf(val.vertex_handle);
+  for (const auto& [key, rd] : chunk_render_datas_) {
+    auto* buf = get_mtl_buf(rd.vertex_handle);
+    const auto& lod = rd.lods[curr_render_lod_];
     for (int face = 0; face < 6; face++) {
-      if (val.face_vert_length[face]) {
-        PerChunkUniforms chunk_uniforms{.chunk_pos = glm::ivec4{val.chunk_world_pos, face}};
-        enc->setVertexBuffer(buf, val.face_vert_begin[face] * sizeof(uint64_t), 0);
+      if (lod.face_vert_length[face]) {
+        PerChunkUniforms chunk_uniforms{.chunk_pos = glm::ivec4{rd.chunk_world_pos, face},
+                                        .data = glm::ivec4{curr_render_lod_, 0, 0, 0}};
+        enc->setVertexBuffer(
+            buf, lod.vert_begin_bytes + lod.face_vert_begin[face] * sizeof(uint64_t), 0);
         enc->setVertexBytes(&chunk_uniforms, sizeof(chunk_uniforms), 1);
-        enc->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, val.face_vert_length[face] * 6ul,
+        enc->drawIndexedPrimitives(MTL::PrimitiveTypeTriangle, lod.face_vert_length[face] * 6ul,
                                    MTL::IndexTypeUInt32, index_buf, 0);
       }
     }
@@ -198,6 +227,9 @@ void Renderer::load_voxel_resources(VoxelDB& vdb, const std::filesystem::path& b
   }
 }
 
-void Renderer::on_imgui() { ImGui::Checkbox("Voxel Normal Maps", &normal_map_enabled_); }
+void Renderer::on_imgui() {
+  ImGui::Checkbox("Voxel Normal Maps", &normal_map_enabled_);
+  ImGui::SliderInt("lod", &curr_render_lod_, 0, k_chunk_bits + 1);
+}
 
 }  // namespace vox
