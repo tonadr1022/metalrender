@@ -12,6 +12,7 @@
 #define packed_float4x4 glm::mat4
 #define float4x4 glm::mat4
 
+#define uint uint32_t
 #define packed_float2 glm::vec2
 #define packed_float3 glm::vec3
 #define packed_char3 glm::i8vec3

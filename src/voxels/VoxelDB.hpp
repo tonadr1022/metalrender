@@ -10,13 +10,14 @@ namespace vox {
 class Renderer;
 
 struct BlockTextureData {
-  std::string albedo_texname;
+  std::filesystem::path albedo_texname;
 };
 
 struct BlockData {
   std::string name;
   glm::vec3 color;
-  uint32_t albedo_tex_idx{k_invalid_id};
+  uint32_t albedo_tex_idx[6] = {k_invalid_id};
+  uint32_t normal_tex_idx[6] = {k_invalid_id};
   uint32_t id{k_invalid_id};
   constexpr static uint32_t k_invalid_id{UINT32_MAX};
 };

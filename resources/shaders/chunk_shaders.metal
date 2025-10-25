@@ -11,6 +11,7 @@ struct v2f {
   half4 color;
   half3 normal;
   float2 uv;
+  uint face [[flat]];
   uint material_id [[flat]];
 };
 
@@ -21,7 +22,7 @@ struct Data {
 
 constant constexpr int flipLookup[6] = {1, -1, -1, 1, -1, 1};
 
-constant const float3 normal_lookup[8] = {
+constant const float3 normal_lookup[6] = {
   float3(0,1,0),
   float3(0,-1,0),
   float3(1,0,0),
@@ -62,10 +63,19 @@ v2f vertex chunk_vertex_main(uint vertexId [[vertex_id]],
     uint material = (vert.d2 & 255u) - 1;
     float3 color = color_lookup[material];
 
+    o.face = face;
     o.position = uniforms.vp * float4(pos_in_chunk.xyz + float3(chunk_world_pos), 1.0);
+    o.normal = half3(normal_lookup[face]);
     o.material_id = material;
     o.color = half4(half3(color),1.0);
-    o.uv = float2(wMod, hMod);
+    o.uv = float2(w * wMod, 1.0 - h * hMod);
+    // TODO: branchless
+    if (face == 3) {
+        o.uv = o.uv.yx * float2(1,-1);
+    }
+    if (face == 2) {
+        o.uv = o.uv.yx * float2(-1,1);
+    }
 
     //o.color = half4(pos_in_chunk.x / k_chunk_len, pos_in_chunk.y / k_chunk_len, pos_in_chunk.z / k_chunk_len, 1.0);
     return o;
@@ -81,8 +91,17 @@ float4 fragment chunk_fragment_main(v2f in [[stage_in]],
         t_address::repeat,
         r_address::repeat
     );
+    half3 sun_dir = normalize(half3(1,1,0));
     device const VoxelMaterial& material = voxel_materials[in.material_id];
-    float4 albedo = block_tex_arr.sample(samp, in.uv, material.albedo_idx);
-    return albedo;
+    float4 albedo = block_tex_arr.sample(samp, in.uv, material.indices[in.face]);
+    half3 normal = half3(block_tex_arr.sample(samp, in.uv, material.indices[in.face + 6]).xyz);
+   // return float4(float3(normal), 1.0);
+
+    // [0,1] => [-1,1]
+    normal = normal * 2.0 - 1.0;
+
+    float4 color = albedo * clamp(dot(sun_dir, in.normal + normal), 0.0h,1.0h) * 0.8;
+    color.xyz += float3(0.2) * albedo.xyz;
+    return color;
 //    return float4(in.color);
 }

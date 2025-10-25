@@ -57,9 +57,20 @@ void VoxelDB::populate_tex_arr_indices(
     auto& b = block_datas_[i];
     auto it = name_to_array_layer.find(tex_data.albedo_texname);
     if (it != name_to_array_layer.end()) {
-      b.albedo_tex_idx = it->second;
+      for (auto& i : b.albedo_tex_idx) {
+        i = it->second;
+      }
     } else {
       LERROR("missing albedo texture for block: {}", b.name);
+    }
+    auto normal_it = name_to_array_layer.find(tex_data.albedo_texname.stem().string() + "_n" +
+                                              tex_data.albedo_texname.extension().string());
+    if (normal_it != name_to_array_layer.end()) {
+      for (auto& i : b.normal_tex_idx) {
+        i = normal_it->second;
+      }
+    } else {
+      LERROR("missing normal texture for block: {}", b.name);
     }
   }
 }

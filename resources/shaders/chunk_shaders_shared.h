@@ -11,7 +11,9 @@ struct PerChunkUniforms {
 };
 
 struct VoxelMaterial {
-  uint32_t albedo_idx;
+  uint indices[12];
 };
+
+#define k_invalid_idx 4294967295  // UINT32_MAX
 
 #endif

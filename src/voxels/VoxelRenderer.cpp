@@ -102,6 +102,8 @@ void Renderer::load_voxel_resources(VoxelDB& vdb, const std::filesystem::path& b
     to_load_tex_filenames.reserve(vdb.get_block_texture_datas().size());
     for (const BlockTextureData& tex_data : vdb.get_block_texture_datas()) {
       to_load_tex_filenames.insert(tex_data.albedo_texname);
+      to_load_tex_filenames.insert(tex_data.albedo_texname.stem().string() + "_n" +
+                                   tex_data.albedo_texname.extension().string());
     }
 
     if (to_load_tex_filenames.size()) {
@@ -128,6 +130,7 @@ void Renderer::load_voxel_resources(VoxelDB& vdb, const std::filesystem::path& b
             LoadData ld{};
             std::filesystem::path tex_path = block_tex_dir / to_load_tex_filenames_vec[tex_i];
             ld.data = stbi_load(tex_path.c_str(), &ld.x, &ld.y, &ld.comp, 4);
+            ld.comp = 4;
             if (!ld.data) {
               LERROR("Failed to load texture data at: {}", tex_path.string());
             }
@@ -145,7 +148,8 @@ void Renderer::load_voxel_resources(VoxelDB& vdb, const std::filesystem::path& b
       upload.data.reserve(tex_array_load_datas.size());
       for (const auto& ld : tex_array_load_datas) {
         if (ld.x != x0 || ld.y != y0 || ld.comp != comp0) {
-          LERROR("Mismatch texture array dimensions");
+          LERROR("Mismatch texture array dimensions:\tA: {} {} {}\tB: {} {} {}\n", x0, y0, comp0,
+                 ld.x, ld.y, ld.comp);
           valid_tex_array = false;
           break;
         }
@@ -175,8 +179,11 @@ void Renderer::load_voxel_resources(VoxelDB& vdb, const std::filesystem::path& b
     std::vector<VoxelMaterial> materials;
     materials.reserve(voxel_datas.size());
     for (const auto& d : voxel_datas) {
-      ALWAYS_ASSERT(d.albedo_tex_idx != BlockData::k_invalid_id);
-      materials.emplace_back(d.albedo_tex_idx);
+      auto& mat = materials.emplace_back();
+      for (int i = 0; i < 6; i++) {
+        mat.indices[i] = d.albedo_tex_idx[i];
+        mat.indices[i + 6] = d.normal_tex_idx[i];
+      }
     }
 
     size_t copy_size = sizeof(VoxelMaterial) * materials.size();
