@@ -13,6 +13,7 @@
 #include "gfx/GFXTypes.hpp"
 #include "gfx/RendererMetal.hpp"
 #include "gfx/metal/MetalUtil.hpp"
+#include "imgui.h"
 #include "voxels/Types.hpp"
 #include "voxels/VoxelDB.hpp"
 
@@ -49,6 +50,10 @@ void Renderer::encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* 
   enc->setFragmentTexture(
       reinterpret_cast<MetalTexture*>(renderer_->get_device()->get_tex(voxel_tex_arr_))->texture(),
       0);
+  {
+    VoxelFragmentUniforms u{.normal_map_enabled = normal_map_enabled_};
+    enc->setFragmentBytes(&u, sizeof(u), 1);
+  }
   for (const auto& [key, val] : chunk_render_datas_) {
     auto* buf = get_mtl_buf(val.vertex_handle);
     for (int face = 0; face < 6; face++) {
@@ -192,5 +197,7 @@ void Renderer::load_voxel_resources(VoxelDB& vdb, const std::filesystem::path& b
            copy_size);
   }
 }
+
+void Renderer::on_imgui() { ImGui::Checkbox("Voxel Normal Maps", &normal_map_enabled_); }
 
 }  // namespace vox

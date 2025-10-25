@@ -42,15 +42,6 @@ SOFTWARE.
 #include "chunk_shaders_shared.h"
 namespace greedy_mesher {
 
-static constexpr int CS = k_chunk_len;
-static_assert(CS <= 62);
-
-// Padded chunk size
-static constexpr int CS_P = CS + 2;
-static constexpr int CS_2 = CS * CS;
-static constexpr int CS_P2 = CS_P * CS_P;
-static constexpr int CS_P3 = CS_P * CS_P * CS_P;
-
 struct MeshData {
   std::vector<uint64_t> faceMasks;     // CS_2 * 6
   std::vector<uint64_t> opaqueMask;    // CS_P2
@@ -61,11 +52,12 @@ struct MeshData {
   std::array<uint32_t, 6> faceVertexBegin{};
   std::array<uint32_t, 6> faceVertexLength{};
 
-  void resize() {
-    faceMasks.resize(CS_2 * 6ull);
-    opaqueMask.resize(CS_P2);
-    forwardMerged.resize(CS_2);
-    rightMerged.resize(CS);
+  void resize(size_t cs = k_chunk_len) {
+    size_t cs_p = cs + 2;
+    faceMasks.resize(cs * cs * 6ull);
+    opaqueMask.resize(cs_p * cs_p);
+    forwardMerged.resize(cs_p * cs_p);
+    rightMerged.resize(cs);
     vertices->resize(10000);
   }
 };
@@ -76,16 +68,17 @@ struct MeshData {
 // ordered in ZXY and is 64^3 which results in a 62^3 mesh.
 //
 // @param[out] meshData The allocated vertices in MeshData with a length of meshData.vertexCount.
-void mesh(const uint8_t* voxels, MeshData& meshData);
+void mesh(const uint8_t* voxels, MeshData& meshData, int lod);
 
-static inline int getAxisIndex(const int axis, const int a, const int b, const int c) {
+static inline int getAxisIndex(const int axis, const int a, const int b, const int c, int cs_p) {
+  int cs_p2 = cs_p * cs_p;
   if (axis == 0) {
-    return b + (a * CS_P) + (c * CS_P2);
+    return b + (a * cs_p) + (c * cs_p2);
   }
   if (axis == 1) {
-    return b + (c * CS_P) + (a * CS_P2);
+    return b + (c * cs_p) + (a * cs_p2);
   }
-  return c + (a * CS_P) + (b * CS_P2);
+  return c + (a * cs_p) + (b * cs_p2);
 }
 
 inline void insertQuad(std::vector<uint64_t>& vertices, uint64_t quad, size_t& vertexI) {
@@ -103,8 +96,5 @@ static inline uint64_t getQuad(uint64_t x, uint64_t y, uint64_t z, uint64_t w, u
   return (type << 32) | (h << 24) | (w << 18) | (z << 12) | (y << 6) | x;
 }
 
-constexpr uint64_t P_MASK = ~(1ull << (CS + 1) | 1);
-
 }  // namespace greedy_mesher
-
 #endif  // MESHER_H

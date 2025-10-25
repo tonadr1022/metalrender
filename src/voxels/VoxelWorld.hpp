@@ -78,7 +78,10 @@ class World {
   }
 
   using NeiChunksArr = std::array<ChunkBlockArr, 27>;
+
   void fill_padded_chunk_blocks(const NeiChunksArr& nei_chunks, PaddedChunkVoxArr& result) const;
+  void fill_padded_chunk_blocks_lod(const NeiChunksArr& nei_chunks, int lod,
+                                    PaddedChunkVoxArr& result) const;
 
   // copy neighbor chunk data by value
   void fill_nei_chunks_block_arrays(ChunkKey key, NeiChunksArr& arr);

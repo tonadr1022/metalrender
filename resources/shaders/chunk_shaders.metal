@@ -84,7 +84,8 @@ v2f vertex chunk_vertex_main(uint vertexId [[vertex_id]],
 
 float4 fragment chunk_fragment_main(v2f in [[stage_in]], 
                                     texture2d_array<float> block_tex_arr [[texture(0)]],
-                                    device const VoxelMaterial* voxel_materials [[buffer(0)]]) {
+                                    device const VoxelMaterial* voxel_materials [[buffer(0)]],
+                                    constant VoxelFragmentUniforms& vox_uniforms [[buffer(1)]]) {
     constexpr sampler samp(
         mag_filter::linear,
         min_filter::linear,
@@ -95,13 +96,16 @@ float4 fragment chunk_fragment_main(v2f in [[stage_in]],
     half3 sun_dir = normalize(half3(1,1,0));
     device const VoxelMaterial& material = voxel_materials[in.material_id];
     float4 albedo = tosrgb(block_tex_arr.sample(samp, in.uv, material.indices[in.face]));
-    half3 normal = half3(block_tex_arr.sample(samp, in.uv, material.indices[in.face + 6]).xyz);
-   // return float4(float3(normal), 1.0);
 
-    // [0,1] => [-1,1]
-    normal = normal * 2.0 - 1.0;
+    half3 normal = half3(in.normal);
 
-    float4 color = albedo * clamp(dot(sun_dir, in.normal + normal), 0.0h, 1.0h) * 0.8;
+    if (vox_uniforms.normal_map_enabled) {
+        half3 nm_normal = half3(block_tex_arr.sample(samp, in.uv, material.indices[in.face + 6]).xyz);
+        nm_normal = nm_normal * 2.0 - 1.0;
+        normal += nm_normal;
+    }
+
+    float4 color = albedo * clamp(dot(sun_dir, normal), 0.0h, 1.0h) * 0.8;
     color.xyz += float3(0.2) * albedo.xyz;
     return color;
 //    return float4(in.color);

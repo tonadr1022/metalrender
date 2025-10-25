@@ -174,6 +174,29 @@ void World::fill_padded_chunk_blocks(const NeiChunksArr& nei_chunks,
   }
 }
 
+void World::fill_padded_chunk_blocks_lod(const NeiChunksArr& nei_chunks, int lod,
+                                         PaddedChunkVoxArr& result) const {
+  int cs = k_chunk_len >> lod;
+  int cs_p = cs + 2;
+  int cs_p_cu = cs_p * cs_p * cs_p;
+  result.resize(cs_p_cu);
+
+  auto get_chunk = [&nei_chunks](int x, int y, int z) -> const ChunkBlockArr& {
+    return nei_chunks[get_nei_chunk_idx(x, y, z)];
+  };
+
+  const ChunkBlockArr& main_chunk = get_chunk(0, 0, 0);
+
+  for (int y = 0; y < cs; y++) {
+    for (int x = 0; x < cs; x++) {
+      for (int z = 0; z < cs; z++) {
+        result[get_idx_cs(x + 1, y + 1, z + 1, cs_p)] =
+            main_chunk.lod_blocks[get_idx_lod(x, y, z, lod)];
+      }
+    }
+  }
+}
+
 void World::fill_nei_chunks_block_arrays(ChunkKey key, NeiChunksArr& arr) {
   ZoneScoped;
   ASSERT(is_meshable(key));
@@ -259,7 +282,11 @@ void World::send_chunk_task(ChunkKey key) {
     };
     const PaddedChunkVoxArrHandle padded_chunk_block_handle = padded_chunk_voxel_arr_pool_.alloc();
     PaddedChunkVoxArr& padded_blocks = *padded_chunk_voxel_arr_pool_.get(padded_chunk_block_handle);
-    fill_padded_chunk_blocks(*nei_chunks_arr_pool_.get(nei_chunk_arr_handle), padded_blocks);
+    auto& nei_chunks_arr = *nei_chunks_arr_pool_.get(nei_chunk_arr_handle);
+    fill_padded_chunk_blocks(nei_chunks_arr, padded_blocks);
+    // PaddedChunkVoxArr pb2;
+    // fill_padded_chunk_blocks_lod(nei_chunks_arr, 1, pb2);
+
     const MesherDataHandle md_handle = mesher_data_pool_.alloc();
     ASSERT(mesher_data_pool_.get(md_handle));
     greedy_mesher::MeshData& mesh_data = *mesher_data_pool_.get(md_handle);
@@ -269,9 +296,8 @@ void World::send_chunk_task(ChunkKey key) {
     // TODO: thread safe?
     Chunk* chunk = chunk_pool_.get(handle);
     ASSERT(chunk);
-    // TODO: improve
-    mesh_data.opaqueMask.clear();
-    mesh_data.opaqueMask.resize(greedy_mesher::CS_P2, 0);
+    // TODO: improve, don't do this?
+    mesh_data.opaqueMask.assign(mesh_data.opaqueMask.size(), 0);
     mesh_data.forwardMerged.assign(mesh_data.forwardMerged.size(), 0);
     mesh_data.rightMerged.assign(mesh_data.rightMerged.size(), 0);
     mesh_data.faceMasks.assign(mesh_data.faceMasks.size(), 0);
@@ -285,7 +311,7 @@ void World::send_chunk_task(ChunkKey key) {
         }
       }
     }
-    greedy_mesher::mesh(padded_blocks.data(), mesh_data);
+    greedy_mesher::mesh(padded_blocks.data(), mesh_data, 0);
     mesh_data.vertices = nullptr;
     padded_chunk_voxel_arr_pool_.destroy(padded_chunk_block_handle);
     nei_chunks_arr_pool_.destroy(nei_chunk_arr_handle);
@@ -303,6 +329,10 @@ void World::send_chunk_task(ChunkKey key) {
 void World::on_imgui() {
   if (ImGui::TreeNode("Blocks")) {
     vdb_.draw_imgui_edit_ui();
+    ImGui::TreePop();
+  }
+  if (ImGui::TreeNode("Renderer")) {
+    renderer_->on_imgui();
     ImGui::TreePop();
   }
 }

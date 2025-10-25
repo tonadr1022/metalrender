@@ -4,34 +4,38 @@
 
 namespace greedy_mesher {
 
-void mesh(const uint8_t* voxels, MeshData& meshData) {
+void mesh(const uint8_t* voxels, MeshData& meshData, int lod) {
   ZoneScoped;
   meshData.vertexCount = 0;
   size_t vertexI = 0;
+  int cs = k_chunk_len >> lod;
+  int cs_p = cs + 2;
 
-  meshData.resize();
+  meshData.resize(cs);
   auto& opaqueMask = meshData.opaqueMask;
   auto& faceMasks = meshData.faceMasks;
   auto& forwardMerged = meshData.forwardMerged;
   auto& rightMerged = meshData.rightMerged;
 
+  uint64_t P_MASK = ~(1ull << (cs + 1) | 1);
+
   // Hidden face culling
-  for (int a = 1; a < CS_P - 1; a++) {
-    const int aCS_P = a * CS_P;
+  for (int a = 1; a < cs_p - 1; a++) {
+    const int aCS_P = a * cs_p;
 
-    for (int b = 1; b < CS_P - 1; b++) {
-      uint64_t columnBits = opaqueMask[(a * CS_P) + b] & P_MASK;
-      const int baIndex = (b - 1) + (a - 1) * CS;
-      const int abIndex = (a - 1) + (b - 1) * CS;
+    for (int b = 1; b < cs_p - 1; b++) {
+      uint64_t columnBits = opaqueMask[(a * cs_p) + b] & P_MASK;
+      const int baIndex = (b - 1) + (a - 1) * cs;
+      const int abIndex = (a - 1) + (b - 1) * cs;
 
-      faceMasks[baIndex + 0 * CS_2] = (columnBits & ~opaqueMask[aCS_P + CS_P + b]) >> 1;
-      faceMasks[baIndex + 1 * CS_2] = (columnBits & ~opaqueMask[aCS_P - CS_P + b]) >> 1;
+      faceMasks[baIndex + 0 * cs * cs] = (columnBits & ~opaqueMask[aCS_P + cs_p + b]) >> 1;
+      faceMasks[baIndex + 1 * cs * cs] = (columnBits & ~opaqueMask[aCS_P - cs_p + b]) >> 1;
 
-      faceMasks[abIndex + 2 * CS_2] = (columnBits & ~opaqueMask[aCS_P + (b + 1)]) >> 1;
-      faceMasks[abIndex + 3 * CS_2] = (columnBits & ~opaqueMask[aCS_P + (b - 1)]) >> 1;
+      faceMasks[abIndex + 2 * cs * cs] = (columnBits & ~opaqueMask[aCS_P + (b + 1)]) >> 1;
+      faceMasks[abIndex + 3 * cs * cs] = (columnBits & ~opaqueMask[aCS_P + (b - 1)]) >> 1;
 
-      faceMasks[baIndex + 4 * CS_2] = columnBits & ~(opaqueMask[aCS_P + b] >> 1);
-      faceMasks[baIndex + 5 * CS_2] = columnBits & ~(opaqueMask[aCS_P + b] << 1);
+      faceMasks[baIndex + 4 * cs * cs] = columnBits & ~(opaqueMask[aCS_P + b] >> 1);
+      faceMasks[baIndex + 5 * cs * cs] = columnBits & ~(opaqueMask[aCS_P + b] << 1);
     }
   }
 
@@ -41,16 +45,16 @@ void mesh(const uint8_t* voxels, MeshData& meshData) {
 
     const int faceVertexBegin = vertexI;
 
-    for (int layer = 0; layer < CS; layer++) {
-      const int bitsLocation = layer * CS + face * CS_2;
+    for (int layer = 0; layer < cs; layer++) {
+      const int bitsLocation = layer * cs + face * (cs * cs);
 
-      for (int forward = 0; forward < CS; forward++) {
+      for (int forward = 0; forward < cs; forward++) {
         uint64_t bitsHere = faceMasks[forward + bitsLocation];
         if (bitsHere == 0) {
           continue;
         }
 
-        const uint64_t bitsNext = forward + 1 < CS ? faceMasks[(forward + 1) + bitsLocation] : 0;
+        const uint64_t bitsNext = forward + 1 < cs ? faceMasks[(forward + 1) + bitsLocation] : 0;
 
         uint8_t rightMerged = 1;
         while (bitsHere) {
@@ -61,19 +65,19 @@ void mesh(const uint8_t* voxels, MeshData& meshData) {
           bitPos = __builtin_ctzll(bitsHere);
 #endif
 
-          const uint8_t type = voxels[getAxisIndex(axis, forward + 1, bitPos + 1, layer + 1)];
+          const uint8_t type = voxels[getAxisIndex(axis, forward + 1, bitPos + 1, layer + 1, cs_p)];
           uint8_t& forwardMergedRef = forwardMerged[bitPos];
 
           if ((bitsNext >> bitPos & 1) &&
-              type == voxels[getAxisIndex(axis, forward + 2, bitPos + 1, layer + 1)]) {
+              type == voxels[getAxisIndex(axis, forward + 2, bitPos + 1, layer + 1, cs_p)]) {
             forwardMergedRef++;
             bitsHere &= ~(1ull << bitPos);
             continue;
           }
 
-          for (int right = bitPos + 1; right < CS; right++) {
+          for (int right = bitPos + 1; right < cs; right++) {
             if (!(bitsHere >> right & 1) || forwardMergedRef != forwardMerged[right] ||
-                type != voxels[getAxisIndex(axis, forward + 1, right + 1, layer + 1)]) {
+                type != voxels[getAxisIndex(axis, forward + 1, right + 1, layer + 1, cs_p)]) {
               break;
             }
             forwardMerged[right] = 0;
@@ -123,17 +127,17 @@ void mesh(const uint8_t* voxels, MeshData& meshData) {
 
     const int faceVertexBegin = vertexI;
 
-    for (int forward = 0; forward < CS; forward++) {
-      const int bitsLocation = forward * CS + face * CS_2;
-      const int bitsForwardLocation = (forward + 1) * CS + face * CS_2;
+    for (int forward = 0; forward < cs; forward++) {
+      const int bitsLocation = forward * cs + face * (cs * cs);
+      const int bitsForwardLocation = (forward + 1) * cs + face * (cs * cs);
 
-      for (int right = 0; right < CS; right++) {
+      for (int right = 0; right < cs; right++) {
         uint64_t bitsHere = faceMasks[right + bitsLocation];
         if (bitsHere == 0) continue;
 
-        const uint64_t bitsForward = forward < CS - 1 ? faceMasks[right + bitsForwardLocation] : 0;
-        const uint64_t bitsRight = right < CS - 1 ? faceMasks[right + 1 + bitsLocation] : 0;
-        const int rightCS = right * CS;
+        const uint64_t bitsForward = forward < cs - 1 ? faceMasks[right + bitsForwardLocation] : 0;
+        const uint64_t bitsRight = right < cs - 1 ? faceMasks[right + 1 + bitsLocation] : 0;
+        const int rightCS = right * cs;
 
         while (bitsHere) {
           uint64_t bitPos;
@@ -145,19 +149,19 @@ void mesh(const uint8_t* voxels, MeshData& meshData) {
 
           bitsHere &= ~(1ull << bitPos);
 
-          const uint8_t type = voxels[getAxisIndex(axis, right + 1, forward + 1, bitPos)];
+          const uint8_t type = voxels[getAxisIndex(axis, right + 1, forward + 1, bitPos, cs_p)];
           uint8_t& forwardMergedRef = forwardMerged[rightCS + (bitPos - 1)];
           uint8_t& rightMergedRef = rightMerged[bitPos - 1];
 
           if (rightMergedRef == 0 && (bitsForward >> bitPos & 1) &&
-              type == voxels[getAxisIndex(axis, right + 1, forward + 2, bitPos)]) {
+              type == voxels[getAxisIndex(axis, right + 1, forward + 2, bitPos, cs_p)]) {
             forwardMergedRef++;
             continue;
           }
 
           if ((bitsRight >> bitPos & 1) &&
-              forwardMergedRef == forwardMerged[(rightCS + CS) + (bitPos - 1)] &&
-              type == voxels[getAxisIndex(axis, right + 2, forward + 1, bitPos)]) {
+              forwardMergedRef == forwardMerged[(rightCS + cs) + (bitPos - 1)] &&
+              type == voxels[getAxisIndex(axis, right + 2, forward + 1, bitPos, cs_p)]) {
             forwardMergedRef = 0;
             rightMergedRef++;
             continue;

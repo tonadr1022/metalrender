@@ -30,6 +30,7 @@ class Renderer {
  public:
   Renderer() = default;
   void init(RendererMetal* renderer);
+  void on_imgui();
 
   void upload_chunk(const ChunkUploadData& upload_data, const std::vector<uint64_t>& vertices);
   void encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf);
@@ -56,6 +57,7 @@ class Renderer {
   rhi::BufferHandleHolder index_buf_;
   rhi::TextureHandleHolder voxel_tex_arr_;
   rhi::BufferHandleHolder voxel_material_buf_;
+  bool normal_map_enabled_{true};
 };
 
 }  // namespace vox

@@ -66,6 +66,8 @@ void TerrainGenerator::generate_world_chunk(const glm::ivec3& chunk_key, Chunk& 
   chunk.has_terrain = true;
   ASSERT(!chunk.is_meshing);
   ASSERT(!chunk.has_mesh);  // TODO: questionable
+  ASSERT(k_chunk_len != 62);
+  chunk.get_blocks().fill_lods();
 }
 
 }  // namespace vox

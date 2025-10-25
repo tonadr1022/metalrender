@@ -1,5 +1,6 @@
 #include "Chunk.hpp"
 
+#include <span>
 #include <tracy/Tracy.hpp>
 
 #include "voxels/Types.hpp"
@@ -60,10 +61,6 @@ constexpr std::array<std::array<glm::ivec3, 4>, 6> vertex_offsets = {{
 
 constexpr uint32_t encode_vertex(int x, int y, int z, uint8_t material, uint8_t ao) {
   return (x) | (y << 7) | (z << 14) | (material << 21) | (ao << 30);
-}
-
-constexpr uint8_t encode_color_216(uint8_t r_scaled, uint8_t g_scaled, uint8_t b_scaled) {
-  return 16 + (36 * r_scaled) + (6 * g_scaled) + b_scaled;
 }
 
 }  // namespace
@@ -161,4 +158,50 @@ void populate_mesh(const PaddedChunkVoxArr& voxels, ChunkUploadData& result) {
   result.quad_count = vertex_count;
 }
 
+namespace {
+
+VoxelId get_most_common(std::span<VoxelId> ids) {
+  VoxelId mc = ids[0];
+  size_t best_count = 1;
+  size_t curr_count = 1;
+  for (size_t i = 1; i < ids.size(); i++) {
+    if (ids[i] == ids[i - 1]) {
+      curr_count++;
+    } else {
+      curr_count = 1;
+    }
+
+    if (curr_count > best_count) {
+      best_count = curr_count;
+      mc = ids[i];
+    }
+  }
+
+  return mc;
+}
+
+}  // namespace
+
+void ChunkBlockArr::fill_lods() {
+  // TODO: remove
+  lod_blocks.fill(0);
+  for (int lod = 1; lod < k_chunk_bits + 1; lod++) {
+    int cl = k_chunk_len >> lod;
+    for (int y = 0; y < cl; y++) {
+      for (int x = 0; x < cl; x++) {
+        for (int z = 0; z < cl; z++) {
+          VoxelId types[8];
+          for (int i = 0; i < 8; i++) {
+            types[i] = get_idx_in_lod(x + (i & 1), y + (i & 2), z + (i & 4), lod - 1);
+          }
+          std::ranges::sort(types);
+          VoxelId most_common = get_most_common(types);
+          ASSERT(lod_blocks[get_idx_lod(x, y, z, lod)] == 0);
+          lod_blocks[get_idx_lod(x, y, z, lod)] = most_common;
+        }
+      }
+    }
+    // LINFO("lod: {}, chunk_len: {}, 3d len: {}", lod, cl, cl * cl * cl);
+  }
+}
 }  // namespace vox

@@ -14,6 +14,10 @@ struct VoxelMaterial {
   uint indices[12];
 };
 
+struct VoxelFragmentUniforms {
+  bool normal_map_enabled;
+};
+
 #define k_invalid_idx 4294967295  // UINT32_MAX
 
 #endif
