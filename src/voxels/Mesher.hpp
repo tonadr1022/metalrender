@@ -43,7 +43,7 @@ SOFTWARE.
 namespace greedy_mesher {
 
 static constexpr int CS = k_chunk_len;
-static_assert(CS == 62);
+static_assert(CS <= 62);
 
 // Padded chunk size
 static constexpr int CS_P = CS + 2;
@@ -58,7 +58,6 @@ struct MeshData {
   std::vector<uint8_t> rightMerged;    // CS
   std::vector<uint64_t>* vertices;
   int vertexCount = 0;
-  int maxVertices = 0;
   std::array<uint32_t, 6> faceVertexBegin{};
   std::array<uint32_t, 6> faceVertexLength{};
 
@@ -89,9 +88,9 @@ static inline int getAxisIndex(const int axis, const int a, const int b, const i
   return c + (a * CS_P) + (b * CS_P2);
 }
 
-static inline void insertQuad(std::vector<uint64_t>& vertices, uint64_t quad, size_t& vertexI) {
+inline void insertQuad(std::vector<uint64_t>& vertices, uint64_t quad, size_t& vertexI) {
   if (vertexI >= vertices.size() - 6ull) {
-    vertices.resize(static_cast<size_t>(vertices.size()) * 2, 0);
+    vertices.resize(vertices.size() * 2ull, 0);
   }
 
   vertices[vertexI] = quad;
@@ -104,7 +103,7 @@ static inline uint64_t getQuad(uint64_t x, uint64_t y, uint64_t z, uint64_t w, u
   return (type << 32) | (h << 24) | (w << 18) | (z << 12) | (y << 6) | x;
 }
 
-constexpr uint64_t P_MASK = ~(1ull << 63 | 1);
+constexpr uint64_t P_MASK = ~(1ull << (CS + 1) | 1);
 
 }  // namespace greedy_mesher
 

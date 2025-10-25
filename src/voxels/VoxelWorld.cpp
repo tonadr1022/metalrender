@@ -3,7 +3,6 @@
 #include <tracy/Tracy.hpp>
 
 #include "core/EAssert.hpp"
-#include "core/Logger.hpp"
 #include "core/ThreadPool.hpp"
 #include "voxels/Chunk.hpp"
 #include "voxels/TerrainGenerator.hpp"
@@ -17,7 +16,7 @@
 
 namespace {
 
-constexpr int radius = 10;
+constexpr int radius = 4;
 constexpr glm::ivec2 y_chunk_range = {-1, 2};
 
 }  // namespace
@@ -245,6 +244,7 @@ void World::send_chunk_task(ChunkKey key) {
     PaddedChunkVoxArr& padded_blocks = *padded_chunk_voxel_arr_pool_.get(padded_chunk_block_handle);
     fill_padded_chunk_blocks(*nei_chunks_arr_pool_.get(nei_chunk_arr_handle), padded_blocks);
     const MesherDataHandle md_handle = mesher_data_pool_.alloc();
+    ASSERT(mesher_data_pool_.get(md_handle));
     greedy_mesher::MeshData& mesh_data = *mesher_data_pool_.get(md_handle);
     mesh_data.vertices = &gpu_upload_data.vertices;
     mesh_data.resize();
@@ -253,7 +253,8 @@ void World::send_chunk_task(ChunkKey key) {
     Chunk* chunk = chunk_pool_.get(handle);
     ASSERT(chunk);
     // TODO: improve
-    mesh_data.opaqueMask.assign(mesh_data.opaqueMask.size(), 0);
+    mesh_data.opaqueMask.clear();
+    mesh_data.opaqueMask.resize(greedy_mesher::CS_P2, 0);
     mesh_data.forwardMerged.assign(mesh_data.forwardMerged.size(), 0);
     mesh_data.rightMerged.assign(mesh_data.rightMerged.size(), 0);
     mesh_data.faceMasks.assign(mesh_data.faceMasks.size(), 0);
@@ -268,7 +269,6 @@ void World::send_chunk_task(ChunkKey key) {
       }
     }
     greedy_mesher::mesh(padded_blocks.data(), mesh_data);
-    LINFO("{} {} {}", chunk->has_terrain, chunk->non_air_block_count, mesh_data.vertexCount);
     mesh_data.vertices = nullptr;
     padded_chunk_voxel_arr_pool_.destroy(padded_chunk_block_handle);
     nei_chunks_arr_pool_.destroy(nei_chunk_arr_handle);

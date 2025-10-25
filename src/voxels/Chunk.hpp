@@ -3,6 +3,7 @@
 #include "Types.hpp"
 #include "chunk_shaders_shared.h"
 #include "core/EAssert.hpp"
+#include "core/Logger.hpp"
 
 namespace vox {
 
@@ -52,6 +53,10 @@ struct ChunkVoxArr {
   void set(int x, int y, int z, VoxelId vox) { blocks[get_idx(x, y, z)] = vox; }
   void set(glm::ivec3 pos, VoxelId vox) { blocks[get_idx(pos)] = vox; }
   void set(int idx, VoxelId vox) { blocks[idx] = vox; }
+};
+
+struct ChunkLodData {
+  std::array<uint32_t, 5> lods;
 };
 
 struct Chunk {

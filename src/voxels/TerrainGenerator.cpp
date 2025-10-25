@@ -2,7 +2,6 @@
 
 #include <FastNoise/FastNoise.h>
 
-#include "core/Logger.hpp"
 #include "voxels/Chunk.hpp"
 
 namespace vox {
@@ -32,14 +31,14 @@ TerrainGenerator::TerrainGenerator() {
 void TerrainGenerator::generate_world_chunk(const glm::ivec3& chunk_key, Chunk& chunk) {
   // populate_chunk(chunk_key, chunk);
   // return;
-  // TODO: pool
+  // TODO: pool noise
   std::vector<float> noise;
   noise.resize(k_chunk_len_sq);
   const glm::ivec3 chunk_world_pos_i = chunk_key * glm::ivec3{k_chunk_len};
   const auto chunk_world_pos = glm::vec3{chunk_world_pos_i};
   int non_air_count = 0;
   fbm_noise_->GenUniformGrid2D(noise.data(), chunk_world_pos_i.x, chunk_world_pos_i.z, k_chunk_len,
-                               k_chunk_len, 0.01, seed_);
+                               k_chunk_len, 0.001 * k_chunk_len, seed_);
   constexpr int k_world_height = k_chunk_len;
   for (int y = 0, i = 0; y < k_chunk_len; y++) {
     for (int x = 0; x < k_chunk_len; x++) {

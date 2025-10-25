@@ -2,8 +2,6 @@
 
 #include <tracy/Tracy.hpp>
 
-#include "core/Logger.hpp"
-
 namespace greedy_mesher {
 
 void mesh(const uint8_t* voxels, MeshData& meshData) {
@@ -22,9 +20,9 @@ void mesh(const uint8_t* voxels, MeshData& meshData) {
     const int aCS_P = a * CS_P;
 
     for (int b = 1; b < CS_P - 1; b++) {
-      const uint64_t columnBits = opaqueMask[(a * CS_P) + b] & P_MASK;
-      const int baIndex = (b - 1) + ((a - 1) * CS);
-      const int abIndex = (a - 1) + ((b - 1) * CS);
+      uint64_t columnBits = opaqueMask[(a * CS_P) + b] & P_MASK;
+      const int baIndex = (b - 1) + (a - 1) * CS;
+      const int abIndex = (a - 1) + (b - 1) * CS;
 
       faceMasks[baIndex + 0 * CS_2] = (columnBits & ~opaqueMask[aCS_P + CS_P + b]) >> 1;
       faceMasks[baIndex + 1 * CS_2] = (columnBits & ~opaqueMask[aCS_P - CS_P + b]) >> 1;
@@ -48,7 +46,9 @@ void mesh(const uint8_t* voxels, MeshData& meshData) {
 
       for (int forward = 0; forward < CS; forward++) {
         uint64_t bitsHere = faceMasks[forward + bitsLocation];
-        if (bitsHere == 0) continue;
+        if (bitsHere == 0) {
+          continue;
+        }
 
         const uint64_t bitsNext = forward + 1 < CS ? faceMasks[(forward + 1) + bitsLocation] : 0;
 
@@ -105,7 +105,6 @@ void mesh(const uint8_t* voxels, MeshData& meshData) {
               break;
             default:
               quad = 0;
-              break;
           }
 
           insertQuad(*meshData.vertices, quad, vertexI);

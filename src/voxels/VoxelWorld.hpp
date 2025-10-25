@@ -81,8 +81,8 @@ class World {
  private:
   Renderer* renderer_{};
   std::unordered_map<ChunkKey, ChunkHandle> chunks_;
-  BlockPool<ChunkHandle, Chunk> chunk_pool_{16, 1, false};
-  inline static uint16_t num_threads = std::thread::hardware_concurrency();
+  BlockPool<ChunkHandle, Chunk> chunk_pool_{128, 10, false};
+  inline static auto num_threads = std::thread::hardware_concurrency();
 
   using PaddedChunkVoxArrHandle = GenerationalHandle<PaddedChunkVoxArr>;
   BlockPool<PaddedChunkVoxArrHandle, PaddedChunkVoxArr> padded_chunk_voxel_arr_pool_{num_threads, 1,

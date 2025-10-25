@@ -107,7 +107,7 @@ struct BlockPool {
     init(1);
   }
 
-  BlockPool(uint16_t element_count_per_block, uint16_t initial_blocks, bool do_destroy)
+  BlockPool(size_t element_count_per_block, size_t initial_blocks, bool do_destroy)
       : element_count_per_block_(element_count_per_block), do_destroy_(do_destroy) {
     init(initial_blocks);
   }

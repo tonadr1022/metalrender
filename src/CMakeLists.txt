@@ -4,6 +4,7 @@ add_executable(${target_name}
     main.cpp
     App.cpp
     core/FileUtil.cpp
+    core/Util.cpp
     gfx/metal/MetalCpp.cpp
     gfx/metal/MetalDevice.cpp
     gfx/metal/MetalBuffer.cpp

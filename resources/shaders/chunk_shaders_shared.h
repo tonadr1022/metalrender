@@ -3,7 +3,7 @@
 
 #include "shader_core.h"
 
-#define k_chunk_len 62
+#define k_chunk_len 32
 
 struct PerChunkUniforms {
   int4 chunk_pos;
