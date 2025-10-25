@@ -63,12 +63,26 @@ v2f vertex chunk_vertex_main(uint vertexId [[vertex_id]],
     float3 color = color_lookup[material];
 
     o.position = uniforms.vp * float4(pos_in_chunk.xyz + float3(chunk_world_pos), 1.0);
+    o.material_id = material;
     o.color = half4(half3(color),1.0);
+    o.uv = float2(wMod, hMod);
 
     //o.color = half4(pos_in_chunk.x / k_chunk_len, pos_in_chunk.y / k_chunk_len, pos_in_chunk.z / k_chunk_len, 1.0);
     return o;
 }
 
-float4 fragment chunk_fragment_main(v2f in [[stage_in]]) {
-    return float4(in.color);
+float4 fragment chunk_fragment_main(v2f in [[stage_in]], 
+                                    texture2d_array<float> block_tex_arr [[texture(0)]],
+                                    device const VoxelMaterial* voxel_materials [[buffer(0)]]) {
+    constexpr sampler samp(
+        mag_filter::linear,
+        min_filter::linear,
+        s_address::repeat,
+        t_address::repeat,
+        r_address::repeat
+    );
+    device const VoxelMaterial& material = voxel_materials[in.material_id];
+    float4 albedo = block_tex_arr.sample(samp, in.uv, material.albedo_idx);
+    return albedo;
+//    return float4(in.color);
 }

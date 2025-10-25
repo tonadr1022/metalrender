@@ -55,7 +55,7 @@ struct App {
   std::vector<ModelHandle> models_;
   bool first_mouse_{true};
   bool hide_mouse_{false};
-  bool imgui_enabled_{false};
+  bool imgui_enabled_{true};
 
   glm::vec2 last_pos_{};
   // TODO: ptr for impl/RHI

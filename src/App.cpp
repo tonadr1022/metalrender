@@ -130,7 +130,7 @@ App::App() {
   voxel_renderer_ = std::make_unique<vox::Renderer>();
   voxel_renderer_->init(&renderer_);
   voxel_world_ = std::make_unique<vox::World>();
-  voxel_world_->init(voxel_renderer_.get());
+  voxel_world_->init(voxel_renderer_.get(), &renderer_, resource_dir_);
 }
 
 namespace rando {
@@ -213,6 +213,10 @@ void App::run() {
     renderer_.render(args);
   }
 
+  if (voxel_world_) {
+    voxel_world_->shutdown();
+  }
+
   ResourceManager::shutdown();
   window_->shutdown();
   device_->shutdown();
@@ -270,11 +274,15 @@ void App::load_config() {
 }
 
 void App::on_imgui() {
+  ImGui::ShowDemoWindow();
   ImGui::Begin("Hello world");
   renderer_.on_imgui();
   if (ImGui::TreeNodeEx("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Position: %f %f %f", camera_.pos.x, camera_.pos.y, camera_.pos.z);
     ImGui::TreePop();
+  }
+  if (voxel_world_) {
+    voxel_world_->on_imgui();
   }
   ImGui::End();
 }

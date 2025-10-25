@@ -122,18 +122,6 @@ void populate_mesh(const PaddedChunkVoxArr& voxels, ChunkUploadData& result) {
         if (!vox) {
           continue;
         }
-        uint8_t r{}, g{}, b{};
-        if (vox == 1) {
-          g = 3;
-        }
-        if (vox == 2) {
-          r = 3;
-        }
-        if (vox == 3) {
-          b = 3;
-        }
-
-        uint8_t material = encode_color_216(r, g, b);
 
         for (int face = 0; face < 6; face++) {
           glm::ivec3 nei_pos{x, y, z};
@@ -161,7 +149,7 @@ void populate_mesh(const PaddedChunkVoxArr& voxels, ChunkUploadData& result) {
 #ifdef BAKED_AO_ENABLED
             ao = get_ao(face, v, block_neighbors);
 #endif
-            out_vertices.emplace_back(encode_vertex(pos[0], pos[1], pos[2], material, ao));
+            out_vertices.emplace_back(encode_vertex(pos[0], pos[1], pos[2], 1, ao));
           }
 
           vertex_count += 4;

@@ -18,6 +18,7 @@ add_executable(${target_name}
     voxels/Mesher.cpp
     voxels/TerrainGenerator.cpp
     voxels/VoxelRenderer.cpp
+    voxels/VoxelDB.cpp
     voxels/VoxelWorld.cpp
     util/Stats.cpp
 )

@@ -14,9 +14,21 @@ class Texture;
 class Device;
 }  // namespace MTL
 
+enum class CPUTextureLoadType : uint8_t {
+  StbImage,  // TODO: Jpeg/PNG/ktx instead
+};
+
 struct TextureUpload {
   std::unique_ptr<void, void (*)(void *)> data;
   rhi::TextureHandleHolder tex;
+  glm::uvec3 dims;
+  uint32_t bytes_per_row;
+};
+
+struct TextureArrayUpload {
+  std::vector<void *> data;
+  CPUTextureLoadType cpu_type;
+  rhi::TextureHandle tex;
   glm::uvec3 dims;
   uint32_t bytes_per_row;
 };
@@ -72,3 +84,4 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
                 ModelLoadResult &out_load_result);
 
 }
+void free_texture(void *data, CPUTextureLoadType type);

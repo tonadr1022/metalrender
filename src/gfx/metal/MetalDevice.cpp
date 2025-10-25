@@ -23,11 +23,26 @@ rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   return buffer_pool_.alloc(desc, mtl_buf);
 }
 
+namespace {
+
+MTL::TextureType get_texture_type(glm::uvec3 dims, size_t array_length) {
+  if (dims.z > 1) {
+    return MTL::TextureType3D;
+  }
+  if (array_length > 1) {
+    return MTL::TextureType2DArray;
+  }
+  return MTL::TextureType2D;
+}
+
+}  // namespace
+
 rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   MTL::TextureDescriptor* texture_desc = MTL::TextureDescriptor::alloc()->init();
   texture_desc->setWidth(desc.dims.x);
   texture_desc->setHeight(desc.dims.y);
   texture_desc->setDepth(desc.dims.z);
+  texture_desc->setTextureType(get_texture_type(desc.dims, desc.array_length));
   texture_desc->setPixelFormat(util::mtl::convert_format(desc.format));
   texture_desc->setStorageMode(util::mtl::convert_storage_mode(desc.storage_mode));
   texture_desc->setMipmapLevelCount(desc.mip_levels);

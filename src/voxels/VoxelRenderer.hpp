@@ -1,5 +1,7 @@
 #pragma once
 
+#include <filesystem>
+
 #include "gfx/Device.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/metal/MetalBuffer.hpp"
@@ -22,6 +24,8 @@ class Buffer;
 
 namespace vox {
 
+class VoxelDB;
+
 class Renderer {
  public:
   Renderer() = default;
@@ -29,6 +33,7 @@ class Renderer {
 
   void upload_chunk(const ChunkUploadData& upload_data, const std::vector<uint64_t>& vertices);
   void encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf);
+  void load_voxel_resources(VoxelDB& vdb, const std::filesystem::path& block_tex_dir);
 
  private:
   struct ChunkRenderData {
@@ -40,7 +45,6 @@ class Renderer {
   };
 
   std::unordered_map<uint64_t, ChunkRenderData> chunk_render_datas_;
-  rhi::BufferHandleHolder index_buf_;
   RendererMetal* renderer_{};
   rhi::Device* device_;
   MTL::RenderPipelineState* main_pso_{};
@@ -48,6 +52,10 @@ class Renderer {
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
     return reinterpret_cast<MetalBuffer*>(device_->get_buf(handle))->buffer();
   }
+
+  rhi::BufferHandleHolder index_buf_;
+  rhi::TextureHandleHolder voxel_tex_arr_;
+  rhi::BufferHandleHolder voxel_material_buf_;
 };
 
 }  // namespace vox

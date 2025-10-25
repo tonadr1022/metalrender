@@ -672,10 +672,10 @@ CullData RendererMetal::set_cpu_cull_data(const Uniforms &uniforms, const Render
 }
 
 void RendererMetal::flush_pending_texture_uploads() {
-  if (!pending_texture_uploads_.empty()) {
+  if (!pending_texture_uploads_.empty() || !pending_texture_array_uploads_.empty()) {
     MTL::CommandBuffer *buf = main_cmd_queue_->commandBuffer();
     MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
-    for (auto &upload : pending_texture_uploads_) {
+    for (TextureUpload &upload : pending_texture_uploads_) {
       const auto src_img_size = static_cast<size_t>(upload.bytes_per_row) * upload.dims.y;
       MTL::Buffer *upload_buf =
           raw_device_->newBuffer(src_img_size, MTL::ResourceStorageModeShared);
@@ -689,12 +689,43 @@ void RendererMetal::flush_pending_texture_uploads() {
       if (tex->desc().mip_levels > 1) {
         blit_enc->generateMipmaps(mtl_tex);
       }
+      // TODO: this isn't always the case
       global_arg_enc_->setTexture(mtl_tex, tex->gpu_slot());
       // mtl_tex->retain();
       all_textures_[tex->gpu_slot()] = std::move(upload.tex);
     }
+
+    for (TextureArrayUpload &upload : pending_texture_array_uploads_) {
+      const auto single_layer_size = upload.bytes_per_row * upload.dims.y;
+      const auto total_upload_size = upload.data.size() * single_layer_size;
+
+      MTL::Buffer *upload_buf =
+          raw_device_->newBuffer(total_upload_size, MTL::ResourceStorageModeShared);
+      for (size_t i = 0; i < upload.data.size(); i++) {
+        const auto &d = upload.data[i];
+        memcpy((uint8_t *)upload_buf->contents() + single_layer_size * i, d, single_layer_size);
+      }
+      const auto img_size = MTL::Size::Make(upload.dims.x, upload.dims.y, upload.dims.z);
+      const auto origin = MTL::Origin::Make(0, 0, 0);
+
+      auto *tex = reinterpret_cast<MetalTexture *>(device_->get_tex(upload.tex));
+      auto *mtl_tex = get_mtl_tex(upload.tex);
+      for (size_t i = 0; i < upload.data.size(); i++) {
+        blit_enc->copyFromBuffer(upload_buf, single_layer_size * i, upload.bytes_per_row, 0,
+                                 img_size, mtl_tex, i, 0, origin);
+        if (tex->desc().mip_levels > 1) {
+          blit_enc->generateMipmaps(mtl_tex);
+        }
+      }
+
+      for (auto &u : upload.data) {
+        free_texture(u, upload.cpu_type);
+      }
+    }
+
     blit_enc->endEncoding();
     pending_texture_uploads_.clear();
+    pending_texture_array_uploads_.clear();
     buf->commit();
     buf->waitUntilCompleted();
   }

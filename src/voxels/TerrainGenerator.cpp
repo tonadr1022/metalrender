@@ -46,17 +46,17 @@ void TerrainGenerator::generate_world_chunk(const glm::ivec3& chunk_key, Chunk& 
         float world_y = chunk_world_pos.y + y;
         int noise_height = (noise[get_idx_2d(z, x)] * .5 + .5) * k_world_height;
         if (world_y < noise_height) {
-          uint32_t color{};
+          VoxelId type{};
           auto diff = noise_height - world_y;
           if (diff == 1) {
-            color = 1;
+            type = 1;
           } else if (diff == 2) {
-            color = 2;
+            type = 2;
           } else {
-            color = 3;
+            type = 3;
           }
-          chunk.set(i, color);
-          non_air_count += color != 0;
+          chunk.set(i, type);
+          non_air_count += type != 0;
         }
       }
     }

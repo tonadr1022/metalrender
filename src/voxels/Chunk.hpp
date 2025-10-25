@@ -41,8 +41,10 @@ inline int regular_idx_to_padded(glm::ivec3 pos) {
 }
 
 using MeshId = uint32_t;
-struct ChunkVoxArr {
+
+struct ChunkBlockArr {
   std::array<VoxelId, k_chunk_len_cu> blocks;
+  std::array<VoxelId, 4096 + 512 + 64 + 8 + 1> lod_blocks;
 
   [[nodiscard]] VoxelId get(int x, int y, int z) const { return blocks[get_idx(x, y, z)]; }
   [[nodiscard]] VoxelId get(int i) const {
@@ -55,16 +57,12 @@ struct ChunkVoxArr {
   void set(int idx, VoxelId vox) { blocks[idx] = vox; }
 };
 
-struct ChunkLodData {
-  std::array<uint32_t, 5> lods;
-};
-
 struct Chunk {
  private:
-  ChunkVoxArr blocks;
+  ChunkBlockArr blocks;
 
  public:
-  [[nodiscard]] const ChunkVoxArr& get_blocks() const { return blocks; }
+  [[nodiscard]] const ChunkBlockArr& get_blocks() const { return blocks; }
   int non_air_block_count{};
   bool has_terrain{};
   bool has_mesh{};

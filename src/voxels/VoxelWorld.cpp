@@ -2,8 +2,10 @@
 
 #include <tracy/Tracy.hpp>
 
+#include "chunk_shaders_shared.h"
 #include "core/EAssert.hpp"
 #include "core/ThreadPool.hpp"
+#include "imgui.h"
 #include "voxels/Chunk.hpp"
 #include "voxels/TerrainGenerator.hpp"
 #include "voxels/Types.hpp"
@@ -22,9 +24,22 @@ constexpr glm::ivec2 y_chunk_range = {-1, 2};
 }  // namespace
 namespace vox {
 
-void World::init(Renderer* renderer) {
-  ZoneScoped;
+void World::init(Renderer* renderer, RendererMetal* metal_renderer,
+                 const std::filesystem::path& resource_dir) {
   renderer_ = renderer;
+  metal_renderer_ = metal_renderer;
+  resource_dir_ = resource_dir;
+
+  vdb_blocks_path_ = resource_dir_ / "blocks.txt";
+  vdb_.load(vdb_blocks_path_);
+  renderer_->load_voxel_resources(vdb_, resource_dir_ / "blocks" / "textures" / "blocks");
+
+  // for (int lod = 0; lod < k_chunk_bits + 1; lod++) {
+  //   auto cl = k_chunk_len >> lod;
+  //   LINFO("lod: {}, chunk_len: {}, 3d len: {}", lod, cl, cl * cl * cl);
+  // }
+  // exit(1);
+  ZoneScoped;
   {
     glm::vec3 key{};
     for (key.y = y_chunk_range.x; key.y <= y_chunk_range.y; key.y++) {
@@ -37,14 +52,16 @@ void World::init(Renderer* renderer) {
   }
 }
 
+void World::shutdown() { vdb_.save(vdb_blocks_path_); }
+
 void World::fill_padded_chunk_blocks(const NeiChunksArr& nei_chunks,
                                      PaddedChunkVoxArr& result) const {
   result.resize(k_chunk_len_padded_cu);
   ZoneScoped;
-  auto get_chunk = [&nei_chunks](int x, int y, int z) -> const ChunkVoxArr& {
+  auto get_chunk = [&nei_chunks](int x, int y, int z) -> const ChunkBlockArr& {
     return nei_chunks[get_nei_chunk_idx(x, y, z)];
   };
-  const ChunkVoxArr& main_chunk = get_chunk(0, 0, 0);
+  const ChunkBlockArr& main_chunk = get_chunk(0, 0, 0);
 
   for (int y = 1; y <= k_chunk_len; y++) {
     for (int x = 1; x <= k_chunk_len; x++) {
@@ -282,4 +299,12 @@ void World::send_chunk_task(ChunkKey key) {
     mesher_data_pool_.destroy(md_handle);
   });
 }
+
+void World::on_imgui() {
+  if (ImGui::TreeNode("Blocks")) {
+    vdb_.draw_imgui_edit_ui();
+    ImGui::TreePop();
+  }
+}
+
 }  // namespace vox

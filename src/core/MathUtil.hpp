@@ -50,4 +50,9 @@ inline void decompose_matrix(const float *matrix, glm::vec3 &translation, glm::q
   rotation[qc ^ 2] = qs * (r20 + qs2 * r02);
   rotation[qc ^ 3] = qs * (r12 + qs3 * r21);
 }
+
+inline size_t get_mip_levels(size_t w, size_t h) {
+  return std::floor(std::log2(std::max(w, h))) + 1;
+}
+
 }  // namespace math

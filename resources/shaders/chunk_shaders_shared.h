@@ -4,13 +4,14 @@
 #include "shader_core.h"
 
 #define k_chunk_len 32
+#define k_chunk_bits 5
 
 struct PerChunkUniforms {
   int4 chunk_pos;
 };
 
 struct VoxelMaterial {
-  packed_float3 color;
+  uint32_t albedo_idx;
 };
 
 #endif

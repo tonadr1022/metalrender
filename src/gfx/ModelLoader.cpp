@@ -154,7 +154,7 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
       int w{}, h{}, comp{};
       const std::filesystem::path full_img_path = directory_path / img.uri;
       uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
-      const uint32_t mip_levels = static_cast<uint32_t>(std::floor(std::log2(std::max(w, h)))) + 1;
+      const uint32_t mip_levels = math::get_mip_levels(w, h);
       const rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
                                   .storage_mode = rhi::StorageMode::GPUOnly,
                                   .dims = glm::uvec3{w, h, 1},
@@ -409,3 +409,11 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
 }
 
 }  // namespace model
+
+void free_texture(void *data, CPUTextureLoadType type) {
+  switch (type) {
+    case CPUTextureLoadType::StbImage: {
+      stbi_image_free(data);
+    }
+  }
+}

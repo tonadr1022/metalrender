@@ -286,6 +286,9 @@ class RendererMetal {
   void free_model(ModelGPUHandle handle);
   void free_instance(ModelInstanceGPUHandle handle);
   void on_imgui();
+  void load_tex_array(TextureArrayUpload upload) {
+    pending_texture_array_uploads_.emplace_back(std::move(upload));
+  }
   TextureWithIdx load_material_image(const rhi::TextureDesc& desc);
 
   enum class RenderMode { Default, Normals, NormalMap, Count };
@@ -396,6 +399,7 @@ class RendererMetal {
 
   MTL::ArgumentEncoder* global_arg_enc_{};
   std::vector<TextureUpload> pending_texture_uploads_;
+  std::vector<TextureArrayUpload> pending_texture_array_uploads_;
   std::vector<rhi::TextureHandleHolder> all_textures_;
 
   std::filesystem::path shader_dir_;
@@ -427,6 +431,9 @@ class RendererMetal {
   }
 
   MTL::Texture* get_mtl_tex(const rhi::TextureHandleHolder& handle) {
+    return reinterpret_cast<MetalTexture*>(device_->get_tex(handle))->texture();
+  }
+  MTL::Texture* get_mtl_tex(const rhi::TextureHandle& handle) {
     return reinterpret_cast<MetalTexture*>(device_->get_tex(handle))->texture();
   }
 

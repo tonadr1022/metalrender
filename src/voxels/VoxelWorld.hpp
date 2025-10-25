@@ -8,9 +8,12 @@
 #include "voxels/Chunk.hpp"
 #include "voxels/Mesher.hpp"
 #include "voxels/TerrainGenerator.hpp"
+#include "voxels/VoxelDB.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "concurrentqueue.h"
 #include "glm/gtx/hash.hpp"  // IWYU pragma: keep
+
+class RendererMetal;
 
 namespace vox {
 
@@ -32,7 +35,9 @@ void iterate_in_radius(glm::ivec3 iter, int radius, auto&& f) {
 
 class World {
  public:
-  void init(Renderer* renderer);
+  void init(Renderer* renderer, RendererMetal* metal_renderer,
+            const std::filesystem::path& resource_dir);
+  void shutdown();
   void update(float dt);
 
   ChunkHandle get_handle(ChunkKey key) {
@@ -72,14 +77,16 @@ class World {
     return true;
   }
 
-  using NeiChunksArr = std::array<ChunkVoxArr, 27>;
+  using NeiChunksArr = std::array<ChunkBlockArr, 27>;
   void fill_padded_chunk_blocks(const NeiChunksArr& nei_chunks, PaddedChunkVoxArr& result) const;
 
   // copy neighbor chunk data by value
   void fill_nei_chunks_block_arrays(ChunkKey key, NeiChunksArr& arr);
+  void on_imgui();
 
  private:
   Renderer* renderer_{};
+  RendererMetal* metal_renderer_{};
   std::unordered_map<ChunkKey, ChunkHandle> chunks_;
   BlockPool<ChunkHandle, Chunk> chunk_pool_{128, 10, false};
   inline static auto num_threads = std::thread::hardware_concurrency();
@@ -109,6 +116,9 @@ class World {
   size_t meshes_in_flight_{};
   std::atomic<size_t> terrain_tasks_in_flight_;
   size_t tasks_{};
+  VoxelDB vdb_;
+  std::filesystem::path resource_dir_;
+  std::filesystem::path vdb_blocks_path_;
 
   void send_chunk_task(ChunkKey key);
 };

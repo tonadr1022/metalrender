@@ -7,5 +7,6 @@ shader_out/
 imgui.ini
 .clangd
 build-debug
+.DS_Store
 # ignore local models
 resources/models/gltf
