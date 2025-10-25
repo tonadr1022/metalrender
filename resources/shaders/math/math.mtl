@@ -10,6 +10,14 @@ inline bool cone_cull(float3 center, float radius, float3 cone_axis, float cone_
 	return dot(center - camera_position, cone_axis) >= cone_cutoff * length(center - camera_position) + radius;
 }
 
+inline float3 tosrgb(float3 c) {
+	return pow(c, float3(1.0 / 2.2));
+}
+
+inline float4 tosrgb(float4 c) {
+	return pow(c, float4(1.0 / 2.2));
+}
+
 // Ref: https://github.com/zeux/niagara/blob/7fa51801abc258c3cb05e9a615091224f02e11cf/src/shaders/math.h#L2
 // Original Ref: 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere. Michael Mara, Morgan McGuire. 2013
 struct ProjectSphereResult {

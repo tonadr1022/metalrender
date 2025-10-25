@@ -4,6 +4,7 @@ using namespace metal;
 #include "shader_core.h"
 #include "shader_global_uniforms.h"
 #include "chunk_shaders_shared.h"
+#include "math/math.mtl"
 
 
 struct v2f {
@@ -93,14 +94,14 @@ float4 fragment chunk_fragment_main(v2f in [[stage_in]],
     );
     half3 sun_dir = normalize(half3(1,1,0));
     device const VoxelMaterial& material = voxel_materials[in.material_id];
-    float4 albedo = block_tex_arr.sample(samp, in.uv, material.indices[in.face]);
+    float4 albedo = tosrgb(block_tex_arr.sample(samp, in.uv, material.indices[in.face]));
     half3 normal = half3(block_tex_arr.sample(samp, in.uv, material.indices[in.face + 6]).xyz);
    // return float4(float3(normal), 1.0);
 
     // [0,1] => [-1,1]
     normal = normal * 2.0 - 1.0;
 
-    float4 color = albedo * clamp(dot(sun_dir, in.normal + normal), 0.0h,1.0h) * 0.8;
+    float4 color = albedo * clamp(dot(sun_dir, in.normal + normal), 0.0h, 1.0h) * 0.8;
     color.xyz += float3(0.2) * albedo.xyz;
     return color;
 //    return float4(in.color);
