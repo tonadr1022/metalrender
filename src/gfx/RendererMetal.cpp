@@ -616,10 +616,9 @@ void RendererMetal::render_imgui() {
   }
 }
 
-Uniforms RendererMetal::set_cpu_global_uniform_data(const RenderArgs &render_args) const {
-  Uniforms uniform_data{};
+void RendererMetal::set_cpu_global_uniform_data(const RenderArgs &render_args) {
   const auto window_dims = window_->get_window_size();
-  uniform_data.view = render_args.view_mat;
+  cpu_uniforms_.view = render_args.view_mat;
 
   float far = k_z_far;
   float near = k_z_near;
@@ -629,10 +628,10 @@ Uniforms RendererMetal::set_cpu_global_uniform_data(const RenderArgs &render_arg
   // uniform_data.proj = glm::perspectiveFovZO(glm::radians(70.0f), (float)window_dims.x,
   //                                           (float)window_dims.y, near, far);
   float aspect = (float)window_dims.x / (float)window_dims.y;
-  uniform_data.proj = infinite_perspective_proj(glm::radians(70.f), aspect, k_z_near);
-  uniform_data.vp = uniform_data.proj * uniform_data.view;
-  uniform_data.render_mode = static_cast<uint32_t>(render_mode_);
-  return uniform_data;
+  cpu_uniforms_.proj = infinite_perspective_proj(glm::radians(70.f), aspect, k_z_near);
+  cpu_uniforms_.vp = cpu_uniforms_.proj * cpu_uniforms_.view;
+  cpu_uniforms_.render_mode = static_cast<uint32_t>(render_mode_);
+  cpu_uniforms_.cam_pos = render_args.camera_pos;
 }
 
 CullData RendererMetal::set_cpu_cull_data(const Uniforms &uniforms, const RenderArgs &render_args) {
@@ -1020,9 +1019,9 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
                                          const CA::MetalDrawable *drawable) {
   ZoneScoped;
 
-  const Uniforms cpu_uniforms = set_cpu_global_uniform_data(render_args);
-  gpu_uniform_buf_->fill(cpu_uniforms);
-  cull_data_buf_->fill(set_cpu_cull_data(cpu_uniforms, render_args));
+  set_cpu_global_uniform_data(render_args);
+  gpu_uniform_buf_->fill(cpu_uniforms_);
+  cull_data_buf_->fill(set_cpu_cull_data(cpu_uniforms_, render_args));
 
   {
     MTL::BlitCommandEncoder *reset_blit_enc = buf->blitCommandEncoder();
@@ -1147,7 +1146,8 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
     set_cull_mode_wind_order(enc);
 
     for (auto &cb : main_render_pass_callbacks_) {
-      cb(enc, reinterpret_cast<MetalBuffer *>(gpu_uniform_buf_->get_buf())->buffer());
+      cb(enc, reinterpret_cast<MetalBuffer *>(gpu_uniform_buf_->get_buf())->buffer(),
+         cpu_uniforms_);
     }
     use_fragment_resources(enc);
     if (k_use_mesh_shader) {

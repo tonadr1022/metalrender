@@ -8,6 +8,7 @@ struct Uniforms {
   float4x4 proj;
   float4x4 view;
   uint render_mode;
+  float3 cam_pos;
 };
 
 #endif

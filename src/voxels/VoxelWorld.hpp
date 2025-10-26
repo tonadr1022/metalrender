@@ -14,6 +14,7 @@
 #include "concurrentqueue.h"
 #include "glm/gtx/hash.hpp"  // IWYU pragma: keep
 
+class Camera;
 class RendererMetal;
 
 namespace vox {
@@ -39,7 +40,7 @@ class World {
   void init(Renderer* renderer, RendererMetal* metal_renderer,
             const std::filesystem::path& resource_dir);
   void shutdown();
-  void update(float dt);
+  void update(float dt, Camera& camera);
 
   ChunkHandle get_handle(ChunkKey key) {
     auto it = chunks_.find(key);
@@ -80,7 +81,6 @@ class World {
 
   using NeiChunksArr = std::array<ChunkBlockArr, 27>;
 
-  void fill_padded_chunk_blocks(const NeiChunksArr& nei_chunks, PaddedChunkVoxArr& result) const;
   void fill_padded_chunk_blocks_lod(const NeiChunksArr& nei_chunks, int lod,
                                     PaddedChunkVoxArr& result) const;
 

@@ -265,8 +265,8 @@ class RendererMetal {
     std::filesystem::path resource_dir;
     std::function<void()> render_imgui_callback;
   };
-  using MainRenderPassCallback =
-      std::function<void(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf)>;
+  using MainRenderPassCallback = std::function<void(
+      MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf, const Uniforms& cpu_uniforms)>;
 
   void add_main_render_pass_callback(MainRenderPassCallback&& cb) {
     main_render_pass_callbacks_.emplace_back(cb);
@@ -309,7 +309,7 @@ class RendererMetal {
   void init_imgui();
   void shutdown_imgui();
   void render_imgui();
-  [[nodiscard]] Uniforms set_cpu_global_uniform_data(const RenderArgs& render_args) const;
+  void set_cpu_global_uniform_data(const RenderArgs& render_args);
   [[nodiscard]] CullData set_cpu_cull_data(const Uniforms& uniforms, const RenderArgs& render_args);
   void flush_pending_texture_uploads();
   void recreate_render_target_textures();
@@ -455,6 +455,7 @@ class RendererMetal {
   util::RollingAvgCtr frame_times_{128};
 
   std::vector<MainRenderPassCallback> main_render_pass_callbacks_;
+  Uniforms cpu_uniforms_;
 };
 
 static constexpr const char* to_string(RendererMetal::RenderMode mode);

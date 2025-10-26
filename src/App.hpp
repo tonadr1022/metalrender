@@ -1,29 +1,13 @@
 #pragma once
 #include <filesystem>
 
+#include "Camera.hpp"
 #include "WindowApple.hpp"
 #include "gfx/RendererMetal.hpp"
 #include "gfx/ResourceManager.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "voxels/VoxelRenderer.hpp"
 #include "voxels/VoxelWorld.hpp"
-
-class Camera {
- public:
-  [[nodiscard]] glm::mat4 get_view_mat() const;
-  void calc_vectors();
-  bool update_pos(GLFWwindow *window, float dt);
-  bool process_mouse(glm::vec2 offset);
-
-  glm::vec3 pos{};
-  float pitch{}, yaw{};
-  glm::vec3 front{}, right{};
-  glm::vec3 max_velocity{5.f};
-  glm::vec3 velocity{};
-  float acceleration_strength{100.0f};
-  float damping{0.9f};
-  float mouse_sensitivity{.1};
-};
 
 struct App {
   App();
@@ -62,5 +46,4 @@ struct App {
   RendererMetal renderer_;
   std::unique_ptr<vox::Renderer> voxel_renderer_;
   std::unique_ptr<vox::World> voxel_world_;
-  bool voxels_on_{true};
 };

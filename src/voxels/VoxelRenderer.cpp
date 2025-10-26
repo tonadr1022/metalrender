@@ -14,6 +14,7 @@
 #include "gfx/RendererMetal.hpp"
 #include "gfx/metal/MetalUtil.hpp"
 #include "imgui.h"
+#include "shader_global_uniforms.h"
 #include "voxels/Types.hpp"
 #include "voxels/VoxelDB.hpp"
 
@@ -67,7 +68,8 @@ void vox::Renderer::upload_chunk(const ChunkUploadData& upload_data) {
   chunk_render_datas_.emplace(handle.to64(), std::move(render_data));
 }
 
-void Renderer::encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf) {
+void Renderer::encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf,
+                                   const Uniforms& cpu_uniforms) {
   MTL::Buffer* index_buf = get_mtl_buf(index_buf_);
   enc->setRenderPipelineState(main_pso_);
   enc->setVertexBuffer(uniform_buf, 0, 2);
@@ -82,11 +84,15 @@ void Renderer::encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* 
   }
   for (const auto& [key, rd] : chunk_render_datas_) {
     auto* buf = get_mtl_buf(rd.vertex_handle);
-    const auto& lod = rd.lods[curr_render_lod_];
+    glm::vec3 chunk_center = glm::vec3{rd.chunk_world_pos} + static_cast<float>(k_chunk_len) / 2.0f;
+    float dist = glm::distance(cpu_uniforms.cam_pos, chunk_center) / lod_render_distance_mult_;
+    auto lod_level = glm::min<uint32_t>(static_cast<uint32_t>(dist) / k_chunk_len, k_chunk_bits);
+
+    const auto& lod = rd.lods[lod_level];
     for (int face = 0; face < 6; face++) {
       if (lod.face_vert_length[face]) {
         PerChunkUniforms chunk_uniforms{.chunk_pos = glm::ivec4{rd.chunk_world_pos, face},
-                                        .data = glm::ivec4{curr_render_lod_, 0, 0, 0}};
+                                        .data = glm::ivec4{lod_level, 0, 0, 0}};
         enc->setVertexBuffer(
             buf, lod.vert_begin_bytes + lod.face_vert_begin[face] * sizeof(uint64_t), 0);
         enc->setVertexBytes(&chunk_uniforms, sizeof(chunk_uniforms), 1);
@@ -116,10 +122,11 @@ void Renderer::init(RendererMetal* renderer) {
     memcpy(device_->get_buf(index_buf_)->contents(), indices.data(), copy_size);
   }
 
-  renderer_->add_main_render_pass_callback(
-      [this](MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf) {
-        encode_gbuffer_pass(enc, uniform_buf);
-      });
+  renderer_->add_main_render_pass_callback([this](MTL::RenderCommandEncoder* enc,
+                                                  MTL::Buffer* uniform_buf,
+                                                  const Uniforms& cpu_uniforms) {
+    encode_gbuffer_pass(enc, uniform_buf, cpu_uniforms);
+  });
 
   MTL::RenderPipelineDescriptor* desc = MTL::RenderPipelineDescriptor::alloc()->init();
   desc->setVertexFunction(renderer_->get_function("chunk_vertex_main"));
@@ -230,6 +237,7 @@ void Renderer::load_voxel_resources(VoxelDB& vdb, const std::filesystem::path& b
 void Renderer::on_imgui() {
   ImGui::Checkbox("Voxel Normal Maps", &normal_map_enabled_);
   ImGui::SliderInt("lod", &curr_render_lod_, 0, k_chunk_bits + 1);
+  ImGui::DragFloat("LOD Render Distance Multiplier", &lod_render_distance_mult_, 0.1, 0.1);
 }
 
 }  // namespace vox

@@ -3,6 +3,7 @@ set(target_name metalrender)
 add_executable(${target_name}
     main.cpp
     App.cpp
+    Camera.cpp
     core/FileUtil.cpp
     core/Util.cpp
     gfx/metal/MetalCpp.cpp

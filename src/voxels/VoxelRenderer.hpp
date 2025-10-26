@@ -12,6 +12,8 @@ class RendererMetal;
 
 class MetalBuffer;
 
+struct Uniforms;
+
 namespace rhi {
 class Device;
 }
@@ -34,7 +36,8 @@ class Renderer {
   void on_imgui();
 
   void upload_chunk(const ChunkUploadData& upload_data);
-  void encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf);
+  void encode_gbuffer_pass(MTL::RenderCommandEncoder* enc, MTL::Buffer* uniform_buf,
+                           const Uniforms& cpu_uniforms);
   void load_voxel_resources(VoxelDB& vdb, const std::filesystem::path& block_tex_dir);
 
  private:
@@ -63,6 +66,7 @@ class Renderer {
   rhi::TextureHandleHolder voxel_tex_arr_;
   rhi::BufferHandleHolder voxel_material_buf_;
   bool normal_map_enabled_{true};
+  float lod_render_distance_mult_{4.};
   int curr_render_lod_{0};
 };
 

@@ -14,6 +14,7 @@ struct v2f {
   float2 uv;
   uint face [[flat]];
   uint material_id [[flat]];
+  uint lod [[flat]];
 };
 
 struct Data {
@@ -71,6 +72,7 @@ v2f vertex chunk_vertex_main(uint vertexId [[vertex_id]],
     o.material_id = material;
     o.color = half4(half3(color),1.0);
     o.uv = float2(w * wMod, 1.0 - h * hMod);
+    o.lod = lod;
     // TODO: branchless
     if (face == 3) {
         o.uv = o.uv.yx * float2(1,-1);
@@ -100,7 +102,7 @@ float4 fragment chunk_fragment_main(v2f in [[stage_in]],
 
     half3 normal = half3(in.normal);
 
-    if (vox_uniforms.normal_map_enabled) {
+    if (vox_uniforms.normal_map_enabled && in.lod == 0) {
         half3 nm_normal = half3(block_tex_arr.sample(samp, in.uv, material.indices[in.face + 6]).xyz);
         nm_normal = nm_normal * 2.0 - 1.0;
         normal += nm_normal;
