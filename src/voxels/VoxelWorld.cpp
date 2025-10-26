@@ -34,11 +34,6 @@ void World::init(Renderer* renderer, RendererMetal* metal_renderer,
   vdb_.load(vdb_blocks_path_);
   renderer_->load_voxel_resources(vdb_, resource_dir_ / "blocks" / "textures" / "blocks");
 
-  // for (int lod = 0; lod < k_chunk_bits + 1; lod++) {
-  //   auto cl = k_chunk_len >> lod;
-  //   LINFO("lod: {}, chunk_len: {}, 3d len: {}", lod, cl, cl * cl * cl);
-  // }
-  // exit(1);
   ZoneScoped;
   {
     glm::vec3 key{};
@@ -190,12 +185,8 @@ void World::fill_padded_chunk_blocks_lod(const NeiChunksArr& nei_chunks, int lod
   for (int y = 0; y < cs; y++) {
     for (int x = 0; x < cs; x++) {
       for (int z = 0; z < cs; z++) {
-        if (lod == 0) {
-          result[get_idx_cs(x + 1, y + 1, z + 1, cs_p)] = main_chunk.blocks[get_idx(x, y, z)];
-        } else {
-          result[get_idx_cs(x + 1, y + 1, z + 1, cs_p)] =
-              main_chunk.lod_blocks[get_idx_lod(x, y, z, lod)];
-        }
+        result[get_idx_cs(x + 1, y + 1, z + 1, cs_p)] =
+            main_chunk.blocks[get_idx_lod(x, y, z, lod)];
       }
     }
   }

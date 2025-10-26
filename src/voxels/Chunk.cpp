@@ -33,11 +33,7 @@ VoxelId get_most_common(std::span<VoxelId> ids) {
 }  // namespace
 
 void ChunkBlockArr::fill_lods() {
-  // TODO: remove
-  lod_blocks.fill(0);
   for (int lod = 1; lod < k_chunk_bits + 1; lod++) {
-    VoxelId* curr_voxels = lod == 1 ? blocks.data() : lod_blocks.data();
-    auto size = lod == 1 ? blocks.size() : lod_blocks.size();
     int cl = k_chunk_len >> lod;
     for (int y = 0; y < cl; y++) {
       for (int x = 0; x < cl; x++) {
@@ -45,21 +41,13 @@ void ChunkBlockArr::fill_lods() {
           VoxelId types[8];
           for (int i = 0; i < 8; i++) {
             // TODO: this is insanity
-            if (lod == 1) {
-              size_t idx =
-                  get_idx((x * 2) + (i & 1), (y * 2) + ((i >> 1) & 1), (z * 2) + ((i >> 2) & 1));
-              ASSERT(idx < size);
-              types[i] = curr_voxels[idx];
-            } else {
-              size_t idx = get_idx_lod((x << 1) + (i & 1), (y << 1) + ((i >> 1) & 1),
-                                       (z << 1) + ((i >> 2) & 1), lod - 1);
-              ASSERT(idx < size);
-              types[i] = curr_voxels[idx];
-            }
+            size_t idx = get_idx_lod((x << 1) + (i & 1), (y << 1) + ((i >> 1) & 1),
+                                     (z << 1) + ((i >> 2) & 1), lod - 1);
+            types[i] = blocks[idx];
           }
           std::ranges::sort(types);
           VoxelId most_common = get_most_common(types);
-          lod_blocks[get_idx_lod(x, y, z, lod)] = most_common;
+          blocks[get_idx_lod(x, y, z, lod)] = most_common;
         }
       }
     }

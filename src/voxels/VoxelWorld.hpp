@@ -8,6 +8,7 @@
 #include "voxels/Chunk.hpp"
 #include "voxels/Mesher.hpp"
 #include "voxels/TerrainGenerator.hpp"
+#include "voxels/Types.hpp"
 #include "voxels/VoxelDB.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "concurrentqueue.h"

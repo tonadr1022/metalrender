@@ -1,6 +1,5 @@
 #pragma once
 
-#include "Types.hpp"
 #include "chunk_shaders_shared.h"
 #include "core/EAssert.hpp"
 
@@ -43,14 +42,17 @@ inline int get_idx_in_lod(int x, int y, int z, int lod) {
   return z + (x * k_chunk_len >> lod) + (y * (k_chunk_len >> lod) * (k_chunk_len >> lod));
 }
 
-// TODO: use binary
-inline constexpr int lod_array_pref_sums[k_chunk_bits] = {
-    0, 4096, 4096 + 512, 4096 + 512 + 64, 4096 + 512 + 64 + 8,
+inline constexpr std::array<int, k_chunk_bits + 1> lod_array_pref_sums = {
+    0,
+    k_chunk_len_cu,
+    k_chunk_len_cu + 4096,
+    k_chunk_len_cu + 4096 + 512,
+    k_chunk_len_cu + 4096 + 512 + 64,
+    k_chunk_len_cu + 4096 + 512 + 64 + 8,
 };
 
 inline int get_idx_lod(int x, int y, int z, int lod) {
-  ASSERT(lod > 0);
-  return get_idx_in_lod(x, y, z, lod) + lod_array_pref_sums[lod - 1];
+  return get_idx_in_lod(x, y, z, lod) + lod_array_pref_sums[lod];
 }
 
 inline int get_padded_chunk_len(int lod) { return (k_chunk_len >> lod) + 2; }
@@ -70,8 +72,7 @@ using MeshId = uint32_t;
 using LodVoxelArray = std::array<VoxelId, 4096 + 512 + 64 + 8 + 1>;
 
 struct ChunkBlockArr {
-  std::array<VoxelId, k_chunk_len_cu> blocks;
-  LodVoxelArray lod_blocks;
+  std::array<VoxelId, k_chunk_len_cu + 4096 + 512 + 64 + 8 + 1> blocks;
 
   [[nodiscard]] VoxelId get(int x, int y, int z) const { return blocks[get_idx(x, y, z)]; }
   [[nodiscard]] VoxelId get(int i) const {

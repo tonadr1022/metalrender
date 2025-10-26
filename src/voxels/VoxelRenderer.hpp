@@ -6,6 +6,7 @@
 #include "gfx/RendererTypes.hpp"
 #include "gfx/metal/MetalBuffer.hpp"
 #include "voxels/Chunk.hpp"
+#include "voxels/Types.hpp"
 
 class RendererMetal;
 
