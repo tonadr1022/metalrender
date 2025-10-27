@@ -99,4 +99,6 @@ struct GraphicsPipelineCreateInfo {
   std::string name;
 };
 
+class Pipeline {};
+
 }  // namespace rhi

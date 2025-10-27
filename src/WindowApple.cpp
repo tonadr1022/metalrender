@@ -26,6 +26,7 @@ void WindowApple::init(rhi::Device* device, KeyCallbackFn key_callback_fn,
   NSView* ns_view = glfwGetCocoaView(window_);
   NSWindow* ns_window = glfwGetCocoaWindow(window_);
   [ns_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+
   CAMetalLayer* mtl_layer = [CAMetalLayer layer];
 
   mtl_layer.contentsScale = [ns_window backingScaleFactor];

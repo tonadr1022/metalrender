@@ -18,6 +18,12 @@ void MetalDevice::init() {
     shader_compiler_ = device_->newCompiler(compiler_desc, &err);
     compiler_desc->release();
   }
+
+  for (size_t i = 0; i < frames_in_flight_; i++) {
+    cmd_allocators_[i] = device_->newCommandAllocator();
+  }
+
+  cmd_lists_.reserve(10);
 }
 
 void MetalDevice::shutdown() {
@@ -177,6 +183,11 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
   return handle;
 }
 
+rhi::PipelineHandleHolder MetalDevice::create_graphics_pipeline_h(
+    const rhi::GraphicsPipelineCreateInfo& cinfo) {
+  return rhi::PipelineHandleHolder{create_graphics_pipeline(cinfo), this};
+}
+
 MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path) {
   NS::Error* err{};
   auto it = path_to_lib_.find(path.string());
@@ -184,3 +195,12 @@ MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path) 
              ? it->second
              : device_->newLibrary(mtl::util::string(metal_shader_dir_ / path), &err);
 }
+
+rhi::CmdEncoder* MetalDevice::begin_command_list() {
+  MTL4::CommandBuffer* cmd_buf = device_->newCommandBuffer();
+  cmd_buf->beginCommandBuffer(cmd_allocators_[frame_idx()]);
+  cmd_lists_.emplace_back(std::make_unique<MetalCmdEncoder>());
+  return cmd_lists_.back().get();
+}
+
+void MetalDevice::begin_frame() {}

@@ -2,7 +2,6 @@
 
 #include <Metal/Metal.hpp>
 #include <filesystem>
-#include <memory>
 
 #include "MetalBuffer.hpp"
 #include "MetalPipeline.hpp"
@@ -10,7 +9,9 @@
 #include "core/Allocator.hpp"
 #include "core/Handle.hpp"
 #include "core/Pool.hpp"
+#include "gfx/Config.hpp"
 #include "gfx/Device.hpp"
+#include "gfx/metal/MetalCmdEncoder.hpp"
 #include "shader_constants.h"
 
 namespace rhi {
@@ -22,6 +23,11 @@ struct TextureDesc;
 namespace NS {
 class AutoreleasePool;
 }
+
+namespace CA {
+class MetalLayer;
+}
+
 namespace MTL {
 class Device;
 class Texture;
@@ -58,18 +64,28 @@ class MetalDevice : public rhi::Device {
     return get_tex(handle.handle);
   }
 
+  rhi::Pipeline* get_pipeline(const rhi::PipelineHandleHolder& handle) override {
+    return pipeline_pool_.get(handle.handle);
+  }
+  rhi::Pipeline* get_pipeline(rhi::PipelineHandle handle) override {
+    return pipeline_pool_.get(handle);
+  }
+
   void destroy(rhi::BufferHandle handle) override;
   void destroy(rhi::TextureHandle handle) override;
   void destroy(rhi::PipelineHandle handle) override;
 
-  // MTL::Buffer* get_bindless_arg_buffer() {
   rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) override;
-
-  //   return reinterpret_cast<MetalBuffer*>(get_buf(bindless_arg_buffer_))->buffer();
-  // }
+  rhi::PipelineHandleHolder create_graphics_pipeline_h(
+      const rhi::GraphicsPipelineCreateInfo& cinfo) override;
 
   void use_bindless_buffer(MTL::RenderCommandEncoder* enc);
+  rhi::CmdEncoder* begin_command_list() override;
+  void begin_frame();
+
+  [[nodiscard]] size_t frame_num() const { return frame_num_; }
+  [[nodiscard]] size_t frame_idx() const { return frame_num_ % frames_in_flight_; }
 
  private:
   BlockPool<rhi::BufferHandle, MetalBuffer> buffer_pool_{128, 1, true};
@@ -78,8 +94,16 @@ class MetalDevice : public rhi::Device {
   std::filesystem::path metal_shader_dir_;
   MTL4::Compiler* shader_compiler_{};
   IndexAllocator texture_index_allocator_{k_max_textures};
+  std::array<MTL4::CommandAllocator*, k_max_frames_in_flight> cmd_allocators_{};
+  std::vector<std::unique_ptr<MetalCmdEncoder>> cmd_lists_;
+
+  size_t frame_num_{};
+
   NS::AutoreleasePool* ar_pool_{};
   MTL::Device* device_{};
+  CA::MetalLayer* metal_layer_{};
+
+  size_t frames_in_flight_{2};
 
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
     return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();

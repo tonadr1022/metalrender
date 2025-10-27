@@ -5,6 +5,7 @@
 #include <functional>
 
 #include "core/Math.hpp"  // IWYU pragma: keep
+#include "gfx/RendererTypes.hpp"
 
 class MetalDevice;
 class WindowApple;
@@ -30,6 +31,6 @@ class RendererMetal4 {
  private:
   MetalDevice* device_{};
   WindowApple* window_{};
-  MTL::Device* raw_device_{};
-  MTL::ResidencySet* make_residency_set();
+  rhi::PipelineHandleHolder test_pso_;
+  size_t frame_num_{};
 };

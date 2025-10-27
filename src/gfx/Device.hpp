@@ -12,6 +12,7 @@ namespace rhi {
 
 struct GraphicsPipelineCreateInfo;
 class Device;
+class CmdEncoder;
 
 class Device {
  public:
@@ -27,10 +28,15 @@ class Device {
   virtual Texture* get_tex(const TextureHandleHolder& handle) = 0;
   virtual Buffer* get_buf(const BufferHandleHolder& handle) = 0;
   virtual Buffer* get_buf(BufferHandle handle) = 0;
+  virtual rhi::Pipeline* get_pipeline(const rhi::PipelineHandleHolder& handle) = 0;
+  virtual rhi::Pipeline* get_pipeline(rhi::PipelineHandle handle) = 0;
   virtual void destroy(BufferHandle handle) = 0;
   virtual void destroy(PipelineHandle handle) = 0;
+  virtual CmdEncoder* begin_command_list() = 0;
 
   virtual rhi::PipelineHandle create_graphics_pipeline(
+      const rhi::GraphicsPipelineCreateInfo& cinfo) = 0;
+  virtual rhi::PipelineHandleHolder create_graphics_pipeline_h(
       const rhi::GraphicsPipelineCreateInfo& cinfo) = 0;
   virtual void destroy(TextureHandle handle) = 0;
 };
