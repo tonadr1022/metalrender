@@ -572,16 +572,16 @@ void RendererMetal::on_imgui() {
 void RendererMetal::load_shaders() {
   NS::Error *err{};
   default_shader_lib_ = raw_device_->newLibrary(
-      util::mtl::string(resource_dir_ / "shader_out" / "default.metallib"), &err);
+      mtl::util::string(resource_dir_ / "shader_out" / "default.metallib"), &err);
 
   if (err) {
-    util::mtl::print_err(err);
+    mtl::util::print_err(err);
     return;
   }
 
   {
     auto add_func = [this](const char *name) {
-      shader_funcs_.emplace(name, default_shader_lib_->newFunction(util::mtl::string(name)));
+      shader_funcs_.emplace(name, default_shader_lib_->newFunction(mtl::util::string(name)));
     };
     add_func("vertexMain");
     add_func("fragmentMain");
@@ -908,8 +908,7 @@ void RendererMetal::load_pipelines() {
         "basic1_object_main",
         is_late_pass ? "basic1_object_main_late_pass" : "basic1_object_main_early_pass",
         object_func_consts));
-    pipeline_desc->setFragmentFunction(get_function("basic1_fragment_main"));
-    pipeline_desc->setLabel(util::mtl::string("basic mesh pipeline"));
+    pipeline_desc->setLabel(mtl::util::string("basic mesh pipeline"));
     pipeline_desc->colorAttachments()->object(0)->setPixelFormat(main_pixel_format);
     pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
     pipeline_desc->setSupportIndirectCommandBuffers(true);
@@ -924,7 +923,7 @@ void RendererMetal::load_pipelines() {
     MTL::RenderPipelineDescriptor *pipeline_desc = MTL::RenderPipelineDescriptor::alloc()->init();
     pipeline_desc->setVertexFunction(get_function("vertexMain"));
     pipeline_desc->setFragmentFunction(get_function("fragmentMain"));
-    pipeline_desc->setLabel(util::mtl::string("basic vert pipeline"));
+    pipeline_desc->setLabel(mtl::util::string("basic vert pipeline"));
     pipeline_desc->colorAttachments()->object(0)->setPixelFormat(main_pixel_format);
     pipeline_desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
     pipeline_desc->setSupportIndirectCommandBuffers(true);
@@ -934,7 +933,7 @@ void RendererMetal::load_pipelines() {
     MTL::RenderPipelineDescriptor *pipeline_desc = MTL::RenderPipelineDescriptor::alloc()->init();
     pipeline_desc->setVertexFunction(get_function("full_screen_tex_vertex_main"));
     pipeline_desc->setFragmentFunction(get_function("full_screen_tex_frag_main"));
-    pipeline_desc->setLabel(util::mtl::string("full screen texture pipeline"));
+    pipeline_desc->setLabel(mtl::util::string("full screen texture pipeline"));
     pipeline_desc->colorAttachments()->object(0)->setPixelFormat(main_pixel_format);
     full_screen_tex_pso_ = load_pipeline(pipeline_desc);
   }
@@ -944,12 +943,12 @@ void RendererMetal::load_pipelines() {
       MTL::ComputePipelineDescriptor *pipeline_desc =
           MTL::ComputePipelineDescriptor::alloc()->init();
       pipeline_desc->setComputeFunction(get_function(name));
-      pipeline_desc->setLabel(util::mtl::string(name));
+      pipeline_desc->setLabel(mtl::util::string(name));
       NS::Error *err{};
       auto *pso = raw_device_->newComputePipelineState(pipeline_desc, MTL::PipelineOptionNone,
                                                        nullptr, &err);
       if (err) {
-        util::mtl::print_err(err);
+        mtl::util::print_err(err);
         exit(1);
       }
       pipeline_desc->release();
@@ -966,7 +965,7 @@ MTL::Function *RendererMetal::get_function(const char *name, bool load) {
   auto it = shader_funcs_.find(name);
   if (it == shader_funcs_.end()) {
     if (load) {
-      MTL::Function *func = default_shader_lib_->newFunction(util::mtl::string(name));
+      MTL::Function *func = default_shader_lib_->newFunction(mtl::util::string(name));
       ALWAYS_ASSERT(func != nullptr);
       shader_funcs_.emplace(name, func);
       return func;
@@ -982,7 +981,7 @@ MTL::Function *RendererMetal::create_function(const std::string &name,
                                               const std::string &specialized_name,
                                               std::span<FuncConst> consts) {
   MTL::FunctionDescriptor *desc = MTL::FunctionDescriptor::alloc()->init();
-  desc->setName(util::mtl::string(name));
+  desc->setName(mtl::util::string(name));
 
   if (!consts.empty()) {
     MTL::FunctionConstantValues *vals = MTL::FunctionConstantValues::alloc()->init();
@@ -996,18 +995,18 @@ MTL::Function *RendererMetal::create_function(const std::string &name,
           break;
       }
 
-      vals->setConstantValue(c.val, t, util::mtl::string(c.name));
+      vals->setConstantValue(c.val, t, mtl::util::string(c.name));
     }
     desc->setConstantValues(vals);
   }
 
   if (!specialized_name.empty()) {
-    desc->setSpecializedName(util::mtl::string(specialized_name));
+    desc->setSpecializedName(mtl::util::string(specialized_name));
   }
   NS::Error *err{};
   MTL::Function *func = default_shader_lib_->newFunction(desc, &err);
   if (err) {
-    util::mtl::print_err(err);
+    mtl::util::print_err(err);
     ALWAYS_ASSERT(0 && "failed to create function");
     return nullptr;
   }
@@ -1025,7 +1024,7 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
 
   {
     MTL::BlitCommandEncoder *reset_blit_enc = buf->blitCommandEncoder();
-    reset_blit_enc->setLabel(util::mtl::string("Reset ICB Blit Encoder"));
+    reset_blit_enc->setLabel(mtl::util::string("Reset ICB Blit Encoder"));
     reset_blit_enc->resetCommandsInBuffer(instance_data_mgr_.icb(),
                                           NS::Range::Make(0, all_model_data_.max_objects));
 
@@ -1078,7 +1077,7 @@ void RendererMetal::encode_regular_frame(const RenderArgs &render_args, MTL::Com
 
   {
     MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
-    blit_enc->setLabel(util::mtl::string("Optimize ICB Blit Encoder"));
+    blit_enc->setLabel(mtl::util::string("Optimize ICB Blit Encoder"));
     blit_enc->optimizeIndirectCommandBuffer(instance_data_mgr_.icb(),
                                             NS::Range::Make(0, all_model_data_.max_objects));
     blit_enc->endEncoding();
@@ -1298,7 +1297,7 @@ MTL::RenderPipelineState *RendererMetal::load_pipeline(MTL::RenderPipelineDescri
   NS::Error *err{};
   auto *result = raw_device_->newRenderPipelineState(desc, MTL::PipelineOptionNone, nullptr, &err);
   if (err) {
-    util::mtl::print_err(err);
+    mtl::util::print_err(err);
     exit(1);
   }
 
@@ -1310,7 +1309,7 @@ MTL::RenderPipelineState *RendererMetal::load_pipeline(MTL::MeshRenderPipelineDe
   NS::Error *err{};
   auto *result = raw_device_->newRenderPipelineState(desc, MTL::PipelineOptionNone, nullptr, &err);
   if (err) {
-    util::mtl::print_err(err);
+    mtl::util::print_err(err);
     exit(1);
   }
 

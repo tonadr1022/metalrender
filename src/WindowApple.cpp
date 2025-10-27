@@ -76,5 +76,3 @@ glm::uvec2 WindowApple::get_window_size() {
   glfwGetFramebufferSize(window_, &x, &y);
   return {x, y};
 }
-
-std::unique_ptr<WindowApple> create_apple_window() { return std::make_unique<WindowApple>(); }

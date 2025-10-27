@@ -1,10 +1,11 @@
 #pragma once
 
-#include <Metal/MTLArgumentEncoder.hpp>
-#include <Metal/MTLBuffer.hpp>
+#include <Metal/Metal.hpp>
+#include <filesystem>
 #include <memory>
 
 #include "MetalBuffer.hpp"
+#include "MetalPipeline.hpp"
 #include "MetalTexture.hpp"
 #include "core/Allocator.hpp"
 #include "core/Handle.hpp"
@@ -59,8 +60,12 @@ class MetalDevice : public rhi::Device {
 
   void destroy(rhi::BufferHandle handle) override;
   void destroy(rhi::TextureHandle handle) override;
+  void destroy(rhi::PipelineHandle handle) override;
 
   // MTL::Buffer* get_bindless_arg_buffer() {
+  rhi::PipelineHandle create_graphics_pipeline(
+      const rhi::GraphicsPipelineCreateInfo& cinfo) override;
+
   //   return reinterpret_cast<MetalBuffer*>(get_buf(bindless_arg_buffer_))->buffer();
   // }
 
@@ -69,6 +74,9 @@ class MetalDevice : public rhi::Device {
  private:
   BlockPool<rhi::BufferHandle, MetalBuffer> buffer_pool_{128, 1, true};
   BlockPool<rhi::TextureHandle, MetalTexture> texture_pool_{128, 1, true};
+  BlockPool<rhi::PipelineHandle, MetalPipeline> pipeline_pool_{20, 1, true};
+  std::filesystem::path metal_shader_dir_;
+  MTL4::Compiler* shader_compiler_{};
   IndexAllocator texture_index_allocator_{k_max_textures};
   NS::AutoreleasePool* ar_pool_{};
   MTL::Device* device_{};
@@ -76,5 +84,8 @@ class MetalDevice : public rhi::Device {
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
     return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();
   }
+  MTL::Library* create_or_get_lib(const std::filesystem::path& path);
+  std::unordered_map<std::string, MTL::Library*> path_to_lib_;
+
+  MTL::ResidencySet* make_residency_set();
 };
-std::unique_ptr<MetalDevice> create_metal_device();

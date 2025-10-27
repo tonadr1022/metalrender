@@ -10,6 +10,7 @@ class Texture;
 
 namespace rhi {
 
+struct GraphicsPipelineCreateInfo;
 class Device;
 
 class Device {
@@ -27,6 +28,10 @@ class Device {
   virtual Buffer* get_buf(const BufferHandleHolder& handle) = 0;
   virtual Buffer* get_buf(BufferHandle handle) = 0;
   virtual void destroy(BufferHandle handle) = 0;
+  virtual void destroy(PipelineHandle handle) = 0;
+
+  virtual rhi::PipelineHandle create_graphics_pipeline(
+      const rhi::GraphicsPipelineCreateInfo& cinfo) = 0;
   virtual void destroy(TextureHandle handle) = 0;
 };
 

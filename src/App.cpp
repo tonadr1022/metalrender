@@ -35,8 +35,8 @@ App::App() {
   resource_dir_ = get_resource_dir();
   shader_dir_ = resource_dir_ / "shaders";
   load_config();
-  device_ = create_metal_device();
-  window_ = create_apple_window();
+  device_ = std::make_unique<MetalDevice>();
+  window_ = std::make_unique<WindowApple>();
   device_->init();
   window_->init(
       device_.get(), [this](int key, int action, int mods) { on_key_event(key, action, mods); },
@@ -44,15 +44,15 @@ App::App() {
 
   on_hide_mouse_change();
 
-  ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_});
-  renderer_.init(RendererMetal::CreateInfo{.device = device_.get(),
-                                           .window = window_.get(),
-                                           .resource_dir = resource_dir_,
-                                           .render_imgui_callback = [this]() { on_imgui(); }});
-  voxel_renderer_ = std::make_unique<vox::Renderer>();
-  voxel_renderer_->init(&renderer_);
-  voxel_world_ = std::make_unique<vox::World>();
-  voxel_world_->init(voxel_renderer_.get(), &renderer_, resource_dir_);
+  // ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_});
+  renderer_.init(RendererMetal4::CreateInfo{.device = device_.get(),
+                                            .window = window_.get(),
+                                            .resource_dir = resource_dir_,
+                                            .render_imgui_callback = [this]() { on_imgui(); }});
+  // voxel_renderer_ = std::make_unique<vox::Renderer>();
+  // voxel_renderer_->init(&renderer_);
+  // voxel_world_ = std::make_unique<vox::World>();
+  // voxel_world_->init(voxel_renderer_.get(), &renderer_, resource_dir_);
 }
 
 namespace rando {
@@ -75,8 +75,7 @@ float get_float(float min, float max) {
 
 void App::run() {
   ZoneScoped;
-  rando::seed(10000000);
-  int scene = 1;
+  int scene = 3;
   if (scene == 0) {
     glm::ivec3 iter{};
     int n = 0;
@@ -90,6 +89,7 @@ void App::run() {
     }
     // load_model(config_.initial_model_path);
   } else if (scene == 1) {
+    rando::seed(10000000);
     size_t count = 100;
     float scale = 10;
 

@@ -12,6 +12,8 @@ add_executable(${target_name}
     gfx/metal/MetalUtil.cpp
     gfx/ModelLoader.cpp
     gfx/RendererMetal.cpp
+    gfx/RendererMetal4.cpp
+    gfx/Pipeline.cpp
     gfx/ModelInstance.cpp
     gfx/ResourceManager.cpp
     WindowApple.cpp
@@ -26,7 +28,7 @@ add_executable(${target_name}
 
 add_custom_target(compile_shaders ALL
     COMMAND ${CMAKE_COMMAND} -E echo "Compile metal shaders"
-    COMMAND bash ${CMAKE_SOURCE_DIR}/compile.sh ${CMAKE_SOURCE_DIR}/resources/shader_out
+    COMMAND bash ${CMAKE_SOURCE_DIR}/compile.sh ${CMAKE_SOURCE_DIR}/resources/shader_out ${CMAKE_SOURCE_DIR}/resources/shader_out/slang
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 add_dependencies(${target_name} compile_shaders)

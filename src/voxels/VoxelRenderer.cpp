@@ -131,7 +131,7 @@ void Renderer::init(RendererMetal* renderer) {
   MTL::RenderPipelineDescriptor* desc = MTL::RenderPipelineDescriptor::alloc()->init();
   desc->setVertexFunction(renderer_->get_function("chunk_vertex_main"));
   desc->setFragmentFunction(renderer_->get_function("chunk_fragment_main"));
-  desc->setLabel(util::mtl::string("chunk pipeline"));
+  desc->setLabel(mtl::util::string("chunk pipeline"));
   desc->colorAttachments()->object(0)->setPixelFormat(renderer_->main_pixel_format);
   desc->setDepthAttachmentPixelFormat(MTL::PixelFormatDepth32Float);
   main_pso_ = renderer_->load_pipeline(desc);

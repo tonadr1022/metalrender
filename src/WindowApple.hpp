@@ -1,7 +1,5 @@
 #pragma once
 
-#include <memory>
-
 #include "Window.hpp"
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -21,7 +19,7 @@ class WindowApple : public Window {
   void poll_events() override;
 
   void set_vsync(bool vsync) override;
-  bool get_vsync() const override;
+  [[nodiscard]] bool get_vsync() const override;
   void init(rhi::Device* device, KeyCallbackFn key_callback_fn,
             CursorPosCallbackFn cursor_pos_callback_fn) override;
   void shutdown() override;
@@ -37,5 +35,3 @@ class WindowApple : public Window {
   CursorPosCallbackFn cursor_pos_callback_fn_;
   GLFWwindow* window_{};
 };
-
-std::unique_ptr<WindowApple> create_apple_window();

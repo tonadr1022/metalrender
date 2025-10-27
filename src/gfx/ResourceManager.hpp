@@ -26,7 +26,6 @@ class ResourceManager {
     instance_ = new ResourceManager{cinfo};
   }
   static void shutdown() {
-    assert(instance_);
     delete instance_;
     instance_ = nullptr;
   }

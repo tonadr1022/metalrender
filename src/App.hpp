@@ -3,7 +3,7 @@
 
 #include "Camera.hpp"
 #include "WindowApple.hpp"
-#include "gfx/RendererMetal.hpp"
+#include "gfx/RendererMetal4.hpp"
 #include "gfx/ResourceManager.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "voxels/VoxelRenderer.hpp"
@@ -43,7 +43,7 @@ struct App {
 
   glm::vec2 last_pos_{};
   // TODO: ptr for impl/RHI
-  RendererMetal renderer_;
+  RendererMetal4 renderer_;
   std::unique_ptr<vox::Renderer> voxel_renderer_;
   std::unique_ptr<vox::World> voxel_world_;
 };

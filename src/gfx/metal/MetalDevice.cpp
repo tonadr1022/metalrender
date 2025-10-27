@@ -5,10 +5,19 @@
 #include "MetalUtil.hpp"
 #include "core/EAssert.hpp"
 #include "gfx/GFXTypes.hpp"
+#include "gfx/Pipeline.hpp"
+#include "gfx/RendererTypes.hpp"
+#include "gfx/metal/MetalPipeline.hpp"
 
 void MetalDevice::init() {
   device_ = MTL::CreateSystemDefaultDevice();
   ar_pool_ = NS::AutoreleasePool::alloc()->init();
+  NS::Error* err{};
+  {
+    MTL4::CompilerDescriptor* compiler_desc = MTL4::CompilerDescriptor::alloc()->init();
+    shader_compiler_ = device_->newCompiler(compiler_desc, &err);
+    compiler_desc->release();
+  }
 }
 
 void MetalDevice::shutdown() {
@@ -17,7 +26,7 @@ void MetalDevice::shutdown() {
 }
 
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
-  auto options = util::mtl::convert_storage_mode(desc.storage_mode);
+  auto options = mtl::util::convert_storage_mode(desc.storage_mode);
   auto* mtl_buf = device_->newBuffer(desc.size, options);
   mtl_buf->retain();
   return buffer_pool_.alloc(desc, mtl_buf);
@@ -43,13 +52,13 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   texture_desc->setHeight(desc.dims.y);
   texture_desc->setDepth(desc.dims.z);
   texture_desc->setTextureType(get_texture_type(desc.dims, desc.array_length));
-  texture_desc->setPixelFormat(util::mtl::convert_format(desc.format));
-  texture_desc->setStorageMode(util::mtl::convert_storage_mode(desc.storage_mode));
+  texture_desc->setPixelFormat(mtl::util::convert_format(desc.format));
+  texture_desc->setStorageMode(mtl::util::convert_storage_mode(desc.storage_mode));
   texture_desc->setMipmapLevelCount(desc.mip_levels);
   texture_desc->setArrayLength(desc.array_length);
   // TODO: parameterize this?
   texture_desc->setAllowGPUOptimizedContents(true);
-  auto usage = util::mtl::convert_texture_usage(desc.usage);
+  auto usage = mtl::util::convert_texture_usage(desc.usage);
   if (desc.flags & rhi::TextureDescFlags_PixelFormatView) {
     usage |= MTL::TextureUsagePixelFormatView;
   }
@@ -91,4 +100,87 @@ void MetalDevice::destroy(rhi::TextureHandle handle) {
   texture_pool_.destroy(handle);
 }
 
-std::unique_ptr<MetalDevice> create_metal_device() { return std::make_unique<MetalDevice>(); }
+void MetalDevice::destroy(rhi::PipelineHandle handle) {
+  auto* e = pipeline_pool_.get(handle);
+  if (e) {
+    if (e->render_pso) {
+      e->render_pso->release();
+    }
+    if (e->compute_pso) {
+      e->compute_pso->release();
+    }
+  }
+}
+
+MTL::ResidencySet* MetalDevice::make_residency_set() {
+  MTL::ResidencySetDescriptor* desc = MTL::ResidencySetDescriptor::alloc()->init();
+  desc->setLabel(mtl::util::string("main residency set"));
+  NS::Error* err{};
+  MTL::ResidencySet* set = device_->newResidencySet(desc, &err);
+  if (err) {
+    LERROR("Failed to create residency set");
+  }
+  return set;
+}
+
+rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
+    const rhi::GraphicsPipelineCreateInfo& cinfo) {
+  using ShaderType = rhi::ShaderType;
+  MTL4::RenderPipelineDescriptor* desc = MTL4::RenderPipelineDescriptor::alloc()->init();
+  for (const auto& shader_info : cinfo.shaders) {
+    // TODO: fix
+    MTL::Library* lib =
+        create_or_get_lib("/Users/tony/personal/metalrender/resources/shader_out/default.metallib");
+    MTL4::LibraryFunctionDescriptor* func_desc = MTL4::LibraryFunctionDescriptor::alloc()->init();
+    func_desc->setLibrary(lib);
+    func_desc->setName(mtl::util::string(shader_info.entry_point));
+    switch (shader_info.type) {
+      case ShaderType::Fragment: {
+        desc->setFragmentFunctionDescriptor(func_desc);
+        break;
+      }
+      case ShaderType::Vertex: {
+        desc->setVertexFunctionDescriptor(func_desc);
+        break;
+      }
+      default: {
+        LERROR("Invalid shader type for GraphicsPipeline creation: {}",
+               to_string(shader_info.type));
+      }
+    }
+    lib->release();
+  }
+
+  int color_format_cnt = 0;
+  for (auto format : cinfo.rendering.color_formats) {
+    if (format != rhi::TextureFormat::Undefined) {
+      color_format_cnt++;
+    } else {
+      break;
+    }
+  }
+  for (int i = 0; i < color_format_cnt; i++) {
+    rhi::TextureFormat format = cinfo.rendering.color_formats[i];
+    desc->colorAttachments()->object(i)->setPixelFormat(mtl::util::convert_format(format));
+  }
+
+  desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);
+  NS::Error* err{};
+
+  auto* result = shader_compiler_->newRenderPipelineState(desc, nullptr, &err);
+  if (!result) {
+    LERROR("Failed to create render pipeline {}", mtl::util::get_err_string(err));
+  }
+
+  auto handle = pipeline_pool_.alloc(MetalPipeline{.render_pso = result});
+
+  return handle;
+}
+
+MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path) {
+  NS::Error* err{};
+  auto it = path_to_lib_.find(path.string());
+  return it != path_to_lib_.end()
+             ? it->second
+             : device_->newLibrary(mtl::util::string(metal_shader_dir_ / path), &err);
+}
