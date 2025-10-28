@@ -12,8 +12,10 @@
 #include "gfx/Config.hpp"
 #include "gfx/Device.hpp"
 #include "gfx/metal/MetalCmdEncoder.hpp"
+#include "gfx/metal/MetalSwapchain.hpp"
 #include "shader_constants.h"
 
+class Window;
 namespace rhi {
 
 struct TextureDesc;
@@ -26,7 +28,8 @@ class AutoreleasePool;
 
 namespace CA {
 class MetalLayer;
-}
+class MetalDrawable;
+}  // namespace CA
 
 namespace MTL {
 class Device;
@@ -39,7 +42,7 @@ class MetalDevice;
 
 class MetalDevice : public rhi::Device {
  public:
-  void init();
+  void init(Window* window);
   void shutdown() override;
   [[nodiscard]] void* get_native_device() const override { return device_; }
 
@@ -80,34 +83,48 @@ class MetalDevice : public rhi::Device {
   rhi::PipelineHandleHolder create_graphics_pipeline_h(
       const rhi::GraphicsPipelineCreateInfo& cinfo) override;
 
+  void submit_frame() override;
+  [[nodiscard]] const Info& get_info() const override { return info_; }
+
   void use_bindless_buffer(MTL::RenderCommandEncoder* enc);
   rhi::CmdEncoder* begin_command_list() override;
-  void begin_frame();
+  // TODO: is there a better spot for setting window dims, ie on event
+  bool begin_frame(glm::uvec2 window_dims) override;
 
   [[nodiscard]] size_t frame_num() const { return frame_num_; }
-  [[nodiscard]] size_t frame_idx() const { return frame_num_ % frames_in_flight_; }
+  [[nodiscard]] size_t frame_idx() const { return frame_num_ % info_.frames_in_flight; }
+
+  rhi::Swapchain& get_swapchain() { return swapchain_; }
+  const rhi::Swapchain& get_swapchain() const { return swapchain_; }
+
+  void set_metal_layer(CA::MetalLayer* layer) { metal_layer_ = layer; }
 
  private:
   BlockPool<rhi::BufferHandle, MetalBuffer> buffer_pool_{128, 1, true};
   BlockPool<rhi::TextureHandle, MetalTexture> texture_pool_{128, 1, true};
   BlockPool<rhi::PipelineHandle, MetalPipeline> pipeline_pool_{20, 1, true};
+  Info info_{};
   std::filesystem::path metal_shader_dir_;
   MTL4::Compiler* shader_compiler_{};
   IndexAllocator texture_index_allocator_{k_max_textures};
   std::array<MTL4::CommandAllocator*, k_max_frames_in_flight> cmd_allocators_{};
   std::vector<std::unique_ptr<MetalCmdEncoder>> cmd_lists_;
+  MTL4::CommandBuffer* main_cmd_buf_{};
+  MTL4::CommandQueue* main_cmd_q_{};
+  MetalSwapchain swapchain_;
 
   size_t frame_num_{};
 
   NS::AutoreleasePool* ar_pool_{};
   MTL::Device* device_{};
   CA::MetalLayer* metal_layer_{};
-
-  size_t frames_in_flight_{2};
+  CA::MetalDrawable* curr_drawable_{};
+  NS::AutoreleasePool* frame_ar_pool_{};
 
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
     return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();
   }
+
   MTL::Library* create_or_get_lib(const std::filesystem::path& path);
   std::unordered_map<std::string, MTL::Library*> path_to_lib_;
 

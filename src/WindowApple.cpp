@@ -59,6 +59,11 @@ void WindowApple::init(rhi::Device* device, KeyCallbackFn key_callback_fn,
     auto* win = reinterpret_cast<WindowApple*>(glfwGetWindowUserPointer(window));
     win->cursor_pos_callback_fn_(xpos, ypos);
   });
+  auto* mtl_device = dynamic_cast<MetalDevice*>(device);
+  if (!mtl_device) {
+    LERROR("invalid device pointer");
+  }
+  mtl_device->set_metal_layer(metal_layer_);
 }
 
 void WindowApple::shutdown() { glfwTerminate(); }

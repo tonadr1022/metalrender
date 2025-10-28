@@ -1,15 +1,22 @@
 #include "MetalDevice.hpp"
 
 #include <Metal/Metal.hpp>
+#include <QuartzCore/CAMetalLayer.hpp>
 
 #include "MetalUtil.hpp"
+#include "WindowApple.hpp"
 #include "core/EAssert.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/Pipeline.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/metal/MetalPipeline.hpp"
 
-void MetalDevice::init() {
+void MetalDevice::init(Window* window) {
+  auto* win = dynamic_cast<WindowApple*>(window);
+  if (!win) {
+    LERROR("invalid window pointer");
+    return;
+  }
   device_ = MTL::CreateSystemDefaultDevice();
   ar_pool_ = NS::AutoreleasePool::alloc()->init();
   NS::Error* err{};
@@ -19,11 +26,15 @@ void MetalDevice::init() {
     compiler_desc->release();
   }
 
-  for (size_t i = 0; i < frames_in_flight_; i++) {
+  // TODO: parameterize
+  info_.frames_in_flight = 2;
+  for (size_t i = 0; i < info_.frames_in_flight; i++) {
     cmd_allocators_[i] = device_->newCommandAllocator();
   }
 
   cmd_lists_.reserve(10);
+  main_cmd_q_ = device_->newMTL4CommandQueue();
+  main_cmd_buf_ = device_->newCommandBuffer();
 }
 
 void MetalDevice::shutdown() {
@@ -100,7 +111,7 @@ void MetalDevice::destroy(rhi::TextureHandle handle) {
     return;
   }
   ASSERT(tex->texture());
-  if (tex->texture()) {
+  if (tex->texture() && !tex->is_drawable_tex()) {
     tex->texture()->release();
   }
   texture_pool_.destroy(handle);
@@ -197,10 +208,44 @@ MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path) 
 }
 
 rhi::CmdEncoder* MetalDevice::begin_command_list() {
-  MTL4::CommandBuffer* cmd_buf = device_->newCommandBuffer();
-  cmd_buf->beginCommandBuffer(cmd_allocators_[frame_idx()]);
-  cmd_lists_.emplace_back(std::make_unique<MetalCmdEncoder>());
+  main_cmd_buf_->beginCommandBuffer(cmd_allocators_[frame_idx()]);
+  cmd_lists_.emplace_back(std::make_unique<MetalCmdEncoder>(this, main_cmd_buf_));
   return cmd_lists_.back().get();
 }
 
-void MetalDevice::begin_frame() {}
+bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
+  frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
+  rhi::TextureDesc swap_img_desc{};
+  ASSERT(metal_layer_);
+  curr_drawable_ = metal_layer_->nextDrawable();
+
+  if (!curr_drawable_) {
+    return false;
+  }
+
+  metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
+
+  swapchain_.get_textures()[frame_idx()] =
+      rhi::TextureHandleHolder{texture_pool_.alloc(swap_img_desc, rhi::Texture::k_invalid_gpu_slot,
+                                                   curr_drawable_->texture(), true),
+                               this};
+
+  return true;
+}
+
+void MetalDevice::submit_frame() {
+  main_cmd_buf_->endCommandBuffer();
+
+  // wait until drawable ready
+  main_cmd_q_->wait(curr_drawable_);
+
+  main_cmd_q_->commit(&main_cmd_buf_, 1);
+
+  main_cmd_q_->signalDrawable(curr_drawable_);
+
+  curr_drawable_->present();
+
+  cmd_lists_.clear();
+
+  frame_num_++;
+}

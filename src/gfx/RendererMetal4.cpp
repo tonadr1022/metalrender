@@ -34,23 +34,22 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
 
 void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
   ZoneScoped;
-  auto* frame_ar_pool = NS::AutoreleasePool::alloc()->init();
-  auto dims = window_->get_window_size();
-  window_->metal_layer_->setDrawableSize(CGSizeMake(dims.x, dims.y));
+  curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
 
-  const CA::MetalDrawable* drawable = window_->metal_layer_->nextDrawable();
-  if (!drawable) {
-    frame_ar_pool->release();
+  if (!device_->begin_frame(window_->get_window_size())) {
     return;
   }
 
   rhi::CmdEncoder* enc = device_->begin_command_list();
   enc->begin_rendering({
-      rhi::RenderingAttachmentInfo::color_att({}, rhi::LoadOp::DontCare, {.color = {1, 0, 0, 1}}),
-      rhi::RenderingAttachmentInfo::depth_stencil_att(
-          {}, rhi::LoadOp::DontCare, {.depth_stencil = {.depth = 0}}, rhi::StoreOp::Store),
+      rhi::RenderingAttachmentInfo::color_att(device_->get_swapchain().get_texture(curr_frame_idx_),
+                                              rhi::LoadOp::DontCare, {.color = {1, 0, 0, 1}}),
   });
+
+  enc->set_viewport({0, 0}, window_->get_window_size());
+
   enc->end_encoding();
+  device_->submit_frame();
 
   frame_num_++;
 }

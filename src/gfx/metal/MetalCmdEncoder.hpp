@@ -15,10 +15,12 @@ class ComputeCommandEncoder;
 class MetalCmdEncoder : public rhi::CmdEncoder {
  public:
   MetalCmdEncoder() = default;
-  explicit MetalCmdEncoder(MTL4::CommandBuffer* cmd_buf);
+  MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_buf);
+
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
   void end_encoding() override;
   void bind_pipeline(rhi::PipelineHandle handle) override;
+  void set_viewport(glm::uvec2 min, glm::uvec2 max) override;
 
  private:
   MetalDevice* device_{};

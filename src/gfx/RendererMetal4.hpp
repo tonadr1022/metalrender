@@ -33,4 +33,5 @@ class RendererMetal4 {
   WindowApple* window_{};
   rhi::PipelineHandleHolder test_pso_;
   size_t frame_num_{};
+  size_t curr_frame_idx_{};
 };

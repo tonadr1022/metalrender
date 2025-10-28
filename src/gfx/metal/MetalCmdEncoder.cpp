@@ -48,8 +48,8 @@ void MetalCmdEncoder::begin_rendering(
     } else {  // color
       MTL::RenderPassColorAttachmentDescriptor* color_desc =
           desc->colorAttachments()->object(color_att_i);
-      color_desc->setTexture(
-          reinterpret_cast<MetalTexture*>(device_->get_tex(att.image))->texture());
+      auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
+      color_desc->setTexture(tex->texture());
       color_desc->setLoadAction(convert(att.load_op));
       color_desc->setStoreAction(convert(att.store_op));
       color_desc->setClearColor(
@@ -77,7 +77,8 @@ void MetalCmdEncoder::begin_rendering(
   }
 }
 
-MetalCmdEncoder::MetalCmdEncoder(MTL4::CommandBuffer* cmd_buf) : cmd_buf_(cmd_buf) {}
+MetalCmdEncoder::MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_buf)
+    : device_(device), cmd_buf_(cmd_buf) {}
 
 void MetalCmdEncoder::end_encoding() {
   if (curr_render_enc_) {
@@ -111,4 +112,14 @@ void MetalCmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
   } else {
     LERROR("invalid pipeline for MetalCmdEncoder::bind_pipeline");
   }
+}
+
+void MetalCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 max) {
+  // TODO: does y need flip? Is this necessary?
+  MTL::Viewport vp;
+  vp.originX = min.x;
+  vp.originY = min.y;
+  vp.width = max.x;
+  vp.height = max.y;
+  curr_render_enc_->setViewport(vp);
 }

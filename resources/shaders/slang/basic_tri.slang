@@ -3,7 +3,11 @@ struct Vertex {
     float3 position;
 };
 
-const StructuredBuffer<Vertex> buf;
+struct Args {
+    const StructuredBuffer<Vertex> buf;
+};
+
+ParameterBlock<Args> block;
 
 struct VOut
 {
@@ -13,7 +17,7 @@ struct VOut
 
 [shader("vertex")]
 VOut vertex_main(uint vert_id : SV_VertexID) {
-    const Vertex v = buf[vert_id];    
+    const Vertex v = block.buf[vert_id];    
     VOut o;
     o.color = float3(vert_id & 1, vert_id & 2, vert_id & 4);
     o.position = float4(v.position, 1.0);

@@ -12,6 +12,7 @@ class CmdEncoder {
   CmdEncoder() = default;
   virtual ~CmdEncoder() = default;
   virtual void end_encoding() = 0;
+  virtual void set_viewport(glm::uvec2 min, glm::uvec2 max) = 0;
 
  private:
 };

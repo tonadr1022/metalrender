@@ -10,6 +10,7 @@ add_executable(${target_name}
     gfx/metal/MetalDevice.cpp
     gfx/metal/MetalBuffer.cpp
     gfx/metal/MetalUtil.cpp
+    gfx/metal/MetalCmdEncoder.cpp
     gfx/ModelLoader.cpp
     gfx/RendererMetal.cpp
     gfx/RendererMetal4.cpp
@@ -33,7 +34,8 @@ add_custom_target(compile_shaders ALL
 )
 add_dependencies(${target_name} compile_shaders)
 
-set_source_files_properties(WindowApple.cpp gfx/Metal/MetalDevice.cpp PROPERTIES COMPILE_FLAGS "-x objective-c++")
+set_source_files_properties(WindowApple.cpp  PROPERTIES COMPILE_FLAGS "-x objective-c++")
+set_source_files_properties(gfx/Metal/MetalDevice.cpp PROPERTIES COMPILE_FLAGS "-x objective-c++")
 target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/resources/shaders)
 target_link_libraries(${target_name} PRIVATE
     glm::glm
