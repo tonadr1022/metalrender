@@ -164,7 +164,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
                                                .mip_levels = 1,
                                                .array_length = 1,
                                                .alloc_gpu_slot = true});
-    ALWAYS_ASSERT(device_->get_tex(default_white_tex_)->gpu_slot() == 0);
+    ALWAYS_ASSERT(device_->get_tex(default_white_tex_)->bindless_idx() == 0);
     auto *data = reinterpret_cast<uint64_t *>(malloc(sizeof(uint64_t)));
     *data = 0xFFFFFFFF;
     std::unique_ptr<void, void (*)(void *)> data_ptr{data, free};
@@ -689,9 +689,9 @@ void RendererMetal::flush_pending_texture_uploads() {
         blit_enc->generateMipmaps(mtl_tex);
       }
       // TODO: this isn't always the case
-      global_arg_enc_->setTexture(mtl_tex, tex->gpu_slot());
+      global_arg_enc_->setTexture(mtl_tex, tex->bindless_idx());
       // mtl_tex->retain();
-      all_textures_[tex->gpu_slot()] = std::move(upload.tex);
+      all_textures_[tex->bindless_idx()] = std::move(upload.tex);
     }
 
     for (TextureArrayUpload &upload : pending_texture_array_uploads_) {

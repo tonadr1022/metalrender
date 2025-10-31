@@ -98,8 +98,12 @@ class MetalDevice : public rhi::Device {
   const rhi::Swapchain& get_swapchain() const { return swapchain_; }
 
   void set_metal_layer(CA::MetalLayer* layer) { metal_layer_ = layer; }
+  void init_bindless();
+  void copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf,
+                      size_t dst_offset) override;
 
  private:
+  size_t curr_cmd_list_idx_{};
   BlockPool<rhi::BufferHandle, MetalBuffer> buffer_pool_{128, 1, true};
   BlockPool<rhi::TextureHandle, MetalTexture> texture_pool_{128, 1, true};
   BlockPool<rhi::PipelineHandle, MetalPipeline> pipeline_pool_{20, 1, true};
@@ -107,6 +111,7 @@ class MetalDevice : public rhi::Device {
   std::filesystem::path metal_shader_dir_;
   MTL4::Compiler* shader_compiler_{};
   IndexAllocator texture_index_allocator_{k_max_textures};
+  IndexAllocator buffer_index_allocator_{k_max_buffers};
   std::array<MTL4::CommandAllocator*, k_max_frames_in_flight> cmd_allocators_{};
   std::vector<std::unique_ptr<MetalCmdEncoder>> cmd_lists_;
   MTL4::CommandBuffer* main_cmd_buf_{};
@@ -120,6 +125,26 @@ class MetalDevice : public rhi::Device {
   CA::MetalLayer* metal_layer_{};
   CA::MetalDrawable* curr_drawable_{};
   NS::AutoreleasePool* frame_ar_pool_{};
+  MTL::ArgumentEncoder* top_level_arg_enc_{};
+  MTL::ResidencySet* main_res_set_{};
+
+ public:  // TODO: fix
+  rhi::BufferHandleHolder top_level_arg_buf_;
+
+ private:
+  MTL::ArgumentEncoder* buffer_arg_enc_{};
+  rhi::BufferHandleHolder buffer_descriptor_table_;
+  std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> frame_push_constant_bufs_{};
+  size_t curr_frame_push_constant_buf_offset_bytes_{};
+
+  // public to other implementation classes
+ public:
+  // returns offset of into the frame's buffer
+  size_t copy_to_frame_push_constant_buf(void* data, size_t size);
+
+  MTL::Buffer* get_frame_push_constant_buf() {
+    return get_mtl_buf(frame_push_constant_bufs_[frame_idx()]);
+  }
 
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
     return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();

@@ -28,6 +28,22 @@ MTL::StoreAction convert(rhi::StoreOp op) {
   }
 }
 
+MTL::PrimitiveType convert(rhi::PrimitiveTopology top) {
+  switch (top) {
+    case rhi::PrimitiveTopology::TriangleList:
+      return MTL::PrimitiveTypeTriangle;
+    case rhi::PrimitiveTopology::TriangleStrip:
+      return MTL::PrimitiveTypeTriangleStrip;
+    case rhi::PrimitiveTopology::LineList:
+      return MTL::PrimitiveTypeLine;
+    case rhi::PrimitiveTopology::LineStrip:
+      return MTL::PrimitiveTypeLineStrip;
+    default:
+      ALWAYS_ASSERT(0 && "unsupported primitive topology");
+      return MTL::PrimitiveTypeTriangle;
+  }
+}
+
 }  // namespace
 
 void MetalCmdEncoder::begin_rendering(
@@ -66,10 +82,15 @@ void MetalCmdEncoder::begin_rendering(
 
   if (curr_render_enc_) {
     curr_render_enc_->endEncoding();
+    curr_render_enc_ = nullptr;
   }
 
   ASSERT(!curr_render_enc_);
   curr_render_enc_ = cmd_buf_->renderCommandEncoder(desc);
+
+  curr_render_enc_->setArgumentTable(arg_table_, MTL::RenderStageFragment | MTL::RenderStageVertex);
+  ASSERT(device_->get_mtl_buf(device_->top_level_arg_buf_)->gpuAddress());
+  arg_table_->setAddress(device_->get_mtl_buf(device_->top_level_arg_buf_)->gpuAddress(), 2);
 
   desc->release();
   if (depth_desc) {
@@ -77,40 +98,41 @@ void MetalCmdEncoder::begin_rendering(
   }
 }
 
-MetalCmdEncoder::MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_buf)
-    : device_(device), cmd_buf_(cmd_buf) {}
+MetalCmdEncoder::MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_buf,
+                                 MTL::ArgumentEncoder* top_level_arg_enc)
+    : device_(device), cmd_buf_(cmd_buf), top_level_arg_enc_(top_level_arg_enc) {
+  MTL4::ArgumentTableDescriptor* desc = MTL4::ArgumentTableDescriptor::alloc()->init();
+  desc->setInitializeBindings(false);
+  desc->setMaxBufferBindCount(10);
+  desc->setMaxSamplerStateBindCount(10);
+  desc->setMaxTextureBindCount(10);
+  NS::Error* err{};
+  arg_table_ = device_->get_device()->newArgumentTable(desc, &err);
+}
 
 void MetalCmdEncoder::end_encoding() {
   if (curr_render_enc_) {
     curr_render_enc_->endEncoding();
   }
+  curr_render_enc_ = nullptr;
   if (curr_compute_enc_) {
     curr_compute_enc_->endEncoding();
   }
+  curr_compute_enc_ = nullptr;
 }
 
 void MetalCmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
   auto* pipeline = reinterpret_cast<MetalPipeline*>(device_->get_pipeline(handle));
-  if (!pipeline) {
-    LERROR("pipeline not found");
-    return;
-  }
-
+  ASSERT(pipeline);
   if (pipeline->render_pso) {
-    if (!curr_render_enc_) {
-      LERROR("Cannot bind pipeline without active rendering commands");
-      return;
-    }
+    ASSERT(curr_render_enc_);
     curr_render_enc_->setRenderPipelineState(pipeline->render_pso);
   } else if (pipeline->compute_pso) {
-    if (!curr_compute_enc_) {
-      LERROR("Cannot bind pipeline without active compute");
-      return;
-    }
+    ASSERT(curr_compute_enc_);
     curr_compute_enc_->setComputePipelineState(pipeline->compute_pso);
-    LERROR("incorrect pipeline for MetalCmdEncoder::bind_pipeline. Need Graphics, have Compute");
   } else {
     LERROR("invalid pipeline for MetalCmdEncoder::bind_pipeline");
+    ASSERT(0);
   }
 }
 
@@ -121,5 +143,18 @@ void MetalCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 max) {
   vp.originY = min.y;
   vp.width = max.x;
   vp.height = max.y;
+  ASSERT(curr_render_enc_);
   curr_render_enc_->setViewport(vp);
+}
+
+void MetalCmdEncoder::draw_primitives(rhi::PrimitiveTopology topology, size_t vertex_start,
+                                      size_t count, size_t instance_count) {
+  ASSERT(curr_render_enc_);
+  curr_render_enc_->drawPrimitives(convert(topology), vertex_start, count, instance_count);
+}
+
+void MetalCmdEncoder::push_constants(void* data, size_t size) {
+  // size_t offset = device_->copy_to_frame_push_constant_buf(data, size);
+  // TODO: magic num
+  // top_level_arg_enc_->setBuffer(device_->get_frame_push_constant_buf(), offset, 0);
 }

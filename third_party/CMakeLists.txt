@@ -2,6 +2,7 @@ add_subdirectory(metal-cpp)
 add_subdirectory(glfw)
 add_subdirectory(glm)
 add_subdirectory(concurrentqueue)
+add_subdirectory(metal_irconverter_runtime)
 
 set(FASTNOISE2_NOISETOOL OFF CACHE BOOL "Build Noise Tool" FORCE)
 add_subdirectory(FastNoise2)

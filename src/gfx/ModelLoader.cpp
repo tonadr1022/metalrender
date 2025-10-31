@@ -171,7 +171,7 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
         assert(0);
       }
 
-      return renderer.get_device()->get_tex(texture_uploads.back().tex)->gpu_slot();
+      return renderer.get_device()->get_tex(texture_uploads.back().tex)->bindless_idx();
     }
 
     assert(0 && "need to handle yet");

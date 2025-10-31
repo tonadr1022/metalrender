@@ -4,6 +4,8 @@
 
 namespace rhi {
 
+constexpr uint32_t k_invalid_bindless_idx = UINT32_MAX;
+
 enum class TextureFormat {
   Undefined,
   R8G8B8A8Srgb,

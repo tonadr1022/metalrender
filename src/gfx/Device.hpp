@@ -44,6 +44,9 @@ class Device {
   // TODO: is there a better spot for setting window dims, ie on event
   virtual bool begin_frame(glm::uvec2 window_dims) = 0;
 
+  virtual void copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf,
+                              size_t dst_offset) = 0;
+
   // commands
   virtual CmdEncoder* begin_command_list() = 0;
   virtual void submit_frame() = 0;

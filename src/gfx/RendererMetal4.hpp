@@ -34,4 +34,6 @@ class RendererMetal4 {
   rhi::PipelineHandleHolder test_pso_;
   size_t frame_num_{};
   size_t curr_frame_idx_{};
+
+  rhi::BufferHandleHolder tri_buf_;
 };

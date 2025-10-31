@@ -17,6 +17,7 @@ add_executable(${target_name}
     gfx/Pipeline.cpp
     gfx/ModelInstance.cpp
     gfx/ResourceManager.cpp
+    gfx/GPUFrameAllocator.cpp
     WindowApple.cpp
     voxels/Chunk.cpp
     voxels/Mesher.cpp
@@ -29,7 +30,7 @@ add_executable(${target_name}
 
 add_custom_target(compile_shaders ALL
     COMMAND ${CMAKE_COMMAND} -E echo "Compile metal shaders"
-    COMMAND bash ${CMAKE_SOURCE_DIR}/compile.sh ${CMAKE_SOURCE_DIR}/resources/shader_out ${CMAKE_SOURCE_DIR}/resources/shader_out/slang
+    COMMAND bash ${CMAKE_SOURCE_DIR}/compile.sh ${CMAKE_SOURCE_DIR}/resources/shader_out ${CMAKE_SOURCE_DIR}/resources/shaders
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 add_dependencies(${target_name} compile_shaders)
@@ -49,4 +50,5 @@ target_link_libraries(${target_name} PRIVATE
     FastNoise
     bs_thread_pool
     concurrentqueue
+    metal_irconverter_runtime
 )

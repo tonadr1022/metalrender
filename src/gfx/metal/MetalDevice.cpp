@@ -1,11 +1,19 @@
 #include "MetalDevice.hpp"
 
+#include <Foundation/NSObject.hpp>
 #include <Metal/Metal.hpp>
 #include <QuartzCore/CAMetalLayer.hpp>
+
+#include "shader_constants.h"
+
+#define IR_RUNTIME_METALCPP
+#define IR_PRIVATE_IMPLEMENTATION
+#include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
 
 #include "MetalUtil.hpp"
 #include "WindowApple.hpp"
 #include "core/EAssert.hpp"
+#include "core/Util.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/Pipeline.hpp"
 #include "gfx/RendererTypes.hpp"
@@ -32,9 +40,17 @@ void MetalDevice::init(Window* window) {
     cmd_allocators_[i] = device_->newCommandAllocator();
   }
 
+  main_res_set_ = make_residency_set();
+  main_res_set_->requestResidency();
   cmd_lists_.reserve(10);
   main_cmd_q_ = device_->newMTL4CommandQueue();
+  main_cmd_q_->addResidencySet(main_res_set_);
   main_cmd_buf_ = device_->newCommandBuffer();
+
+  for (size_t i = 0; i < info_.frames_in_flight; i++) {
+    frame_push_constant_bufs_[i] = create_buf_h(rhi::BufferDesc{.size = 1024ul * 1024});
+  }
+  init_bindless();
 }
 
 void MetalDevice::shutdown() {
@@ -46,7 +62,23 @@ rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   auto options = mtl::util::convert_storage_mode(desc.storage_mode);
   auto* mtl_buf = device_->newBuffer(desc.size, options);
   mtl_buf->retain();
-  return buffer_pool_.alloc(desc, mtl_buf);
+
+  uint32_t idx = rhi::k_invalid_bindless_idx;
+  if (desc.alloc_gpu_slot) {
+    idx = buffer_index_allocator_.alloc_idx();
+    IRBufferView bview{};
+    bview.buffer = mtl_buf;
+    bview.bufferOffset = 0;
+    bview.bufferSize = desc.size;
+    bview.typedBuffer = false;
+    auto metadata = IRDescriptorTableGetBufferMetadata(&bview);
+    auto* pResourceTable =
+        (IRDescriptorTableEntry*)(get_mtl_buf(buffer_descriptor_table_))->contents();
+    IRDescriptorTableSetBuffer(&pResourceTable[idx], mtl_buf->gpuAddress(), metadata);
+  }
+  main_res_set_->addAllocation(mtl_buf);
+
+  return buffer_pool_.alloc(desc, mtl_buf, idx);
 }
 
 namespace {
@@ -83,7 +115,7 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   auto* tex = device_->newTexture(texture_desc);
   tex->retain();
   texture_desc->release();
-  uint32_t idx = rhi::Texture::k_invalid_gpu_slot;
+  uint32_t idx = rhi::k_invalid_bindless_idx;
   if (desc.alloc_gpu_slot) {
     idx = texture_index_allocator_.alloc_idx();
   }
@@ -145,9 +177,13 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
   using ShaderType = rhi::ShaderType;
   MTL4::RenderPipelineDescriptor* desc = MTL4::RenderPipelineDescriptor::alloc()->init();
   for (const auto& shader_info : cinfo.shaders) {
-    // TODO: fix
+    // TODO: LMAO
     MTL::Library* lib =
-        create_or_get_lib("/Users/tony/personal/metalrender/resources/shader_out/default.metallib");
+        shader_info.type == ShaderType::Fragment
+            ? create_or_get_lib(
+                  "/Users/tony/personal/metalrender/resources/shader_out/test_frag.metallib")
+            : create_or_get_lib(
+                  "/Users/tony/personal/metalrender/resources/shader_out/test_vert.metallib");
     MTL4::LibraryFunctionDescriptor* func_desc = MTL4::LibraryFunctionDescriptor::alloc()->init();
     func_desc->setLibrary(lib);
     func_desc->setName(mtl::util::string(shader_info.entry_point));
@@ -185,6 +221,11 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
   NS::Error* err{};
 
   auto* result = shader_compiler_->newRenderPipelineState(desc, nullptr, &err);
+  auto* reflection = result->reflection();
+  for (size_t i = 0; i < reflection->vertexBindings()->count(); i++) {
+    auto* binding = (MTL::Binding*)reflection->vertexBindings()->object(i);
+    LINFO("vertex binding name: {}", binding->name()->cString(NS::ASCIIStringEncoding));
+  }
   if (!result) {
     LERROR("Failed to create render pipeline {}", mtl::util::get_err_string(err));
   }
@@ -208,16 +249,24 @@ MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path) 
 }
 
 rhi::CmdEncoder* MetalDevice::begin_command_list() {
-  main_cmd_buf_->beginCommandBuffer(cmd_allocators_[frame_idx()]);
-  cmd_lists_.emplace_back(std::make_unique<MetalCmdEncoder>(this, main_cmd_buf_));
+  if (curr_cmd_list_idx_ < cmd_lists_.size()) {
+    auto* ret = cmd_lists_[curr_cmd_list_idx_].get();
+    curr_cmd_list_idx_++;
+    return ret;
+  }
+  cmd_lists_.emplace_back(
+      std::make_unique<MetalCmdEncoder>(this, main_cmd_buf_, top_level_arg_enc_));
+  curr_cmd_list_idx_++;
   return cmd_lists_.back().get();
 }
 
 bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
+  curr_cmd_list_idx_ = 0;
   rhi::TextureDesc swap_img_desc{};
   ASSERT(metal_layer_);
   curr_drawable_ = metal_layer_->nextDrawable();
+  curr_frame_push_constant_buf_offset_bytes_ = 0;
 
   if (!curr_drawable_) {
     return false;
@@ -226,10 +275,11 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
 
   swapchain_.get_textures()[frame_idx()] =
-      rhi::TextureHandleHolder{texture_pool_.alloc(swap_img_desc, rhi::Texture::k_invalid_gpu_slot,
+      rhi::TextureHandleHolder{texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx,
                                                    curr_drawable_->texture(), true),
                                this};
 
+  main_cmd_buf_->beginCommandBuffer(cmd_allocators_[frame_idx()]);
   return true;
 }
 
@@ -245,7 +295,81 @@ void MetalDevice::submit_frame() {
 
   curr_drawable_->present();
 
-  cmd_lists_.clear();
-
   frame_num_++;
+}
+
+void MetalDevice::init_bindless() {
+  {
+    // buffer desc table
+    buffer_descriptor_table_ =
+        create_buf_h(rhi::BufferDesc{.size = sizeof(IRDescriptorTableEntry) * k_max_buffers});
+
+    MTL::ArgumentDescriptor* arg0 = MTL::ArgumentDescriptor::alloc()->init();
+    arg0->setIndex(0);
+    arg0->setAccess(MTL::ArgumentAccessReadWrite);
+    arg0->setArrayLength(k_max_buffers);
+    arg0->setDataType(MTL::DataTypePointer);
+
+    NS::Object* args_arr[] = {arg0};
+    const NS::Array* args = NS::Array::array(args_arr, ARRAY_SIZE(args_arr));
+    buffer_arg_enc_ = device_->newArgumentEncoder(args);
+    buffer_arg_enc_->setArgumentBuffer(get_mtl_buf(buffer_descriptor_table_), 0);
+  }
+  {  // top level arg enc
+    top_level_arg_buf_ = create_buf_h(rhi::BufferDesc{.size = sizeof(IRDescriptorTableEntry) * 4});
+
+    MTL::ArgumentDescriptor* arg0 = MTL::ArgumentDescriptor::alloc()->init();
+    arg0->setIndex(0);
+    arg0->setAccess(MTL::ArgumentAccessReadOnly);
+    arg0->setDataType(MTL::DataTypePointer);
+
+    MTL::ArgumentDescriptor* arg1 = MTL::ArgumentDescriptor::alloc()->init();
+    arg1->setIndex(1);
+    arg1->setAccess(MTL::ArgumentAccessReadWrite);
+    arg1->setDataType(MTL::DataTypePointer);
+
+    NS::Object* args_arr[] = {arg0, arg1};
+    const NS::Array* args = NS::Array::array(args_arr, ARRAY_SIZE(args_arr));
+    top_level_arg_enc_ = device_->newArgumentEncoder(args);
+    top_level_arg_enc_->setArgumentBuffer(get_mtl_buf(top_level_arg_buf_), 0);
+    for (auto& i : args_arr) {
+      i->release();
+    }
+    // {
+    //   IRBufferView bview{};
+    //   bview.buffer = get_mtl_buf(buffer_descriptor_table_);
+    //   bview.bufferOffset = 0;
+    //   bview.bufferSize = get_buf(top_level_arg_buf_)->size();
+    //   bview.typedBuffer = false;
+    //   auto metadata = IRDescriptorTableGetBufferMetadata(&bview);
+    //   auto* pResourceTable =
+    //   (IRDescriptorTableEntry*)(get_mtl_buf(top_level_arg_buf_))->contents();
+    //   IRDescriptorTableSetBuffer(&pResourceTable[1],
+    //                              get_mtl_buf(buffer_descriptor_table_)->gpuAddress(), metadata);
+    // }
+    top_level_arg_enc_->setBuffer(get_mtl_buf(buffer_descriptor_table_), 0, 1);
+  }
+  // TODO: this is sooooooooooooo cursed LMAOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+  main_res_set_->commit();
+}
+
+void MetalDevice::copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf,
+                                 size_t dst_offset) {
+  auto* buffer = get_buf(buf);
+  ASSERT(buffer);
+  if (!buffer) {
+    LERROR("[copy_to_buffer]: Buffer not found");
+    return;
+  }
+  // TODO: don't assume it's shared on metal
+  memcpy((uint8_t*)buffer->contents() + dst_offset, src, src_size);
+  buffer->contents();
+}
+
+size_t MetalDevice::copy_to_frame_push_constant_buf(void* data, size_t size) {
+  auto* buf = get_frame_push_constant_buf();
+  memcpy((uint8_t*)buf->contents() + curr_frame_push_constant_buf_offset_bytes_, data, size);
+  size_t offset = curr_frame_push_constant_buf_offset_bytes_;
+  curr_frame_push_constant_buf_offset_bytes_ += size;
+  return offset;
 }
