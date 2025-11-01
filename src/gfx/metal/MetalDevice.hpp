@@ -42,7 +42,7 @@ class MetalDevice;
 
 class MetalDevice : public rhi::Device {
  public:
-  void init(Window* window);
+  void init(Window* window, std::filesystem::path shader_lib_dir);
   void shutdown() override;
   [[nodiscard]] void* get_native_device() const override { return device_; }
 
@@ -164,6 +164,7 @@ class MetalDevice : public rhi::Device {
   };
 
  private:
+  std::filesystem::path shader_lib_dir_;
   MTL::ArgumentEncoder* buffer_arg_enc_{};
   // std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> frame_push_constant_bufs_{};
   size_t curr_frame_push_constant_buf_offset_bytes_{};

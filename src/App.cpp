@@ -37,7 +37,8 @@ App::App() {
   load_config();
   device_ = std::make_unique<MetalDevice>();
   window_ = std::make_unique<WindowApple>();
-  device_->init(window_.get());
+  device_->init(window_.get(), resource_dir_ / "shader_out");
+
   window_->init(
       device_.get(), [this](int key, int action, int mods) { on_key_event(key, action, mods); },
       [this](double x_pos, double y_pos) { on_curse_pos_event(x_pos, y_pos); });

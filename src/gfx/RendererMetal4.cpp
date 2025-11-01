@@ -19,6 +19,9 @@ struct Vert {
   glm::vec2 uv;
 };
 
+using rhi::ShaderType;
+using rhi::TextureFormat;
+
 }  // namespace
 
 void RendererMetal4::init(const CreateInfo& cinfo) {
@@ -27,18 +30,8 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
 
   {
     test_pso_ = device_->create_graphics_pipeline_h(rhi::GraphicsPipelineCreateInfo{
-        .shaders =
-            {
-                rhi::ShaderCreateInfo{
-                    .type = rhi::ShaderType::Vertex,
-                    .entry_point = "vert_main",
-                },
-                rhi::ShaderCreateInfo{
-                    .type = rhi::ShaderType::Fragment,
-                    .entry_point = "frag_main",
-                },
-            },
-        .rendering = {.color_formats{rhi::TextureFormat::R8G8B8A8Srgb}},
+        .shaders = {{"basic_tri", ShaderType::Vertex}, {"basic_tri", ShaderType::Fragment}},
+        .rendering = {.color_formats{TextureFormat::R8G8B8A8Srgb}},
     });
   }
 

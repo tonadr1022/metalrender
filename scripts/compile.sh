@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Usage: ./compile.sh <output_dir> [shader_src_dir]
+# Usage: ./compile.sh <output_dir> <shader_src_dir>
 echo "Compiling shaders..."
 
 if [[ $# -lt 1 ]]; then
@@ -10,7 +10,7 @@ if [[ $# -lt 1 ]]; then
 fi
 
 OUT_DIR="$1"
-SRC_DIR="${2:-resources/shaders}"
+SRC_DIR="$2"
 
 # Verify source dir exists
 if [[ ! -d "$SRC_DIR" ]]; then

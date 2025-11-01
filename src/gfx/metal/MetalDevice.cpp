@@ -19,7 +19,10 @@
 #include "gfx/RendererTypes.hpp"
 #include "gfx/metal/MetalPipeline.hpp"
 
-void MetalDevice::init(Window* window) {
+void MetalDevice::init(Window* window, std::filesystem::path shader_lib_dir) {
+  shader_lib_dir_ = std::move(shader_lib_dir);
+  shader_lib_dir_ /= "metal";
+
   auto* win = dynamic_cast<WindowApple*>(window);
   if (!win) {
     LERROR("invalid window pointer");
@@ -180,23 +183,35 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
     const rhi::GraphicsPipelineCreateInfo& cinfo) {
   using ShaderType = rhi::ShaderType;
   MTL4::RenderPipelineDescriptor* desc = MTL4::RenderPipelineDescriptor::alloc()->init();
+  // TODO: LMAO this is cursed
   for (const auto& shader_info : cinfo.shaders) {
-    // TODO: LMAO
-    MTL::Library* lib =
-        shader_info.type == ShaderType::Fragment
-            ? create_or_get_lib(
-                  "/Users/tony/personal/metalrender/resources/shader_out/test_frag.metallib")
-            : create_or_get_lib(
-                  "/Users/tony/personal/metalrender/resources/shader_out/test_vert.metallib");
+    const char* type_str{};
+    switch (shader_info.type) {
+      case rhi::ShaderType::Fragment:
+        type_str = "frag";
+        break;
+      case rhi::ShaderType::Vertex:
+        type_str = "vert";
+        break;
+      default:
+        type_str = "";
+        break;
+    }
+    auto path = (shader_lib_dir_ / shader_info.path)
+                    .concat("_")
+                    .concat(type_str)
+                    .replace_extension(".metallib");
+    MTL::Library* lib = create_or_get_lib(path);
     MTL4::LibraryFunctionDescriptor* func_desc = MTL4::LibraryFunctionDescriptor::alloc()->init();
     func_desc->setLibrary(lib);
-    func_desc->setName(mtl::util::string(shader_info.entry_point));
     switch (shader_info.type) {
       case ShaderType::Fragment: {
+        func_desc->setName(mtl::util::string("frag_main"));
         desc->setFragmentFunctionDescriptor(func_desc);
         break;
       }
       case ShaderType::Vertex: {
+        func_desc->setName(mtl::util::string("vert_main"));
         desc->setVertexFunctionDescriptor(func_desc);
         break;
       }
@@ -247,9 +262,15 @@ rhi::PipelineHandleHolder MetalDevice::create_graphics_pipeline_h(
 MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path) {
   NS::Error* err{};
   auto it = path_to_lib_.find(path.string());
-  return it != path_to_lib_.end()
-             ? it->second
-             : device_->newLibrary(mtl::util::string(metal_shader_dir_ / path), &err);
+  if (it != path_to_lib_.end()) {
+    return it->second;
+  }
+  auto* lib = device_->newLibrary(mtl::util::string(path), &err);
+  if (err) {
+    mtl::util::print_err(err);
+    return nullptr;
+  }
+  return lib;
 }
 
 rhi::CmdEncoder* MetalDevice::begin_command_list() {

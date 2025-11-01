@@ -1,6 +1,6 @@
 #define bufferSpace space1
 
-#include "root_sig.hlsl"
+#include "root_sig.h"
 #include "material.h"
 
 ByteAddressBuffer BufferTable[] : register(t0, bufferSpace);
