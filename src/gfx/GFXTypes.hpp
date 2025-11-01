@@ -42,7 +42,8 @@ struct TextureDesc {
 struct BufferDesc {
   StorageMode storage_mode{StorageMode::Default};
   size_t size{};
-  bool alloc_gpu_slot{false};
+  bool bindless{false};
+  const char* name{};
 };
 
 enum class LoadOp : uint8_t { Load, Clear, DontCare };

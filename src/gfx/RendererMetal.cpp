@@ -136,7 +136,7 @@ GPUFrameAllocator::GPUFrameAllocator(rhi::Device *device, size_t size, size_t fr
   ALWAYS_ASSERT(frames_in_flight < k_max_frames_in_flight);
   for (size_t i = 0; i < frames_in_flight; i++) {
     buffers_[i] = device_->create_buf_h(rhi::BufferDesc{
-        .storage_mode = rhi::StorageMode::Default, .size = size, .alloc_gpu_slot = false});
+        .storage_mode = rhi::StorageMode::Default, .size = size, .bindless = false});
   }
 }
 

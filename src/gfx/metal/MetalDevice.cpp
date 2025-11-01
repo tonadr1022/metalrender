@@ -41,16 +41,17 @@ void MetalDevice::init(Window* window) {
   }
 
   main_res_set_ = make_residency_set();
-  main_res_set_->requestResidency();
   cmd_lists_.reserve(10);
   main_cmd_q_ = device_->newMTL4CommandQueue();
   main_cmd_q_->addResidencySet(main_res_set_);
   main_cmd_buf_ = device_->newCommandBuffer();
 
-  for (size_t i = 0; i < info_.frames_in_flight; i++) {
-    frame_push_constant_bufs_[i] = create_buf_h(rhi::BufferDesc{.size = 1024ul * 1024});
-  }
+  push_constant_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
+  arg_buf_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
+
   init_bindless();
+
+  main_res_set_->requestResidency();
 }
 
 void MetalDevice::shutdown() {
@@ -61,10 +62,13 @@ void MetalDevice::shutdown() {
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   auto options = mtl::util::convert_storage_mode(desc.storage_mode);
   auto* mtl_buf = device_->newBuffer(desc.size, options);
+  if (desc.name) {
+    mtl_buf->setLabel(mtl::util::string(desc.name));
+  }
   mtl_buf->retain();
 
   uint32_t idx = rhi::k_invalid_bindless_idx;
-  if (desc.alloc_gpu_slot) {
+  if (desc.bindless) {
     idx = buffer_index_allocator_.alloc_idx();
     IRBufferView bview{};
     bview.buffer = mtl_buf;
@@ -261,8 +265,11 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
 }
 
 bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
+  main_res_set_->commit();
   frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
   curr_cmd_list_idx_ = 0;
+  push_constant_allocator_->reset(frame_idx());
+  arg_buf_allocator_->reset(frame_idx());
   rhi::TextureDesc swap_img_desc{};
   ASSERT(metal_layer_);
   curr_drawable_ = metal_layer_->nextDrawable();
@@ -301,8 +308,8 @@ void MetalDevice::submit_frame() {
 void MetalDevice::init_bindless() {
   {
     // buffer desc table
-    buffer_descriptor_table_ =
-        create_buf_h(rhi::BufferDesc{.size = sizeof(IRDescriptorTableEntry) * k_max_buffers});
+    buffer_descriptor_table_ = create_buf_h(
+        rhi::BufferDesc{.size = sizeof(IRDescriptorTableEntry) * k_max_buffers, .bindless = false});
 
     MTL::ArgumentDescriptor* arg0 = MTL::ArgumentDescriptor::alloc()->init();
     arg0->setIndex(0);
@@ -316,8 +323,6 @@ void MetalDevice::init_bindless() {
     buffer_arg_enc_->setArgumentBuffer(get_mtl_buf(buffer_descriptor_table_), 0);
   }
   {  // top level arg enc
-    top_level_arg_buf_ = create_buf_h(rhi::BufferDesc{.size = sizeof(IRDescriptorTableEntry) * 4});
-
     MTL::ArgumentDescriptor* arg0 = MTL::ArgumentDescriptor::alloc()->init();
     arg0->setIndex(0);
     arg0->setAccess(MTL::ArgumentAccessReadOnly);
@@ -331,7 +336,6 @@ void MetalDevice::init_bindless() {
     NS::Object* args_arr[] = {arg0, arg1};
     const NS::Array* args = NS::Array::array(args_arr, ARRAY_SIZE(args_arr));
     top_level_arg_enc_ = device_->newArgumentEncoder(args);
-    top_level_arg_enc_->setArgumentBuffer(get_mtl_buf(top_level_arg_buf_), 0);
     for (auto& i : args_arr) {
       i->release();
     }
@@ -347,10 +351,7 @@ void MetalDevice::init_bindless() {
     //   IRDescriptorTableSetBuffer(&pResourceTable[1],
     //                              get_mtl_buf(buffer_descriptor_table_)->gpuAddress(), metadata);
     // }
-    top_level_arg_enc_->setBuffer(get_mtl_buf(buffer_descriptor_table_), 0, 1);
   }
-  // TODO: this is sooooooooooooo cursed LMAOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
-  main_res_set_->commit();
 }
 
 void MetalDevice::copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf,
@@ -366,10 +367,14 @@ void MetalDevice::copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle b
   buffer->contents();
 }
 
-size_t MetalDevice::copy_to_frame_push_constant_buf(void* data, size_t size) {
-  auto* buf = get_frame_push_constant_buf();
-  memcpy((uint8_t*)buf->contents() + curr_frame_push_constant_buf_offset_bytes_, data, size);
-  size_t offset = curr_frame_push_constant_buf_offset_bytes_;
-  curr_frame_push_constant_buf_offset_bytes_ += size;
-  return offset;
+// size_t MetalDevice::copy_to_frame_push_constant_buf(void* data, size_t size) {
+//   auto* buf = get_frame_push_constant_buf();
+//   memcpy((uint8_t*)buf->contents() + curr_frame_push_constant_buf_offset_bytes_, data, size);
+//   size_t offset = curr_frame_push_constant_buf_offset_bytes_;
+//   curr_frame_push_constant_buf_offset_bytes_ += size;
+//   return offset;
+// }
+
+MetalDevice::GPUFrameAllocator::Alloc MetalDevice::alloc_arg_buf() {
+  return arg_buf_allocator_->alloc(sizeof(uint64_t) * 4);
 }

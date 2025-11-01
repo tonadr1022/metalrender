@@ -89,8 +89,6 @@ void MetalCmdEncoder::begin_rendering(
   curr_render_enc_ = cmd_buf_->renderCommandEncoder(desc);
 
   curr_render_enc_->setArgumentTable(arg_table_, MTL::RenderStageFragment | MTL::RenderStageVertex);
-  ASSERT(device_->get_mtl_buf(device_->top_level_arg_buf_)->gpuAddress());
-  arg_table_->setAddress(device_->get_mtl_buf(device_->top_level_arg_buf_)->gpuAddress(), 2);
 
   desc->release();
   if (depth_desc) {
@@ -154,7 +152,24 @@ void MetalCmdEncoder::draw_primitives(rhi::PrimitiveTopology topology, size_t ve
 }
 
 void MetalCmdEncoder::push_constants(void* data, size_t size) {
-  // size_t offset = device_->copy_to_frame_push_constant_buf(data, size);
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(size);
+  memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, data, size);
+  auto [arg_buf, arg_buf_offset] = device_->alloc_arg_buf();
+  struct TLAB {
+    uint64_t pc_buf;
+    uint64_t bdt;
+  };
+  auto* tlab = (TLAB*)((uint8_t*)arg_buf->contents() + arg_buf_offset);
+  tlab->pc_buf = pc_buf->gpuAddress() + pc_buf_offset;
+  tlab->bdt = device_->get_mtl_buf(device_->buffer_descriptor_table_)->gpuAddress();
+
   // TODO: magic num
-  // top_level_arg_enc_->setBuffer(device_->get_frame_push_constant_buf(), offset, 0);
+  // top_level_arg_enc_->setArgumentBuffer(arg_buf, arg_buf_offset);
+  // top_level_arg_enc_->setBuffer(pc_buf, pc_buf_offset, 0);
+  // top_level_arg_enc_->setBuffer(device_->get_mtl_buf(device_->buffer_descriptor_table_), 0, 1);
+  curr_arg_buf_ = arg_buf;
+  curr_arg_buf_offset_ = arg_buf_offset;
+
+  ASSERT(curr_arg_buf_->gpuAddress());
+  arg_table_->setAddress(arg_buf->gpuAddress() + arg_buf_offset, 2);
 }

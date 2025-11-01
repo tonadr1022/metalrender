@@ -129,22 +129,51 @@ class MetalDevice : public rhi::Device {
   MTL::ResidencySet* main_res_set_{};
 
  public:  // TODO: fix
-  rhi::BufferHandleHolder top_level_arg_buf_;
+  // rhi::BufferHandleHolder top_level_arg_buf_;
+  struct GPUFrameAllocator {
+    struct Alloc {
+      MTL::Buffer* buf;
+      size_t offset;
+    };
+
+    GPUFrameAllocator(size_t size, MetalDevice* device, size_t frames_in_flight) {
+      capacity_ = size;
+      device_ = device;
+      for (size_t i = 0; i < frames_in_flight; i++) {
+        buffers[i] = device->create_buf_h(rhi::BufferDesc{.size = size, .bindless = false});
+      }
+    }
+
+    Alloc alloc(size_t size) {
+      auto* buf = device_->get_mtl_buf(buffers[device_->frame_idx()]);
+      auto offset = offset_;
+      offset_ += size;
+      return {buf, offset};
+    }
+
+    void reset(size_t frame_idx) {
+      frame_idx_ = frame_idx;
+      offset_ = 0;
+    }
+
+    std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> buffers;
+    size_t capacity_{};
+    size_t offset_{};
+    size_t frame_idx_{};
+    MetalDevice* device_;
+  };
 
  private:
   MTL::ArgumentEncoder* buffer_arg_enc_{};
-  rhi::BufferHandleHolder buffer_descriptor_table_;
-  std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> frame_push_constant_bufs_{};
+  // std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> frame_push_constant_bufs_{};
   size_t curr_frame_push_constant_buf_offset_bytes_{};
+  std::optional<GPUFrameAllocator> arg_buf_allocator_;
 
   // public to other implementation classes
  public:
-  // returns offset of into the frame's buffer
-  size_t copy_to_frame_push_constant_buf(void* data, size_t size);
-
-  MTL::Buffer* get_frame_push_constant_buf() {
-    return get_mtl_buf(frame_push_constant_bufs_[frame_idx()]);
-  }
+  std::optional<GPUFrameAllocator> push_constant_allocator_;
+  [[nodiscard]] GPUFrameAllocator::Alloc alloc_arg_buf();
+  rhi::BufferHandleHolder buffer_descriptor_table_;
 
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
     return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();

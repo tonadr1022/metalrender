@@ -16,6 +16,11 @@ struct RenderArgs {
   bool draw_imgui;
 };
 
+struct MyMesh {
+  rhi::BufferHandleHolder vertex_buf;
+  size_t vertex_count;
+};
+
 class RendererMetal4 {
  public:
   struct CreateInfo {
@@ -35,5 +40,5 @@ class RendererMetal4 {
   size_t frame_num_{};
   size_t curr_frame_idx_{};
 
-  rhi::BufferHandleHolder tri_buf_;
+  std::vector<MyMesh> meshes_;
 };

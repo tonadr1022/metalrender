@@ -24,7 +24,7 @@ cbuffer ColorBuffer : register(b0) {
 
 [RootSignature(ROOT_SIGNATURE)]
 VOut vert_main(uint vert_id : SV_VertexID) {
-    Vertex v = BufferTable[0].Load<Vertex>(sizeof(Vertex) * vert_id);
+    Vertex v = BufferTable[vert_buf_idx].Load<Vertex>(sizeof(Vertex) * vert_id);
     VOut o;
     o.color = float3(vert_id & 1, vert_id & 2, vert_id & 4);
     o.uv = v.uv;

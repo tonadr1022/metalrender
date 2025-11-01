@@ -40,16 +40,32 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
     });
   }
 
-  tri_buf_ = device_->create_buf_h(
-      rhi::BufferDesc{.size = sizeof(float) * 3 * 100, .alloc_gpu_slot = true});
+  std::vector<std::vector<Vert>> geos{
+      {
+          Vert{glm::vec3{-0.5, -0.5, 0}},
+          Vert{glm::vec3{0.5, -0.5, 0}},
+          Vert{glm::vec3{0.0, 0.5, 0}},
+      },
+      {
 
-  std::vector<Vert> verts{{
-      Vert{glm::vec3{-0.5, -0.5, 0}},
-      Vert{glm::vec3{0.5, -0.5, 0}},
-      Vert{glm::vec3{0.0, 0.5, 0}},
-  }};
+          Vert{glm::vec3{-1., -1., 0}},
+          Vert{glm::vec3{1.0, -1.0, 0}},
+          Vert{glm::vec3{0.0, 0.0, 0}},
+      },
+  };
 
-  device_->copy_to_buffer(verts.data(), verts.size() * sizeof(Vert), tri_buf_.handle, 0);
+  const char* names[] = {
+      "tri 1",
+      "tri 2",
+  };
+  size_t i = 0;
+  for (auto& verts : geos) {
+    auto buf = device_->create_buf_h(
+        rhi::BufferDesc{.size = sizeof(float) * 3 * 100, .bindless = true, .name = names[i]});
+    device_->copy_to_buffer(verts.data(), verts.size() * sizeof(Vert), buf.handle, 0);
+    meshes_.emplace_back(std::move(buf), verts.size());
+    i++;
+  }
 }
 
 void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
@@ -67,16 +83,18 @@ void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
   });
 
   enc->bind_pipeline(test_pso_);
-  {
-    struct {
-      uint32_t vert_buf_idx;
-      uint32_t color_buf_idx;
-    } pc{.vert_buf_idx = device_->get_buf(tri_buf_)->bindless_idx()};
-    enc->push_constants(&pc, sizeof(pc));
-  }
-  enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
-
   enc->set_viewport({0, 0}, window_->get_window_size());
+
+  for (auto& mesh : meshes_) {
+    {
+      struct {
+        uint32_t vert_buf_idx;
+        uint32_t color_buf_idx;
+      } pc{.vert_buf_idx = device_->get_buf(mesh.vertex_buf)->bindless_idx()};
+      enc->push_constants(&pc, sizeof(pc));
+    }
+    enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, mesh.vertex_count);
+  }
 
   enc->end_encoding();
   device_->submit_frame();

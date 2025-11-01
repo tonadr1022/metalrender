@@ -16,8 +16,9 @@ class ArgumentTable;
 namespace MTL {
 
 class ArgumentEncoder;
+class Buffer;
 
-}
+}  // namespace MTL
 
 class MetalCmdEncoder : public rhi::CmdEncoder {
  public:
@@ -39,4 +40,6 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   MTL4::ComputeCommandEncoder* curr_compute_enc_{};
   MTL::ArgumentEncoder* top_level_arg_enc_{};
   MTL4::ArgumentTable* arg_table_{};
+  MTL::Buffer* curr_arg_buf_{};
+  size_t curr_arg_buf_offset_{};
 };
