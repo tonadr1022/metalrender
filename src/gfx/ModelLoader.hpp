@@ -20,8 +20,7 @@ enum class CPUTextureLoadType : uint8_t {
 
 struct TextureUpload {
   std::unique_ptr<void, void (*)(void *)> data;
-  rhi::TextureHandleHolder tex;
-  glm::uvec3 dims;
+  rhi::TextureDesc desc;
   uint32_t bytes_per_row;
 };
 
@@ -76,12 +75,10 @@ struct ModelLoadResult {
 };
 
 // TODO: re-evaluate whether renderer is needed. images can be loaded in renderer itself
-class RendererMetal;
 namespace model {
 
-bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
-                const glm::mat4 &root_transform, ModelInstance &out_model,
-                ModelLoadResult &out_load_result);
+bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transform,
+                ModelInstance &out_model, ModelLoadResult &out_load_result);
 
 }
 void free_texture(void *data, CPUTextureLoadType type);

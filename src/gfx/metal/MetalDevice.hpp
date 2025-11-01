@@ -179,6 +179,9 @@ class MetalDevice : public rhi::Device {
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
     return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();
   }
+  MTL::Buffer* get_mtl_buf(rhi::BufferHandle handle) {
+    return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();
+  }
 
   MTL::Library* create_or_get_lib(const std::filesystem::path& path);
   std::unordered_map<std::string, MTL::Library*> path_to_lib_;

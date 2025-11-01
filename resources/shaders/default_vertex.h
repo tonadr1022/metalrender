@@ -5,8 +5,9 @@
 
 struct DefaultVertex {
   packed_float4 pos;
-  packed_float2 uv;
-  packed_float3 normal;
+  packed_float3 color;
+  // packed_float2 uv;
+  // packed_float3 normal;
 };
 
 struct MeshletVertex {
@@ -27,8 +28,7 @@ struct Meshlet {
   float radius;
 
   // stored in 8-bit SNORM format
-  packed_char3 cone_axis;
-  char cone_cutoff;
+  packed_char4 cone_axis_cutoff;
 };
 
 #endif

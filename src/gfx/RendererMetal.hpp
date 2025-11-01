@@ -248,6 +248,12 @@ class RendererMetal {
   const MTL::PixelFormat main_pixel_format{MTL::PixelFormatBGRA8Unorm};
 
  private:
+  struct GPUTexUpload {
+    std::unique_ptr<void, void (*)(void*)> data;
+    rhi::TextureHandleHolder tex;
+    glm::uvec3 dims;
+    uint32_t bytes_per_row;
+  };
   // struct PerFrameData {
   //   NS::SharedPtr<MTL::Buffer> uniform_buf;
   // };
@@ -345,7 +351,7 @@ class RendererMetal {
   MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
 
   MTL::ArgumentEncoder* global_arg_enc_{};
-  std::vector<TextureUpload> pending_texture_uploads_;
+  std::vector<GPUTexUpload> pending_texture_uploads_;
   std::vector<TextureArrayUpload> pending_texture_array_uploads_;
   std::vector<rhi::TextureHandleHolder> all_textures_;
 

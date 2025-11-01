@@ -1,6 +1,7 @@
 #include "ModelLoader.hpp"
 
 #include "gfx/GFXTypes.hpp"
+#include "shader_constants.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image/stb_image.h>
@@ -13,7 +14,6 @@
 #include <span>
 #include <stack>
 
-#include "RendererMetal.hpp"
 #include "core/MathUtil.hpp"
 #include "meshoptimizer.h"
 
@@ -104,9 +104,8 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
     meshlet.triangle_count = m.triangle_count;
     meshlet.center = {bounds.center[0], bounds.center[1], bounds.center[2]};
     meshlet.radius = bounds.radius;
-    meshlet.cone_axis =
-        glm::i8vec3{bounds.cone_axis_s8[0], bounds.cone_axis_s8[1], bounds.cone_axis_s8[2]};
-    meshlet.cone_cutoff = bounds.cone_cutoff_s8;
+    meshlet.cone_axis_cutoff = glm::i8vec4{bounds.cone_axis_s8[0], bounds.cone_axis_s8[1],
+                                           bounds.cone_axis_s8[2], bounds.cone_cutoff_s8};
   }
 
   for (auto &v : meshlet_vertices) {
@@ -121,9 +120,8 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
 
 namespace model {
 
-bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
-                const glm::mat4 &root_transform, ModelInstance &out_model,
-                ModelLoadResult &out_load_result) {
+bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transform,
+                ModelInstance &out_model, ModelLoadResult &out_load_result) {
   out_load_result = {};
   out_model = {};
   const cgltf_options gltf_load_opts{};
@@ -163,15 +161,13 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
                                   .alloc_gpu_slot = true};
       std::unique_ptr<void, void (*)(void *)> data_ptr{reinterpret_cast<void *>(data),
                                                        stbi_image_free};
-      texture_uploads.emplace_back(TextureUpload{.data = std::move(data_ptr),
-                                                 .tex = renderer.get_device()->create_tex_h(desc),
-                                                 .dims = desc.dims,
-                                                 .bytes_per_row = desc.dims.x * 4});
+      auto upload_idx = texture_uploads.size();
+      texture_uploads.emplace_back(TextureUpload{
+          .data = std::move(data_ptr), .desc = desc, .bytes_per_row = desc.dims.x * 4});
       if (!data) {
         assert(0);
       }
-
-      return renderer.get_device()->get_tex(texture_uploads.back().tex)->bindless_idx();
+      return upload_idx;
     }
 
     assert(0 && "need to handle yet");
@@ -269,13 +265,13 @@ bool load_model(const std::filesystem::path &path, RendererMetal &renderer,
             for (size_t i = 0; i < accessor->count; i++) {
               float uv[2] = {0, 0};
               cgltf_accessor_read_float(accessor, i, uv, 2);
-              all_vertices[base_vertex + i].uv = glm::vec2{uv[0], uv[1]};
+              // all_vertices[base_vertex + i].uv = glm::vec2{uv[0], uv[1]};
             }
           } else if (attr.type == cgltf_attribute_type_normal) {
             float normal[3] = {0, 0, 0};
             for (size_t i = 0; i < accessor->count; i++) {
               cgltf_accessor_read_float(accessor, i, normal, 3);
-              all_vertices[base_vertex + i].normal = glm::vec3{normal[0], normal[1], normal[2]};
+              // all_vertices[base_vertex + i].normal = glm::vec3{normal[0], normal[1], normal[2]};
             }
           }
         }

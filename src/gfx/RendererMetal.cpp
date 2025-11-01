@@ -157,6 +157,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
   cull_data_buf_.emplace(gpu_frame_allocator_->create_buffer<CullData>(1));
 
   {
+    // TODO: streamline
     default_white_tex_ =
         device_->create_tex_h(rhi::TextureDesc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
                                                .storage_mode = rhi::StorageMode::GPUOnly,
@@ -168,10 +169,10 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     auto *data = reinterpret_cast<uint64_t *>(malloc(sizeof(uint64_t)));
     *data = 0xFFFFFFFF;
     std::unique_ptr<void, void (*)(void *)> data_ptr{data, free};
-    pending_texture_uploads_.push_back(TextureUpload{.data = std::move(data_ptr),
-                                                     .tex = std::move(default_white_tex_),
-                                                     .dims = glm::uvec3{1, 1, 1},
-                                                     .bytes_per_row = 4});
+    pending_texture_uploads_.push_back(GPUTexUpload{.data = std::move(data_ptr),
+                                                    .tex = std::move(default_white_tex_),
+                                                    .dims = glm::uvec3{1, 1, 1},
+                                                    .bytes_per_row = 4});
   }
 
   init_imgui();
@@ -330,13 +331,16 @@ void RendererMetal::render(const RenderArgs &render_args) {
 bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat4 &root_transform,
                                ModelInstance &model, ModelGPUHandle &out_handle) {
   ModelLoadResult result;
-  if (!model::load_model(path, *this, root_transform, model, result)) {
+  if (!model::load_model(path, root_transform, model, result)) {
     return false;
   }
 
-  pending_texture_uploads_.reserve(result.texture_uploads.size());
+  pending_texture_uploads_.reserve(pending_texture_uploads_.size() + result.texture_uploads.size());
   for (auto &u : result.texture_uploads) {
-    pending_texture_uploads_.push_back(std::move(u));
+    pending_texture_uploads_.push_back(GPUTexUpload{.data = std::move(u.data),
+                                                    .tex = device_->create_tex_h(u.desc),
+                                                    .dims = u.desc.dims,
+                                                    .bytes_per_row = u.bytes_per_row});
   }
 
   if (k_use_mesh_shader) {
@@ -674,7 +678,7 @@ void RendererMetal::flush_pending_texture_uploads() {
   if (!pending_texture_uploads_.empty() || !pending_texture_array_uploads_.empty()) {
     MTL::CommandBuffer *buf = main_cmd_queue_->commandBuffer();
     MTL::BlitCommandEncoder *blit_enc = buf->blitCommandEncoder();
-    for (TextureUpload &upload : pending_texture_uploads_) {
+    for (GPUTexUpload &upload : pending_texture_uploads_) {
       const auto src_img_size = static_cast<size_t>(upload.bytes_per_row) * upload.dims.y;
       MTL::Buffer *upload_buf =
           raw_device_->newBuffer(src_img_size, MTL::ResourceStorageModeShared);

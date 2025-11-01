@@ -25,6 +25,6 @@ metallib_path=resources/shader_out/metal/$basename\_$type.metallib
 
 echo "Compiling to $metallib_path"
 
-$DXC_EXE $1 -Fo $dxil_path -T $shader_model -E $entry_point
+dxc $1 -Fo $dxil_path -T $shader_model -E $entry_point
 metal-shaderconverter $dxil_path -o $metallib_path
 rm $dxil_path

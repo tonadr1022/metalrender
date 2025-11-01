@@ -173,3 +173,11 @@ void MetalCmdEncoder::push_constants(void* data, size_t size) {
   ASSERT(curr_arg_buf_->gpuAddress());
   arg_table_->setAddress(arg_buf->gpuAddress() + arg_buf_offset, 2);
 }
+
+void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
+                                              rhi::BufferHandle index_buf, size_t index_start,
+                                              size_t count) {
+  auto* buf = device_->get_mtl_buf(index_buf);
+  curr_render_enc_->drawIndexedPrimitives(convert(topology), count, MTL::IndexTypeUInt32,
+                                          buf->gpuAddress() + index_start, buf->length());
+}

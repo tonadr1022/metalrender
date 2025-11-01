@@ -33,6 +33,8 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   void draw_primitives(rhi::PrimitiveTopology topology, size_t vertex_start, size_t count,
                        size_t instance_count) override;
   void push_constants(void* data, size_t size) override;
+  void draw_indexed_primitives(rhi::PrimitiveTopology topology, rhi::BufferHandle index_buf,
+                               size_t index_start, size_t count) override;
 
   MetalDevice* device_{};
   MTL4::CommandBuffer* cmd_buf_{};
