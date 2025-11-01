@@ -24,7 +24,10 @@ set_source_files_properties(
     imgui/backends/imgui_impl_metal.mm
     PROPERTIES
     COMPILE_DEFINITIONS "IMGUI_IMPL_METAL_CPP"
+    COMPILE_FLAGS "-x objective-c++"
 )
+
+# set_source_files_properties(imgui/backends/imgui_impl_metal.mm PROPERTIES )
 
 target_link_libraries(lib_imgui PUBLIC METAL_CPP glfw)
 
