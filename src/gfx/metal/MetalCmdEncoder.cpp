@@ -1,12 +1,52 @@
 #include "MetalCmdEncoder.hpp"
 
-#include <Metal/MTLRenderPass.hpp>
 #include <Metal/Metal.hpp>
 
 #include "gfx/GFXTypes.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 
 namespace {
+
+MTL::CullMode convert(rhi::CullMode mode) {
+  switch (mode) {
+    case rhi::CullMode::Back:
+      return MTL::CullModeBack;
+    case rhi::CullMode::Front:
+      return MTL::CullModeFront;
+    case rhi::CullMode::None:
+      return MTL::CullModeNone;
+  }
+}
+
+MTL::Winding convert(rhi::WindOrder wind_order) {
+  switch (wind_order) {
+    case rhi::WindOrder::Clockwise:
+      return MTL::WindingClockwise;
+    case rhi::WindOrder::CounterClockwise:
+      return MTL::WindingCounterClockwise;
+  }
+}
+
+MTL::CompareFunction convert(rhi::CompareOp op) {
+  switch (op) {
+    case rhi::CompareOp::Less:
+      return MTL::CompareFunctionLess;
+    case rhi::CompareOp::Greater:
+      return MTL::CompareFunctionGreater;
+    case rhi::CompareOp::LessOrEqual:
+      return MTL::CompareFunctionLessEqual;
+    case rhi::CompareOp::GreaterOrEqual:
+      return MTL::CompareFunctionGreaterEqual;
+    case rhi::CompareOp::Always:
+      return MTL::CompareFunctionAlways;
+    case rhi::CompareOp::Never:
+      return MTL::CompareFunctionNever;
+    case rhi::CompareOp::NotEqual:
+      return MTL::CompareFunctionNotEqual;
+    case rhi::CompareOp::Equal:
+      return MTL::CompareFunctionEqual;
+  }
+}
 
 MTL::LoadAction convert(rhi::LoadOp op) {
   switch (op) {
@@ -89,6 +129,8 @@ void MetalCmdEncoder::begin_rendering(
   curr_render_enc_ = cmd_buf_->renderCommandEncoder(desc);
 
   curr_render_enc_->setArgumentTable(arg_table_, MTL::RenderStageFragment | MTL::RenderStageVertex);
+  curr_render_enc_->barrierAfterQueueStages(MTL::RenderStageFragment, MTL::RenderStageVertex,
+                                            MTL4::VisibilityOptionDevice);
 
   desc->release();
   if (depth_desc) {
@@ -139,15 +181,15 @@ void MetalCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 max) {
   MTL::Viewport vp;
   vp.originX = min.x;
   vp.originY = min.y;
-  vp.width = max.x;
-  vp.height = max.y;
-  ASSERT(curr_render_enc_);
+  vp.width = max.x - min.x;
+  vp.height = max.y - min.y;
+  vp.znear = 0.00f;
+  vp.zfar = 1.f;
   curr_render_enc_->setViewport(vp);
 }
 
 void MetalCmdEncoder::draw_primitives(rhi::PrimitiveTopology topology, size_t vertex_start,
                                       size_t count, size_t instance_count) {
-  ASSERT(curr_render_enc_);
   curr_render_enc_->drawPrimitives(convert(topology), vertex_start, count, instance_count);
 }
 
@@ -180,4 +222,21 @@ void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
   auto* buf = device_->get_mtl_buf(index_buf);
   curr_render_enc_->drawIndexedPrimitives(convert(topology), count, MTL::IndexTypeUInt32,
                                           buf->gpuAddress() + index_start, buf->length());
+}
+
+void MetalCmdEncoder::set_depth_stencil_state(rhi::CompareOp depth_compare_op,
+                                              bool depth_write_enabled) {
+  MTL::DepthStencilDescriptor* depth_stencil_desc = MTL::DepthStencilDescriptor::alloc()->init();
+  depth_stencil_desc->setDepthCompareFunction(convert(depth_compare_op));
+  depth_stencil_desc->setDepthWriteEnabled(depth_write_enabled);
+  curr_render_enc_->setDepthStencilState(
+      device_->get_device()->newDepthStencilState(depth_stencil_desc));
+}
+
+void MetalCmdEncoder::set_cull_mode(rhi::CullMode cull_mode) {
+  curr_render_enc_->setCullMode(convert(cull_mode));
+}
+
+void MetalCmdEncoder::set_wind_order(rhi::WindOrder wind_order) {
+  curr_render_enc_->setFrontFacingWinding(convert(wind_order));
 }

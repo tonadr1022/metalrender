@@ -18,6 +18,7 @@
 
 namespace {
 
+using rhi::RenderingAttachmentInfo;
 using rhi::ShaderType;
 using rhi::TextureFormat;
 
@@ -78,34 +79,6 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
     i++;
   }
 
-  // std::vector<std::vector<DefaultVertex>> geos{
-  //     {
-  //         {glm::vec4{-0.5, -0.5, 0, 0}},
-  //         {glm::vec4{0.5, -0.5, 0, 0}},
-  //         {glm::vec4{0.0, 0.5, 0, 0}},
-  //     },
-  //     {
-  //
-  //         {glm::vec4{-1., -1., 0, 0}},
-  //         {glm::vec4{1.0, -1.0, 0, 0}},
-  //         {glm::vec4{0.0, 0.0, 0, 0}},
-  //     },
-  // };
-
-  // const char* names[] = {
-  //     "cube",
-  //     "tri 1 buf",
-  //     "tri 2 buf",
-  // };
-  //
-  // for (auto& verts : geos) {
-  //   auto buf = device_->create_buf_h(
-  //       rhi::BufferDesc{.size = sizeof(float) * 3 * 100, .bindless = true, .name = names[i]});
-  //   device_->copy_to_buffer(verts.data(), verts.size() * sizeof(DefaultVertex), buf.handle, 0);
-  //
-  //   meshes_.emplace_back(std::move(buf), i, verts.size());
-  //   i++;
-  // }
   create_render_target_textures();
 }
 
@@ -118,19 +91,22 @@ void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
   }
 
   rhi::CmdEncoder* enc = device_->begin_command_list();
-  enc->begin_rendering(
-      {rhi::RenderingAttachmentInfo::color_att(
-           device_->get_swapchain().get_texture(curr_frame_idx_), rhi::LoadOp::Clear,
-           {.color = {1, 0, 0, 1}}),
-       rhi::RenderingAttachmentInfo::depth_stencil_att(depth_tex_.handle, rhi::LoadOp::Clear,
-                                                       {.depth_stencil = {.depth = 0}})});
+  enc->begin_rendering({
+      RenderingAttachmentInfo::color_att(device_->get_swapchain().get_texture(curr_frame_idx_),
+                                         rhi::LoadOp::Clear, {.color = {0.1, 0.2, 0.1, 1}}),
+      RenderingAttachmentInfo::depth_stencil_att(depth_tex_.handle, rhi::LoadOp::Clear,
+                                                 {.depth_stencil = {.depth = 1}}),
+  });
 
   enc->bind_pipeline(test_pso_);
+  enc->set_depth_stencil_state(rhi::CompareOp::LessOrEqual, true);
+  enc->set_wind_order(rhi::WindOrder::CounterClockwise);
+  enc->set_cull_mode(rhi::CullMode::Back);
   enc->set_viewport({0, 0}, window_->get_window_size());
 
   auto win_dims = window_->get_window_size();
   float aspect = (float)win_dims.x / win_dims.y;
-  glm::mat4 mv = glm::perspective(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
+  glm::mat4 mv = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
   for (auto& mesh : meshes_) {
     {
       BasicTriPC pc{.mvp = mv,
@@ -141,7 +117,6 @@ void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
     }
     enc->draw_indexed_primitives(rhi::PrimitiveTopology::TriangleList, mesh.index_buf.handle, 0,
                                  mesh.index_count);
-    // enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, mesh.vertex_count);
   }
 
   enc->end_encoding();
@@ -150,6 +125,7 @@ void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
 
   frame_num_++;
 }
+
 void RendererMetal4::create_render_target_textures() {
   auto dims = window_->get_window_size();
   depth_tex_ = device_->create_tex_h(rhi::TextureDesc{

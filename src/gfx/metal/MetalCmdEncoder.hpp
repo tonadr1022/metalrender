@@ -35,6 +35,9 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   void push_constants(void* data, size_t size) override;
   void draw_indexed_primitives(rhi::PrimitiveTopology topology, rhi::BufferHandle index_buf,
                                size_t index_start, size_t count) override;
+  void set_depth_stencil_state(rhi::CompareOp depth_compare_op, bool depth_write_enabled) override;
+  void set_wind_order(rhi::WindOrder wind_order) override;
+  void set_cull_mode(rhi::CullMode cull_mode) override;
 
   MetalDevice* device_{};
   MTL4::CommandBuffer* cmd_buf_{};
