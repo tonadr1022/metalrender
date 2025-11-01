@@ -1,6 +1,7 @@
 #define bufferSpace space1
 
 #include "root_sig.hlsl"
+#include "material.h"
 
 ByteAddressBuffer BufferTable[] : register(t0, bufferSpace);
 
@@ -18,7 +19,8 @@ struct VOut
 
 cbuffer ColorBuffer : register(b0) {
     uint vert_buf_idx;
-    uint color_idx;
+    uint mat_buf_idx;
+    uint mat_buf_id;
 };
 
 
@@ -34,5 +36,6 @@ VOut vert_main(uint vert_id : SV_VertexID) {
 
 [RootSignature(ROOT_SIGNATURE)]
 float4 frag_main(VOut input) : SV_Target0 {
-    return float4(input.color, 1.0);
+    M4Material material = BufferTable[mat_buf_idx].Load<M4Material>(sizeof(M4Material) * mat_buf_id);
+    return float4(input.color * material.color.xyz, 1.0);
 }

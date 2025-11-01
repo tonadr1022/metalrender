@@ -6,7 +6,7 @@
 #define uint32_t uint
 #define ATTR_POSITION [[position]]
 
-#else
+#elifdef __cplusplus
 #include <glm/ext/vector_int3_sized.hpp>
 #include <glm/mat4x4.hpp>
 #define packed_float4x4 glm::mat4
@@ -23,6 +23,7 @@
 #define float4 glm::vec4
 #define int3 glm::ivec3
 #define int4 glm::ivec4
+#define uint3 glm::uvec3
 
 #define ATTR_POSITION
 #endif

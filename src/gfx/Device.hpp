@@ -47,6 +47,10 @@ class Device {
   virtual void copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf,
                               size_t dst_offset) = 0;
 
+  void copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf) {
+    copy_to_buffer(src, src_size, buf, 0);
+  }
+
   // commands
   virtual CmdEncoder* begin_command_list() = 0;
   virtual void submit_frame() = 0;

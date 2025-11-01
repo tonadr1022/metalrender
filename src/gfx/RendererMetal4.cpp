@@ -5,10 +5,12 @@
 #include <tracy/Tracy.hpp>
 
 #include "WindowApple.hpp"
+#include "core/Util.hpp"
 #include "gfx/CmdEncoder.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/Pipeline.hpp"
 #include "gfx/metal/MetalDevice.hpp"
+#include "hlsl/material.h"
 
 namespace {
 
@@ -40,6 +42,12 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
     });
   }
 
+  material_buf_ = device_->create_buf_h(rhi::BufferDesc{
+      .size = k_max_materials * sizeof(M4Material),
+      .bindless = true,
+      .name = "all materials buf",
+  });
+
   std::vector<std::vector<Vert>> geos{
       {
           Vert{glm::vec3{-0.5, -0.5, 0}},
@@ -55,15 +63,25 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
   };
 
   const char* names[] = {
-      "tri 1",
-      "tri 2",
+      "tri 1 buf",
+      "tri 2 buf",
   };
+
+  M4Material materials[] = {
+      M4Material{.color = glm::vec4{1, 0, 0, 0}},
+      M4Material{.color = glm::vec4{0, 1, 0, 0}},
+  };
+
+  device_->copy_to_buffer(materials, sizeof(M4Material) * ARRAY_SIZE(materials),
+                          material_buf_.handle, 0);
+
   size_t i = 0;
   for (auto& verts : geos) {
     auto buf = device_->create_buf_h(
         rhi::BufferDesc{.size = sizeof(float) * 3 * 100, .bindless = true, .name = names[i]});
     device_->copy_to_buffer(verts.data(), verts.size() * sizeof(Vert), buf.handle, 0);
-    meshes_.emplace_back(std::move(buf), verts.size());
+
+    meshes_.emplace_back(std::move(buf), i, verts.size());
     i++;
   }
 }
@@ -89,14 +107,18 @@ void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
     {
       struct {
         uint32_t vert_buf_idx;
-        uint32_t color_buf_idx;
-      } pc{.vert_buf_idx = device_->get_buf(mesh.vertex_buf)->bindless_idx()};
+        uint32_t mat_buf_idx;
+        uint32_t mat_buf_id;
+      } pc{.vert_buf_idx = device_->get_buf(mesh.vertex_buf)->bindless_idx(),
+           .mat_buf_idx = device_->get_buf(material_buf_)->bindless_idx(),
+           .mat_buf_id = (uint32_t)mesh.material_id};
       enc->push_constants(&pc, sizeof(pc));
     }
     enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, mesh.vertex_count);
   }
 
   enc->end_encoding();
+
   device_->submit_frame();
 
   frame_num_++;
