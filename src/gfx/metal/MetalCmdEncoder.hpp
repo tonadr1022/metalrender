@@ -38,13 +38,20 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   void set_depth_stencil_state(rhi::CompareOp depth_compare_op, bool depth_write_enabled) override;
   void set_wind_order(rhi::WindOrder wind_order) override;
   void set_cull_mode(rhi::CullMode cull_mode) override;
+  // TODO: will this work with vulkanisms
+  void copy_buf_to_tex(rhi::BufferHandle src_buf, size_t src_offset, size_t src_bytes_per_row,
+                       rhi::TextureHandle dst_tex) override;
 
   MetalDevice* device_{};
   MTL4::CommandBuffer* cmd_buf_{};
-  MTL4::RenderCommandEncoder* curr_render_enc_{};
-  MTL4::ComputeCommandEncoder* curr_compute_enc_{};
+  MTL4::RenderCommandEncoder* render_enc_{};
+  MTL4::ComputeCommandEncoder* compute_enc_{};
   MTL::ArgumentEncoder* top_level_arg_enc_{};
   MTL4::ArgumentTable* arg_table_{};
   MTL::Buffer* curr_arg_buf_{};
   size_t curr_arg_buf_offset_{};
+
+ private:
+  void end_render_encoder();
+  void end_compute_encoder();
 };

@@ -29,6 +29,24 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
 
+  all_textures_.resize(k_max_textures);
+
+  {
+    samplers_.emplace_back(device_->create_sampler_h(rhi::SamplerDesc{
+        .min_filter = rhi::FilterMode::Nearest,
+        .mag_filter = rhi::FilterMode::Nearest,
+        .mipmap_mode = rhi::FilterMode::Nearest,
+        .address_mode = rhi::AddressMode::Repeat,
+    }));
+
+    samplers_.emplace_back(device_->create_sampler_h(rhi::SamplerDesc{
+        .min_filter = rhi::FilterMode::Linear,
+        .mag_filter = rhi::FilterMode::Linear,
+        .mipmap_mode = rhi::FilterMode::Linear,
+        .address_mode = rhi::AddressMode::Repeat,
+    }));
+  }
+
   {
     test_pso_ = device_->create_graphics_pipeline_h(rhi::GraphicsPipelineCreateInfo{
         .shaders = {{"basic_tri", ShaderType::Vertex}, {"basic_tri", ShaderType::Fragment}},
@@ -42,10 +60,11 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
       .name = "all materials buf",
   });
 
+  uint32_t albedo_tex = 0;
   M4Material materials[] = {
-      M4Material{.color = glm::vec4{1, 0, 0, 1}},
-      M4Material{.color = glm::vec4{0, 0, 1, 1}},
-      M4Material{.color = glm::vec4{0, 1, 0, 1}},
+      M4Material{.color = glm::vec4{1}, .albedo_tex_idx = albedo_tex},
+      M4Material{.color = glm::vec4{1}, .albedo_tex_idx = albedo_tex},
+      M4Material{.color = glm::vec4{1}, .albedo_tex_idx = albedo_tex},
   };
 
   device_->copy_to_buffer(materials, sizeof(M4Material) * ARRAY_SIZE(materials),
@@ -55,10 +74,14 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
   ALWAYS_ASSERT(model::load_model(resource_dir_ / "models/Cube/glTF/Cube.gltf", glm::mat4{1},
                                   out_instance, out_result));
 
-  size_t j = 0;
-  for (auto& v : out_result.vertices) {
-    v.color = materials[j % 3].color;
-    j++;
+  for (auto& upload : out_result.texture_uploads) {
+    auto tex = device_->create_tex_h(upload.desc);
+    ASSERT(tex.handle.is_valid());
+    pending_texture_uploads_.push_back(GPUTexUpload{
+        .data = std::move(upload.data),
+        .tex = std::move(tex),
+        .bytes_per_row = upload.bytes_per_row,
+    });
   }
 
   size_t i = 0;
@@ -89,6 +112,7 @@ void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
   if (!device_->begin_frame(window_->get_window_size())) {
     return;
   }
+  flush_pending_texture_uploads();
 
   rhi::CmdEncoder* enc = device_->begin_command_list();
   enc->begin_rendering({
@@ -135,4 +159,30 @@ void RendererMetal4::create_render_target_textures() {
                                               rhi::TextureUsageShaderRead),
       .dims = glm::uvec3{dims, 1},
   });
+}
+
+void RendererMetal4::load_model() {}
+
+void RendererMetal4::flush_pending_texture_uploads() {
+  if (!pending_texture_uploads_.empty()) {
+    rhi::CmdEncoder* enc = device_->begin_command_list();
+    for (auto& upload : pending_texture_uploads_) {
+      auto* tex = device_->get_tex(upload.tex);
+      const auto src_img_size = static_cast<size_t>(upload.bytes_per_row) * tex->desc().dims.y;
+
+      // TODO: scratch buffers
+      auto upload_buf_handle = device_->create_buf_h(rhi::BufferDesc{
+          .storage_mode = rhi::StorageMode::CPUAndGPU, .size = src_img_size, .bindless = false});
+
+      auto* upload_buf = device_->get_buf(upload_buf_handle);
+      memcpy(upload_buf->contents(), upload.data.get(), src_img_size);
+
+      enc->copy_buf_to_tex(upload_buf_handle.handle, 0, upload.bytes_per_row, upload.tex.handle);
+      // TODO: mipmaps
+      all_textures_[tex->bindless_idx()] = std::move(upload.tex);
+    }
+
+    enc->end_encoding();
+    pending_texture_uploads_.clear();
+  }
 }

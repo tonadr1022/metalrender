@@ -5,9 +5,8 @@
 
 struct DefaultVertex {
   packed_float4 pos;
-  packed_float3 color;
-  // packed_float2 uv;
-  // packed_float3 normal;
+  packed_float2 uv;
+  packed_float3 normal;
 };
 
 struct MeshletVertex {

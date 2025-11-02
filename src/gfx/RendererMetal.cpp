@@ -164,7 +164,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
                                                .dims = glm::uvec3{1, 1, 1},
                                                .mip_levels = 1,
                                                .array_length = 1,
-                                               .alloc_gpu_slot = true});
+                                               .bindless = true});
     ALWAYS_ASSERT(device_->get_tex(default_white_tex_)->bindless_idx() == 0);
     auto *data = reinterpret_cast<uint64_t *>(malloc(sizeof(uint64_t)));
     *data = 0xFFFFFFFF;

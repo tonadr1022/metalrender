@@ -35,6 +35,7 @@ class RendererMetal4 {
   void init(const CreateInfo& cinfo);
   void render(const RenderArgs& args);
   void on_imgui() {}
+  void load_model();
 
  private:
   MetalDevice* device_{};
@@ -45,7 +46,19 @@ class RendererMetal4 {
   size_t frame_num_{};
   size_t curr_frame_idx_{};
   std::filesystem::path resource_dir_;
+  std::vector<rhi::TextureHandleHolder> all_textures_;
+
+  struct GPUTexUpload {
+    std::unique_ptr<void, void (*)(void*)> data;
+    rhi::TextureHandleHolder tex;
+    uint32_t bytes_per_row;
+  };
+
+  std::vector<GPUTexUpload> pending_texture_uploads_;
 
   std::vector<MyMesh> meshes_;
   void create_render_target_textures();
+  void flush_pending_texture_uploads();
+
+  std::vector<rhi::SamplerHandleHolder> samplers_;
 };

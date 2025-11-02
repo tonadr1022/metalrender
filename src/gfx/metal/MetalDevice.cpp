@@ -18,6 +18,63 @@
 #include "gfx/Pipeline.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/metal/MetalPipeline.hpp"
+#include "gfx/metal/MetalUtil.hpp"
+
+namespace {
+
+MTL::SamplerAddressMode convert(rhi::AddressMode m) {
+  using rhi::AddressMode;
+  switch (m) {
+    case AddressMode::Repeat:
+      return MTL::SamplerAddressModeRepeat;
+    case AddressMode::MirroredRepeat:
+      return MTL::SamplerAddressModeMirrorRepeat;
+    case AddressMode::MirrorClampToEdge:
+      return MTL::SamplerAddressModeMirrorClampToEdge;
+    case AddressMode::ClampToBorder:
+      return MTL::SamplerAddressModeClampToBorderColor;
+    case AddressMode::ClampToEdge:
+      return MTL::SamplerAddressModeClampToEdge;
+  }
+}
+
+MTL::SamplerBorderColor convert(rhi::BorderColor c) {
+  using rhi::BorderColor;
+  switch (c) {
+    case BorderColor::FloatOpaqueWhite:
+    case BorderColor::IntOpaqueWhite:
+      return MTL::SamplerBorderColorOpaqueWhite;
+    case BorderColor::FloatOpaqueBlack:
+    case BorderColor::IntOpaqueBlack:
+      return MTL::SamplerBorderColorOpaqueBlack;
+    case BorderColor::FloatTransparentBlack:
+    case BorderColor::IntTransparentBlack:
+      return MTL::SamplerBorderColorTransparentBlack;
+  }
+}
+
+MTL::SamplerMinMagFilter convert_filter(rhi::FilterMode m) {
+  using rhi::FilterMode;
+  switch (m) {
+    case FilterMode::Linear:
+      return MTL::SamplerMinMagFilterLinear;
+    case FilterMode::Nearest:
+      return MTL::SamplerMinMagFilterNearest;
+  }
+}
+MTL::SamplerMipFilter convert_mip_filter(rhi::FilterMode m) {
+  using rhi::FilterMode;
+  switch (m) {
+    case FilterMode::Linear:
+      return MTL::SamplerMipFilterLinear;
+    case FilterMode::Nearest:
+      return MTL::SamplerMipFilterNearest;
+    default:
+      return MTL::SamplerMipFilterNotMipmapped;
+  }
+}
+
+}  // namespace
 
 void MetalDevice::init(Window* window, std::filesystem::path shader_lib_dir) {
   shader_lib_dir_ = std::move(shader_lib_dir);
@@ -63,7 +120,7 @@ void MetalDevice::shutdown() {
 }
 
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
-  auto options = mtl::util::convert_storage_mode(desc.storage_mode);
+  auto options = mtl::util::convert(desc.storage_mode);
   auto* mtl_buf = device_->newBuffer(desc.size, options);
   if (desc.name) {
     mtl_buf->setLabel(mtl::util::string(desc.name));
@@ -108,13 +165,13 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   texture_desc->setHeight(desc.dims.y);
   texture_desc->setDepth(desc.dims.z);
   texture_desc->setTextureType(get_texture_type(desc.dims, desc.array_length));
-  texture_desc->setPixelFormat(mtl::util::convert_format(desc.format));
-  texture_desc->setStorageMode(mtl::util::convert_storage_mode(desc.storage_mode));
+  texture_desc->setPixelFormat(mtl::util::convert(desc.format));
+  texture_desc->setStorageMode(mtl::util::convert(desc.storage_mode));
   texture_desc->setMipmapLevelCount(desc.mip_levels);
   texture_desc->setArrayLength(desc.array_length);
   // TODO: parameterize this?
   texture_desc->setAllowGPUOptimizedContents(true);
-  auto usage = mtl::util::convert_texture_usage(desc.usage);
+  auto usage = mtl::util::convert(desc.usage);
   if (desc.flags & rhi::TextureDescFlags_PixelFormatView) {
     usage |= MTL::TextureUsagePixelFormatView;
   }
@@ -123,9 +180,14 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   tex->retain();
   texture_desc->release();
   uint32_t idx = rhi::k_invalid_bindless_idx;
-  if (desc.alloc_gpu_slot) {
+  if (desc.bindless) {
     idx = texture_index_allocator_.alloc_idx();
+    auto* resource_table =
+        (IRDescriptorTableEntry*)(get_mtl_buf(texture_descriptor_table_))->contents();
+    IRDescriptorTableSetTexture(&resource_table[idx], tex, 0.0f, 0);
   }
+  main_res_set_->addAllocation(tex);
+
   return texture_pool_.alloc(desc, idx, tex);
 }
 
@@ -165,6 +227,13 @@ void MetalDevice::destroy(rhi::PipelineHandle handle) {
     if (e->compute_pso) {
       e->compute_pso->release();
     }
+  }
+}
+
+void MetalDevice::destroy(rhi::SamplerHandle handle) {
+  auto* s = sampler_pool_.get(handle);
+  if (s) {
+    s->sampler()->release();
   }
 }
 
@@ -233,7 +302,7 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
   }
   for (int i = 0; i < color_format_cnt; i++) {
     rhi::TextureFormat format = cinfo.rendering.color_formats[i];
-    desc->colorAttachments()->object(i)->setPixelFormat(mtl::util::convert_format(format));
+    desc->colorAttachments()->object(i)->setPixelFormat(mtl::util::convert(format));
   }
 
   desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);
@@ -252,6 +321,34 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
   auto handle = pipeline_pool_.alloc(MetalPipeline{.render_pso = result});
 
   return handle;
+}
+
+rhi::SamplerHandle MetalDevice::create_sampler(const rhi::SamplerDesc& desc) {
+  MTL::SamplerDescriptor* samp_desc = MTL::SamplerDescriptor::alloc()->init();
+  samp_desc->setBorderColor(convert(desc.border_color));
+  if (desc.compare_enable) {
+    samp_desc->setCompareFunction(mtl::util::convert(desc.compare_op));
+  }
+  // TODO: lod handling
+  samp_desc->setMipFilter(convert_mip_filter(desc.mipmap_mode));
+  samp_desc->setMinFilter(convert_filter(desc.min_filter));
+  samp_desc->setMagFilter(convert_filter(desc.mag_filter));
+  samp_desc->setSAddressMode(convert(desc.address_mode));
+  samp_desc->setTAddressMode(convert(desc.address_mode));
+  samp_desc->setRAddressMode(convert(desc.address_mode));
+  samp_desc->setSupportArgumentBuffers(true);
+  MTL::SamplerState* sampler = device_->newSamplerState(samp_desc);
+  samp_desc->release();
+
+  uint32_t bindless_idx{rhi::k_invalid_bindless_idx};
+  if (desc.bindless) {
+    bindless_idx = sampler_index_allocator_.alloc_idx();
+    auto* resource_table =
+        (IRDescriptorTableEntry*)(get_mtl_buf(sampler_descriptor_table_))->contents();
+    // TODO: lod bias
+    IRDescriptorTableSetSampler(&resource_table[bindless_idx], sampler, 0.0);
+  }
+  return sampler_pool_.alloc(desc, sampler, bindless_idx);
 }
 
 rhi::PipelineHandleHolder MetalDevice::create_graphics_pipeline_h(
@@ -327,28 +424,35 @@ void MetalDevice::submit_frame() {
 }
 
 void MetalDevice::init_bindless() {
-  {
-    // buffer desc table
-    buffer_descriptor_table_ = create_buf_h(
-        rhi::BufferDesc{.size = sizeof(IRDescriptorTableEntry) * k_max_buffers, .bindless = false});
-
+  auto create_descriptor_table = [this](rhi::BufferHandleHolder* out_buf, size_t count,
+                                        bool read_only = false) -> MTL::ArgumentEncoder* {
+    *out_buf = create_buf_h(
+        rhi::BufferDesc{.size = sizeof(IRDescriptorTableEntry) * count, .bindless = false});
     MTL::ArgumentDescriptor* arg0 = MTL::ArgumentDescriptor::alloc()->init();
     arg0->setIndex(0);
-    arg0->setAccess(MTL::ArgumentAccessReadWrite);
-    arg0->setArrayLength(k_max_buffers);
+    arg0->setAccess(read_only ? MTL::ArgumentAccessReadOnly : MTL::ArgumentAccessReadWrite);
+    arg0->setArrayLength(count);
     arg0->setDataType(MTL::DataTypePointer);
 
     NS::Object* args_arr[] = {arg0};
     const NS::Array* args = NS::Array::array(args_arr, ARRAY_SIZE(args_arr));
-    buffer_arg_enc_ = device_->newArgumentEncoder(args);
-    buffer_arg_enc_->setArgumentBuffer(get_mtl_buf(buffer_descriptor_table_), 0);
-  }
-  {  // top level arg enc
+    auto* arg_enc = device_->newArgumentEncoder(args);
+    arg_enc->setArgumentBuffer(get_mtl_buf(*out_buf), 0);
+    return arg_enc;
+  };
+
+  buffer_arg_enc_ = create_descriptor_table(&buffer_descriptor_table_, k_max_buffers);
+  texture_arg_enc_ = create_descriptor_table(&texture_descriptor_table_, k_max_textures);
+  sampler_arg_enc_ = create_descriptor_table(&sampler_descriptor_table_, k_max_samplers, true);
+
+  {
+    // push constant buffer
     MTL::ArgumentDescriptor* arg0 = MTL::ArgumentDescriptor::alloc()->init();
     arg0->setIndex(0);
     arg0->setAccess(MTL::ArgumentAccessReadOnly);
     arg0->setDataType(MTL::DataTypePointer);
 
+    // top level arg buffer
     MTL::ArgumentDescriptor* arg1 = MTL::ArgumentDescriptor::alloc()->init();
     arg1->setIndex(1);
     arg1->setAccess(MTL::ArgumentAccessReadWrite);
@@ -360,18 +464,6 @@ void MetalDevice::init_bindless() {
     for (auto& i : args_arr) {
       i->release();
     }
-    // {
-    //   IRBufferView bview{};
-    //   bview.buffer = get_mtl_buf(buffer_descriptor_table_);
-    //   bview.bufferOffset = 0;
-    //   bview.bufferSize = get_buf(top_level_arg_buf_)->size();
-    //   bview.typedBuffer = false;
-    //   auto metadata = IRDescriptorTableGetBufferMetadata(&bview);
-    //   auto* pResourceTable =
-    //   (IRDescriptorTableEntry*)(get_mtl_buf(top_level_arg_buf_))->contents();
-    //   IRDescriptorTableSetBuffer(&pResourceTable[1],
-    //                              get_mtl_buf(buffer_descriptor_table_)->gpuAddress(), metadata);
-    // }
   }
 }
 
@@ -388,14 +480,6 @@ void MetalDevice::copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle b
   buffer->contents();
 }
 
-// size_t MetalDevice::copy_to_frame_push_constant_buf(void* data, size_t size) {
-//   auto* buf = get_frame_push_constant_buf();
-//   memcpy((uint8_t*)buf->contents() + curr_frame_push_constant_buf_offset_bytes_, data, size);
-//   size_t offset = curr_frame_push_constant_buf_offset_bytes_;
-//   curr_frame_push_constant_buf_offset_bytes_ += size;
-//   return offset;
-// }
-
 MetalDevice::GPUFrameAllocator::Alloc MetalDevice::alloc_arg_buf() {
-  return arg_buf_allocator_->alloc(sizeof(uint64_t) * 4);
+  return arg_buf_allocator_->alloc(sizeof(uint64_t) * 12);
 }

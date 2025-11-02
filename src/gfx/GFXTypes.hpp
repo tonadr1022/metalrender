@@ -35,7 +35,7 @@ struct TextureDesc {
   glm::uvec3 dims{1};
   uint32_t mip_levels{1};
   uint32_t array_length{1};
-  bool alloc_gpu_slot{};
+  bool bindless{};
   TextureDescFlags flags{};
 };
 
@@ -238,6 +238,36 @@ enum class PrimitiveTopology : uint8_t {
   TriangleStrip,
   TriangleFan,
   PatchList
+};
+
+enum class FilterMode : uint8_t { Nearest, Linear };
+
+enum class AddressMode : uint8_t {
+  Repeat,
+  MirroredRepeat,
+  ClampToEdge,
+  ClampToBorder,
+  MirrorClampToEdge
+};
+
+enum class BorderColor : uint8_t {
+  FloatTransparentBlack,
+  IntTransparentBlack,
+  FloatOpaqueBlack,
+  IntOpaqueBlack,
+  FloatOpaqueWhite,
+  IntOpaqueWhite
+};
+
+enum class CullMode : uint8_t {
+  None,
+  Back,
+  Front,
+};
+
+enum class WindOrder : uint8_t {
+  Clockwise,
+  CounterClockwise,
 };
 
 }  // namespace rhi

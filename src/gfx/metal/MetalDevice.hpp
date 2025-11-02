@@ -12,6 +12,7 @@
 #include "gfx/Config.hpp"
 #include "gfx/Device.hpp"
 #include "gfx/metal/MetalCmdEncoder.hpp"
+#include "gfx/metal/MetalSampler.hpp"
 #include "gfx/metal/MetalSwapchain.hpp"
 #include "shader_constants.h"
 
@@ -66,6 +67,10 @@ class MetalDevice : public rhi::Device {
   rhi::Texture* get_tex(const rhi::TextureHandleHolder& handle) override {
     return get_tex(handle.handle);
   }
+  rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) override;
+  rhi::SamplerHandleHolder create_sampler_h(const rhi::SamplerDesc& desc) override {
+    return rhi::SamplerHandleHolder{create_sampler(desc), this};
+  }
 
   rhi::Pipeline* get_pipeline(const rhi::PipelineHandleHolder& handle) override {
     return pipeline_pool_.get(handle.handle);
@@ -77,6 +82,7 @@ class MetalDevice : public rhi::Device {
   void destroy(rhi::BufferHandle handle) override;
   void destroy(rhi::TextureHandle handle) override;
   void destroy(rhi::PipelineHandle handle) override;
+  void destroy(rhi::SamplerHandle handle) override;
 
   rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) override;
@@ -107,11 +113,13 @@ class MetalDevice : public rhi::Device {
   BlockPool<rhi::BufferHandle, MetalBuffer> buffer_pool_{128, 1, true};
   BlockPool<rhi::TextureHandle, MetalTexture> texture_pool_{128, 1, true};
   BlockPool<rhi::PipelineHandle, MetalPipeline> pipeline_pool_{20, 1, true};
+  BlockPool<rhi::SamplerHandle, MetalSampler> sampler_pool_{16, 1, true};
   Info info_{};
   std::filesystem::path metal_shader_dir_;
   MTL4::Compiler* shader_compiler_{};
   IndexAllocator texture_index_allocator_{k_max_textures};
   IndexAllocator buffer_index_allocator_{k_max_buffers};
+  IndexAllocator sampler_index_allocator_{k_max_samplers};
   std::array<MTL4::CommandAllocator*, k_max_frames_in_flight> cmd_allocators_{};
   std::vector<std::unique_ptr<MetalCmdEncoder>> cmd_lists_;
   MTL4::CommandBuffer* main_cmd_buf_{};
@@ -166,6 +174,8 @@ class MetalDevice : public rhi::Device {
  private:
   std::filesystem::path shader_lib_dir_;
   MTL::ArgumentEncoder* buffer_arg_enc_{};
+  MTL::ArgumentEncoder* texture_arg_enc_{};
+  MTL::ArgumentEncoder* sampler_arg_enc_{};
   // std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> frame_push_constant_bufs_{};
   size_t curr_frame_push_constant_buf_offset_bytes_{};
   std::optional<GPUFrameAllocator> arg_buf_allocator_;
@@ -175,12 +185,18 @@ class MetalDevice : public rhi::Device {
   std::optional<GPUFrameAllocator> push_constant_allocator_;
   [[nodiscard]] GPUFrameAllocator::Alloc alloc_arg_buf();
   rhi::BufferHandleHolder buffer_descriptor_table_;
+  rhi::BufferHandleHolder texture_descriptor_table_;
+  rhi::BufferHandleHolder sampler_descriptor_table_;
 
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
     return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();
   }
   MTL::Buffer* get_mtl_buf(rhi::BufferHandle handle) {
     return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();
+  }
+
+  MTL::Texture* get_mtl_tex(rhi::TextureHandle handle) {
+    return reinterpret_cast<MetalTexture*>(get_tex(handle))->texture();
   }
 
   MTL::Library* create_or_get_lib(const std::filesystem::path& path);

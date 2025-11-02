@@ -4,87 +4,9 @@
 
 #include "gfx/GFXTypes.hpp"
 #include "gfx/metal/MetalDevice.hpp"
+#include "gfx/metal/MetalUtil.hpp"
 
-namespace {
-
-MTL::CullMode convert(rhi::CullMode mode) {
-  switch (mode) {
-    case rhi::CullMode::Back:
-      return MTL::CullModeBack;
-    case rhi::CullMode::Front:
-      return MTL::CullModeFront;
-    case rhi::CullMode::None:
-      return MTL::CullModeNone;
-  }
-}
-
-MTL::Winding convert(rhi::WindOrder wind_order) {
-  switch (wind_order) {
-    case rhi::WindOrder::Clockwise:
-      return MTL::WindingClockwise;
-    case rhi::WindOrder::CounterClockwise:
-      return MTL::WindingCounterClockwise;
-  }
-}
-
-MTL::CompareFunction convert(rhi::CompareOp op) {
-  switch (op) {
-    case rhi::CompareOp::Less:
-      return MTL::CompareFunctionLess;
-    case rhi::CompareOp::Greater:
-      return MTL::CompareFunctionGreater;
-    case rhi::CompareOp::LessOrEqual:
-      return MTL::CompareFunctionLessEqual;
-    case rhi::CompareOp::GreaterOrEqual:
-      return MTL::CompareFunctionGreaterEqual;
-    case rhi::CompareOp::Always:
-      return MTL::CompareFunctionAlways;
-    case rhi::CompareOp::Never:
-      return MTL::CompareFunctionNever;
-    case rhi::CompareOp::NotEqual:
-      return MTL::CompareFunctionNotEqual;
-    case rhi::CompareOp::Equal:
-      return MTL::CompareFunctionEqual;
-  }
-}
-
-MTL::LoadAction convert(rhi::LoadOp op) {
-  switch (op) {
-    case rhi::LoadOp::Load:
-      return MTL::LoadActionLoad;
-    case rhi::LoadOp::Clear:
-      return MTL::LoadActionClear;
-    default:
-      return MTL::LoadActionDontCare;
-  }
-}
-
-MTL::StoreAction convert(rhi::StoreOp op) {
-  switch (op) {
-    case rhi::StoreOp::Store:
-      return MTL::StoreActionStore;
-    default:
-      return MTL::StoreActionDontCare;
-  }
-}
-
-MTL::PrimitiveType convert(rhi::PrimitiveTopology top) {
-  switch (top) {
-    case rhi::PrimitiveTopology::TriangleList:
-      return MTL::PrimitiveTypeTriangle;
-    case rhi::PrimitiveTopology::TriangleStrip:
-      return MTL::PrimitiveTypeTriangleStrip;
-    case rhi::PrimitiveTopology::LineList:
-      return MTL::PrimitiveTypeLine;
-    case rhi::PrimitiveTopology::LineStrip:
-      return MTL::PrimitiveTypeLineStrip;
-    default:
-      ALWAYS_ASSERT(0 && "unsupported primitive topology");
-      return MTL::PrimitiveTypeTriangle;
-  }
-}
-
-}  // namespace
+namespace {}  // namespace
 
 void MetalCmdEncoder::begin_rendering(
     std::initializer_list<rhi::RenderingAttachmentInfo> attachments) {  // new command encoder
@@ -97,8 +19,8 @@ void MetalCmdEncoder::begin_rendering(
       depth_desc = MTL::RenderPassDepthAttachmentDescriptor::alloc()->init();
       depth_desc->setTexture(
           reinterpret_cast<MetalTexture*>(device_->get_tex(att.image))->texture());
-      depth_desc->setLoadAction(convert(att.load_op));
-      depth_desc->setStoreAction(convert(att.store_op));
+      depth_desc->setLoadAction(mtl::util::convert(att.load_op));
+      depth_desc->setStoreAction(mtl::util::convert(att.store_op));
       depth_desc->setClearDepth(att.clear_value.depth_stencil.depth);
       desc->setDepthAttachment(depth_desc);
     } else {  // color
@@ -106,8 +28,8 @@ void MetalCmdEncoder::begin_rendering(
           desc->colorAttachments()->object(color_att_i);
       auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
       color_desc->setTexture(tex->texture());
-      color_desc->setLoadAction(convert(att.load_op));
-      color_desc->setStoreAction(convert(att.store_op));
+      color_desc->setLoadAction(mtl::util::convert(att.load_op));
+      color_desc->setStoreAction(mtl::util::convert(att.store_op));
       color_desc->setClearColor(
           MTL::ClearColor::Make(att.clear_value.color.r, att.clear_value.color.g,
                                 att.clear_value.color.b, att.clear_value.color.a));
@@ -115,22 +37,14 @@ void MetalCmdEncoder::begin_rendering(
     }
   }
 
-  if (curr_compute_enc_) {
-    curr_compute_enc_->endEncoding();
-    curr_compute_enc_ = nullptr;
-  }
+  end_compute_encoder();
 
-  if (curr_render_enc_) {
-    curr_render_enc_->endEncoding();
-    curr_render_enc_ = nullptr;
-  }
+  ASSERT(!render_enc_);
+  render_enc_ = cmd_buf_->renderCommandEncoder(desc);
 
-  ASSERT(!curr_render_enc_);
-  curr_render_enc_ = cmd_buf_->renderCommandEncoder(desc);
-
-  curr_render_enc_->setArgumentTable(arg_table_, MTL::RenderStageFragment | MTL::RenderStageVertex);
-  curr_render_enc_->barrierAfterQueueStages(MTL::RenderStageFragment, MTL::RenderStageVertex,
-                                            MTL4::VisibilityOptionDevice);
+  render_enc_->setArgumentTable(arg_table_, MTL::RenderStageFragment | MTL::RenderStageVertex);
+  render_enc_->barrierAfterQueueStages(MTL::RenderStageFragment, MTL::RenderStageVertex,
+                                       MTL4::VisibilityOptionDevice);
 
   desc->release();
   if (depth_desc) {
@@ -151,25 +65,25 @@ MetalCmdEncoder::MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_b
 }
 
 void MetalCmdEncoder::end_encoding() {
-  if (curr_render_enc_) {
-    curr_render_enc_->endEncoding();
+  if (render_enc_) {
+    render_enc_->endEncoding();
+    render_enc_ = nullptr;
   }
-  curr_render_enc_ = nullptr;
-  if (curr_compute_enc_) {
-    curr_compute_enc_->endEncoding();
+  if (compute_enc_) {
+    compute_enc_->endEncoding();
+    compute_enc_ = nullptr;
   }
-  curr_compute_enc_ = nullptr;
 }
 
 void MetalCmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
   auto* pipeline = reinterpret_cast<MetalPipeline*>(device_->get_pipeline(handle));
   ASSERT(pipeline);
   if (pipeline->render_pso) {
-    ASSERT(curr_render_enc_);
-    curr_render_enc_->setRenderPipelineState(pipeline->render_pso);
+    ASSERT(render_enc_);
+    render_enc_->setRenderPipelineState(pipeline->render_pso);
   } else if (pipeline->compute_pso) {
-    ASSERT(curr_compute_enc_);
-    curr_compute_enc_->setComputePipelineState(pipeline->compute_pso);
+    ASSERT(compute_enc_);
+    compute_enc_->setComputePipelineState(pipeline->compute_pso);
   } else {
     LERROR("invalid pipeline for MetalCmdEncoder::bind_pipeline");
     ASSERT(0);
@@ -185,12 +99,12 @@ void MetalCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 max) {
   vp.height = max.y - min.y;
   vp.znear = 0.00f;
   vp.zfar = 1.f;
-  curr_render_enc_->setViewport(vp);
+  render_enc_->setViewport(vp);
 }
 
 void MetalCmdEncoder::draw_primitives(rhi::PrimitiveTopology topology, size_t vertex_start,
                                       size_t count, size_t instance_count) {
-  curr_render_enc_->drawPrimitives(convert(topology), vertex_start, count, instance_count);
+  render_enc_->drawPrimitives(mtl::util::convert(topology), vertex_start, count, instance_count);
 }
 
 void MetalCmdEncoder::push_constants(void* data, size_t size) {
@@ -198,17 +112,20 @@ void MetalCmdEncoder::push_constants(void* data, size_t size) {
   memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, data, size);
   auto [arg_buf, arg_buf_offset] = device_->alloc_arg_buf();
   struct TLAB {
-    uint64_t pc_buf;
-    uint64_t bdt;
+    uint64_t push_constant_buf;
+    uint64_t buffer_descriptor_table;
+    uint64_t texture_descriptor_table;
+    uint64_t sampler_descriptor_table;
   };
   auto* tlab = (TLAB*)((uint8_t*)arg_buf->contents() + arg_buf_offset);
-  tlab->pc_buf = pc_buf->gpuAddress() + pc_buf_offset;
-  tlab->bdt = device_->get_mtl_buf(device_->buffer_descriptor_table_)->gpuAddress();
+  tlab->push_constant_buf = pc_buf->gpuAddress() + pc_buf_offset;
+  tlab->buffer_descriptor_table =
+      device_->get_mtl_buf(device_->buffer_descriptor_table_)->gpuAddress();
+  tlab->texture_descriptor_table =
+      device_->get_mtl_buf(device_->texture_descriptor_table_)->gpuAddress();
+  tlab->sampler_descriptor_table =
+      device_->get_mtl_buf(device_->sampler_descriptor_table_)->gpuAddress();
 
-  // TODO: magic num
-  // top_level_arg_enc_->setArgumentBuffer(arg_buf, arg_buf_offset);
-  // top_level_arg_enc_->setBuffer(pc_buf, pc_buf_offset, 0);
-  // top_level_arg_enc_->setBuffer(device_->get_mtl_buf(device_->buffer_descriptor_table_), 0, 1);
   curr_arg_buf_ = arg_buf;
   curr_arg_buf_offset_ = arg_buf_offset;
 
@@ -220,23 +137,51 @@ void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
                                               rhi::BufferHandle index_buf, size_t index_start,
                                               size_t count) {
   auto* buf = device_->get_mtl_buf(index_buf);
-  curr_render_enc_->drawIndexedPrimitives(convert(topology), count, MTL::IndexTypeUInt32,
-                                          buf->gpuAddress() + index_start, buf->length());
+  render_enc_->drawIndexedPrimitives(mtl::util::convert(topology), count, MTL::IndexTypeUInt32,
+                                     buf->gpuAddress() + index_start, buf->length());
 }
 
 void MetalCmdEncoder::set_depth_stencil_state(rhi::CompareOp depth_compare_op,
                                               bool depth_write_enabled) {
   MTL::DepthStencilDescriptor* depth_stencil_desc = MTL::DepthStencilDescriptor::alloc()->init();
-  depth_stencil_desc->setDepthCompareFunction(convert(depth_compare_op));
+  depth_stencil_desc->setDepthCompareFunction(mtl::util::convert(depth_compare_op));
   depth_stencil_desc->setDepthWriteEnabled(depth_write_enabled);
-  curr_render_enc_->setDepthStencilState(
+  render_enc_->setDepthStencilState(
       device_->get_device()->newDepthStencilState(depth_stencil_desc));
 }
 
 void MetalCmdEncoder::set_cull_mode(rhi::CullMode cull_mode) {
-  curr_render_enc_->setCullMode(convert(cull_mode));
+  render_enc_->setCullMode(mtl::util::convert(cull_mode));
 }
 
 void MetalCmdEncoder::set_wind_order(rhi::WindOrder wind_order) {
-  curr_render_enc_->setFrontFacingWinding(convert(wind_order));
+  render_enc_->setFrontFacingWinding(mtl::util::convert(wind_order));
+}
+
+void MetalCmdEncoder::copy_buf_to_tex(rhi::BufferHandle src_buf, size_t src_offset,
+                                      size_t src_bytes_per_row, rhi::TextureHandle dst_tex) {
+  end_render_encoder();
+  if (!compute_enc_) {
+    compute_enc_ = cmd_buf_->computeCommandEncoder();
+  }
+  auto* buf = device_->get_mtl_buf(src_buf);
+  auto* tex = device_->get_mtl_tex(dst_tex);
+  MTL::Size img_size = MTL::Size::Make(tex->width(), tex->height(), tex->depth());
+  compute_enc_->copyFromBuffer(buf, src_offset, src_bytes_per_row, 0, img_size, tex, 0, 0,
+                               MTL::Origin::Make(0, 0, 0));
+  compute_enc_->generateMipmaps(tex);
+}
+
+void MetalCmdEncoder::end_render_encoder() {
+  if (render_enc_) {
+    render_enc_->endEncoding();
+    render_enc_ = nullptr;
+  }
+}
+
+void MetalCmdEncoder::end_compute_encoder() {
+  if (compute_enc_) {
+    compute_enc_->endEncoding();
+    compute_enc_ = nullptr;
+  }
 }

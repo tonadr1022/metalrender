@@ -7,7 +7,6 @@
 
 struct VOut {
     float4 pos : SV_Position;
-    float3 color : COLOR0;
     float2 uv : TEXCOORD0;
 };
 
@@ -16,10 +15,7 @@ struct VOut {
 VOut vert_main(uint vert_id : SV_VertexID) {
     DefaultVertex v = BufferTable[vert_buf_idx].BUFLOAD(DefaultVertex, vert_id);
     VOut o;
-    o.color = v.color;
-//    o.color = float3(vert_id & 1, vert_id & 2, vert_id & 4);
-    //o.uv = v.uv;
-    o.uv = float2(0.0,0.0);
+    o.uv = v.uv;
     o.pos = mul(mvp, float4(v.pos.xyz, 1.0));
     return o;
 }
@@ -27,5 +23,7 @@ VOut vert_main(uint vert_id : SV_VertexID) {
 [RootSignature(ROOT_SIGNATURE)]
 float4 frag_main(VOut input) : SV_Target0 {
     M4Material material = BufferTable[mat_buf_idx].BUFLOAD(M4Material, mat_buf_id);
-    return float4(input.color + material.color.xyz, 1.0);
+    float4 albedo = TextureTable[material.albedo_tex_idx].Sample(SamplerTable[0], input.uv);
+//    return float4(input.uv.xy, 0.0,1.0);
+    return float4(albedo.xyz * material.color.xyz, 1.0);
 }

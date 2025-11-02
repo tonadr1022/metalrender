@@ -12,8 +12,81 @@ void print_err(NS::Error* err) {
   LINFO("{}", err->localizedDescription()->cString(NS::ASCIIStringEncoding));
 }
 
+MTL::CullMode convert(rhi::CullMode mode) {
+  switch (mode) {
+    case rhi::CullMode::Back:
+      return MTL::CullModeBack;
+    case rhi::CullMode::Front:
+      return MTL::CullModeFront;
+    case rhi::CullMode::None:
+      return MTL::CullModeNone;
+  }
+}
+
+MTL::Winding convert(rhi::WindOrder wind_order) {
+  switch (wind_order) {
+    case rhi::WindOrder::Clockwise:
+      return MTL::WindingClockwise;
+    case rhi::WindOrder::CounterClockwise:
+      return MTL::WindingCounterClockwise;
+  }
+}
+
+MTL::CompareFunction convert(rhi::CompareOp op) {
+  switch (op) {
+    case rhi::CompareOp::Less:
+      return MTL::CompareFunctionLess;
+    case rhi::CompareOp::Greater:
+      return MTL::CompareFunctionGreater;
+    case rhi::CompareOp::LessOrEqual:
+      return MTL::CompareFunctionLessEqual;
+    case rhi::CompareOp::GreaterOrEqual:
+      return MTL::CompareFunctionGreaterEqual;
+    case rhi::CompareOp::Always:
+      return MTL::CompareFunctionAlways;
+    case rhi::CompareOp::Never:
+      return MTL::CompareFunctionNever;
+    case rhi::CompareOp::NotEqual:
+      return MTL::CompareFunctionNotEqual;
+    case rhi::CompareOp::Equal:
+      return MTL::CompareFunctionEqual;
+  }
+}
+MTL::LoadAction convert(rhi::LoadOp op) {
+  switch (op) {
+    case rhi::LoadOp::Load:
+      return MTL::LoadActionLoad;
+    case rhi::LoadOp::Clear:
+      return MTL::LoadActionClear;
+    default:
+      return MTL::LoadActionDontCare;
+  }
+}
+MTL::StoreAction convert(rhi::StoreOp op) {
+  switch (op) {
+    case rhi::StoreOp::Store:
+      return MTL::StoreActionStore;
+    default:
+      return MTL::StoreActionDontCare;
+  }
+}
+MTL::PrimitiveType convert(rhi::PrimitiveTopology top) {
+  switch (top) {
+    case rhi::PrimitiveTopology::TriangleList:
+      return MTL::PrimitiveTypeTriangle;
+    case rhi::PrimitiveTopology::TriangleStrip:
+      return MTL::PrimitiveTypeTriangleStrip;
+    case rhi::PrimitiveTopology::LineList:
+      return MTL::PrimitiveTypeLine;
+    case rhi::PrimitiveTopology::LineStrip:
+      return MTL::PrimitiveTypeLineStrip;
+    default:
+      ALWAYS_ASSERT(0 && "unsupported primitive topology");
+      return MTL::PrimitiveTypeTriangle;
+  }
+}
 }  // namespace mtl::util
-MTL::PixelFormat mtl::util::convert_format(rhi::TextureFormat format) {
+MTL::PixelFormat mtl::util::convert(rhi::TextureFormat format) {
   using namespace rhi;
   switch (format) {
     case TextureFormat::R8G8B8A8Srgb:
@@ -32,7 +105,7 @@ MTL::PixelFormat mtl::util::convert_format(rhi::TextureFormat format) {
   }
   return MTL::PixelFormatInvalid;
 }
-MTL::StorageMode mtl::util::convert_storage_mode(rhi::StorageMode mode) {
+MTL::StorageMode mtl::util::convert(rhi::StorageMode mode) {
   using namespace rhi;
   switch (mode) {
     case StorageMode::CPUAndGPU:
@@ -49,7 +122,7 @@ MTL::StorageMode mtl::util::convert_storage_mode(rhi::StorageMode mode) {
   ASSERT(0 && "unreachable");
   return MTL::StorageModePrivate;
 }
-MTL::TextureUsage mtl::util::convert_texture_usage(rhi::TextureUsage usage) {
+MTL::TextureUsage mtl::util::convert(rhi::TextureUsage usage) {
   using namespace rhi;
   MTL::TextureUsage result{};
 

@@ -54,6 +54,7 @@ App::App() {
   // voxel_renderer_->init(&renderer_);
   // voxel_world_ = std::make_unique<vox::World>();
   // voxel_world_->init(voxel_renderer_.get(), &renderer_, resource_dir_);
+  camera_.pos.x = -5;
 }
 
 namespace rando {

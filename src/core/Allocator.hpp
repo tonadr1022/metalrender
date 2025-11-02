@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Logger.hpp"
+#include "core/EAssert.hpp"
 
 class IndexAllocator {
  public:
@@ -11,7 +12,7 @@ class IndexAllocator {
   explicit IndexAllocator(uint32_t capacity) { reserve(capacity); }
 
   void reserve(uint32_t capacity) {
-    assert(capacity >= capacity_);
+    ASSERT(capacity >= capacity_);
     for (uint32_t i = capacity_; i < capacity; i++) {
       free_list_.push_back(capacity - 1 - i);
     }

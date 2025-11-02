@@ -3,6 +3,7 @@
 #include "Buffer.hpp"
 #include "RendererTypes.hpp"
 #include "Texture.hpp"
+#include "gfx/Sampler.hpp"
 
 namespace MTL {
 class Texture;
@@ -40,6 +41,9 @@ class Device {
       const rhi::GraphicsPipelineCreateInfo& cinfo) = 0;
   virtual rhi::PipelineHandleHolder create_graphics_pipeline_h(
       const rhi::GraphicsPipelineCreateInfo& cinfo) = 0;
+  virtual rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) = 0;
+  virtual rhi::SamplerHandleHolder create_sampler_h(const rhi::SamplerDesc& desc) = 0;
+
   [[nodiscard]] virtual const Info& get_info() const = 0;
   // TODO: is there a better spot for setting window dims, ie on event
   virtual bool begin_frame(glm::uvec2 window_dims) = 0;
@@ -56,6 +60,7 @@ class Device {
   virtual void submit_frame() = 0;
 
   virtual void destroy(TextureHandle handle) = 0;
+  virtual void destroy(SamplerHandle handle) = 0;
 };
 
 }  // namespace rhi

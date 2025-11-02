@@ -16,6 +16,7 @@ class Buffer;
 class Device;
 class Texture;
 class Pipeline;
+class Sampler;
 
 using BufferHandle = GenerationalHandle<Buffer>;
 using BufferHandleHolder = Holder<BufferHandle, ::rhi::Device>;
@@ -23,5 +24,7 @@ using TextureHandle = GenerationalHandle<::rhi::Texture>;
 using TextureHandleHolder = Holder<TextureHandle, ::rhi::Device>;
 using PipelineHandle = GenerationalHandle<Pipeline>;
 using PipelineHandleHolder = Holder<PipelineHandle, ::rhi::Device>;
+using SamplerHandle = GenerationalHandle<Sampler>;
+using SamplerHandleHolder = Holder<SamplerHandle, ::rhi::Device>;
 
 }  // namespace rhi

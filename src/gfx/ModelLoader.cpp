@@ -158,7 +158,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
                                   .dims = glm::uvec3{w, h, 1},
                                   .mip_levels = mip_levels,
                                   .array_length = 1,
-                                  .alloc_gpu_slot = true};
+                                  .bindless = true};
       std::unique_ptr<void, void (*)(void *)> data_ptr{reinterpret_cast<void *>(data),
                                                        stbi_image_free};
       auto upload_idx = texture_uploads.size();
@@ -265,13 +265,13 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
             for (size_t i = 0; i < accessor->count; i++) {
               float uv[2] = {0, 0};
               cgltf_accessor_read_float(accessor, i, uv, 2);
-              // all_vertices[base_vertex + i].uv = glm::vec2{uv[0], uv[1]};
+              all_vertices[base_vertex + i].uv = glm::vec2{uv[0], uv[1]};
             }
           } else if (attr.type == cgltf_attribute_type_normal) {
             float normal[3] = {0, 0, 0};
             for (size_t i = 0; i < accessor->count; i++) {
               cgltf_accessor_read_float(accessor, i, normal, 3);
-              // all_vertices[base_vertex + i].normal = glm::vec3{normal[0], normal[1], normal[2]};
+              all_vertices[base_vertex + i].normal = glm::vec3{normal[0], normal[1], normal[2]};
             }
           }
         }

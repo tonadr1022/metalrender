@@ -5,17 +5,6 @@
 
 namespace rhi {
 
-enum class CullMode {
-  None,
-  Back,
-  Front,
-};
-
-enum class WindOrder {
-  Clockwise,
-  CounterClockwise,
-};
-
 class CmdEncoder {
  public:
   virtual void begin_rendering(std::initializer_list<RenderingAttachmentInfo> attachments) = 0;
@@ -42,6 +31,9 @@ class CmdEncoder {
   virtual ~CmdEncoder() = default;
   virtual void end_encoding() = 0;
   virtual void set_viewport(glm::uvec2 min, glm::uvec2 max) = 0;
+
+  virtual void copy_buf_to_tex(rhi::BufferHandle src_buf, size_t src_offset,
+                               size_t src_bytes_per_row, rhi::TextureHandle dst_tex) = 0;
 
  private:
 };
