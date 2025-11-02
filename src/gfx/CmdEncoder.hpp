@@ -30,7 +30,7 @@ class CmdEncoder {
   CmdEncoder() = default;
   virtual ~CmdEncoder() = default;
   virtual void end_encoding() = 0;
-  virtual void set_viewport(glm::uvec2 min, glm::uvec2 max) = 0;
+  virtual void set_viewport(glm::uvec2 min, glm::uvec2 extent) = 0;
 
   virtual void copy_buf_to_tex(rhi::BufferHandle src_buf, size_t src_offset,
                                size_t src_bytes_per_row, rhi::TextureHandle dst_tex) = 0;

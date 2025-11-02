@@ -90,13 +90,12 @@ void MetalCmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
   }
 }
 
-void MetalCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 max) {
-  // TODO: does y need flip? Is this necessary?
+void MetalCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 extent) {
   MTL::Viewport vp;
   vp.originX = min.x;
   vp.originY = min.y;
-  vp.width = max.x - min.x;
-  vp.height = max.y - min.y;
+  vp.width = extent.x;
+  vp.height = extent.y;
   vp.znear = 0.00f;
   vp.zfar = 1.f;
   render_enc_->setViewport(vp);

@@ -29,7 +29,7 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
   void end_encoding() override;
   void bind_pipeline(rhi::PipelineHandle handle) override;
-  void set_viewport(glm::uvec2 min, glm::uvec2 max) override;
+  void set_viewport(glm::uvec2 min, glm::uvec2 extent) override;
   void draw_primitives(rhi::PrimitiveTopology topology, size_t vertex_start, size_t count,
                        size_t instance_count) override;
   void push_constants(void* data, size_t size) override;
