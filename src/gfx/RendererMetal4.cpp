@@ -117,11 +117,15 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
           .vertex_offset = static_cast<int32_t>(mesh.vertex_offset_bytes),
           .first_instance = draw_cmd_idx,
       });
-      out_instance.global_transforms[node].scale = 100;
+      auto model_mat = calc_matrix(out_instance.global_transforms[node]);
+      // model_mat = glm::transpose(model_mat);
+      LINFO("{} ", model_mat[3][0]);
       instance_datas.emplace_back(InstData{
-          .model = calc_matrix(out_instance.global_transforms[node]),
-          .material_id = 0,
-          .base_vertex = static_cast<uint32_t>(cmds.back().vertex_offset / sizeof(DefaultVertex))});
+          .model = model_mat,
+          // .material_id = draw_cmd_idx,  // TODO: fixxxxxxxxxx
+          // .base_vertex = static_cast<uint32_t>(cmds.back().vertex_offset /
+          // sizeof(DefaultVertex)),
+      });
       draw_cmd_idx++;
     }
 
@@ -139,7 +143,9 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
     }
     if (materials.empty()) {
       materials.emplace_back(
-          M4Material{.color = glm::vec4{1, 1, 1, 1}, .albedo_tex_idx = UINT32_MAX});
+          M4Material{.color = glm::vec4{1, 0, 0, 1}, .albedo_tex_idx = UINT32_MAX});
+      materials.emplace_back(
+          M4Material{.color = glm::vec4{0, 0, 1, 1}, .albedo_tex_idx = UINT32_MAX});
     }
     device_->copy_to_buffer(materials.data(), materials.size() * sizeof(M4Material),
                             all_material_buf_.handle, 0);

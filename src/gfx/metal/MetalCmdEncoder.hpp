@@ -69,8 +69,10 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   MTL4::ComputeCommandEncoder* compute_enc_{};
   MTL::ArgumentEncoder* top_level_arg_enc_{};
   MTL4::ArgumentTable* arg_table_{};
-  MTL::GPUAddress tlab_buf_{};
-  size_t tlab_size_{};
+  // MTL::GPUAddress tlab_buf_{};
+  // size_t tlab_size_{};
+  MTL::GPUAddress pc_buf_{};
+  size_t pc_buf_size_{};
 
   rhi::BufferHandle curr_bound_index_buf_;
   size_t curr_bound_index_buf_offset_;

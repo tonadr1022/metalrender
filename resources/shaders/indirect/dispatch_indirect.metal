@@ -16,7 +16,6 @@ struct Args {
 };
 
 struct Args2 {
-    uint tlab_size;
     uint draw_cnt;
 };
 
@@ -37,6 +36,15 @@ struct BasicIndirectPC {
   uint _pad[20];
 };
 
+
+#define PC_SIZE 160
+struct TLAB_Layout {
+    packed_uint4 pad[10]; // 160 bytes
+    uint draw_id;
+};
+
+static_assert(sizeof(TLAB_Layout) == 164);
+
 kernel void comp_main(const device uint8_t* pc [[buffer(0)]],
                       constant Args2& args2 [[buffer(1)]],
                       device Args& args [[buffer(2)]],
@@ -46,18 +54,19 @@ kernel void comp_main(const device uint8_t* pc [[buffer(0)]],
                       const device uint8_t* resource_desc_heap [[buffer(6)]],
                       const device uint8_t* sampler_desc_heap [[buffer(7)]],
                       uint gid [[thread_position_in_grid]]) {
-    uint tlab_size = sizeof(TLAB);
     uint draw_cnt = args2.draw_cnt;
     if (gid >= draw_cnt) {
             return;
     }
-    device uint8_t* out_ptr = out_args + gid * tlab_size;
-    for (uint i = 0; i < tlab_size; i++) {
+    if (gid != 1) {
+         //   return;
+    }
+    device uint8_t* out_ptr = out_args + gid * sizeof(TLAB_Layout);
+    for (uint i = 0; i < PC_SIZE; i++) {
         out_ptr[i] = pc[i];
     }
-    device TLAB* tlab = reinterpret_cast<device TLAB*>(out_ptr);
-    device BasicIndirectPC* push = reinterpret_cast<device BasicIndirectPC*>(tlab->push_constant_buf);
-    push->inst_id = gid;
+    device TLAB_Layout* tlab_lay = reinterpret_cast<device TLAB_Layout*>(out_ptr);
+    tlab_lay->draw_id = gid;
 
     const device IndexedIndirectDrawCmd& cmd = in_cmds[gid];
     render_command ren_cmd(args.cmd_buf, gid);

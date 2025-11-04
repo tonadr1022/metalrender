@@ -26,12 +26,9 @@ VOut vert_main(uint vert_id : SV_VertexID, uint instance_id : SV_InstanceID) {
     DefaultVertex v = v_buf[vert_id];
     VOut o;
     o.uv = v.uv;
-    if (instance_id == 1) {
-        o.pos = mul(vp, mul(instance_data.model, float4(v.pos.xyz, 1.0)));
-    } else {
-        o.pos = mul(vp, float4(v.pos.xyz, 1.0));
-    }
-    o.material_id = instance_data.material_id;
+    o.pos = mul(vp, mul(instance_data.model, float4(v.pos.xyz, 1.0)));
+    o.material_id = gDrawID.did;
+    //o.material_id = instance_data.material_id;
     return o;
 }
 

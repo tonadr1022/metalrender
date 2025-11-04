@@ -7,6 +7,7 @@
 #include "gfx/metal/MetalUtil.hpp"
 
 namespace {
+constexpr size_t k_pc_size = 164;
 
 using namespace rhi;
 
@@ -115,14 +116,17 @@ void MetalCmdEncoder::draw_primitives(rhi::PrimitiveTopology topology, size_t ve
 }
 
 void MetalCmdEncoder::push_constants(void* data, size_t size) {
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(size);
+  ASSERT(size <= k_pc_size);
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_pc_size);
   memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, data, size);
-  auto [tlab_buf, arg_buf_offset] = device_->arg_buf_allocator_->alloc(sizeof(TLAB));
-  auto* tlab = (TLAB*)((uint8_t*)tlab_buf->contents() + arg_buf_offset);
-  tlab->push_constant_buf = pc_buf->gpuAddress() + pc_buf_offset;
-
-  tlab_buf_ = tlab_buf->gpuAddress() + arg_buf_offset;
-  tlab_size_ = sizeof(TLAB);
+  // auto [tlab_buf, arg_buf_offset] = device_->arg_buf_allocator_->alloc(sizeof(TLAB));
+  // auto* tlab = (TLAB*)((uint8_t*)tlab_buf->contents() + arg_buf_offset);
+  // tlab->push_constant_buf = pc_buf->gpuAddress() + pc_buf_offset;
+  //
+  // tlab_buf_ = tlab_buf->gpuAddress() + arg_buf_offset;
+  // tlab_size_ = sizeof(TLAB);
+  pc_buf_ = pc_buf->gpuAddress() + pc_buf_offset;
+  pc_buf_size_ = k_pc_size;
 
   // arg_table_->setAddress(tlab_buf_, 2);
 }
@@ -218,16 +222,14 @@ void MetalCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle indirect_
   compute_enc_->setComputePipelineState(device_->dispatch_indirect_pso_);
   compute_enc_->setArgumentTable(arg_table_);
 
-  arg_table_->setAddress(tlab_buf_, 0);
+  arg_table_->setAddress(pc_buf_, 0);
 
   struct Args2 {
-    uint32_t tlab_size;
     uint32_t draw_cnt;
   };
 
   auto [args2_buf, args2_offset] = device_->test_allocator_->alloc(sizeof(Args2));
   auto* args2 = (Args2*)((uint8_t*)args2_buf->contents() + args2_offset);
-  args2->tlab_size = sizeof(TLAB);
   args2->draw_cnt = draw_cnt;
   arg_table_->setAddress(args2_buf->gpuAddress() + args2_offset, 1);
 
