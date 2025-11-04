@@ -160,7 +160,7 @@ rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
 
   uint32_t idx = rhi::k_invalid_bindless_idx;
   if (desc.bindless) {
-    idx = buffer_index_allocator_.alloc_idx();
+    idx = resource_desc_heap_allocator_.alloc_idx();
     IRBufferView bview{};
     bview.buffer = mtl_buf;
     bview.bufferOffset = 0;
@@ -168,7 +168,7 @@ rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
     bview.typedBuffer = false;
     auto metadata = IRDescriptorTableGetBufferMetadata(&bview);
     auto* pResourceTable =
-        (IRDescriptorTableEntry*)(get_mtl_buf(buffer_descriptor_table_))->contents();
+        (IRDescriptorTableEntry*)(get_mtl_buf(resource_descriptor_table_))->contents();
     IRDescriptorTableSetBuffer(&pResourceTable[idx], mtl_buf->gpuAddress(), metadata);
   }
   main_res_set_->addAllocation(mtl_buf);
@@ -212,9 +212,9 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   texture_desc->release();
   uint32_t idx = rhi::k_invalid_bindless_idx;
   if (desc.bindless) {
-    idx = texture_index_allocator_.alloc_idx();
+    idx = resource_desc_heap_allocator_.alloc_idx();
     auto* resource_table =
-        (IRDescriptorTableEntry*)(get_mtl_buf(texture_descriptor_table_))->contents();
+        (IRDescriptorTableEntry*)(get_mtl_buf(resource_descriptor_table_))->contents();
     IRDescriptorTableSetTexture(&resource_table[idx], tex, 0.0f, 0);
   }
   main_res_set_->addAllocation(tex);
@@ -369,7 +369,7 @@ rhi::SamplerHandle MetalDevice::create_sampler(const rhi::SamplerDesc& desc) {
 
   uint32_t bindless_idx{rhi::k_invalid_bindless_idx};
   if (desc.bindless) {
-    bindless_idx = sampler_index_allocator_.alloc_idx();
+    bindless_idx = sampler_desc_heap_allocator_.alloc_idx();
     auto* resource_table =
         (IRDescriptorTableEntry*)(get_mtl_buf(sampler_descriptor_table_))->contents();
     // TODO: lod bias
@@ -468,9 +468,9 @@ void MetalDevice::init_bindless() {
     return arg_enc;
   };
 
-  buffer_arg_enc_ = create_descriptor_table(&buffer_descriptor_table_, k_max_buffers);
-  texture_arg_enc_ = create_descriptor_table(&texture_descriptor_table_, k_max_textures);
-  sampler_arg_enc_ = create_descriptor_table(&sampler_descriptor_table_, k_max_samplers, true);
+  resource_table_arg_enc_ = create_descriptor_table(&resource_descriptor_table_, k_max_buffers);
+  sampler_table_arg_enc_ =
+      create_descriptor_table(&sampler_descriptor_table_, k_max_samplers, true);
 
   {
     // push constant buffer

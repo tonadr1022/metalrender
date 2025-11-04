@@ -20,8 +20,10 @@ ConstantBuffer<DrawID> gDrawID : register(b1);
 
 [RootSignature(ROOT_SIGNATURE)]
 VOut vert_main(uint vert_id : SV_VertexID, uint instance_id : SV_InstanceID) {
-    InstData instance_data = BufferTable[instance_data_buf_idx].BUFLOAD(InstData, gDrawID.did);
-    DefaultVertex v = BufferTable[vert_buf_idx].BUFLOAD(DefaultVertex, vert_id);
+    StructuredBuffer<InstData> instance_data_buf = ResourceDescriptorHeap[instance_data_buf_idx];
+    InstData instance_data = instance_data_buf[gDrawID.did];
+    StructuredBuffer<DefaultVertex> v_buf = ResourceDescriptorHeap[vert_buf_idx];
+    DefaultVertex v = v_buf[vert_id];
     VOut o;
     o.uv = v.uv;
     if (instance_id == 1) {
@@ -37,10 +39,13 @@ VOut vert_main(uint vert_id : SV_VertexID, uint instance_id : SV_InstanceID) {
 
 [RootSignature(ROOT_SIGNATURE)]
 float4 frag_main(VOut input) : SV_Target0 {
-    M4Material material = BufferTable[mat_buf_idx].BUFLOAD(M4Material, input.material_id);
+    StructuredBuffer<M4Material> material_buf = ResourceDescriptorHeap[mat_buf_idx];
+    M4Material material = material_buf[input.material_id];
     float4 albedo = float4(1,1,1,1);
+    Texture2D albedo_tex = ResourceDescriptorHeap[material.albedo_tex_idx];
+    SamplerState samp = SamplerDescriptorHeap[0];
     if (material.albedo_tex_idx != UINT32_MAX) {
-        albedo *= TextureTable[material.albedo_tex_idx].Sample(SamplerTable[0], input.uv);
+        albedo *= albedo_tex.Sample(samp, input.uv);
     }
     return float4(albedo.xyz * material.color.rgb, 1.0);
     

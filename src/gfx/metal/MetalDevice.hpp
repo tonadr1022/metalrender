@@ -120,9 +120,8 @@ class MetalDevice : public rhi::Device {
   Info info_{};
   std::filesystem::path metal_shader_dir_;
   MTL4::Compiler* shader_compiler_{};
-  IndexAllocator texture_index_allocator_{k_max_textures};
-  IndexAllocator buffer_index_allocator_{k_max_buffers};
-  IndexAllocator sampler_index_allocator_{k_max_samplers};
+  IndexAllocator resource_desc_heap_allocator_{k_max_textures};
+  IndexAllocator sampler_desc_heap_allocator_{k_max_samplers};
   std::array<MTL4::CommandAllocator*, k_max_frames_in_flight> cmd_allocators_{};
   std::vector<std::unique_ptr<MetalCmdEncoder>> cmd_lists_;
   MTL4::CommandBuffer* main_cmd_buf_{};
@@ -181,9 +180,8 @@ class MetalDevice : public rhi::Device {
 
  private:
   std::filesystem::path shader_lib_dir_;
-  MTL::ArgumentEncoder* buffer_arg_enc_{};
-  MTL::ArgumentEncoder* texture_arg_enc_{};
-  MTL::ArgumentEncoder* sampler_arg_enc_{};
+  MTL::ArgumentEncoder* resource_table_arg_enc_{};
+  MTL::ArgumentEncoder* sampler_table_arg_enc_{};
 
   // TODO: no public members pls
   // public to other implementation classes
@@ -197,8 +195,7 @@ class MetalDevice : public rhi::Device {
   std::optional<GPUFrameAllocator> arg_buf_allocator_;
   std::optional<GPUFrameAllocator> push_constant_allocator_;
   std::optional<GPUFrameAllocator> test_allocator_;
-  rhi::BufferHandleHolder buffer_descriptor_table_;
-  rhi::BufferHandleHolder texture_descriptor_table_;
+  rhi::BufferHandleHolder resource_descriptor_table_;
   rhi::BufferHandleHolder sampler_descriptor_table_;
 
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {

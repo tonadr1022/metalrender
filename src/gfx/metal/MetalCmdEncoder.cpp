@@ -120,12 +120,6 @@ void MetalCmdEncoder::push_constants(void* data, size_t size) {
   auto [tlab_buf, arg_buf_offset] = device_->arg_buf_allocator_->alloc(sizeof(TLAB));
   auto* tlab = (TLAB*)((uint8_t*)tlab_buf->contents() + arg_buf_offset);
   tlab->push_constant_buf = pc_buf->gpuAddress() + pc_buf_offset;
-  tlab->buffer_descriptor_table =
-      device_->get_mtl_buf(device_->buffer_descriptor_table_)->gpuAddress();
-  tlab->texture_descriptor_table =
-      device_->get_mtl_buf(device_->texture_descriptor_table_)->gpuAddress();
-  tlab->sampler_descriptor_table =
-      device_->get_mtl_buf(device_->sampler_descriptor_table_)->gpuAddress();
 
   tlab_buf_ = tlab_buf->gpuAddress() + arg_buf_offset;
   tlab_size_ = sizeof(TLAB);
@@ -251,6 +245,11 @@ void MetalCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle indirect_
   auto* index_buffer = device_->get_mtl_buf(curr_bound_index_buf_);
   ASSERT(index_buffer);
   arg_table_->setAddress(index_buffer->gpuAddress() + curr_bound_index_buf_offset_, 5);
+
+  arg_table_->setAddress(device_->get_mtl_buf(device_->resource_descriptor_table_)->gpuAddress(),
+                         6);
+  arg_table_->setAddress(device_->get_mtl_buf(device_->resource_descriptor_table_)->gpuAddress(),
+                         7);
 
   uint32_t threads_per_tg_x = 32;
   uint32_t tg_x = (draw_cnt + threads_per_tg_x - 1) / threads_per_tg_x;

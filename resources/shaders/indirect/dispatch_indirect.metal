@@ -43,6 +43,8 @@ kernel void comp_main(const device uint8_t* pc [[buffer(0)]],
                       device uint8_t* out_args [[buffer(3)]],
                       const device IndexedIndirectDrawCmd* in_cmds [[buffer(4)]],
                       const device uint8_t* index_buf [[buffer(5)]],
+                      const device uint8_t* resource_desc_heap [[buffer(6)]],
+                      const device uint8_t* sampler_desc_heap [[buffer(7)]],
                       uint gid [[thread_position_in_grid]]) {
     uint tlab_size = sizeof(TLAB);
     uint draw_cnt = args2.draw_cnt;
@@ -60,8 +62,13 @@ kernel void comp_main(const device uint8_t* pc [[buffer(0)]],
     const device IndexedIndirectDrawCmd& cmd = in_cmds[gid];
     render_command ren_cmd(args.cmd_buf, gid);
     ren_cmd.reset();
+    ren_cmd.set_vertex_buffer(resource_desc_heap, 0);
+    ren_cmd.set_fragment_buffer(resource_desc_heap, 0);
+    ren_cmd.set_vertex_buffer(sampler_desc_heap, 1);
+    ren_cmd.set_fragment_buffer(sampler_desc_heap, 1);
     ren_cmd.set_vertex_buffer(out_ptr, 2);
     ren_cmd.set_fragment_buffer(out_ptr, 2);
+
     ren_cmd.draw_indexed_primitives(primitive_type::triangle,
                                 cmd.index_count,
                                 reinterpret_cast<const device uint*>(index_buf + cmd.first_index * sizeof(uint)),

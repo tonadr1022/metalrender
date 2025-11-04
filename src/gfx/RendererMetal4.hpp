@@ -79,7 +79,6 @@ class RendererMetal4 {
  private:
   MetalDevice* device_{};
   WindowApple* window_{};
-  rhi::PipelineHandleHolder test_pso_;
   rhi::PipelineHandleHolder test2_pso_;
   rhi::BufferHandleHolder all_material_buf_;
   rhi::TextureHandleHolder depth_tex_;

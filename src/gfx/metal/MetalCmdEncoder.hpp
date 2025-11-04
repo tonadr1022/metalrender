@@ -24,9 +24,6 @@ class Buffer;
 
 struct TLAB {
   uint64_t push_constant_buf;
-  uint64_t buffer_descriptor_table;
-  uint64_t texture_descriptor_table;
-  uint64_t sampler_descriptor_table;
 };
 class MetalCmdEncoder : public rhi::CmdEncoder {
  public:
