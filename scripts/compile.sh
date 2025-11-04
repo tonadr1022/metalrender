@@ -42,7 +42,7 @@ for src in "${METAL_SOURCES[@]}"; do
 	base="$(basename "$src" .metal)"
 	out_air="$BUILD_DIR/$base.air"
 	echo "  metal -c $src -> $(basename "$out_air")"
-	xcrun -sdk macosx metal -c "$src" -o "$out_air" -frecord-sources -gline-tables-only
+	xcrun -sdk macosx metal -c "$src" -o "$out_air" -frecord-sources
 done
 
 # Link all .air -> metallib

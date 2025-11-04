@@ -110,11 +110,10 @@ MTL::StorageMode mtl::util::convert(rhi::StorageMode mode) {
   switch (mode) {
     case StorageMode::CPUAndGPU:
     case StorageMode::CPUOnly:
+    case StorageMode::Default:
       return MTL::StorageModeShared;
     case StorageMode::GPUOnly:
       return MTL::StorageModePrivate;
-    case StorageMode::Default:
-      return MTL::StorageModeShared;
     default:
       ASSERT(0 && "invalid storage mode");
       return MTL::StorageModePrivate;

@@ -15,7 +15,13 @@ enum class TextureFormat {
   R32float,
 };
 
-enum class StorageMode { GPUOnly, CPUAndGPU, CPUOnly, Default };
+enum class StorageMode {
+  GPUOnly,
+  CPUAndGPU,
+  CPUOnly,
+  // GPU optimal. On apple silicon, this is shared
+  Default
+};
 
 enum TextureUsage {
   TextureUsageNone,

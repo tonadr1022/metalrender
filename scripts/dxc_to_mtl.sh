@@ -20,11 +20,13 @@ if [[ ! -d "resources/shader_out/metal" ]]; then
 	mkdir resources/shader_out/metal
 fi
 
-dxil_path=/tmp/$basename\_$type.dxil
-metallib_path=resources/shader_out/metal/$basename\_$type.metallib
+filepath=resources/shader_out/metal/$basename\_$type
+dxil_path=$filepath.dxil
+metallib_path=$filepath.metallib
+reflection_path=$filepath.json
 
 echo "Compiling to $metallib_path"
 
 dxc $1 -Fo $dxil_path -T $shader_model -E $entry_point
-metal-shaderconverter $dxil_path -o $metallib_path
-rm $dxil_path
+metal-shaderconverter $dxil_path -o $metallib_path --output-reflection-file=$reflection_path
+# rm $dxil_path

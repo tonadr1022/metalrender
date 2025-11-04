@@ -9,6 +9,7 @@
 #include "core/Allocator.hpp"
 #include "core/Handle.hpp"
 #include "core/Pool.hpp"
+#include "core/Util.hpp"
 #include "gfx/Config.hpp"
 #include "gfx/Device.hpp"
 #include "gfx/metal/MetalCmdEncoder.hpp"
@@ -109,6 +110,8 @@ class MetalDevice : public rhi::Device {
                       size_t dst_offset) override;
 
  private:
+  MTL::ComputePipelineState* compile_mtl_compute_pipeline(const std::filesystem::path& path);
+
   size_t curr_cmd_list_idx_{};
   BlockPool<rhi::BufferHandle, MetalBuffer> buffer_pool_{128, 1, true};
   BlockPool<rhi::TextureHandle, MetalTexture> texture_pool_{128, 1, true};
@@ -137,6 +140,9 @@ class MetalDevice : public rhi::Device {
   MTL::ResidencySet* main_res_set_{};
 
  public:  // TODO: fix
+  // TODO: use handle and also figure out a better way than this
+  MTL::ComputePipelineState* dispatch_indirect_pso_{};
+
   // rhi::BufferHandleHolder top_level_arg_buf_;
   struct GPUFrameAllocator {
     struct Alloc {
@@ -153,7 +159,9 @@ class MetalDevice : public rhi::Device {
     }
 
     Alloc alloc(size_t size) {
-      auto* buf = device_->get_mtl_buf(buffers[device_->frame_idx()]);
+      size = align_up(size, 8);
+      ASSERT(size + offset_ <= capacity_);
+      auto* buf = device_->get_mtl_buf(buffers[frame_idx_]);
       auto offset = offset_;
       offset_ += size;
       return {buf, offset};
@@ -176,14 +184,19 @@ class MetalDevice : public rhi::Device {
   MTL::ArgumentEncoder* buffer_arg_enc_{};
   MTL::ArgumentEncoder* texture_arg_enc_{};
   MTL::ArgumentEncoder* sampler_arg_enc_{};
-  // std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> frame_push_constant_bufs_{};
-  size_t curr_frame_push_constant_buf_offset_bytes_{};
-  std::optional<GPUFrameAllocator> arg_buf_allocator_;
 
+  // TODO: no public members pls
   // public to other implementation classes
  public:
+  // TODO: remove
+  rhi::BufferHandleHolder main_icb_container_buf_;
+  // TODO: remove
+  MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
+  MTL::IndirectCommandBuffer* main_icb_{};
+
+  std::optional<GPUFrameAllocator> arg_buf_allocator_;
   std::optional<GPUFrameAllocator> push_constant_allocator_;
-  [[nodiscard]] GPUFrameAllocator::Alloc alloc_arg_buf();
+  std::optional<GPUFrameAllocator> test_allocator_;
   rhi::BufferHandleHolder buffer_descriptor_table_;
   rhi::BufferHandleHolder texture_descriptor_table_;
   rhi::BufferHandleHolder sampler_descriptor_table_;

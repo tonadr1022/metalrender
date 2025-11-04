@@ -107,11 +107,42 @@ void MetalDevice::init(Window* window, std::filesystem::path shader_lib_dir) {
   main_cmd_buf_ = device_->newCommandBuffer();
 
   push_constant_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
+  test_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
   arg_buf_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
 
   init_bindless();
 
   main_res_set_->requestResidency();
+  dispatch_indirect_pso_ =
+      compile_mtl_compute_pipeline(shader_lib_dir_ / "dispatch_indirect.metallib");
+
+  {
+    MTL::IndirectCommandBufferDescriptor* desc =
+        MTL::IndirectCommandBufferDescriptor::alloc()->init();
+    desc->setInheritBuffers(false);
+    desc->setInheritPipelineState(true);
+
+    desc->setCommandTypes(MTL::IndirectCommandTypeDrawIndexed);
+    desc->setMaxVertexBufferBindCount(3);
+    desc->setMaxFragmentBufferBindCount(3);
+
+    main_icb_ = device_->newIndirectCommandBuffer(desc, 1'000'000, MTL::ResourceStorageModePrivate);
+    main_res_set_->addAllocation(main_icb_);
+
+    // TODO: move this to a class that abstracts indirect buffers
+    MTL::ArgumentDescriptor* arg = MTL::ArgumentDescriptor::alloc()->init();
+    arg->setIndex(0);
+    arg->setAccess(MTL::BindingAccessReadWrite);
+    arg->setDataType(MTL::DataTypeIndirectCommandBuffer);
+    std::array<NS::Object*, 1> args_arr{arg};
+    const NS::Array* args = NS::Array::array(args_arr.data(), args_arr.size());
+    main_icb_container_arg_enc_ = device_->newArgumentEncoder(args);
+    main_icb_container_buf_ = create_buf_h({.size = main_icb_container_arg_enc_->encodedLength()});
+    main_icb_container_arg_enc_->setArgumentBuffer(get_mtl_buf(main_icb_container_buf_), 0);
+    main_icb_container_arg_enc_->setIndirectCommandBuffer(main_icb_, 0);
+
+    desc->release();
+  }
 }
 
 void MetalDevice::shutdown() {
@@ -266,6 +297,7 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
         type_str = "";
         break;
     }
+    // TODO: this logic should go elsewhere
     auto path = (shader_lib_dir_ / shader_info.path)
                     .concat("_")
                     .concat(type_str)
@@ -309,11 +341,6 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
   NS::Error* err{};
 
   auto* result = shader_compiler_->newRenderPipelineState(desc, nullptr, &err);
-  auto* reflection = result->reflection();
-  for (size_t i = 0; i < reflection->vertexBindings()->count(); i++) {
-    auto* binding = (MTL::Binding*)reflection->vertexBindings()->object(i);
-    LINFO("vertex binding name: {}", binding->name()->cString(NS::ASCIIStringEncoding));
-  }
   if (!result) {
     LERROR("Failed to create render pipeline {}", mtl::util::get_err_string(err));
   }
@@ -387,11 +414,10 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
   curr_cmd_list_idx_ = 0;
   push_constant_allocator_->reset(frame_idx());
+  test_allocator_->reset(frame_idx());
   arg_buf_allocator_->reset(frame_idx());
-  rhi::TextureDesc swap_img_desc{};
   ASSERT(metal_layer_);
   curr_drawable_ = metal_layer_->nextDrawable();
-  curr_frame_push_constant_buf_offset_bytes_ = 0;
 
   if (!curr_drawable_) {
     return false;
@@ -399,6 +425,7 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
 
   metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
 
+  rhi::TextureDesc swap_img_desc{};
   swapchain_.get_textures()[frame_idx()] =
       rhi::TextureHandleHolder{texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx,
                                                    curr_drawable_->texture(), true),
@@ -480,6 +507,21 @@ void MetalDevice::copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle b
   buffer->contents();
 }
 
-MetalDevice::GPUFrameAllocator::Alloc MetalDevice::alloc_arg_buf() {
-  return arg_buf_allocator_->alloc(sizeof(uint64_t) * 12);
+MTL::ComputePipelineState* MetalDevice::compile_mtl_compute_pipeline(
+    const std::filesystem::path& path) {
+  MTL4::ComputePipelineDescriptor* desc = MTL4::ComputePipelineDescriptor::alloc()->init();
+  MTL::Library* lib = create_or_get_lib(path.string());
+  desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);
+  MTL4::LibraryFunctionDescriptor* func_desc = MTL4::LibraryFunctionDescriptor::alloc()->init();
+  func_desc->setName(mtl::util::string("comp_main"));
+  func_desc->setLibrary(lib);
+  desc->setComputeFunctionDescriptor(func_desc);
+
+  lib->release();
+  NS::Error* err{};
+  auto* pso = shader_compiler_->newComputePipelineState(desc, nullptr, &err);
+  if (err) {
+    LERROR("Failed to create compute pipeline {}", mtl::util::get_err_string(err));
+  }
+  return pso;
 }

@@ -6,7 +6,6 @@
 struct M4Material {
   float4 color;
   uint albedo_tex_idx;
-  uint3 _pad;
 };
 
 #endif

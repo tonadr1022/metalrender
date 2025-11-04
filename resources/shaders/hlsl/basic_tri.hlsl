@@ -25,5 +25,5 @@ float4 frag_main(VOut input) : SV_Target0 {
     M4Material material = BufferTable[mat_buf_idx].BUFLOAD(M4Material, mat_buf_id);
     float4 albedo = TextureTable[material.albedo_tex_idx].Sample(SamplerTable[0], input.uv);
 //    return float4(input.uv.xy, 0.0,1.0);
-    return float4(albedo.xyz * material.color.xyz, 1.0);
+    return float4(albedo.xyz, 1.0);
 }

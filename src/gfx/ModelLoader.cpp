@@ -1,5 +1,6 @@
 #include "ModelLoader.hpp"
 
+#include "core/EAssert.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "shader_constants.h"
 
@@ -179,6 +180,11 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
   for (size_t material_i = 0; material_i < gltf->materials_count; material_i++) {
     const cgltf_material *gltf_mat = &gltf->materials[material_i];
     Material material{};
+    material.albedo_factors.r = gltf_mat->pbr_metallic_roughness.base_color_factor[0];
+    material.albedo_factors.g = gltf_mat->pbr_metallic_roughness.base_color_factor[1];
+    material.albedo_factors.b = gltf_mat->pbr_metallic_roughness.base_color_factor[2];
+    material.albedo_factors.a = gltf_mat->pbr_metallic_roughness.base_color_factor[3];
+
     auto set_and_load_material_img = [&gltf, &load_img](const cgltf_texture_view *tex_view,
                                                         uint32_t &result_tex_id) {
       if (!tex_view || !tex_view->texture || !tex_view->texture->image) {
@@ -248,6 +254,8 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
           for (size_t i = 0; i < primitive.indices->count; i++) {
             all_indices.push_back(cgltf_accessor_read_index(primitive.indices, i));
           }
+        } else {
+          ALWAYS_ASSERT(0 && "don't support non indexed meshes");
         }
         assert(primitive.attributes_count > 0);
         const auto vertex_count = static_cast<uint32_t>(primitive.attributes[0].data->count);

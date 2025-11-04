@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Metal/MTLGPUAddress.hpp>
+
 #include "gfx/CmdEncoder.hpp"
 
 class MetalDevice;
@@ -20,6 +22,12 @@ class Buffer;
 
 }  // namespace MTL
 
+struct TLAB {
+  uint64_t push_constant_buf;
+  uint64_t buffer_descriptor_table;
+  uint64_t texture_descriptor_table;
+  uint64_t sampler_descriptor_table;
+};
 class MetalCmdEncoder : public rhi::CmdEncoder {
  public:
   MetalCmdEncoder() = default;
@@ -34,7 +42,8 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
                        size_t instance_count) override;
   void push_constants(void* data, size_t size) override;
   void draw_indexed_primitives(rhi::PrimitiveTopology topology, rhi::BufferHandle index_buf,
-                               size_t index_start, size_t count) override;
+                               size_t index_start, size_t count, size_t instance_count,
+                               size_t base_vertex, size_t base_instance) override;
   void set_depth_stencil_state(rhi::CompareOp depth_compare_op, bool depth_write_enabled) override;
   void set_wind_order(rhi::WindOrder wind_order) override;
   void set_cull_mode(rhi::CullMode cull_mode) override;
@@ -42,16 +51,34 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   void copy_buf_to_tex(rhi::BufferHandle src_buf, size_t src_offset, size_t src_bytes_per_row,
                        rhi::TextureHandle dst_tex) override;
 
+  // must call push_constants AND bind_index_buf first
+  void prepare_indexed_indirect_draws(rhi::BufferHandle indirect_buf, size_t offset,
+                                      size_t draw_cnt, rhi::BufferHandle index_buf,
+                                      size_t index_buf_offset) override;
+  // void bind_index_buf(rhi::BufferHandle index_buf, size_t offset) override {
+  //   curr_bound_index_buf_ = index_buf;
+  //   curr_bound_index_buf_offset_ = offset;
+  // }
+  void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
+               rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
+
+  void draw_indexed_indirect(rhi::BufferHandle indirect_buf, size_t offset,
+                             size_t draw_cnt) override;
+
+ private:
   MetalDevice* device_{};
   MTL4::CommandBuffer* cmd_buf_{};
   MTL4::RenderCommandEncoder* render_enc_{};
   MTL4::ComputeCommandEncoder* compute_enc_{};
   MTL::ArgumentEncoder* top_level_arg_enc_{};
   MTL4::ArgumentTable* arg_table_{};
-  MTL::Buffer* curr_arg_buf_{};
-  size_t curr_arg_buf_offset_{};
+  MTL::GPUAddress tlab_buf_{};
+  size_t tlab_size_{};
 
- private:
+  rhi::BufferHandle curr_bound_index_buf_;
+  size_t curr_bound_index_buf_offset_;
+
   void end_render_encoder();
   void end_compute_encoder();
+  void start_compute_encoder();
 };

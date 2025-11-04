@@ -35,6 +35,7 @@ struct TextureArrayUpload {
 struct Material {
   uint32_t albedo_tex{};
   uint32_t normal_tex{};
+  glm::vec4 albedo_factors{1};
 };
 
 struct Mesh {
