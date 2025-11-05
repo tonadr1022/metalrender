@@ -12,9 +12,10 @@ struct IndexedIndirectDrawCmd {
 };
 
 struct InstData {
-  float4x4 model;
-  // uint material_id;
-  // uint base_vertex;
+  float3 translation;
+  float4 rotation;
+  float scale;
+  uint material_id;
 };
 
 #endif  // SHARED_INDIRECT_H

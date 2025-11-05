@@ -372,7 +372,6 @@ rhi::SamplerHandle MetalDevice::create_sampler(const rhi::SamplerDesc& desc) {
     bindless_idx = sampler_desc_heap_allocator_.alloc_idx();
     auto* resource_table =
         (IRDescriptorTableEntry*)(get_mtl_buf(sampler_descriptor_table_))->contents();
-    // TODO: lod bias
     IRDescriptorTableSetSampler(&resource_table[bindless_idx], sampler, 0.0);
   }
   return sampler_pool_.alloc(desc, sampler, bindless_idx);
@@ -468,7 +467,8 @@ void MetalDevice::init_bindless() {
     return arg_enc;
   };
 
-  resource_table_arg_enc_ = create_descriptor_table(&resource_descriptor_table_, k_max_buffers);
+  resource_table_arg_enc_ =
+      create_descriptor_table(&resource_descriptor_table_, k_max_buffers + k_max_textures);
   sampler_table_arg_enc_ =
       create_descriptor_table(&sampler_descriptor_table_, k_max_samplers, true);
 

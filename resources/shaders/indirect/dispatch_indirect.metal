@@ -19,24 +19,6 @@ struct Args2 {
     uint draw_cnt;
 };
 
-// top level argument buffer
-struct TLAB {
-  uint64_t push_constant_buf;
-  uint64_t buffer_descriptor_table;
-  uint64_t texture_descriptor_table;
-  uint64_t sampler_descriptor_table;
-};
-
-struct BasicIndirectPC {
-  float4x4 vp;
-  uint vert_buf_idx;
-  uint instance_data_buf_idx;
-  uint mat_buf_idx;
-  uint inst_id;
-  uint _pad[20];
-};
-
-
 #define PC_SIZE 160
 struct TLAB_Layout {
     packed_uint4 pad[10]; // 160 bytes
@@ -58,17 +40,14 @@ kernel void comp_main(const device uint8_t* pc [[buffer(0)]],
     if (gid >= draw_cnt) {
             return;
     }
-    if (gid != 1) {
-         //   return;
-    }
     device uint8_t* out_ptr = out_args + gid * sizeof(TLAB_Layout);
     for (uint i = 0; i < PC_SIZE; i++) {
         out_ptr[i] = pc[i];
     }
-    device TLAB_Layout* tlab_lay = reinterpret_cast<device TLAB_Layout*>(out_ptr);
-    tlab_lay->draw_id = gid;
-
     const device IndexedIndirectDrawCmd& cmd = in_cmds[gid];
+    device TLAB_Layout* tlab_lay = reinterpret_cast<device TLAB_Layout*>(out_ptr);
+    tlab_lay->draw_id = cmd.first_instance;
+
     render_command ren_cmd(args.cmd_buf, gid);
     ren_cmd.reset();
     ren_cmd.set_vertex_buffer(resource_desc_heap, 0);

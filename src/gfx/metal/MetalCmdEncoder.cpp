@@ -250,8 +250,7 @@ void MetalCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle indirect_
 
   arg_table_->setAddress(device_->get_mtl_buf(device_->resource_descriptor_table_)->gpuAddress(),
                          6);
-  arg_table_->setAddress(device_->get_mtl_buf(device_->resource_descriptor_table_)->gpuAddress(),
-                         7);
+  arg_table_->setAddress(device_->get_mtl_buf(device_->sampler_descriptor_table_)->gpuAddress(), 7);
 
   uint32_t threads_per_tg_x = 32;
   uint32_t tg_x = (draw_cnt + threads_per_tg_x - 1) / threads_per_tg_x;

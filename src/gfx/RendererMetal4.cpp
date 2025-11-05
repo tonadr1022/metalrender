@@ -22,10 +22,10 @@ using rhi::RenderingAttachmentInfo;
 using rhi::ShaderType;
 using rhi::TextureFormat;
 
-glm::mat4 calc_matrix(const TRS& trs) {
-  return glm::translate(glm::mat4{1}, trs.translation) * glm::mat4_cast(trs.rotation) *
-         glm::scale(glm::mat4{1}, glm::vec3{trs.scale});
-}
+// glm::mat4 calc_matrix(const TRS& trs) {
+//   return glm::translate(glm::mat4{1}, trs.translation) * glm::mat4_cast(trs.rotation) *
+//          glm::scale(glm::mat4{1}, glm::vec3{trs.scale});
+// }
 
 }  // namespace
 
@@ -66,17 +66,20 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
       .name = "all materials buf",
   });
 
-  // ALWAYS_ASSERT(model::load_model(resource_dir_ / "models/glTF/Models/Cube/glTF/Cube.gltf",
-  //                                 glm::mat4{1}, out_instance, out_result));
-  ALWAYS_ASSERT(
-      model::load_model(resource_dir_ / "models/glTF/Models/SimpleMeshes/glTF/SimpleMeshes.gltf",
-                        glm::mat4{1}, out_instance, out_result));
+  ALWAYS_ASSERT(model::load_model(resource_dir_ / "models/glTF/Models/Cube/glTF/Cube.gltf",
+                                  glm::mat4{1}, out_instance, out_result));
+  // ALWAYS_ASSERT(
+  //     model::load_model(resource_dir_ / "models/glTF/Models/SimpleMeshes/glTF/SimpleMeshes.gltf",
+  // glm::mat4{1}, out_instance, out_result));
   // ALWAYS_ASSERT(model::load_model(resource_dir_ / "models/glTF/Models/Sponza/glTF/Sponza.gltf",
   //                                 glm::mat4{1}, out_instance, out_result));
 
+  std::vector<uint32_t> img_upload_bindless_indices;
+  img_upload_bindless_indices.reserve(out_result.texture_uploads.size());
   for (auto& upload : out_result.texture_uploads) {
     auto tex = device_->create_tex_h(upload.desc);
     ASSERT(tex.handle.is_valid());
+    img_upload_bindless_indices.emplace_back(device_->get_tex(tex)->bindless_idx());
     pending_texture_uploads_.push_back(GPUTexUpload{
         .data = std::move(upload.data),
         .tex = std::move(tex),
@@ -117,14 +120,12 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
           .vertex_offset = static_cast<int32_t>(mesh.vertex_offset_bytes),
           .first_instance = draw_cmd_idx,
       });
-      auto model_mat = calc_matrix(out_instance.global_transforms[node]);
-      // model_mat = glm::transpose(model_mat);
-      LINFO("{} ", model_mat[3][0]);
+      const auto& trs = out_instance.global_transforms[node];
       instance_datas.emplace_back(InstData{
-          .model = model_mat,
-          // .material_id = draw_cmd_idx,  // TODO: fixxxxxxxxxx
-          // .base_vertex = static_cast<uint32_t>(cmds.back().vertex_offset /
-          // sizeof(DefaultVertex)),
+          .translation = trs.translation,
+          .rotation = glm::vec4{trs.rotation.x, trs.rotation.y, trs.rotation.z, trs.rotation.w},
+          .scale = trs.scale,
+          .material_id = mesh.material_id,
       });
       draw_cmd_idx++;
     }
@@ -139,13 +140,8 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
     materials.reserve(out_result.materials.size());
     // TODO: this texture index is the upload index, which is not going to work with multiple models
     for (auto& m : out_result.materials) {
-      materials.emplace_back(M4Material{.color = m.albedo_factors, .albedo_tex_idx = m.albedo_tex});
-    }
-    if (materials.empty()) {
-      materials.emplace_back(
-          M4Material{.color = glm::vec4{1, 0, 0, 1}, .albedo_tex_idx = UINT32_MAX});
-      materials.emplace_back(
-          M4Material{.color = glm::vec4{0, 0, 1, 1}, .albedo_tex_idx = UINT32_MAX});
+      m.albedo_tex = img_upload_bindless_indices[m.albedo_tex];
+      materials.emplace_back(M4Material{.albedo_tex_idx = m.albedo_tex});
     }
     device_->copy_to_buffer(materials.data(), materials.size() * sizeof(M4Material),
                             all_material_buf_.handle, 0);
