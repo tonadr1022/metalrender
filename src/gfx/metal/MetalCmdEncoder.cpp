@@ -2,12 +2,17 @@
 
 #include <Metal/Metal.hpp>
 
+#include "core/EAssert.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "gfx/metal/MetalUtil.hpp"
 
 namespace {
-constexpr size_t k_pc_size = 164;
+struct Cbuffer2 {
+  uint32_t draw_id;
+  uint32_t vertex_id_base;
+};
+constexpr size_t k_pc_size = 160 + sizeof(Cbuffer2);
 
 using namespace rhi;
 
@@ -51,7 +56,7 @@ void MetalCmdEncoder::begin_rendering(
 
   ASSERT(!render_enc_);
   render_enc_ = cmd_buf_->renderCommandEncoder(desc);
-  render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionDevice);
+  render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionNone);
 
   render_enc_->setArgumentTable(arg_table_, MTL::RenderStageFragment | MTL::RenderStageVertex);
 
@@ -61,9 +66,8 @@ void MetalCmdEncoder::begin_rendering(
   }
 }
 
-MetalCmdEncoder::MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_buf,
-                                 MTL::ArgumentEncoder* top_level_arg_enc)
-    : device_(device), cmd_buf_(cmd_buf), top_level_arg_enc_(top_level_arg_enc) {
+MetalCmdEncoder::MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_buf)
+    : device_(device), cmd_buf_(cmd_buf) {
   MTL4::ArgumentTableDescriptor* desc = MTL4::ArgumentTableDescriptor::alloc()->init();
   desc->setInitializeBindings(false);
   desc->setMaxBufferBindCount(10);
@@ -167,19 +171,25 @@ void MetalCmdEncoder::set_wind_order(rhi::WindOrder wind_order) {
   render_enc_->setFrontFacingWinding(mtl::util::convert(wind_order));
 }
 
-void MetalCmdEncoder::copy_buf_to_tex(rhi::BufferHandle src_buf, size_t src_offset,
-                                      size_t src_bytes_per_row, rhi::TextureHandle dst_tex) {
+void MetalCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
+                                          size_t src_bytes_per_row, rhi::TextureHandle dst_tex) {
   end_render_encoder();
   start_compute_encoder();
 
   auto* buf = device_->get_mtl_buf(src_buf);
   auto* tex = device_->get_mtl_tex(dst_tex);
+  ALWAYS_ASSERT(buf);
+  ALWAYS_ASSERT(tex);
   MTL::Size img_size = MTL::Size::Make(tex->width(), tex->height(), tex->depth());
+  ALWAYS_ASSERT(img_size.width * img_size.depth * img_size.height * 4 <=
+                device_->get_buf(src_buf)->size());
   compute_enc_->copyFromBuffer(buf, src_offset, src_bytes_per_row, 0, img_size, tex, 0, 0,
                                MTL::Origin::Make(0, 0, 0));
   compute_enc_->barrierAfterEncoderStages(MTL::StageBlit, MTL::StageBlit,
                                           MTL4::VisibilityOptionDevice);
-  compute_enc_->generateMipmaps(tex);
+  if (tex->mipmapLevelCount() > 1) {
+    compute_enc_->generateMipmaps(tex);
+  }
   compute_enc_->barrierAfterEncoderStages(MTL::StageBlit, MTL::StageBlit,
                                           MTL4::VisibilityOptionDevice);
 }
@@ -271,8 +281,6 @@ void MetalCmdEncoder::barrier(rhi::PipelineStage, rhi::AccessFlags, rhi::Pipelin
     compute_enc_->barrierAfterStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionDevice);
   } else if (render_enc_) {
     render_enc_->barrierAfterStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionDevice);
-    render_enc_->barrierAfterEncoderStages(MTL::StageAll, MTL::StageAll,
-                                           MTL4::VisibilityOptionDevice);
     render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll,
                                          MTL4::VisibilityOptionDevice);
   }
@@ -281,4 +289,17 @@ void MetalCmdEncoder::barrier(rhi::PipelineStage, rhi::AccessFlags, rhi::Pipelin
 void MetalCmdEncoder::draw_indexed_indirect(rhi::BufferHandle, size_t, size_t draw_cnt) {
   ASSERT(render_enc_);
   render_enc_->executeCommandsInBuffer(device_->main_icb_, NS::Range::Make(0, draw_cnt));
+}
+
+void MetalCmdEncoder::copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice,
+                                      size_t src_level, rhi::BufferHandle dst_buf,
+                                      size_t dst_offset) {
+  end_render_encoder();
+  start_compute_encoder();
+  auto* tex = device_->get_mtl_tex(src_tex);
+  auto* buf = device_->get_mtl_buf(dst_buf);
+  size_t bytes_per_row = tex->width() * 4;
+  compute_enc_->copyFromTexture(tex, src_slice, src_level, MTL::Origin::Make(0, 0, 0),
+                                MTL::Size::Make(tex->width(), tex->height(), tex->depth()), buf,
+                                dst_offset, bytes_per_row, 0);
 }

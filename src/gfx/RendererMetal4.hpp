@@ -96,7 +96,7 @@ class RendererMetal4 {
   std::optional<ScratchBufferPool> scratch_buffer_pool_;
 
   struct GPUTexUpload {
-    std::unique_ptr<void, void (*)(void*)> data;
+    void* data;
     rhi::TextureHandleHolder tex;
     uint32_t bytes_per_row;
   };
@@ -109,4 +109,6 @@ class RendererMetal4 {
 
   std::vector<rhi::SamplerHandleHolder> samplers_;
   [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandleHolder& buf) const;
+
+  rhi::TextureHandleHolder default_white_tex_;
 };

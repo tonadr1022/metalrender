@@ -6,6 +6,9 @@
 
 #include "bindless.hlsli"
 
+#define NEAREST_SAMPLER_IDX 0
+#define LINEAR_SAMPLER_IDX 1
+
 struct VOut {
     float4 pos : SV_Position;
     float2 uv : TEXCOORD0;
@@ -14,6 +17,7 @@ struct VOut {
 
 struct DrawID {
     uint did;
+    uint vert_id;
 };
 
 ConstantBuffer<DrawID> gDrawID : register(b1);
@@ -23,12 +27,11 @@ float3 rotate_quat(float3 v, float4 q) {
 }
 
 [RootSignature(ROOT_SIGNATURE)]
-VOut vert_main(uint vert_id : SV_VertexID, uint instance_id : SV_InstanceID) {
+VOut vert_main(uint vert_id : SV_VertexID) {
     StructuredBuffer<InstData> instance_data_buf = ResourceDescriptorHeap[instance_data_buf_idx];
     InstData instance_data = instance_data_buf[gDrawID.did];
-
     StructuredBuffer<DefaultVertex> v_buf = ResourceDescriptorHeap[vert_buf_idx];
-    DefaultVertex v = v_buf[vert_id];
+    DefaultVertex v = v_buf[vert_id + gDrawID.vert_id];
     VOut o;
     o.uv = v.uv;
     float3 pos = rotate_quat(instance_data.scale * v.pos.xyz, instance_data.rotation) + instance_data.translation;
@@ -37,15 +40,19 @@ VOut vert_main(uint vert_id : SV_VertexID, uint instance_id : SV_InstanceID) {
     return o;
 }
 
-#define UINT32_MAX 4294967295
-
 [RootSignature(ROOT_SIGNATURE)]
 float4 frag_main(VOut input) : SV_Target0 {
     StructuredBuffer<M4Material> material_buf = ResourceDescriptorHeap[mat_buf_idx];
     M4Material material = material_buf[input.material_id];
-    Texture2D albedo_tex = ResourceDescriptorHeap[material.albedo_tex_idx];
-    SamplerState samp = SamplerDescriptorHeap[0];
-    float4 albedo = albedo_tex.Sample(samp, input.uv);
+    SamplerState samp = SamplerDescriptorHeap[LINEAR_SAMPLER_IDX];
+    float4 albedo = float4(1.0,1.0,1.0,1.0);
+    if (material.albedo_tex_idx != 0) {
+        Texture2D albedo_tex = ResourceDescriptorHeap[material.albedo_tex_idx];
+        albedo = albedo_tex.Sample(samp, input.uv);
+    }
+    if (albedo.a < 0.5) {
+        discard;
+    }
     return float4(albedo.xyz , 1.0);
     
 }

@@ -4,7 +4,6 @@
 #include "../shader_core.h"
 
 struct M4Material {
-  // float4 color;
   uint albedo_tex_idx;
 };
 

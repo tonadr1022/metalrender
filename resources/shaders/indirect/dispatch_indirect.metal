@@ -23,9 +23,9 @@ struct Args2 {
 struct TLAB_Layout {
     packed_uint4 pad[10]; // 160 bytes
     uint draw_id;
+    uint vertex_id_base;
 };
 
-static_assert(sizeof(TLAB_Layout) == 164);
 
 kernel void comp_main(const device uint8_t* pc [[buffer(0)]],
                       constant Args2& args2 [[buffer(1)]],
@@ -47,6 +47,7 @@ kernel void comp_main(const device uint8_t* pc [[buffer(0)]],
     const device IndexedIndirectDrawCmd& cmd = in_cmds[gid];
     device TLAB_Layout* tlab_lay = reinterpret_cast<device TLAB_Layout*>(out_ptr);
     tlab_lay->draw_id = cmd.first_instance;
+    tlab_lay->vertex_id_base = cmd.vertex_offset / sizeof(DefaultVertex);
 
     render_command ren_cmd(args.cmd_buf, gid);
     ren_cmd.reset();
@@ -63,5 +64,5 @@ kernel void comp_main(const device uint8_t* pc [[buffer(0)]],
                                 1,
                                 cmd.vertex_offset,
                                 // TODO: when culling, this needs updating, ie atomic
-                                0);
+                                cmd.first_instance);
 }

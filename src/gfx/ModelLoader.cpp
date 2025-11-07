@@ -145,9 +145,12 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
   }
 
   auto &texture_uploads = out_load_result.texture_uploads;
-  texture_uploads.reserve(gltf->images_count);
+  texture_uploads.resize(gltf->images_count);
 
   auto load_img = [&](uint32_t gltf_img_i) -> uint32_t {
+    if (texture_uploads[gltf_img_i].data) {
+      return gltf_img_i;
+    }
     const cgltf_image &img = gltf->images[gltf_img_i];
     if (!img.buffer_view) {
       int w{}, h{}, comp{};
@@ -155,20 +158,18 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
       uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
       const uint32_t mip_levels = math::get_mip_levels(w, h);
       const rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
-                                  .storage_mode = rhi::StorageMode::GPUOnly,
+                                  .storage_mode = rhi::StorageMode::Default,
+                                  .usage = rhi::TextureUsageShaderRead,
                                   .dims = glm::uvec3{w, h, 1},
                                   .mip_levels = mip_levels,
                                   .array_length = 1,
                                   .bindless = true};
-      std::unique_ptr<void, void (*)(void *)> data_ptr{reinterpret_cast<void *>(data),
-                                                       stbi_image_free};
-      auto upload_idx = texture_uploads.size();
-      texture_uploads.emplace_back(TextureUpload{
-          .data = std::move(data_ptr), .desc = desc, .bytes_per_row = desc.dims.x * 4});
+      texture_uploads[gltf_img_i] =
+          TextureUpload{.data = data, .desc = desc, .bytes_per_row = desc.dims.x * 4};
       if (!data) {
         assert(0);
       }
-      return upload_idx;
+      return gltf_img_i;
     }
 
     assert(0 && "need to handle yet");
@@ -179,24 +180,37 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
   materials.reserve(gltf->materials_count);
   for (size_t material_i = 0; material_i < gltf->materials_count; material_i++) {
     const cgltf_material *gltf_mat = &gltf->materials[material_i];
+    if (!gltf_mat) {
+      ALWAYS_ASSERT(0);
+    }
     Material material{};
     material.albedo_factors.r = gltf_mat->pbr_metallic_roughness.base_color_factor[0];
     material.albedo_factors.g = gltf_mat->pbr_metallic_roughness.base_color_factor[1];
     material.albedo_factors.b = gltf_mat->pbr_metallic_roughness.base_color_factor[2];
     material.albedo_factors.a = gltf_mat->pbr_metallic_roughness.base_color_factor[3];
+    material.albedo_factors.a = 1.0;
 
-    auto set_and_load_material_img = [&gltf, &load_img](const cgltf_texture_view *tex_view,
-                                                        uint32_t &result_tex_id) {
+    auto set_and_load_material_img = [&gltf, &load_img, &texture_uploads](
+                                         const cgltf_texture_view *tex_view,
+                                         uint32_t &result_tex_id) {
       if (!tex_view || !tex_view->texture || !tex_view->texture->image) {
         return;
       }
       const size_t gltf_image_i = tex_view->texture->image - gltf->images;
-      result_tex_id = load_img(gltf_image_i);
+      if (texture_uploads[gltf_image_i].data) {
+        result_tex_id = gltf_image_i;
+      } else {
+        result_tex_id = load_img(gltf_image_i);
+      }
     };
 
     set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.base_color_texture,
                               material.albedo_tex);
     set_and_load_material_img(&gltf_mat->normal_texture, material.normal_tex);
+    if (gltf_mat->has_pbr_metallic_roughness) {
+      uint32_t tx{};
+      set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.metallic_roughness_texture, tx);
+    }
 
     materials.push_back(material);
   }

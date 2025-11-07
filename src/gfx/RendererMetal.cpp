@@ -169,7 +169,7 @@ void RendererMetal::init(const CreateInfo &cinfo) {
     auto *data = reinterpret_cast<uint64_t *>(malloc(sizeof(uint64_t)));
     *data = 0xFFFFFFFF;
     std::unique_ptr<void, void (*)(void *)> data_ptr{data, free};
-    pending_texture_uploads_.push_back(GPUTexUpload{.data = std::move(data_ptr),
+    pending_texture_uploads_.push_back(GPUTexUpload{.data = data,
                                                     .tex = std::move(default_white_tex_),
                                                     .dims = glm::uvec3{1, 1, 1},
                                                     .bytes_per_row = 4});
@@ -337,7 +337,7 @@ bool RendererMetal::load_model(const std::filesystem::path &path, const glm::mat
 
   pending_texture_uploads_.reserve(pending_texture_uploads_.size() + result.texture_uploads.size());
   for (auto &u : result.texture_uploads) {
-    pending_texture_uploads_.push_back(GPUTexUpload{.data = std::move(u.data),
+    pending_texture_uploads_.push_back(GPUTexUpload{.data = u.data,
                                                     .tex = device_->create_tex_h(u.desc),
                                                     .dims = u.desc.dims,
                                                     .bytes_per_row = u.bytes_per_row});
@@ -682,7 +682,7 @@ void RendererMetal::flush_pending_texture_uploads() {
       const auto src_img_size = static_cast<size_t>(upload.bytes_per_row) * upload.dims.y;
       MTL::Buffer *upload_buf =
           raw_device_->newBuffer(src_img_size, MTL::ResourceStorageModeShared);
-      memcpy(upload_buf->contents(), upload.data.get(), src_img_size);
+      memcpy(upload_buf->contents(), upload.data, src_img_size);
       const MTL::Origin origin = MTL::Origin::Make(0, 0, 0);
       const MTL::Size img_size = MTL::Size::Make(upload.dims.x, upload.dims.y, upload.dims.z);
       auto *tex = reinterpret_cast<MetalTexture *>(device_->get_tex(upload.tex));

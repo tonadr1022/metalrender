@@ -13,7 +13,6 @@
 #include "MetalUtil.hpp"
 #include "WindowApple.hpp"
 #include "core/EAssert.hpp"
-#include "core/Util.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/Pipeline.hpp"
 #include "gfx/RendererTypes.hpp"
@@ -143,6 +142,8 @@ void MetalDevice::init(Window* window, std::filesystem::path shader_lib_dir) {
 
     desc->release();
   }
+
+  shared_event_ = device_->newSharedEvent();
 }
 
 void MetalDevice::shutdown() {
@@ -172,6 +173,7 @@ rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
     IRDescriptorTableSetBuffer(&pResourceTable[idx], mtl_buf->gpuAddress(), metadata);
   }
   main_res_set_->addAllocation(mtl_buf);
+  main_res_set_->commit();
 
   return buffer_pool_.alloc(desc, mtl_buf, idx);
 }
@@ -402,8 +404,7 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
     curr_cmd_list_idx_++;
     return ret;
   }
-  cmd_lists_.emplace_back(
-      std::make_unique<MetalCmdEncoder>(this, main_cmd_buf_, top_level_arg_enc_));
+  cmd_lists_.emplace_back(std::make_unique<MetalCmdEncoder>(this, main_cmd_buf_));
   curr_cmd_list_idx_++;
   return cmd_lists_.back().get();
 }
@@ -412,6 +413,15 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   main_res_set_->commit();
   frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
   curr_cmd_list_idx_ = 0;
+  {
+    // wait on shared event
+    if (frame_num_ > info_.frames_in_flight) {
+      auto prev_frame = frame_num_ - info_.frames_in_flight;
+      if (!shared_event_->waitUntilSignaledValue(prev_frame, 1000ull * 1000)) {
+        LERROR("No signaled value from shared event for previous frame: {}", prev_frame);
+      }
+    }
+  }
   push_constant_allocator_->reset(frame_idx());
   test_allocator_->reset(frame_idx());
   arg_buf_allocator_->reset(frame_idx());
@@ -445,53 +455,18 @@ void MetalDevice::submit_frame() {
   main_cmd_q_->signalDrawable(curr_drawable_);
 
   curr_drawable_->present();
-
+  main_cmd_q_->signalEvent(shared_event_, frame_num_);
   frame_num_++;
 }
 
 void MetalDevice::init_bindless() {
-  auto create_descriptor_table = [this](rhi::BufferHandleHolder* out_buf, size_t count,
-                                        bool read_only = false) -> MTL::ArgumentEncoder* {
+  auto create_descriptor_table = [this](rhi::BufferHandleHolder* out_buf, size_t count) {
     *out_buf = create_buf_h(
         rhi::BufferDesc{.size = sizeof(IRDescriptorTableEntry) * count, .bindless = false});
-    MTL::ArgumentDescriptor* arg0 = MTL::ArgumentDescriptor::alloc()->init();
-    arg0->setIndex(0);
-    arg0->setAccess(read_only ? MTL::ArgumentAccessReadOnly : MTL::ArgumentAccessReadWrite);
-    arg0->setArrayLength(count);
-    arg0->setDataType(MTL::DataTypePointer);
-
-    NS::Object* args_arr[] = {arg0};
-    const NS::Array* args = NS::Array::array(args_arr, ARRAY_SIZE(args_arr));
-    auto* arg_enc = device_->newArgumentEncoder(args);
-    arg_enc->setArgumentBuffer(get_mtl_buf(*out_buf), 0);
-    return arg_enc;
   };
 
-  resource_table_arg_enc_ =
-      create_descriptor_table(&resource_descriptor_table_, k_max_buffers + k_max_textures);
-  sampler_table_arg_enc_ =
-      create_descriptor_table(&sampler_descriptor_table_, k_max_samplers, true);
-
-  {
-    // push constant buffer
-    MTL::ArgumentDescriptor* arg0 = MTL::ArgumentDescriptor::alloc()->init();
-    arg0->setIndex(0);
-    arg0->setAccess(MTL::ArgumentAccessReadOnly);
-    arg0->setDataType(MTL::DataTypePointer);
-
-    // top level arg buffer
-    MTL::ArgumentDescriptor* arg1 = MTL::ArgumentDescriptor::alloc()->init();
-    arg1->setIndex(1);
-    arg1->setAccess(MTL::ArgumentAccessReadWrite);
-    arg1->setDataType(MTL::DataTypePointer);
-
-    NS::Object* args_arr[] = {arg0, arg1};
-    const NS::Array* args = NS::Array::array(args_arr, ARRAY_SIZE(args_arr));
-    top_level_arg_enc_ = device_->newArgumentEncoder(args);
-    for (auto& i : args_arr) {
-      i->release();
-    }
-  }
+  create_descriptor_table(&resource_descriptor_table_, k_max_buffers + k_max_textures);
+  create_descriptor_table(&sampler_descriptor_table_, k_max_samplers);
 }
 
 void MetalDevice::copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf,
@@ -502,9 +477,9 @@ void MetalDevice::copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle b
     LERROR("[copy_to_buffer]: Buffer not found");
     return;
   }
+  ASSERT(buffer->size() - dst_offset >= src_size);
   // TODO: don't assume it's shared on metal
   memcpy((uint8_t*)buffer->contents() + dst_offset, src, src_size);
-  buffer->contents();
 }
 
 MTL::ComputePipelineState* MetalDevice::compile_mtl_compute_pipeline(

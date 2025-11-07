@@ -28,8 +28,7 @@ struct TLAB {
 class MetalCmdEncoder : public rhi::CmdEncoder {
  public:
   MetalCmdEncoder() = default;
-  MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_buf,
-                  MTL::ArgumentEncoder* top_level_arg_enc);
+  MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_buf);
 
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
   void end_encoding() override;
@@ -45,8 +44,10 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   void set_wind_order(rhi::WindOrder wind_order) override;
   void set_cull_mode(rhi::CullMode cull_mode) override;
   // TODO: will this work with vulkanisms
-  void copy_buf_to_tex(rhi::BufferHandle src_buf, size_t src_offset, size_t src_bytes_per_row,
-                       rhi::TextureHandle dst_tex) override;
+  void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset, size_t src_bytes_per_row,
+                           rhi::TextureHandle dst_tex) override;
+  void copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice, size_t src_level,
+                       rhi::BufferHandle dst_buf, size_t dst_offset) override;
 
   // must call push_constants AND bind_index_buf first
   void prepare_indexed_indirect_draws(rhi::BufferHandle indirect_buf, size_t offset,
@@ -67,7 +68,6 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   MTL4::CommandBuffer* cmd_buf_{};
   MTL4::RenderCommandEncoder* render_enc_{};
   MTL4::ComputeCommandEncoder* compute_enc_{};
-  MTL::ArgumentEncoder* top_level_arg_enc_{};
   MTL4::ArgumentTable* arg_table_{};
   // MTL::GPUAddress tlab_buf_{};
   // size_t tlab_size_{};

@@ -19,7 +19,7 @@ enum class CPUTextureLoadType : uint8_t {
 };
 
 struct TextureUpload {
-  std::unique_ptr<void, void (*)(void *)> data;
+  void *data{};
   rhi::TextureDesc desc;
   uint32_t bytes_per_row;
 };

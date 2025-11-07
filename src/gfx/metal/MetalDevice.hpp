@@ -120,7 +120,7 @@ class MetalDevice : public rhi::Device {
   Info info_{};
   std::filesystem::path metal_shader_dir_;
   MTL4::Compiler* shader_compiler_{};
-  IndexAllocator resource_desc_heap_allocator_{k_max_textures};
+  IndexAllocator resource_desc_heap_allocator_{k_max_textures + k_max_buffers};
   IndexAllocator sampler_desc_heap_allocator_{k_max_samplers};
   std::array<MTL4::CommandAllocator*, k_max_frames_in_flight> cmd_allocators_{};
   std::vector<std::unique_ptr<MetalCmdEncoder>> cmd_lists_;
@@ -135,7 +135,6 @@ class MetalDevice : public rhi::Device {
   CA::MetalLayer* metal_layer_{};
   CA::MetalDrawable* curr_drawable_{};
   NS::AutoreleasePool* frame_ar_pool_{};
-  MTL::ArgumentEncoder* top_level_arg_enc_{};
   MTL::ResidencySet* main_res_set_{};
 
  public:  // TODO: fix
@@ -180,8 +179,7 @@ class MetalDevice : public rhi::Device {
 
  private:
   std::filesystem::path shader_lib_dir_;
-  MTL::ArgumentEncoder* resource_table_arg_enc_{};
-  MTL::ArgumentEncoder* sampler_table_arg_enc_{};
+  MTL::SharedEvent* shared_event_;
 
   // TODO: no public members pls
   // public to other implementation classes

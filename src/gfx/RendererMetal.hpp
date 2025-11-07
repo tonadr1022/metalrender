@@ -249,7 +249,7 @@ class RendererMetal {
 
  private:
   struct GPUTexUpload {
-    std::unique_ptr<void, void (*)(void*)> data;
+    void* data;
     rhi::TextureHandleHolder tex;
     glm::uvec3 dims;
     uint32_t bytes_per_row;

@@ -79,8 +79,10 @@ class CmdEncoder {
   virtual void end_encoding() = 0;
   virtual void set_viewport(glm::uvec2 min, glm::uvec2 extent) = 0;
 
-  virtual void copy_buf_to_tex(rhi::BufferHandle src_buf, size_t src_offset,
-                               size_t src_bytes_per_row, rhi::TextureHandle dst_tex) = 0;
+  virtual void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
+                                   size_t src_bytes_per_row, rhi::TextureHandle dst_tex) = 0;
+  virtual void copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice, size_t src_level,
+                               rhi::BufferHandle dst_buf, size_t dst_offset) = 0;
   // virtual void bind_index_buf(rhi::BufferHandle index_buf, size_t offset) = 0;
   // virtual void bind_index_buf(rhi::BufferHandle index_buf) { bind_index_buf(index_buf, 0); }
 
