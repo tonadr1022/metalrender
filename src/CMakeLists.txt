@@ -37,7 +37,7 @@ if(VULKAN_BACKEND_ALLOWED)
     target_compile_definitions(${target_name} PRIVATE VULKAN_BACKEND_ALLOWED=1)
 endif()
 
-if(DEFINED APPLE)
+if(BUILD_METAL)
     target_sources(${target_name} PRIVATE
         gfx/metal/MetalCpp.cpp
         gfx/metal/MetalDevice.cpp
@@ -75,8 +75,15 @@ target_link_libraries(${target_name} PRIVATE
     concurrentqueue
 )
 
-if (DEFINED APPLE)
+if (BUILD_VULKAN)
     target_link_libraries(${target_name} PRIVATE
-    metal_irconverter_runtime
-)
+        volk
+        GPUOpen::VulkanMemoryAllocator
+    )
+endif()
+
+if (BUILD_METAL)
+    target_link_libraries(${target_name} PRIVATE
+        metal_irconverter_runtime
+    )
 endif()

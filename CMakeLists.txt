@@ -6,6 +6,18 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 project(metalrender VERSION 0.1 LANGUAGES C CXX OBJC OBJCXX)
 
+if (DEFINED APPLE)
+    set(BUILD_METAL ON)
+else()
+    set(BUILD_METAL OFF)
+endif()
+
+option(BUILD_VULKAN "Build Vulkan" ON)
+if (BUILD_VULKAN)
+    set(BUILD_VULKAN ON)
+endif()
+
+
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_SOURCE_DIR}/cmake")
 
 include(Warnings)

@@ -1,8 +1,16 @@
-add_subdirectory(metal-cpp)
+if (BUILD_METAL)
+    add_subdirectory(metal-cpp)
+    add_subdirectory(metal_irconverter_runtime)
+endif()
+
+if (BUILD_VULKAN)
+    add_subdirectory(VulkanMemoryAllocator)
+    add_subdirectory(volk)
+endif()
+
 add_subdirectory(glfw)
 add_subdirectory(glm)
 add_subdirectory(concurrentqueue)
-add_subdirectory(metal_irconverter_runtime)
 
 set(FASTNOISE2_NOISETOOL OFF CACHE BOOL "Build Noise Tool" FORCE)
 add_subdirectory(FastNoise2)
@@ -17,19 +25,26 @@ add_library(lib_imgui STATIC
     imgui/imgui_widgets.cpp
     imgui/imgui_tables.cpp
     imgui/misc/cpp/imgui_stdlib.cpp
-    imgui/backends/imgui_impl_glfw.cpp
-    imgui/backends/imgui_impl_metal.mm)
-
-set_source_files_properties(
-    imgui/backends/imgui_impl_metal.mm
-    PROPERTIES
-    COMPILE_DEFINITIONS "IMGUI_IMPL_METAL_CPP"
-    COMPILE_FLAGS "-x objective-c++"
 )
 
-# set_source_files_properties(imgui/backends/imgui_impl_metal.mm PROPERTIES )
+if (BUILD_METAL)
+    target_sources(lib_imgui PRIVATE
+        imgui/backends/imgui_impl_glfw.cpp
+        imgui/backends/imgui_impl_metal.mm
+    )
 
-target_link_libraries(lib_imgui PUBLIC METAL_CPP glfw)
+    set_source_files_properties(
+        imgui/backends/imgui_impl_metal.mm
+        PROPERTIES
+        COMPILE_DEFINITIONS "IMGUI_IMPL_METAL_CPP"
+        COMPILE_FLAGS "-x objective-c++"
+    )
+    target_link_libraries(lib_imgui PUBLIC METAL_CPP)
+endif()
+
+
+target_link_libraries(lib_imgui PUBLIC glfw)
+
 
 add_subdirectory(OffsetAllocator)
 
