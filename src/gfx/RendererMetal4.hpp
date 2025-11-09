@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Metal/Metal.hpp>
 #include <filesystem>
 #include <functional>
 
@@ -12,7 +11,6 @@
 #include "gfx/RendererTypes.hpp"
 #include "hlsl/shared_indirect.h"
 
-class MetalDevice;
 class WindowApple;
 
 namespace rhi {
@@ -68,7 +66,7 @@ class RendererMetal4 {
   std::vector<IndexedIndirectDrawCmd> cmds;
   std::vector<InstData> instance_datas;
   struct CreateInfo {
-    MetalDevice* device;
+    rhi::Device* device;
     WindowApple* window;
     std::filesystem::path resource_dir;
     std::function<void()> render_imgui_callback;
@@ -80,7 +78,7 @@ class RendererMetal4 {
   ScratchBufferPool& get_scratch_buffer_pool() { return scratch_buffer_pool_.value(); }
 
  private:
-  MetalDevice* device_{};
+  rhi::Device* device_{};
   WindowApple* window_{};
   rhi::PipelineHandleHolder test2_pso_;
   rhi::BufferHandleHolder all_material_buf_;

@@ -75,11 +75,11 @@ MTL::SamplerMipFilter convert_mip_filter(rhi::FilterMode m) {
 
 }  // namespace
 
-void MetalDevice::init(Window* window, std::filesystem::path shader_lib_dir) {
-  shader_lib_dir_ = std::move(shader_lib_dir);
+void MetalDevice::init(const InitInfo& init_info) {
+  shader_lib_dir_ = init_info.shader_lib_dir;
   shader_lib_dir_ /= "metal";
 
-  auto* win = dynamic_cast<WindowApple*>(window);
+  auto* win = dynamic_cast<WindowApple*>(init_info.window);
   if (!win) {
     LERROR("invalid window pointer");
     return;
@@ -347,7 +347,7 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
     LERROR("Failed to create render pipeline {}", mtl::util::get_err_string(err));
   }
 
-  auto handle = pipeline_pool_.alloc(MetalPipeline{.render_pso = result});
+  auto handle = pipeline_pool_.alloc(MetalPipeline{result, nullptr});
 
   return handle;
 }
@@ -377,11 +377,6 @@ rhi::SamplerHandle MetalDevice::create_sampler(const rhi::SamplerDesc& desc) {
     IRDescriptorTableSetSampler(&resource_table[bindless_idx], sampler, 0.0);
   }
   return sampler_pool_.alloc(desc, sampler, bindless_idx);
-}
-
-rhi::PipelineHandleHolder MetalDevice::create_graphics_pipeline_h(
-    const rhi::GraphicsPipelineCreateInfo& cinfo) {
-  return rhi::PipelineHandleHolder{create_graphics_pipeline(cinfo), this};
 }
 
 MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path) {

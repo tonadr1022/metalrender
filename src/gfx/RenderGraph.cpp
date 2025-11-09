@@ -74,6 +74,11 @@ RGPass& RenderGraph::add_pass(const std::string& name) {
 }
 
 void RenderGraph::execute() {
+  struct ResourceState {};
+
+  std::vector<ResourceState> tex_states_(tex_usages_.size());
+  std::vector<ResourceState> buf_states_(buf_usages_.size());
+
   for (auto pass_i : pass_stack_) {
     rhi::CmdEncoder* enc = device_->begin_command_list();
     auto& pass = passes_[pass_i];
@@ -282,6 +287,7 @@ void RenderGraph::find_deps_recursive(uint32_t pass_i, uint32_t stack_size) {
     }
   }
 }
+
 const char* to_string(RGResourceType type) {
   switch (type) {
     case gfx::RGResourceType::Texture:

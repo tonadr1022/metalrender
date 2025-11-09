@@ -5,7 +5,6 @@
 #include "WindowApple.hpp"
 #include "gfx/RendererMetal4.hpp"
 #include "gfx/ResourceManager.hpp"
-#include "gfx/metal/MetalDevice.hpp"
 #include "voxels/VoxelRenderer.hpp"
 #include "voxels/VoxelWorld.hpp"
 
@@ -33,7 +32,7 @@ struct App {
   Config config_;
   std::filesystem::path resource_dir_;
   std::filesystem::path shader_dir_;
-  std::unique_ptr<MetalDevice> device_;
+  std::unique_ptr<rhi::Device> device_;
   std::unique_ptr<WindowApple> window_;
   Camera camera_;
   std::vector<ModelHandle> models_;

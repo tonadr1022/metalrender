@@ -7,11 +7,9 @@
 #include <glm/mat4x4.hpp>
 #include <span>
 
-#include "Config.hpp"
 #include "GFXTypes.hpp"
 #include "ModelLoader.hpp"
 #include "RendererTypes.hpp"
-#include "core/BitUtil.hpp"
 #include "core/Handle.hpp"
 #include "core/Pool.hpp"
 #include "gfx/GPUFrameAllocator.hpp"

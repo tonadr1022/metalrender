@@ -99,6 +99,10 @@ struct GraphicsPipelineCreateInfo {
   std::string name;
 };
 
-class Pipeline {};
+class Pipeline {
+ public:
+  Pipeline() = default;
+  virtual ~Pipeline() = default;
+};
 
 }  // namespace rhi

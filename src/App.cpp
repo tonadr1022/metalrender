@@ -35,9 +35,10 @@ App::App() {
   resource_dir_ = get_resource_dir();
   shader_dir_ = resource_dir_ / "shaders";
   load_config();
-  device_ = std::make_unique<MetalDevice>();
+  device_ = rhi::create_device(rhi::GfxAPI::Metal);
+  std::make_unique<MetalDevice>();
   window_ = std::make_unique<WindowApple>();
-  device_->init(window_.get(), resource_dir_ / "shader_out");
+  device_->init({.window = window_.get(), .shader_lib_dir = resource_dir_ / "shader_out"});
 
   window_->init(
       device_.get(), [this](int key, int action, int mods) { on_key_event(key, action, mods); },

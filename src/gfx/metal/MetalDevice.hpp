@@ -44,38 +44,22 @@ class MetalDevice;
 
 class MetalDevice : public rhi::Device {
  public:
-  void init(Window* window, std::filesystem::path shader_lib_dir);
+  using rhi::Device::get_buf;
+  using rhi::Device::get_pipeline;
+  using rhi::Device::get_tex;
   void shutdown() override;
+  void init(const InitInfo& init_info) override;
   [[nodiscard]] void* get_native_device() const override { return device_; }
 
   [[nodiscard]] MTL::Device* get_device() const { return device_; }
 
   rhi::BufferHandle create_buf(const rhi::BufferDesc& desc) override;
-  rhi::BufferHandleHolder create_buf_h(const rhi::BufferDesc& desc) override {
-    return rhi::BufferHandleHolder{create_buf(desc), this};
-  }
-  rhi::Buffer* get_buf(const rhi::BufferHandleHolder& handle) override {
-    return buffer_pool_.get(handle.handle);
-  }
   rhi::Buffer* get_buf(rhi::BufferHandle handle) override { return buffer_pool_.get(handle); }
 
   rhi::TextureHandle create_tex(const rhi::TextureDesc& desc) override;
-  rhi::TextureHandleHolder create_tex_h(const rhi::TextureDesc& desc) override {
-    return rhi::TextureHandleHolder{create_tex(desc), this};
-  }
   rhi::Texture* get_tex(rhi::TextureHandle handle) override { return texture_pool_.get(handle); }
-
-  rhi::Texture* get_tex(const rhi::TextureHandleHolder& handle) override {
-    return get_tex(handle.handle);
-  }
   rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) override;
-  rhi::SamplerHandleHolder create_sampler_h(const rhi::SamplerDesc& desc) override {
-    return rhi::SamplerHandleHolder{create_sampler(desc), this};
-  }
 
-  rhi::Pipeline* get_pipeline(const rhi::PipelineHandleHolder& handle) override {
-    return pipeline_pool_.get(handle.handle);
-  }
   rhi::Pipeline* get_pipeline(rhi::PipelineHandle handle) override {
     return pipeline_pool_.get(handle);
   }
@@ -86,8 +70,6 @@ class MetalDevice : public rhi::Device {
   void destroy(rhi::SamplerHandle handle) override;
 
   rhi::PipelineHandle create_graphics_pipeline(
-      const rhi::GraphicsPipelineCreateInfo& cinfo) override;
-  rhi::PipelineHandleHolder create_graphics_pipeline_h(
       const rhi::GraphicsPipelineCreateInfo& cinfo) override;
 
   void submit_frame() override;
@@ -101,8 +83,8 @@ class MetalDevice : public rhi::Device {
   [[nodiscard]] size_t frame_num() const { return frame_num_; }
   [[nodiscard]] size_t frame_idx() const { return frame_num_ % info_.frames_in_flight; }
 
-  rhi::Swapchain& get_swapchain() { return swapchain_; }
-  const rhi::Swapchain& get_swapchain() const { return swapchain_; }
+  rhi::Swapchain& get_swapchain() override { return swapchain_; }
+  const rhi::Swapchain& get_swapchain() const override { return swapchain_; }
 
   void set_metal_layer(CA::MetalLayer* layer) { metal_layer_ = layer; }
   void init_bindless();
@@ -197,7 +179,7 @@ class MetalDevice : public rhi::Device {
   rhi::BufferHandleHolder sampler_descriptor_table_;
 
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
-    return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();
+    return reinterpret_cast<MetalBuffer*>(get_buf(handle.handle))->buffer();
   }
   MTL::Buffer* get_mtl_buf(rhi::BufferHandle handle) {
     return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();
