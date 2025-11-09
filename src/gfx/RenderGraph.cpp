@@ -3,6 +3,7 @@
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
 #include "gfx/CmdEncoder.hpp"
+#include "gfx/Device.hpp"
 
 namespace gfx {
 
@@ -68,17 +69,33 @@ RGPass::RGPass(std::string name, RenderGraph* rg, uint32_t pass_i)
 
 RGPass& RenderGraph::add_pass(const std::string& name) {
   auto idx = static_cast<uint32_t>(passes_.size());
-  passes_.emplace_back(RGPass{name, this, idx});
+  passes_.emplace_back(name, this, idx);
   return passes_.back();
 }
 
-void RenderGraph::execute() {}
+void RenderGraph::execute() {
+  for (auto pass_i : pass_stack_) {
+    rhi::CmdEncoder* enc = device_->begin_command_list();
+    auto& pass = passes_[pass_i];
+    pass.get_execute_fn()(enc);
+    enc->end_encoding();
+  }
+  {
+    passes_.clear();
+  }
+}
 
-void RenderGraph::reset() { passes_.clear(); }
+void RenderGraph::reset() {}
 
 void RenderGraph::bake(bool verbose) {
   if (verbose) {
     LINFO("//////////// Baking Render Graph ////////////");
+  }
+  {
+    sink_passes_.clear();
+    pass_dependencies_.clear();
+    intermed_pass_visited_.clear();
+    pass_stack_.clear();
   }
 
   // find sink nodes, ie nodes that don't write to anything
@@ -87,11 +104,16 @@ void RenderGraph::bake(bool verbose) {
   for (size_t pass_i = 0; pass_i < passes_.size(); pass_i++) {
     auto& pass = passes_[pass_i];
     if (pass.get_resource_writes().empty()) {
-      ALWAYS_ASSERT((pass.get_resource_reads().size() || pass.get_resource_writes().size()) &&
-                    "Pass must have at least one read or write");
+      if (pass.get_resource_writes().empty() && pass.get_resource_reads().empty()) {
+        LCRITICAL("Pass does not read or write to a resource: {}", pass.get_name());
+        exit(1);
+      }
       sink_passes_.emplace_back(pass_i);
     }
-    ASSERT(pass.execute_fn_);
+    if (!pass.get_execute_fn()) {
+      LCRITICAL("No execute fn set for pass {}", pass.get_name());
+      exit(1);
+    }
   }
 
   // traverse pass dependencies
@@ -115,7 +137,7 @@ void RenderGraph::bake(bool verbose) {
   if (verbose) {
     LINFO("Pass Order:");
     for (auto pass_i : pass_stack_) {
-      LINFO("\t{}", passes_[pass_i].name_);
+      LINFO("\t{}", passes_[pass_i].get_name());
     }
     LINFO("");
   }
@@ -124,7 +146,10 @@ void RenderGraph::bake(bool verbose) {
   }
 }
 
-void RenderGraph::init() { passes_.reserve(200); }
+void RenderGraph::init(rhi::Device* device) {
+  device_ = device;
+  passes_.reserve(200);
+}
 
 RGResourceHandle RGPass::add(const std::string& name, AttachmentInfo att_info, RGAccess access) {
   assert_rg_access_valid(access);
@@ -133,12 +158,53 @@ RGResourceHandle RGPass::add(const std::string& name, AttachmentInfo att_info, R
     resource_reads_.push_back(handle);
   }
   if (access & AnyWrite) {
-    ALWAYS_ASSERT((!(access & AnyRead)) &&
-                  "Cannot have a read and write access for single resource at single usage");
     resource_writes_.push_back(handle);
   }
 
   return handle;
+}
+
+RGResourceHandle RGPass::add(rhi::TextureHandle tex_handle, RGAccess access) {
+  assert_rg_access_valid(access);
+  RGResourceHandle resource_handle = rg_->add_tex_usage(tex_handle, access, *this);
+  if (access & AnyRead) {
+    resource_reads_.push_back(resource_handle);
+  }
+  if (access & AnyWrite) {
+    resource_writes_.push_back(resource_handle);
+  }
+
+  return resource_handle;
+}
+
+RGResourceHandle RenderGraph::add_tex_usage(rhi::TextureHandle tex_handle, RGAccess access,
+                                            RGPass& pass) {
+  rhi::AccessFlags access_bits{};
+  rhi::PipelineStage stage_bits{};
+  convert_rg_access(access, access_bits, stage_bits);
+  RGResourceHandle resource_handle;
+  auto resource_handle_it = tex_handle_to_handle_.find(tex_handle.to64());
+  if (resource_handle_it != tex_handle_to_handle_.end()) {
+    resource_handle = resource_handle_it->second;
+  } else {
+    resource_handle = {.idx = static_cast<uint32_t>(tex_usages_.size()),
+                       .type = RGResourceType::Texture};
+    TextureUsage tex_use{.handle = tex_handle};
+    emplace_back_tex_usage(tex_use);
+    tex_handle_to_handle_.emplace(tex_handle.to64(), resource_handle);
+  }
+
+  auto* usage = get_tex_usage(resource_handle);
+  usage->accesses |= access_bits;
+  usage->stages |= stage_bits;
+
+  if (access & AnyRead) {
+    add_resource_to_pass_reads(resource_handle, pass);
+  }
+  if (access & AnyWrite) {
+    add_resource_to_pass_writes(resource_handle, pass);
+  }
+  return resource_handle;
 }
 
 RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
@@ -224,4 +290,5 @@ const char* to_string(RGResourceType type) {
       return "Buffer";
   }
 }
+
 }  // namespace gfx

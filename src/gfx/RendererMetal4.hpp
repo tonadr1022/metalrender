@@ -116,7 +116,7 @@ class RendererMetal4 {
   [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandleHolder& buf) const;
 
   rhi::TextureHandleHolder default_white_tex_;
-  void add_render_graph_passes();
+  void add_render_graph_passes(const RenderArgs& args);
 };
 
 }  // namespace gfx

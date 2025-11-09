@@ -7,7 +7,7 @@
 
 namespace gfx {
 
-using ExecuteFn = std::function<void()>;
+using ExecuteFn = std::function<void(rhi::CmdEncoder* enc)>;
 
 class RenderGraph;
 
@@ -62,11 +62,14 @@ struct AttachmentInfo {
 struct BufferInfo {
   size_t size;
 };
+
 class RGPass {
  public:
   RGPass() = default;
+  RGPass(std::string name, RenderGraph* rg, uint32_t pass_i);
 
   RGResourceHandle add(const std::string& name, AttachmentInfo att_info, RGAccess access);
+  RGResourceHandle add(rhi::TextureHandle tex_handle, RGAccess access);
 
   RGResourceHandle use_buf(BufferInfo, RGAccess) { return {}; }
 
@@ -78,21 +81,23 @@ class RGPass {
   }
   [[nodiscard]] uint32_t get_idx() const { return pass_i_; }
   void set_execute_fn(auto&& f) { execute_fn_ = f; }
+  [[nodiscard]] const std::string& get_name() const { return name_; }
+  [[nodiscard]] const ExecuteFn& get_execute_fn() const { return execute_fn_; }
 
  private:
   std::vector<RGResourceHandle> resource_reads_;
   std::vector<RGResourceHandle> resource_writes_;
-  RGPass(std::string name, RenderGraph* rg, uint32_t pass_i);
-  friend class RenderGraph;
   ExecuteFn execute_fn_;
   RenderGraph* rg_;
   uint32_t pass_i_{};
-  std::string name_;
+  const std::string name_;
 };
 
 class RenderGraph {
  public:
-  void init();
+  void init(rhi::Device* device);
+  void depend_passes(RGPass& pre_pass, RGPass& post_pass, rhi::AccessFlags access,
+                     rhi::PipelineStage stage);
 
   void bake(bool verbose = false);
 
@@ -114,6 +119,8 @@ class RenderGraph {
   RGResourceHandle add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                  RGAccess access, RGPass& pass);
 
+  RGResourceHandle add_tex_usage(rhi::TextureHandle handle, RGAccess access, RGPass& pass);
+
  private:
   struct ResourceUsage {
     rhi::AccessFlagsBits accesses;
@@ -121,6 +128,7 @@ class RenderGraph {
   };
   struct TextureUsage : public ResourceUsage {
     AttachmentInfo att_info;
+    rhi::TextureHandle handle;
   };
 
   struct BufferUsage : ResourceUsage {
@@ -165,6 +173,7 @@ class RenderGraph {
   std::vector<RGPass> passes_;
   std::vector<std::unordered_set<uint32_t>> pass_dependencies_;
   std::unordered_map<std::string, RGResourceHandle> resource_name_to_handle_;
+  std::unordered_map<uint64_t, RGResourceHandle> tex_handle_to_handle_;
 
   std::vector<uint32_t> sink_passes_;
   std::vector<uint32_t> pass_stack_;
@@ -172,6 +181,7 @@ class RenderGraph {
   // cache for intermediate calc data
   std::unordered_set<uint32_t> intermed_pass_visited_;
   std::vector<uint32_t> intermed_pass_stack_;
+  rhi::Device* device_{};
 };
 
 }  // namespace gfx
