@@ -206,11 +206,12 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
 
     set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.base_color_texture,
                               material.albedo_tex);
-    set_and_load_material_img(&gltf_mat->normal_texture, material.normal_tex);
-    if (gltf_mat->has_pbr_metallic_roughness) {
-      uint32_t tx{};
-      set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.metallic_roughness_texture, tx);
-    }
+    // set_and_load_material_img(&gltf_mat->normal_texture, material.normal_tex);
+    // if (gltf_mat->has_pbr_metallic_roughness) {
+    //   uint32_t tx{};
+    //   set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.metallic_roughness_texture,
+    //   tx);
+    // }
 
     materials.push_back(material);
   }

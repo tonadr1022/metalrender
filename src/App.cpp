@@ -46,10 +46,11 @@ App::App() {
   on_hide_mouse_change();
 
   // ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_});
-  renderer_.init(RendererMetal4::CreateInfo{.device = device_.get(),
-                                            .window = window_.get(),
-                                            .resource_dir = resource_dir_,
-                                            .render_imgui_callback = [this]() { on_imgui(); }});
+  renderer_.init(
+      gfx::RendererMetal4::CreateInfo{.device = device_.get(),
+                                      .window = window_.get(),
+                                      .resource_dir = resource_dir_,
+                                      .render_imgui_callback = [this]() { on_imgui(); }});
   // voxel_renderer_ = std::make_unique<vox::Renderer>();
   // voxel_renderer_->init(&renderer_);
   // voxel_world_ = std::make_unique<vox::World>();
@@ -131,9 +132,9 @@ void App::run() {
     for (const auto model : models_) {
       ResourceManager::get().get_model(model)->update_transforms();
     }
-    const RenderArgs args{.view_mat = camera_.get_view_mat(),
-                          .camera_pos = camera_.pos,
-                          .draw_imgui = imgui_enabled_};
+    const gfx::RenderArgs args{.view_mat = camera_.get_view_mat(),
+                               .camera_pos = camera_.pos,
+                               .draw_imgui = imgui_enabled_};
     renderer_.render(args);
   }
 

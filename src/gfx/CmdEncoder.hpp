@@ -23,6 +23,8 @@ enum PipelineStage : uint64_t {
   PipelineStage_AllCommands = 0x10000ull,
 };
 
+using PipelineStageBits = uint64_t;
+
 enum AccessFlags : uint64_t {
   AccessFlags_None = 0ULL,
   AccessFlags_IndirectCommandRead = 0X00000001ULL,
@@ -46,6 +48,8 @@ enum AccessFlags : uint64_t {
   AccessFlags_ShaderStorageRead = 0X200000000ULL,
   AccessFlags_ShaderStorageWrite = 0X400000000ULL,
 };
+
+using AccessFlagsBits = uint64_t;
 
 class CmdEncoder {
  public:

@@ -18,6 +18,7 @@ add_executable(${target_name}
     gfx/ModelInstance.cpp
     gfx/ResourceManager.cpp
     gfx/GPUFrameAllocator.cpp
+    gfx/RenderGraph.cpp
     WindowApple.cpp
     voxels/Chunk.cpp
     voxels/Mesher.cpp

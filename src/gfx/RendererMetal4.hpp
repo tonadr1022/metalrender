@@ -8,6 +8,7 @@
 #include "gfx/Config.hpp"
 #include "gfx/ModelInstance.hpp"
 #include "gfx/ModelLoader.hpp"
+#include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "hlsl/shared_indirect.h"
 
@@ -17,6 +18,8 @@ class WindowApple;
 namespace rhi {
 class CmdEncoder;
 }
+
+namespace gfx {
 
 struct RenderArgs {
   glm::mat4 view_mat;
@@ -95,6 +98,8 @@ class RendererMetal4 {
   std::vector<rhi::TextureHandleHolder> all_textures_;
   std::optional<ScratchBufferPool> scratch_buffer_pool_;
 
+  gfx::RenderGraph rg_;
+
   struct GPUTexUpload {
     void* data;
     rhi::TextureHandleHolder tex;
@@ -111,4 +116,7 @@ class RendererMetal4 {
   [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandleHolder& buf) const;
 
   rhi::TextureHandleHolder default_white_tex_;
+  void add_render_graph_passes();
 };
+
+}  // namespace gfx

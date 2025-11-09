@@ -29,6 +29,8 @@ using rhi::TextureFormat;
 
 }  // namespace
 
+namespace gfx {
+
 void RendererMetal4::init(const CreateInfo& cinfo) {
   device_ = cinfo.device;
   window_ = cinfo.window;
@@ -183,6 +185,10 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
 
   create_render_target_textures();
   scratch_buffer_pool_.emplace(device_);
+
+  rg_.init();
+  add_render_graph_passes();
+  rg_.bake(true);
 }
 
 void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
@@ -329,3 +335,18 @@ void ScratchBufferPool::reset(size_t frame_idx) {
   }
   in_use_entries.clear();
 }
+
+void RendererMetal4::add_render_graph_passes() {
+  {
+    auto& pass = rg_.add_pass("gbuffer_pass");
+    pass.add("gbuffer_a", {}, RGAccess::ColorWrite);
+    pass.set_execute_fn([]() {});
+  }
+  {
+    auto& pass = rg_.add_pass("shade");
+    pass.add("gbuffer_a", {}, RGAccess::ComputeRead);
+    pass.set_execute_fn([]() {});
+  }
+}
+
+}  // namespace gfx

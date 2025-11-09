@@ -43,7 +43,7 @@ struct App {
 
   glm::vec2 last_pos_{};
   // TODO: ptr for impl/RHI
-  RendererMetal4 renderer_;
+  gfx::RendererMetal4 renderer_;
   std::unique_ptr<vox::Renderer> voxel_renderer_;
   std::unique_ptr<vox::World> voxel_world_;
 };
