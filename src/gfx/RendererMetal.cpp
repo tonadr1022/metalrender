@@ -29,7 +29,6 @@
 #include "ModelLoader.hpp"
 #include "QuartzCore/CAMetalDrawable.hpp"
 #include "QuartzCore/CAMetalLayer.hpp"
-#include "WindowApple.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
 #include "core/Util.hpp"

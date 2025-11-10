@@ -5,15 +5,14 @@
 #include <glm/gtc/random.hpp>
 #include <random>
 
-#include "WindowApple.hpp"
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
-#include "gfx/ResourceManager.hpp"
-#include "gfx/metal/MetalDevice.hpp"
+// #include "gfx/ResourceManager.hpp"
+#include "gfx/Device.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
 #include "tracy/Tracy.hpp"
-#include "voxels/VoxelWorld.hpp"
+// #include "voxels/VoxelWorld.hpp"
 
 namespace {
 
@@ -36,13 +35,11 @@ App::App() {
   shader_dir_ = resource_dir_ / "shaders";
   load_config();
   device_ = rhi::create_device(rhi::GfxAPI::Metal);
-  std::make_unique<MetalDevice>();
-  window_ = std::make_unique<WindowApple>();
+  // device_ = rhi::create_device(rhi::GfxAPI::Vulkan);
+  window_ = std::make_unique<Window>();
+  window_->init([this](int key, int action, int mods) { on_key_event(key, action, mods); },
+                [this](double x_pos, double y_pos) { on_curse_pos_event(x_pos, y_pos); });
   device_->init({.window = window_.get(), .shader_lib_dir = resource_dir_ / "shader_out"});
-
-  window_->init(
-      device_.get(), [this](int key, int action, int mods) { on_key_event(key, action, mods); },
-      [this](double x_pos, double y_pos) { on_curse_pos_event(x_pos, y_pos); });
 
   on_hide_mouse_change();
 
@@ -126,24 +123,24 @@ void App::run() {
     last_time = curr_time;
     camera_.update_pos(window_->get_handle(), dt);
 
-    if (voxel_world_) {
-      voxel_world_->update(dt, camera_);
-    }
+    // if (voxel_world_) {
+    //   voxel_world_->update(dt, camera_);
+    // }
 
-    for (const auto model : models_) {
-      ResourceManager::get().get_model(model)->update_transforms();
-    }
+    // for (const auto model : models_) {
+    //   ResourceManager::get().get_model(model)->update_transforms();
+    // }
     const gfx::RenderArgs args{.view_mat = camera_.get_view_mat(),
                                .camera_pos = camera_.pos,
                                .draw_imgui = imgui_enabled_};
     renderer_.render(args);
   }
 
-  if (voxel_world_) {
-    voxel_world_->shutdown();
-  }
+  // if (voxel_world_) {
+  //   voxel_world_->shutdown();
+  // }
 
-  ResourceManager::shutdown();
+  // ResourceManager::shutdown();
   window_->shutdown();
   device_->shutdown();
 }
@@ -171,14 +168,14 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
       on_hide_mouse_change();
     }
     if (key == GLFW_KEY_TAB) {
-      window_->set_vsync(!window_->get_vsync());
+      device_->set_vsync(!device_->get_vsync());
     }
     if (key == GLFW_KEY_G && mods & GLFW_MOD_ALT) {
       imgui_enabled_ = !imgui_enabled_;
     }
     if (key == GLFW_KEY_C) {
-      ResourceManager::get().free_model(models_[0]);
-      models_.erase(models_.begin());
+      // ResourceManager::get().free_model(models_[0]);
+      // models_.erase(models_.begin());
     }
   }
 }
@@ -207,14 +204,14 @@ void App::on_imgui() {
     ImGui::Text("Position: %f %f %f", camera_.pos.x, camera_.pos.y, camera_.pos.z);
     ImGui::TreePop();
   }
-  if (voxel_world_) {
-    voxel_world_->on_imgui();
-  }
+  // if (voxel_world_) {
+  //   voxel_world_->on_imgui();
+  // }
   ImGui::End();
 }
 
-void App::load_model(const std::filesystem::path& path, const glm::mat4& transform) {
-  auto full_path =
-      path.string().starts_with("Models") ? resource_dir_ / "models" / "gltf" / path : path;
-  models_.push_back(ResourceManager::get().load_model(full_path, transform));
+void App::load_model(const std::filesystem::path&, const glm::mat4&) {
+  // auto full_path =
+  //     path.string().starts_with("Models") ? resource_dir_ / "models" / "gltf" / path : path;
+  // models_.push_back(ResourceManager::get().load_model(full_path, transform));
 }

@@ -2,11 +2,11 @@
 #include <filesystem>
 
 #include "Camera.hpp"
-#include "WindowApple.hpp"
+#include "Window.hpp"
 #include "gfx/RendererMetal4.hpp"
-#include "gfx/ResourceManager.hpp"
-#include "voxels/VoxelRenderer.hpp"
-#include "voxels/VoxelWorld.hpp"
+// #include "gfx/ResourceManager.hpp"
+// #include "voxels/VoxelRenderer.hpp"
+// #include "voxels/VoxelWorld.hpp"
 
 struct App {
   App();
@@ -33,9 +33,9 @@ struct App {
   std::filesystem::path resource_dir_;
   std::filesystem::path shader_dir_;
   std::unique_ptr<rhi::Device> device_;
-  std::unique_ptr<WindowApple> window_;
+  std::unique_ptr<Window> window_;
   Camera camera_;
-  std::vector<ModelHandle> models_;
+  // std::vector<ModelHandle> models_;
   bool first_mouse_{true};
   bool hide_mouse_{false};
   bool imgui_enabled_{true};
@@ -43,6 +43,6 @@ struct App {
   glm::vec2 last_pos_{};
   // TODO: ptr for impl/RHI
   gfx::RendererMetal4 renderer_;
-  std::unique_ptr<vox::Renderer> voxel_renderer_;
-  std::unique_ptr<vox::World> voxel_world_;
+  // std::unique_ptr<vox::Renderer> voxel_renderer_;
+  // std::unique_ptr<vox::World> voxel_world_;
 };

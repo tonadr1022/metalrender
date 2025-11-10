@@ -21,7 +21,7 @@
 #include "util/Stats.hpp"
 
 class MetalDevice;
-class WindowApple;
+class Window;
 
 namespace CA {
 
@@ -206,7 +206,7 @@ class RendererMetal {
  public:
   struct CreateInfo {
     MetalDevice* device;
-    WindowApple* window;
+    Window* window;
     std::filesystem::path resource_dir;
     std::function<void()> render_imgui_callback;
   };
@@ -278,7 +278,7 @@ class RendererMetal {
   std::function<void()> render_imgui_callback_;
 
   [[maybe_unused]] MetalDevice* device_{};
-  WindowApple* window_{};
+  Window* window_{};
 
   MTL::Device* raw_device_{};
   MTL::CommandQueue* main_cmd_queue_{};

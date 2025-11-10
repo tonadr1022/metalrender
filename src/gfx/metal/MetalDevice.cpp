@@ -1,9 +1,12 @@
 #include "MetalDevice.hpp"
 
+#include <QuartzCore/QuartzCore.h>
+
 #include <Foundation/NSObject.hpp>
 #include <Metal/Metal.hpp>
 #include <QuartzCore/CAMetalLayer.hpp>
 
+#include "Window.hpp"
 #include "shader_constants.h"
 
 #define IR_RUNTIME_METALCPP
@@ -11,7 +14,6 @@
 #include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
 
 #include "MetalUtil.hpp"
-#include "WindowApple.hpp"
 #include "core/EAssert.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/Pipeline.hpp"
@@ -79,12 +81,15 @@ void MetalDevice::init(const InitInfo& init_info) {
   shader_lib_dir_ = init_info.shader_lib_dir;
   shader_lib_dir_ /= "metal";
 
-  auto* win = dynamic_cast<WindowApple*>(init_info.window);
+  auto* win = dynamic_cast<Window*>(init_info.window);
   if (!win) {
     LERROR("invalid window pointer");
     return;
   }
   device_ = MTL::CreateSystemDefaultDevice();
+  metal_layer_ = init_metal_window(init_info.window->get_handle(), device_);
+  ALWAYS_ASSERT(metal_layer_);
+
   ar_pool_ = NS::AutoreleasePool::alloc()->init();
   NS::Error* err{};
   {
@@ -495,3 +500,9 @@ MTL::ComputePipelineState* MetalDevice::compile_mtl_compute_pipeline(
   }
   return pso;
 }
+
+void MetalDevice::set_vsync(bool vsync) {
+  [(CAMetalLayer*)metal_layer_ setDisplaySyncEnabled:vsync];
+}
+
+bool MetalDevice::get_vsync() const { return [(CAMetalLayer*)metal_layer_ displaySyncEnabled]; }

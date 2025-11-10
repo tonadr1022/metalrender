@@ -1,5 +1,7 @@
 #pragma once
 
+#include <volk.h>
+
 #include "gfx/Device.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/vulkan/VulkanBuffer.hpp"
@@ -16,7 +18,7 @@ class VulkanDevice : public rhi::Device {
   using rhi::Device::get_pipeline;
   using rhi::Device::get_tex;
 
-  void init(const InitInfo&) override {}
+  void init(const InitInfo&) override;
   void shutdown() override;
 
   rhi::BufferHandle create_buf(const rhi::BufferDesc& desc) override {
@@ -90,6 +92,13 @@ class VulkanDevice : public rhi::Device {
     return nullptr;
   }
 
+  void set_vsync(bool) override { exit(1); }
+
+  bool get_vsync() const override {
+    exit(1);
+    return vsync_enabled_;
+  }
+
  private:
   Info info_{};
   BlockPool<rhi::BufferHandle, VulkanBuffer> buffer_pool_{128, 1, true};
@@ -97,4 +106,9 @@ class VulkanDevice : public rhi::Device {
   BlockPool<rhi::PipelineHandle, VulkanPipeline> pipeline_pool_{20, 1, true};
   BlockPool<rhi::SamplerHandle, VulkanSampler> sampler_pool_{16, 1, true};
   VulkanSwapchain swapchain_;
+  VkInstance instance_;
+  VkSurfaceKHR surface_;
+  VkPhysicalDevice physical_device_;
+  VkQueue graphics_queue_;
+  bool vsync_enabled_{};
 };

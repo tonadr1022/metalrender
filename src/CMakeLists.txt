@@ -11,30 +11,33 @@ add_executable(${target_name}
     gfx/RendererMetal4.cpp
     gfx/Pipeline.cpp
     gfx/ModelInstance.cpp
-    gfx/ResourceManager.cpp
+    # gfx/ResourceManager.cpp
+    # gfx/RendererMetal.cpp
     gfx/GPUFrameAllocator.cpp
     gfx/Device.cpp
     gfx/RenderGraph.cpp
-    WindowApple.cpp
-    voxels/Chunk.cpp
-    voxels/Mesher.cpp
-    voxels/TerrainGenerator.cpp
-    voxels/VoxelRenderer.cpp
-    voxels/VoxelDB.cpp
-    voxels/VoxelWorld.cpp
+    Window.cpp
+    # voxels/Chunk.cpp
+    # voxels/Mesher.cpp
+    # voxels/TerrainGenerator.cpp
+    # voxels/VoxelRenderer.cpp
+    # voxels/VoxelDB.cpp
+    # voxels/VoxelWorld.cpp
     util/Stats.cpp
 )
 
 
 
-option(VULKAN_BACKEND_ALLOWED "Allow Vulkan Backend" ON)
 
-if(VULKAN_BACKEND_ALLOWED)
+if(BUILD_VULKAN)
     target_sources(${target_name} PRIVATE
         gfx/vulkan/VulkanDevice.cpp
     )
-
-    target_compile_definitions(${target_name} PRIVATE VULKAN_BACKEND_ALLOWED=1)
+    target_compile_definitions(${target_name} PRIVATE VULKAN_BACKEND=1)
+    # target_include_directories(${target_name} SYSTEM PUBLIC
+    #     ${CMAKE_SOURCE_DIR}/third_party/vma/include
+    #     # ${Vulkan_INCLUDE_DIRS}
+    # )
 endif()
 
 if(BUILD_METAL)
@@ -44,11 +47,12 @@ if(BUILD_METAL)
         gfx/metal/MetalBuffer.cpp
         gfx/metal/MetalUtil.cpp
         gfx/metal/MetalCmdEncoder.cpp
-        gfx/RendererMetal.cpp
+        gfx/metal/MetalWindow.cpp
     )
 
-    target_compile_definitions(${target_name} PRIVATE METAL_BACKEND_ALLOWED=1)
-    set_source_files_properties(gfx/Metal/MetalDevice.cpp WindowApple.cpp  PROPERTIES COMPILE_FLAGS "-x objective-c++")
+    target_compile_definitions(${target_name} PRIVATE METAL_BACKEND=1)
+    set_source_files_properties(gfx/metal/MetalDevice.cpp PROPERTIES COMPILE_FLAGS "-x objective-c++")
+    set_source_files_properties(gfx/metal/MetalWindow.cpp PROPERTIES COMPILE_FLAGS "-x objective-c++")
 endif()
 
 add_custom_target(compile_shaders ALL
@@ -77,8 +81,9 @@ target_link_libraries(${target_name} PRIVATE
 
 if (BUILD_VULKAN)
     target_link_libraries(${target_name} PRIVATE
-        volk
+        volk::volk
         GPUOpen::VulkanMemoryAllocator
+        vk-bootstrap::vk-bootstrap
     )
 endif()
 

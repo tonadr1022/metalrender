@@ -18,6 +18,10 @@
 #include "shader_constants.h"
 
 class Window;
+namespace CA {
+class MetalLayer;
+}
+
 namespace rhi {
 
 struct TextureDesc;
@@ -49,6 +53,8 @@ class MetalDevice : public rhi::Device {
   using rhi::Device::get_tex;
   void shutdown() override;
   void init(const InitInfo& init_info) override;
+  void set_vsync(bool vsync) override;
+  bool get_vsync() const override;
   [[nodiscard]] void* get_native_device() const override { return device_; }
 
   [[nodiscard]] MTL::Device* get_device() const { return device_; }
@@ -86,7 +92,6 @@ class MetalDevice : public rhi::Device {
   rhi::Swapchain& get_swapchain() override { return swapchain_; }
   const rhi::Swapchain& get_swapchain() const override { return swapchain_; }
 
-  void set_metal_layer(CA::MetalLayer* layer) { metal_layer_ = layer; }
   void init_bindless();
   void copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf,
                       size_t dst_offset) override;
@@ -194,3 +199,7 @@ class MetalDevice : public rhi::Device {
 
   MTL::ResidencySet* make_residency_set();
 };
+
+struct GLFWwindow;
+
+CA::MetalLayer* init_metal_window(GLFWwindow* window, MTL::Device* device);

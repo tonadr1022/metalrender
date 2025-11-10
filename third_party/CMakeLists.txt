@@ -4,8 +4,18 @@ if (BUILD_METAL)
 endif()
 
 if (BUILD_VULKAN)
+
+    find_package(Vulkan REQUIRED)
+    message(STATUS "Vulkan found: ${Vulkan_FOUND}")
+    message(STATUS "Vulkan include dirs: ${Vulkan_INCLUDE_DIRS}")
+    message(STATUS "Vulkan libraries: ${Vulkan_LIBRARIES}")
+
+    set(VMA_STATIC_VULKAN_FUNCTIONS OFF CACHE BOOL "" FORCE)
+    set(VMA_DYNAMIC_VULKAN_FUNCTIONS OFF CACHE BOOL "" FORCE)
+
     add_subdirectory(VulkanMemoryAllocator)
     add_subdirectory(volk)
+    add_subdirectory(vk-bootstrap)
 endif()
 
 add_subdirectory(glfw)
@@ -25,11 +35,11 @@ add_library(lib_imgui STATIC
     imgui/imgui_widgets.cpp
     imgui/imgui_tables.cpp
     imgui/misc/cpp/imgui_stdlib.cpp
+    imgui/backends/imgui_impl_glfw.cpp
 )
 
 if (BUILD_METAL)
     target_sources(lib_imgui PRIVATE
-        imgui/backends/imgui_impl_glfw.cpp
         imgui/backends/imgui_impl_metal.mm
     )
 
@@ -43,7 +53,19 @@ if (BUILD_METAL)
 endif()
 
 
-target_link_libraries(lib_imgui PUBLIC glfw)
+if (BUILD_VULKAN)
+    target_sources(lib_imgui PRIVATE
+        imgui/backends/imgui_impl_vulkan.cpp
+    )
+    target_include_directories(lib_imgui PUBLIC
+        ${Vulkan_INCLUDE_DIRS}
+    )
+
+    target_compile_definitions(lib_imgui PUBLIC IMGUI_IMPL_VULKAN_NO_PROTOTYPES)
+    target_link_libraries(lib_imgui PRIVATE volk::volk)
+endif()
+
+target_link_libraries(lib_imgui PUBLIC glfw )
 
 
 add_subdirectory(OffsetAllocator)

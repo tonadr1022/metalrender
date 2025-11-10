@@ -4,11 +4,11 @@
 
 extern std::unique_ptr<rhi::Device> create_vulkan_device();
 
-#ifdef METAL_BACKEND_ALLOWED
+#ifdef METAL_BACKEND
 #include "gfx/metal/MetalDevice.hpp"
 #endif
 
-#ifdef VULKAN_BACKEND_ALLOWED
+#ifdef VULKAN_BACKEND
 #include "gfx/vulkan/VulkanDevice.hpp"
 #endif
 
@@ -17,7 +17,7 @@ namespace rhi {
 std::unique_ptr<Device> create_device(GfxAPI api) {
   switch (api) {
     case rhi::GfxAPI::Metal:
-#ifndef METAL_BACKEND_ALLOWED
+#ifndef METAL_BACKEND
       LCRITICAL("Metal backend not available");
       exit(1);
       return nullptr;
@@ -25,7 +25,7 @@ std::unique_ptr<Device> create_device(GfxAPI api) {
       return std::make_unique<MetalDevice>();
 #endif
     case rhi::GfxAPI::Vulkan:
-#ifndef VULKAN_BACKEND_ALLOWED
+#ifndef VULKAN_BACKEND
       LCRITICAL("Vulkan backend not available");
       exit(1);
       return nullptr;

@@ -4,7 +4,7 @@
 #include <QuartzCore/CAMetalLayer.hpp>
 #include <tracy/Tracy.hpp>
 
-#include "WindowApple.hpp"
+#include "Window.hpp"
 #include "core/EAssert.hpp"
 #include "gfx/CmdEncoder.hpp"
 #include "gfx/GFXTypes.hpp"

@@ -5,13 +5,14 @@
 
 #include "core/Math.hpp"  // IWYU pragma: keep
 #include "gfx/Config.hpp"
+#include "gfx/Device.hpp"
 #include "gfx/ModelInstance.hpp"
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "hlsl/shared_indirect.h"
 
-class WindowApple;
+class Window;
 
 namespace rhi {
 class CmdEncoder;
@@ -67,7 +68,7 @@ class RendererMetal4 {
   std::vector<InstData> instance_datas;
   struct CreateInfo {
     rhi::Device* device;
-    WindowApple* window;
+    Window* window;
     std::filesystem::path resource_dir;
     std::function<void()> render_imgui_callback;
   };
@@ -79,7 +80,7 @@ class RendererMetal4 {
 
  private:
   rhi::Device* device_{};
-  WindowApple* window_{};
+  Window* window_{};
   rhi::PipelineHandleHolder test2_pso_;
   rhi::BufferHandleHolder all_material_buf_;
   rhi::TextureHandleHolder depth_tex_;
