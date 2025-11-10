@@ -34,12 +34,12 @@ App::App() {
   resource_dir_ = get_resource_dir();
   shader_dir_ = resource_dir_ / "shaders";
   load_config();
-  device_ = rhi::create_device(rhi::GfxAPI::Metal);
-  // device_ = rhi::create_device(rhi::GfxAPI::Vulkan);
+  device_ = rhi::create_device(rhi::GfxAPI::Vulkan);
   window_ = std::make_unique<Window>();
   window_->init([this](int key, int action, int mods) { on_key_event(key, action, mods); },
                 [this](double x_pos, double y_pos) { on_curse_pos_event(x_pos, y_pos); });
-  device_->init({.window = window_.get(), .shader_lib_dir = resource_dir_ / "shader_out"});
+  device_->init(
+      {.window = window_.get(), .shader_lib_dir = resource_dir_ / "shader_out", .app_name = "lol"});
 
   on_hide_mouse_change();
 

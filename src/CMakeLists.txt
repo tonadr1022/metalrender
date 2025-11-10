@@ -32,6 +32,7 @@ add_executable(${target_name}
 if(BUILD_VULKAN)
     target_sources(${target_name} PRIVATE
         gfx/vulkan/VulkanDevice.cpp
+        gfx/vulkan/VulkanCommon.cpp
     )
     target_compile_definitions(${target_name} PRIVATE VULKAN_BACKEND=1)
     # target_include_directories(${target_name} SYSTEM PUBLIC

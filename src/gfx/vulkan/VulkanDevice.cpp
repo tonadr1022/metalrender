@@ -1,6 +1,7 @@
 #include "VulkanDevice.hpp"
 
 // clang-format off
+#define VOLK_IMPLEMENTATION
 #include <volk.h>
 #include <VkBootstrap.h>
 
@@ -9,6 +10,7 @@
 
 #include "Window.hpp"
 #include "core/Logger.hpp"
+#include "gfx/vulkan/VulkanCommon.hpp"
 
 namespace {
 
@@ -32,9 +34,6 @@ vk_debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
 void check_vkb_result(const char* err_msg, const auto& vkb_result) {
   if (!vkb_result) {
     LCRITICAL("{}: {}", err_msg, vkb_result.error().message());
-    for (const auto& v : vkb_result.detailed_failure_reasons()) {
-      LCRITICAL("\t{}", v);
-    }
     exit(1);
   }
 }
@@ -44,21 +43,33 @@ void check_vkb_result(const char* err_msg, const auto& vkb_result) {
 void VulkanDevice::shutdown() {}
 
 void VulkanDevice::init(const InitInfo& init_info) {
-  vkb::InstanceBuilder builder;
-  // init_info.window->
-  if (init_info.validation_layers_enabled) {
+  vkb::InstanceBuilder builder{};
+
+  VK_CHECK(volkInitialize());
+
+  if (init_info.app_name.size()) {
+    builder.set_app_name(init_info.app_name.c_str());
   }
-  auto inst_ret = builder.set_app_name(init_info.app_name.c_str())
-                      .request_validation_layers(init_info.validation_layers_enabled)
-                      .use_default_debug_messenger()
+
+  auto inst_ret = builder.request_validation_layers(init_info.validation_layers_enabled)
+                      .set_minimum_instance_version(1, 2, 0)
+                      .require_api_version(1, 2, 0)
                       .set_debug_callback(vk_debug_callback)
                       .build();
   check_vkb_result("Failed to get vulkan instance", inst_ret);
   vkb::Instance vkb_inst = inst_ret.value();
   instance_ = vkb_inst.instance;
 
+  volkLoadInstance(instance_);
+
+  glfwCreateWindowSurface(instance_, init_info.window->get_handle(), nullptr, &surface_);
+  if (!surface_) {
+    LCRITICAL("Failed to create surface");
+    exit(1);
+  }
+
   vkb::PhysicalDeviceSelector phys_device_selector{vkb_inst};
-  auto phys_ret = phys_device_selector.set_surface(surface_).set_minimum_version(1, 3).select();
+  auto phys_ret = phys_device_selector.set_surface(surface_).set_minimum_version(1, 2).select();
   check_vkb_result("Failed to select physical device", phys_ret);
   physical_device_ = phys_ret.value().physical_device;
 

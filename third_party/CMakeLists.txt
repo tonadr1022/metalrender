@@ -20,6 +20,8 @@ endif()
 
 add_subdirectory(glfw)
 add_subdirectory(glm)
+target_compile_definitions(glm INTERFACE VK_NO_PROTOTYPES)
+
 add_subdirectory(concurrentqueue)
 
 set(FASTNOISE2_NOISETOOL OFF CACHE BOOL "Build Noise Tool" FORCE)
