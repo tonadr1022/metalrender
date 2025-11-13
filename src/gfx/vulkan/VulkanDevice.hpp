@@ -2,15 +2,28 @@
 
 #include <volk.h>
 
+#include "VMAWrapper.hpp"
+#include "VkBootstrap.h"
+#include "gfx/Config.hpp"
 #include "gfx/Device.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/vulkan/VulkanBuffer.hpp"
+#include "gfx/vulkan/VulkanCmdEncoder.hpp"
 #include "gfx/vulkan/VulkanPipeline.hpp"
 #include "gfx/vulkan/VulkanSampler.hpp"
 #include "gfx/vulkan/VulkanSwapchain.hpp"
 #include "gfx/vulkan/VulkanTexture.hpp"
 
 class Window;
+
+namespace gfx::vk {
+
+enum QueueType : uint8_t {
+  QueueType_Graphics,
+  QueueType_Compute,
+  QueueType_Transfer,
+  QueueType_Count,
+};
 
 class VulkanDevice : public rhi::Device {
  public:
@@ -21,15 +34,9 @@ class VulkanDevice : public rhi::Device {
   void init(const InitInfo&) override;
   void shutdown() override;
 
-  rhi::BufferHandle create_buf(const rhi::BufferDesc& desc) override {
-    exit(1);
-    return buffer_pool_.alloc(desc, rhi::k_invalid_bindless_idx);
-  }
+  rhi::BufferHandle create_buf(const rhi::BufferDesc& desc) override;
 
-  rhi::TextureHandle create_tex(const rhi::TextureDesc& desc) override {
-    exit(1);
-    return texture_pool_.alloc(desc, rhi::k_invalid_bindless_idx);
-  }
+  rhi::TextureHandle create_tex(const rhi::TextureDesc& desc) override;
 
   rhi::Texture* get_tex(rhi::TextureHandle handle) override { return texture_pool_.get(handle); }
   rhi::Buffer* get_buf(rhi::BufferHandle handle) override { return buffer_pool_.get(handle); }
@@ -48,10 +55,7 @@ class VulkanDevice : public rhi::Device {
   }
 
   rhi::PipelineHandle create_graphics_pipeline(
-      const rhi::GraphicsPipelineCreateInfo& /*cinfo*/) override {
-    exit(1);
-    return pipeline_pool_.alloc();
-  }
+      const rhi::GraphicsPipelineCreateInfo& /*cinfo*/) override;
 
   rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) override {
     exit(1);
@@ -70,7 +74,7 @@ class VulkanDevice : public rhi::Device {
   }
 
   // commands
-  rhi::CmdEncoder* begin_command_list() override { exit(1); }
+  rhi::CmdEncoder* begin_command_list() override;
   void submit_frame() override {}
 
   void destroy(rhi::TextureHandle handle) override {
@@ -100,15 +104,32 @@ class VulkanDevice : public rhi::Device {
   }
 
  private:
+  struct Queue {
+    VkQueue queue;
+    uint32_t family_idx;
+  };
+
   Info info_{};
   BlockPool<rhi::BufferHandle, VulkanBuffer> buffer_pool_{128, 1, true};
   BlockPool<rhi::TextureHandle, VulkanTexture> texture_pool_{128, 1, true};
   BlockPool<rhi::PipelineHandle, VulkanPipeline> pipeline_pool_{20, 1, true};
   BlockPool<rhi::SamplerHandle, VulkanSampler> sampler_pool_{16, 1, true};
+  VkCommandPool command_pools_[k_max_frames_in_flight];
   VulkanSwapchain swapchain_;
-  VkInstance instance_;
-  VkSurfaceKHR surface_;
-  VkPhysicalDevice physical_device_;
-  VkQueue graphics_queue_;
+  vkb::Instance vkb_inst_;
+  vkb::Device vkb_device_;
+  VkInstance instance_{};
+  VkSurfaceKHR surface_{};
+  VkPhysicalDevice physical_device_{};
+  VkDevice device_{};
+  VkPipelineLayout default_pipeline_layout_{};
+
+  Queue queues_[QueueType_Count]{};
+
+  std::vector<std::unique_ptr<VulkanCmdEncoder>> cmd_encoders_;
+  size_t curr_cmd_encoder_i_{};
+  VmaAllocator allocator_;
   bool vsync_enabled_{};
 };
+
+}  // namespace gfx::vk

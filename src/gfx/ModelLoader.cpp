@@ -159,7 +159,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
       const uint32_t mip_levels = math::get_mip_levels(w, h);
       const rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
                                   .storage_mode = rhi::StorageMode::Default,
-                                  .usage = rhi::TextureUsageShaderRead,
+                                  .usage = rhi::TextureUsageSample,
                                   .dims = glm::uvec3{w, h, 1},
                                   .mip_levels = mip_levels,
                                   .array_length = 1,

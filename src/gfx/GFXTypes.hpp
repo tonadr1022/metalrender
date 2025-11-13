@@ -18,16 +18,17 @@ enum class TextureFormat {
 enum class StorageMode {
   GPUOnly,
   CPUAndGPU,
-  CPUOnly,
   // GPU optimal. On apple silicon, this is shared
   Default
 };
 
 enum TextureUsage {
   TextureUsageNone,
-  TextureUsageShaderRead,
+  TextureUsageStorage,
+  TextureUsageSample,
   TextureUsageShaderWrite,
-  TextureUsageRenderTarget
+  TextureUsageColorAttachment,
+  TextureUsageDepthStencilAttachment,
 };
 
 using DefaultIndexT = uint32_t;
@@ -45,10 +46,21 @@ struct TextureDesc {
   TextureDescFlags flags{};
 };
 
+enum BufferUsage : uint8_t {
+  BufferUsage_None = 0,
+  BufferUsage_Storage = 1 << 0,
+  BufferUsage_Indirect = 1 << 1,
+  BufferUsage_Vertex = 1 << 2,
+  BufferUsage_Index = 1 << 3,
+  BufferUsage_Uniform = 1 << 4,
+};
+
 struct BufferDesc {
   StorageMode storage_mode{StorageMode::Default};
+  BufferUsage usage{BufferUsage_None};
   size_t size{};
   bool bindless{false};
+  bool random_host_access{};
   const char* name{};
 };
 
@@ -269,6 +281,12 @@ enum class CullMode : uint8_t {
   None,
   Back,
   Front,
+};
+
+enum class PolygonMode : uint8_t {
+  Fill,
+  Line,
+  Point,
 };
 
 enum class WindOrder : uint8_t {

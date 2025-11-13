@@ -1,6 +1,5 @@
 set(target_name metalrender)
 
-
 add_executable(${target_name}
     main.cpp
     App.cpp
@@ -33,6 +32,8 @@ if(BUILD_VULKAN)
     target_sources(${target_name} PRIVATE
         gfx/vulkan/VulkanDevice.cpp
         gfx/vulkan/VulkanCommon.cpp
+        gfx/vulkan/VulkanLibs.cpp
+        gfx/vulkan/VulkanCmdEncoder.cpp
     )
     target_compile_definitions(${target_name} PRIVATE VULKAN_BACKEND=1)
     # target_include_directories(${target_name} SYSTEM PUBLIC

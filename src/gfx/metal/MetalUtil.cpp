@@ -4,6 +4,7 @@
 #include <cassert>
 
 #include "core/Logger.hpp"
+#include "gfx/GFXTypes.hpp"
 
 namespace mtl::util {
 
@@ -105,11 +106,11 @@ MTL::PixelFormat mtl::util::convert(rhi::TextureFormat format) {
   }
   return MTL::PixelFormatInvalid;
 }
+
 MTL::StorageMode mtl::util::convert(rhi::StorageMode mode) {
   using namespace rhi;
   switch (mode) {
     case StorageMode::CPUAndGPU:
-    case StorageMode::CPUOnly:
     case StorageMode::Default:
       return MTL::StorageModeShared;
     case StorageMode::GPUOnly:
@@ -121,14 +122,15 @@ MTL::StorageMode mtl::util::convert(rhi::StorageMode mode) {
   ASSERT(0 && "unreachable");
   return MTL::StorageModePrivate;
 }
+
 MTL::TextureUsage mtl::util::convert(rhi::TextureUsage usage) {
   using namespace rhi;
   MTL::TextureUsage result{};
 
-  if (usage & TextureUsageShaderRead) {
+  if (usage & TextureUsageSample || usage & rhi::TextureUsageStorage) {
     result |= MTL::TextureUsageShaderRead;
   }
-  if (usage & TextureUsageRenderTarget) {
+  if (usage & rhi::TextureUsageColorAttachment || usage & rhi::TextureUsageDepthStencilAttachment) {
     result |= MTL::TextureUsageRenderTarget;
   }
   if (usage & TextureUsageShaderWrite) {

@@ -3,6 +3,8 @@
 #include "gfx/Config.hpp"
 #include "gfx/Swapchain.hpp"
 
+namespace gfx::vk {
+
 class VulkanSwapchain : public rhi::Swapchain {
  public:
   VulkanSwapchain() = default;
@@ -18,3 +20,5 @@ class VulkanSwapchain : public rhi::Swapchain {
  private:
   SwapchainTextures textures_{};
 };
+
+}  // namespace gfx::vk

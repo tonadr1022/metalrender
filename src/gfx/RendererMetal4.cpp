@@ -71,8 +71,8 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
 
   {
     test2_pso_ = device_->create_graphics_pipeline_h({
-        .shaders = {{"basic_indirect", ShaderType::Vertex},
-                    {"basic_indirect", ShaderType::Fragment}},
+        .shaders = {{{"basic_indirect", ShaderType::Vertex},
+                     {"basic_indirect", ShaderType::Fragment}}},
         .rendering = {.color_formats{TextureFormat::R8G8B8A8Srgb}},
     });
   }
@@ -211,8 +211,8 @@ void RendererMetal4::create_render_target_textures() {
   depth_tex_ = device_->create_tex_h(rhi::TextureDesc{
       .format = rhi::TextureFormat::D32float,
       .storage_mode = rhi::StorageMode::GPUOnly,
-      .usage = static_cast<rhi::TextureUsage>(rhi::TextureUsageRenderTarget |
-                                              rhi::TextureUsageShaderRead),
+      .usage = static_cast<rhi::TextureUsage>(rhi::TextureUsageDepthStencilAttachment |
+                                              rhi::TextureUsageStorage),
       .dims = glm::uvec3{dims, 1},
   });
 }
@@ -241,7 +241,7 @@ rhi::BufferHandle ScratchBufferPool::alloc(size_t size) {
   if (best_idx == -1) {
     // create new buf
     in_use_entries.emplace_back(
-        device_->create_buf_h({.storage_mode = rhi::StorageMode::CPUOnly,
+        device_->create_buf_h({.storage_mode = rhi::StorageMode::CPUAndGPU,
                                .size = std::max<uint32_t>(1024 * 1024, size)}));
   } else {
     auto e = std::move(entries[best_idx]);

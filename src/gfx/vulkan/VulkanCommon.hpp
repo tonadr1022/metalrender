@@ -4,20 +4,20 @@
 
 #include <cstddef>
 
-namespace gfx::vk2 {
+namespace gfx::vk {
 
 void print_vk_error(size_t x, bool exit_prog = false);
 
-}  // namespace gfx::vk2
+}  // namespace gfx::vk
 
 #ifndef NDEBUG
-#define VK_CHECK(x)                      \
-  do {                                   \
-    ::gfx::vk2::print_vk_error(x, true); \
+#define VK_CHECK(x)                     \
+  do {                                  \
+    ::gfx::vk::print_vk_error(x, true); \
   } while (0)
 #else
-#define VK_CHECK(x)                       \
-  do {                                    \
-    ::gfx::vk2::print_vk_error(x, false); \
+#define VK_CHECK(x)                      \
+  do {                                   \
+    ::gfx::vk::print_vk_error(x, false); \
   } while (0)
 #endif

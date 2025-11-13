@@ -14,6 +14,8 @@ fi
 
 for f in "${HLSL_SOURCES[@]}"; do
 	echo "Compiling"
-	./scripts/dxc_to_mtl.sh $f vert
-	./scripts/dxc_to_mtl.sh $f frag
+	./scripts/dxc_to_mtl.sh $f vert --metal
+	./scripts/dxc_to_mtl.sh $f frag --metal
+	./scripts/dxc_to_mtl.sh $f vert --spirv
+	./scripts/dxc_to_mtl.sh $f frag --spirv
 done

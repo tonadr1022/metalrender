@@ -22,6 +22,7 @@ struct GraphicsPipelineCreateInfo {
     bool depth_clamp{false};
     bool depth_bias{false};
     bool rasterize_discard_enable{false};
+    PolygonMode polygon_mode{PolygonMode::Fill};
     float line_width{1.};
     float depth_bias_constant_factor{};
     float depth_bias_clamp{};
@@ -65,7 +66,9 @@ struct GraphicsPipelineCreateInfo {
   };
 
   struct RenderingInfo {
-    std::array<TextureFormat, 5> color_formats{};
+    std::array<TextureFormat, 5> color_formats{TextureFormat::Undefined, TextureFormat::Undefined,
+                                               TextureFormat::Undefined, TextureFormat::Undefined,
+                                               TextureFormat::Undefined};
     TextureFormat depth_format{TextureFormat::Undefined};
     TextureFormat stencil_format{TextureFormat::Undefined};
   };
@@ -82,7 +85,7 @@ struct GraphicsPipelineCreateInfo {
     bool stencil_test_enable{false};
   };
 
-  std::vector<ShaderCreateInfo> shaders;
+  std::array<ShaderCreateInfo, 2> shaders{};
 
   PrimitiveTopology topology{PrimitiveTopology::TriangleList};
   RenderingInfo rendering{};

@@ -5,7 +5,7 @@
 struct VOut {
     float4 pos : SV_Position;
     float2 uv : TEXCOORD0;
-    uint8_t4_packed color : COLOR0;
+    //uint8_t4_packed color : COLOR0;
 };
 
 

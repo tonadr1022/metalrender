@@ -1,6 +1,6 @@
 #include "Device.hpp"
 
-#include "core/Logger.hpp"
+#include "core/Logger.hpp"  // IWYU pragma: keep
 
 extern std::unique_ptr<rhi::Device> create_vulkan_device();
 
@@ -30,7 +30,7 @@ std::unique_ptr<Device> create_device(GfxAPI api) {
       exit(1);
       return nullptr;
 #else
-      return std::make_unique<VulkanDevice>();
+      return std::make_unique<gfx::vk::VulkanDevice>();
 #endif
   }
 }

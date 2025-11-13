@@ -2,6 +2,8 @@
 
 #include "gfx/Sampler.hpp"
 
+namespace gfx::vk {
+
 class VulkanSampler : public rhi::Sampler {
  public:
   explicit VulkanSampler(const rhi::SamplerDesc& desc,
@@ -10,3 +12,5 @@ class VulkanSampler : public rhi::Sampler {
   VulkanSampler() = default;
   ~VulkanSampler() = default;
 };
+
+}  // namespace gfx::vk

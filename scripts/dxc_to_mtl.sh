@@ -10,6 +10,12 @@ else
 	echo "unable to determine shader model from dxc output filename"
 fi
 
+if [[ "$3" == "--metal" ]]; then
+	compile_metal=1
+elif [[ "$3" == "--spirv" ]]; then
+	compile_metal=0
+fi
+
 entry_point=$type\_main
 
 full_path=$1
@@ -21,12 +27,18 @@ if [[ ! -d "resources/shader_out/metal" ]]; then
 fi
 
 filepath=resources/shader_out/metal/$basename\_$type
-dxil_path=$filepath.dxil
 metallib_path=$filepath.metallib
 reflection_path=$filepath.json
 
 echo "Compiling to $metallib_path"
 
-dxc $1 -Fo $dxil_path -T $shader_model -E $entry_point
-metal-shaderconverter $dxil_path -o $metallib_path --output-reflection-file=$reflection_path
+if [[ $compile_metal == 1 ]]; then
+	dxil_path=$filepath.dxil
+	dxc $1 -Fo $dxil_path -T $shader_model -E $entry_point
+	metal-shaderconverter $dxil_path -o $metallib_path --output-reflection-file=$reflection_path
+else
+	spirv_path=$filepath.spirv
+	dxc $1 -Fo $spirv_path -T $shader_model -E $entry_point -spirv
+fi
+
 # rm $dxil_path

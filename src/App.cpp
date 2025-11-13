@@ -40,6 +40,8 @@ App::App() {
                 [this](double x_pos, double y_pos) { on_curse_pos_event(x_pos, y_pos); });
   device_->init(
       {.window = window_.get(), .shader_lib_dir = resource_dir_ / "shader_out", .app_name = "lol"});
+  device_->shutdown();
+  exit(1);
 
   on_hide_mouse_change();
 
