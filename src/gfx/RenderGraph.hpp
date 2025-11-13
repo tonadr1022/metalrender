@@ -22,6 +22,10 @@ struct RGResourceHandle {
   bool operator==(const RGResourceHandle& other) const {
     return idx == other.idx && type == other.type;
   }
+
+  [[nodiscard]] uint64_t to_64() const {
+    return static_cast<uint64_t>(idx) | static_cast<uint64_t>(type) << 32;
+  }
 };
 
 enum RGAccess : uint16_t {
@@ -40,10 +44,11 @@ enum RGAccess : uint16_t {
   ComputeRW = ComputeRead | ComputeWrite,
   TransferRead = 1ULL << 10,
   TransferWrite = 1ULL << 11,
-  FragmentRead = 1ULL << 12,
+  FragmentStorageRead = 1ULL << 12,
   ComputeSample = 1ULL << 13,
+  FragmentSample = 1ULL << 14,
   AnyRead = ColorRead | DepthStencilRead | VertexRead | IndexRead | IndirectRead | ComputeRead |
-            TransferRead | FragmentRead | ComputeSample,
+            TransferRead | FragmentSample | FragmentStorageRead | ComputeSample,
   AnyWrite = ColorWrite | DepthStencilWrite | ComputeWrite | TransferWrite,
 };
 
@@ -63,6 +68,12 @@ struct BufferInfo {
   size_t size;
 };
 
+struct ResourceAndUsage {
+  RGResourceHandle handle;
+  rhi::AccessFlags access;
+  rhi::PipelineStage stage;
+};
+
 class RGPass {
  public:
   RGPass() = default;
@@ -73,20 +84,26 @@ class RGPass {
 
   RGResourceHandle use_buf(BufferInfo, RGAccess) { return {}; }
 
-  [[nodiscard]] const std::vector<RGResourceHandle>& get_resource_reads() const {
-    return resource_reads_;
+  [[nodiscard]] const std::vector<ResourceAndUsage>& get_resource_usages() const {
+    return resource_usages_;
   }
-  [[nodiscard]] const std::vector<RGResourceHandle>& get_resource_writes() const {
-    return resource_writes_;
+
+  [[nodiscard]] const std::vector<uint32_t>& get_resource_reads() const {
+    return resource_read_indices_;
   }
+
+  [[nodiscard]] bool has_resource_writes() const {
+    return resource_usages_.size() > resource_read_indices_.size();
+  }
+
   [[nodiscard]] uint32_t get_idx() const { return pass_i_; }
   void set_execute_fn(auto&& f) { execute_fn_ = f; }
   [[nodiscard]] const std::string& get_name() const { return name_; }
   [[nodiscard]] const ExecuteFn& get_execute_fn() const { return execute_fn_; }
 
  private:
-  std::vector<RGResourceHandle> resource_reads_;
-  std::vector<RGResourceHandle> resource_writes_;
+  std::vector<ResourceAndUsage> resource_usages_;
+  std::vector<uint32_t> resource_read_indices_;
   ExecuteFn execute_fn_;
   RenderGraph* rg_;
   uint32_t pass_i_{};
@@ -169,10 +186,23 @@ class RenderGraph {
   std::vector<TextureUsage> tex_usages_;
   std::vector<BufferUsage> buf_usages_;
   std::vector<ResourcePassUsages> resource_pass_usages_[2];
+  std::string get_resource_name(RGResourceHandle handle) {
+    auto it = resource_handle_to_name_.find(handle.to_64());
+    return it == resource_handle_to_name_.end() ? "" : it->second;
+  }
 
+  struct BarrierInfo {
+    RGResourceHandle resource;
+    rhi::PipelineStage src_stage;
+    rhi::PipelineStage dst_stage;
+    rhi::AccessFlags src_access;
+    rhi::AccessFlags dst_access;
+  };
   std::vector<RGPass> passes_;
+  std::vector<std::vector<BarrierInfo>> pass_barrier_infos_;
   std::vector<std::unordered_set<uint32_t>> pass_dependencies_;
   std::unordered_map<std::string, RGResourceHandle> resource_name_to_handle_;
+  std::unordered_map<uint64_t, std::string> resource_handle_to_name_;
   std::unordered_map<uint64_t, RGResourceHandle> tex_handle_to_handle_;
 
   std::vector<uint32_t> sink_passes_;
@@ -182,6 +212,7 @@ class RenderGraph {
   std::unordered_set<uint32_t> intermed_pass_visited_;
   std::vector<uint32_t> intermed_pass_stack_;
   rhi::Device* device_{};
+  size_t external_texture_count_{};
 };
 
 }  // namespace gfx

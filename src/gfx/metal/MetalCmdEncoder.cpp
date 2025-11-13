@@ -56,6 +56,7 @@ void MetalCmdEncoder::begin_rendering(
 
   ASSERT(!render_enc_);
   render_enc_ = cmd_buf_->renderCommandEncoder(desc);
+  // TODO: flush all the stages up to this point
   render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionNone);
 
   render_enc_->setArgumentTable(arg_table_, MTL::RenderStageFragment | MTL::RenderStageVertex);
@@ -227,7 +228,7 @@ void MetalCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle indirect_
   start_compute_encoder();
   ASSERT(device_->dispatch_indirect_pso_);
 
-  compute_enc_->barrierAfterStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionDevice);
+  // compute_enc_->barrierAfterStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionDevice);
 
   compute_enc_->setComputePipelineState(device_->dispatch_indirect_pso_);
   compute_enc_->setArgumentTable(arg_table_);
@@ -268,9 +269,12 @@ void MetalCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle indirect_
                                      MTL::Size::Make(threads_per_tg_x, 1, 1));
 }
 
-void MetalCmdEncoder::barrier(rhi::PipelineStage, rhi::AccessFlags, rhi::PipelineStage,
-                              rhi::AccessFlags) {
-  ASSERT(compute_enc_ || render_enc_);
+void MetalCmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
+                              rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) {
+  barrier_infos.emplace_back(src_stage, dst_stage, src_access, dst_access);
+  barrier_infos.clear();
+  // compute_need_flush_ = true;
+  // render_need_flush_ = true;
   // bool src_is_compute = stage_is_compute_encoder(src_stage);
   // bool dst_is_compute = stage_is_compute_encoder(dst_stage);
   if (compute_enc_) {
@@ -283,6 +287,12 @@ void MetalCmdEncoder::barrier(rhi::PipelineStage, rhi::AccessFlags, rhi::Pipelin
     render_enc_->barrierAfterStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionDevice);
     render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll,
                                          MTL4::VisibilityOptionDevice);
+  }
+}
+
+void MetalCmdEncoder::flush_compute_barriers() {
+  if (compute_enc_ && compute_need_flush_) {
+    compute_need_flush_ = false;
   }
 }
 

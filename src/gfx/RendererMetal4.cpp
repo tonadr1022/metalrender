@@ -198,7 +198,8 @@ void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
   }
 
   add_render_graph_passes(args);
-  rg_.bake();
+  static int i = 0;
+  rg_.bake(i++ == 0);
   rg_.execute();
 
   device_->submit_frame();
@@ -278,7 +279,7 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
   {
     gbuffer_pass.add("gbuffer_a", {}, RGAccess::ColorWrite);
     for (const auto& t : pending_texture_uploads_) {
-      gbuffer_pass.add(t.tex.handle, RGAccess::FragmentRead);
+      gbuffer_pass.add(t.tex.handle, RGAccess::FragmentSample);
     }
 
     gbuffer_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
@@ -311,9 +312,6 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
-
-      enc->barrier(rhi::PipelineStage_ComputeShader, rhi::AccessFlags_ShaderWrite,
-                   rhi::PipelineStage_AllGraphics, rhi::AccessFlags_ShaderRead);
 
       // for (size_t i = 0; i < std::min(draw_cmd_count_, cmds.size()); i++) {
       // auto& cmd = cmds[i];
