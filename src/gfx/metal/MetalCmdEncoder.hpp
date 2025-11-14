@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Metal/MTLCommandEncoder.hpp>
 #include <Metal/MTLGPUAddress.hpp>
 
 #include "gfx/CmdEncoder.hpp"
@@ -73,16 +74,12 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   // size_t tlab_size_{};
   MTL::GPUAddress pc_buf_{};
   size_t pc_buf_size_{};
-  struct BarrierInfo {
-    rhi::PipelineStage src_stage;
-    rhi::PipelineStage dst_stage;
-    rhi::AccessFlags src_access;
-    rhi::AccessFlags dst_access;
-  };
-  std::vector<BarrierInfo> barrier_infos;
-  bool compute_need_flush_{true};
-  bool render_need_flush_{true};
+  MTL::Stages compute_enc_flush_stages_{};
+  MTL::Stages render_enc_flush_stages_{};
+  MTL::Stages compute_enc_dst_stages_{};
+  MTL::Stages render_enc_dst_stages_{};
   void flush_compute_barriers();
+  void flush_render_barriers();
 
   rhi::BufferHandle curr_bound_index_buf_;
   size_t curr_bound_index_buf_offset_;

@@ -79,8 +79,9 @@ class RGPass {
   RGPass() = default;
   RGPass(std::string name, RenderGraph* rg, uint32_t pass_i);
 
-  RGResourceHandle add(const std::string& name, AttachmentInfo att_info, RGAccess access);
-  RGResourceHandle add(rhi::TextureHandle tex_handle, RGAccess access);
+  RGResourceHandle add_tex(const std::string& name, AttachmentInfo att_info, RGAccess access);
+  RGResourceHandle add_tex(rhi::TextureHandle tex_handle, RGAccess access);
+  RGResourceHandle add_buf(const std::string& name, rhi::BufferHandle buf_handle, RGAccess access);
 
   RGResourceHandle use_buf(BufferInfo, RGAccess) { return {}; }
 
@@ -136,20 +137,22 @@ class RenderGraph {
   RGResourceHandle add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                  RGAccess access, RGPass& pass);
 
+  RGResourceHandle add_buf_usage(const std::string& name, rhi::BufferHandle buf_handle,
+                                 RGAccess access, RGPass& pass);
   RGResourceHandle add_tex_usage(rhi::TextureHandle handle, RGAccess access, RGPass& pass);
 
  private:
   struct ResourceUsage {
-    rhi::AccessFlagsBits accesses;
-    rhi::PipelineStageBits stages;
+    // rhi::AccessFlagsBits accesses;
+    // rhi::PipelineStageBits stages;
   };
   struct TextureUsage : public ResourceUsage {
     AttachmentInfo att_info;
     rhi::TextureHandle handle;
   };
 
-  struct BufferUsage : ResourceUsage {
-    size_t size;
+  struct BufferUsage : public ResourceUsage {
+    rhi::BufferHandle handle;
   };
 
   void reset();
@@ -181,6 +184,12 @@ class RenderGraph {
   void emplace_back_tex_usage(Args&&... args) {
     tex_usages_.emplace_back(std::forward<Args>(args)...);
     resource_pass_usages_[(int)RGResourceType::Texture].emplace_back();
+  }
+
+  template <typename... Args>
+  void emplace_back_buf_usage(Args&&... args) {
+    buf_usages_.emplace_back(std::forward<Args>(args)...);
+    resource_pass_usages_[(int)RGResourceType::Buffer].emplace_back();
   }
 
   std::vector<TextureUsage> tex_usages_;

@@ -1,8 +1,10 @@
 #include "MetalCmdEncoder.hpp"
 
+#include <Metal/MTLCommandEncoder.hpp>
 #include <Metal/Metal.hpp>
 
 #include "core/EAssert.hpp"
+#include "gfx/CmdEncoder.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "gfx/metal/MetalUtil.hpp"
@@ -56,8 +58,7 @@ void MetalCmdEncoder::begin_rendering(
 
   ASSERT(!render_enc_);
   render_enc_ = cmd_buf_->renderCommandEncoder(desc);
-  // TODO: flush all the stages up to this point
-  render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionNone);
+  flush_render_barriers();
 
   render_enc_->setArgumentTable(arg_table_, MTL::RenderStageFragment | MTL::RenderStageVertex);
 
@@ -213,8 +214,8 @@ void MetalCmdEncoder::start_compute_encoder() {
   if (!compute_enc_) {
     compute_enc_ = cmd_buf_->computeCommandEncoder();
     // TODO: diabolical
-    compute_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll,
-                                          MTL4::VisibilityOptionDevice);
+    // compute_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll,
+    //                                       MTL4::VisibilityOptionDevice);
   }
 }
 
@@ -269,30 +270,60 @@ void MetalCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle indirect_
                                      MTL::Size::Make(threads_per_tg_x, 1, 1));
 }
 
-void MetalCmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
-                              rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) {
-  barrier_infos.emplace_back(src_stage, dst_stage, src_access, dst_access);
-  barrier_infos.clear();
-  // compute_need_flush_ = true;
-  // render_need_flush_ = true;
-  // bool src_is_compute = stage_is_compute_encoder(src_stage);
-  // bool dst_is_compute = stage_is_compute_encoder(dst_stage);
-  if (compute_enc_) {
-    compute_enc_->barrierAfterEncoderStages(MTL::StageAll, MTL::StageAll,
-                                            MTL4::VisibilityOptionDevice);
-    compute_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll,
-                                          MTL4::VisibilityOptionDevice);
-    compute_enc_->barrierAfterStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionDevice);
-  } else if (render_enc_) {
-    render_enc_->barrierAfterStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionDevice);
-    render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll,
-                                         MTL4::VisibilityOptionDevice);
+namespace {
+
+MTL::Stages convert_stage(rhi::PipelineStage stage) {
+  MTL::Stages result{};
+  if (stage & (rhi::PipelineStage_AllCommands)) {
+    result |= MTL::StageAll;
+  }
+  if (stage & (rhi::PipelineStage_FragmentShader | rhi::PipelineStage_EarlyFragmentTests |
+               rhi::PipelineStage_LateFragmentTests | rhi::PipelineStage_ColorAttachmentOutput |
+               rhi::PipelineStage_AllGraphics)) {
+    result |= MTL::StageFragment;
+  }
+  if (stage & (rhi::PipelineStage_VertexShader | rhi::PipelineStage_VertexInput |
+               rhi::PipelineStage_AllGraphics | rhi::PipelineStage_DrawIndirect)) {
+    result |= MTL::StageVertex;
+  }
+  if (stage & (rhi::PipelineStage_ComputeShader)) {
+    result |= MTL::StageDispatch;
+  }
+  if (stage & (rhi::PipelineStage_AllTransfer)) {
+    result |= MTL::StageBlit;
+  }
+  return result;
+}
+}  // namespace
+void MetalCmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
+                              rhi::PipelineStage dst_stage, rhi::AccessFlags) {
+  auto src_mtl_stage = convert_stage(src_stage);
+  auto dst_mtl_stage = convert_stage(dst_stage);
+  if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
+    compute_enc_flush_stages_ |= src_mtl_stage;
+    compute_enc_dst_stages_ |= dst_mtl_stage;
+  }
+  if (dst_mtl_stage & (MTL::StageVertex | MTL::StageFragment | MTL::StageObject | MTL::StageMesh)) {
+    render_enc_flush_stages_ |= src_mtl_stage;
+    render_enc_dst_stages_ |= dst_mtl_stage;
   }
 }
 
 void MetalCmdEncoder::flush_compute_barriers() {
-  if (compute_enc_ && compute_need_flush_) {
-    compute_need_flush_ = false;
+  if (compute_enc_ && compute_enc_flush_stages_) {
+    compute_enc_->barrierAfterQueueStages(compute_enc_flush_stages_, compute_enc_dst_stages_,
+                                          MTL4::VisibilityOptionDevice);
+    compute_enc_flush_stages_ = 0;
+    compute_enc_dst_stages_ = 0;
+  }
+}
+
+void MetalCmdEncoder::flush_render_barriers() {
+  if (render_enc_ && render_enc_flush_stages_) {
+    render_enc_->barrierAfterQueueStages(render_enc_flush_stages_, render_enc_dst_stages_,
+                                         MTL4::VisibilityOptionNone);
+    render_enc_flush_stages_ = 0;
+    render_enc_dst_stages_ = 0;
   }
 }
 

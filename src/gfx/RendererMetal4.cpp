@@ -270,36 +270,41 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
   if (!pending_texture_uploads_.empty()) {
     auto& tex_flush_pass = rg_.add_pass("flush_textures");
     for (const auto& t : pending_texture_uploads_) {
-      tex_flush_pass.add(t.tex.handle, RGAccess::ComputeWrite);
+      tex_flush_pass.add_tex(t.tex.handle,
+                             (RGAccess)(RGAccess::ComputeWrite | RGAccess::TransferWrite));
     }
     tex_flush_pass.set_execute_fn(
         [this](rhi::CmdEncoder* enc) { flush_pending_texture_uploads(enc); });
   }
+  {
+    auto& prepare_indirect_pass = rg_.add_pass("prepare_indirect");
+    prepare_indirect_pass.add_buf("indirect_buffer", indirect_cmd_buf_.handle,
+                                  RGAccess::ComputeWrite);
+    prepare_indirect_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
+      auto win_dims = window_->get_window_size();
+      float aspect = (float)win_dims.x / win_dims.y;
+      glm::mat4 mv = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
+      static_assert(sizeof(BasicIndirectPC) == 160);
+      BasicIndirectPC pc{
+          .vp = mv,
+          .vert_buf_idx = get_bindless_idx(all_static_vertices_buf_),
+          .instance_data_buf_idx = get_bindless_idx(instance_data_buf_),
+          .mat_buf_idx = get_bindless_idx(all_material_buf_),
+      };
+      enc->push_constants(&pc, sizeof(pc));
+      enc->prepare_indexed_indirect_draws(indirect_cmd_buf_.handle, 0, draw_cmd_count_,
+                                          all_static_indices_buf_.handle, 0);
+    });
+  }
 
   {
-    gbuffer_pass.add("gbuffer_a", {}, RGAccess::ColorWrite);
+    gbuffer_pass.add_buf("indirect_buffer", indirect_cmd_buf_.handle, RGAccess::IndirectRead);
+    gbuffer_pass.add_tex("gbuffer_a", {}, RGAccess::ColorWrite);
     for (const auto& t : pending_texture_uploads_) {
-      gbuffer_pass.add(t.tex.handle, RGAccess::FragmentSample);
+      gbuffer_pass.add_tex(t.tex.handle, RGAccess::FragmentSample);
     }
 
-    gbuffer_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
-      {
-        auto win_dims = window_->get_window_size();
-        float aspect = (float)win_dims.x / win_dims.y;
-        glm::mat4 mv =
-            glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
-        static_assert(sizeof(BasicIndirectPC) == 160);
-        BasicIndirectPC pc{
-            .vp = mv,
-            .vert_buf_idx = get_bindless_idx(all_static_vertices_buf_),
-            .instance_data_buf_idx = get_bindless_idx(instance_data_buf_),
-            .mat_buf_idx = get_bindless_idx(all_material_buf_),
-        };
-        enc->push_constants(&pc, sizeof(pc));
-        enc->prepare_indexed_indirect_draws(indirect_cmd_buf_.handle, 0, draw_cmd_count_,
-                                            all_static_indices_buf_.handle, 0);
-      }
-
+    gbuffer_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
       enc->begin_rendering({
           RenderingAttachmentInfo::color_att(device_->get_swapchain().get_texture(curr_frame_idx_),
                                              rhi::LoadOp::Clear, {.color = {0.1, 0.2, 0.1, 1}}),
@@ -325,7 +330,7 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
   }
   {
     auto& pass = rg_.add_pass("shade");
-    pass.add("gbuffer_a", {}, RGAccess::ComputeRead);
+    pass.add_tex("gbuffer_a", {}, RGAccess::ComputeRead);
     pass.set_execute_fn([](rhi::CmdEncoder*) {});
   }
 }
