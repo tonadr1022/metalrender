@@ -120,34 +120,6 @@ void MetalDevice::init(const InitInfo& init_info) {
   dispatch_indirect_pso_ =
       compile_mtl_compute_pipeline(shader_lib_dir_ / "dispatch_indirect.metallib");
 
-  {
-    MTL::IndirectCommandBufferDescriptor* desc =
-        MTL::IndirectCommandBufferDescriptor::alloc()->init();
-    desc->setInheritBuffers(false);
-    desc->setInheritPipelineState(true);
-
-    desc->setCommandTypes(MTL::IndirectCommandTypeDrawIndexed);
-    desc->setMaxVertexBufferBindCount(3);
-    desc->setMaxFragmentBufferBindCount(3);
-
-    main_icb_ = device_->newIndirectCommandBuffer(desc, 1'000'000, MTL::ResourceStorageModePrivate);
-    main_res_set_->addAllocation(main_icb_);
-
-    // TODO: move this to a class that abstracts indirect buffers
-    MTL::ArgumentDescriptor* arg = MTL::ArgumentDescriptor::alloc()->init();
-    arg->setIndex(0);
-    arg->setAccess(MTL::BindingAccessReadWrite);
-    arg->setDataType(MTL::DataTypeIndirectCommandBuffer);
-    std::array<NS::Object*, 1> args_arr{arg};
-    const NS::Array* args = NS::Array::array(args_arr.data(), args_arr.size());
-    main_icb_container_arg_enc_ = device_->newArgumentEncoder(args);
-    main_icb_container_buf_ = create_buf_h({.size = main_icb_container_arg_enc_->encodedLength()});
-    main_icb_container_arg_enc_->setArgumentBuffer(get_mtl_buf(main_icb_container_buf_), 0);
-    main_icb_container_arg_enc_->setIndirectCommandBuffer(main_icb_, 0);
-
-    desc->release();
-  }
-
   shared_event_ = device_->newSharedEvent();
 }
 
@@ -238,8 +210,14 @@ void MetalDevice::destroy(rhi::BufferHandle handle) {
 
   ASSERT(buf->buffer());
   if (buf->buffer()) {
+    main_res_set_->removeAllocation(buf->buffer());
     buf->buffer()->release();
   }
+
+  if (buf->desc().usage & rhi::BufferUsage_Indirect) {
+    indirect_buffer_handle_to_icb_.erase(handle.to64());
+  }
+
   buffer_pool_.destroy(handle);
 }
 
@@ -251,6 +229,7 @@ void MetalDevice::destroy(rhi::TextureHandle handle) {
   }
   ASSERT(tex->texture());
   if (tex->texture() && !tex->is_drawable_tex()) {
+    main_res_set_->removeAllocation(tex->texture());
     tex->texture()->release();
   }
   texture_pool_.destroy(handle);

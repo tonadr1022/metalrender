@@ -77,7 +77,8 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
     });
   }
 
-  all_material_buf_ = device_->create_buf_h(rhi::BufferDesc{
+  all_material_buf_ = device_->create_buf_h({
+      .usage = rhi::BufferUsage_Storage,
       .size = k_max_materials * sizeof(M4Material),
       .bindless = true,
       .name = "all materials buf",
@@ -113,14 +114,26 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
   constexpr size_t k_max_vertices = 2'000'000;
   constexpr size_t k_max_indices = 2'000'000;
 
-  indirect_cmd_buf_ = device_->create_buf_h(
-      {.size = sizeof(IndexedIndirectDrawCmd) * k_max_draws, .bindless = true});
-  instance_data_buf_ =
-      device_->create_buf_h({.size = sizeof(InstData) * k_max_draws, .bindless = true});
-  all_static_vertices_buf_ =
-      device_->create_buf_h({.size = sizeof(DefaultVertex) * k_max_vertices, .bindless = true});
-  all_static_indices_buf_ =
-      device_->create_buf_h({.size = sizeof(rhi::DefaultIndexT) * k_max_indices, .bindless = true});
+  indirect_cmd_buf_ = device_->create_buf_h({
+      .usage = (rhi::BufferUsage)(rhi::BufferUsage_Indirect | rhi::BufferUsage_Storage),
+      .size = sizeof(IndexedIndirectDrawCmd) * k_max_draws,
+      .bindless = true,
+  });
+  instance_data_buf_ = device_->create_buf_h({
+      .usage = rhi::BufferUsage_Storage,
+      .size = sizeof(InstData) * k_max_draws,
+      .bindless = true,
+  });
+  all_static_vertices_buf_ = device_->create_buf_h({
+      .usage = rhi::BufferUsage_Storage,
+      .size = sizeof(DefaultVertex) * k_max_vertices,
+      .bindless = true,
+  });
+  all_static_indices_buf_ = device_->create_buf_h({
+      .usage = rhi::BufferUsage_Index,
+      .size = sizeof(rhi::DefaultIndexT) * k_max_indices,
+      .bindless = true,
+  });
 
   {
     const auto tot_draws = out_instance.tot_mesh_nodes;
@@ -241,9 +254,11 @@ rhi::BufferHandle ScratchBufferPool::alloc(size_t size) {
 
   if (best_idx == -1) {
     // create new buf
-    in_use_entries.emplace_back(
-        device_->create_buf_h({.storage_mode = rhi::StorageMode::CPUAndGPU,
-                               .size = std::max<uint32_t>(1024 * 1024, size)}));
+    in_use_entries.emplace_back(device_->create_buf_h({
+        .storage_mode = rhi::StorageMode::CPUAndGPU,
+        .usage = rhi::BufferUsage_Transfer,
+        .size = std::max<uint32_t>(1024 * 1024, size),
+    }));
   } else {
     auto e = std::move(entries[best_idx]);
     entries.erase(entries.begin() + best_idx);

@@ -4,6 +4,8 @@ I've been working on this renderer to enlighten myself on the wonders
 of the Metal API while I don't have access to a desktop.
 So far, it's been focused on meshlet rendering, with the possibility to expand it into Minecraft 2 (LOL).
 
+The mtl4 branch is an ongoing attempt at a render hardware interface (RHI) wrapping metal and eventually Vulkan to enable all of the main branch rendering to be re-written in an API agnostic fashion. This would enable a cross platform renderer (for Minecraft 2).
+
 ![Suzanne Meshlets](./screenshots/suzanne_meshlets.png "Suzanne_Meshlets")
 
 ## Running locally

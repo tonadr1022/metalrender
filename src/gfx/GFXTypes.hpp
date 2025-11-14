@@ -53,6 +53,7 @@ enum BufferUsage : uint8_t {
   BufferUsage_Vertex = 1 << 2,
   BufferUsage_Index = 1 << 3,
   BufferUsage_Uniform = 1 << 4,
+  BufferUsage_Transfer = 1 << 5,
 };
 
 struct BufferDesc {

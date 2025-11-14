@@ -29,6 +29,12 @@ struct TLAB {
 class MetalCmdEncoder : public rhi::CmdEncoder {
  public:
   MetalCmdEncoder() = default;
+  MetalCmdEncoder(const MetalCmdEncoder&) = delete;
+  MetalCmdEncoder(MetalCmdEncoder&&) = delete;
+  MetalCmdEncoder& operator=(const MetalCmdEncoder&) = delete;
+  MetalCmdEncoder& operator=(MetalCmdEncoder&&) = delete;
+  ~MetalCmdEncoder() override;
+
   MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_buf);
 
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
@@ -65,6 +71,13 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
                              size_t draw_cnt) override;
 
  private:
+  void init_icb_arg_encoder_and_buf();
+  void flush_compute_barriers();
+  void flush_render_barriers();
+  void end_render_encoder();
+  void end_compute_encoder();
+  void start_compute_encoder();
+
   MetalDevice* device_{};
   MTL4::CommandBuffer* cmd_buf_{};
   MTL4::RenderCommandEncoder* render_enc_{};
@@ -78,13 +91,10 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   MTL::Stages render_enc_flush_stages_{};
   MTL::Stages compute_enc_dst_stages_{};
   MTL::Stages render_enc_dst_stages_{};
-  void flush_compute_barriers();
-  void flush_render_barriers();
 
   rhi::BufferHandle curr_bound_index_buf_;
   size_t curr_bound_index_buf_offset_;
 
-  void end_render_encoder();
-  void end_compute_encoder();
-  void start_compute_encoder();
+  rhi::BufferHandleHolder main_icb_container_buf_;
+  MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
 };

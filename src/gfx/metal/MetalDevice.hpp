@@ -139,7 +139,8 @@ class MetalDevice : public rhi::Device {
       capacity_ = size;
       device_ = device;
       for (size_t i = 0; i < frames_in_flight; i++) {
-        buffers[i] = device->create_buf_h(rhi::BufferDesc{.size = size, .bindless = false});
+        buffers[i] = device->create_buf_h(
+            rhi::BufferDesc{.usage = rhi::BufferUsage_Storage, .size = size, .bindless = false});
       }
     }
 
@@ -171,12 +172,6 @@ class MetalDevice : public rhi::Device {
   // TODO: no public members pls
   // public to other implementation classes
  public:
-  // TODO: remove
-  rhi::BufferHandleHolder main_icb_container_buf_;
-  // TODO: remove
-  MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
-  MTL::IndirectCommandBuffer* main_icb_{};
-
   std::optional<GPUFrameAllocator> arg_buf_allocator_;
   std::optional<GPUFrameAllocator> push_constant_allocator_;
   std::optional<GPUFrameAllocator> test_allocator_;
@@ -198,6 +193,11 @@ class MetalDevice : public rhi::Device {
   std::unordered_map<std::string, MTL::Library*> path_to_lib_;
 
   MTL::ResidencySet* make_residency_set();
+  struct ICB {
+    MTL::IndirectCommandBuffer* icb;
+  };
+  std::unordered_map<uint64_t, ICB> indirect_buffer_handle_to_icb_;
+  MTL::ResidencySet* get_main_residency_set() const { return main_res_set_; }
 };
 
 struct GLFWwindow;
