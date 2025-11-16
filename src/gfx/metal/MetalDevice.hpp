@@ -195,11 +195,30 @@ class MetalDevice : public rhi::Device {
 
   MTL::ResidencySet* make_residency_set();
 
-  struct ICB_Data {
-    uint64_t curr_id{};
-    std::vector<MTL::IndirectCommandBuffer*> icbs;
+  class ICB_Mgr {
+   public:
+    explicit ICB_Mgr(MetalDevice* device) : device_(device) {}
+
+    struct ICB_Data {
+      uint64_t curr_id{};
+      std::vector<MTL::IndirectCommandBuffer*> icbs;
+    };
+
+    struct ICB_Alloc {
+      uint32_t id;
+      MTL::IndirectCommandBuffer* icb;
+    };
+
+    ICB_Alloc alloc(rhi::BufferHandle indirect_buf_handle, uint32_t draw_cnt);
+    MTL::IndirectCommandBuffer* get(rhi::BufferHandle indirect_buf, uint32_t id);
+    void reset_for_frame();
+    void remove(rhi::BufferHandle indirect_buf);
+
+    std::unordered_map<uint64_t, ICB_Data> indirect_buffer_handle_to_icb_;
+    MetalDevice* device_{};
   };
-  std::unordered_map<uint64_t, ICB_Data> indirect_buffer_handle_to_icb_;
+
+  ICB_Mgr icb_mgr_{this};
 
   MTL::ResidencySet* get_main_residency_set() const { return main_res_set_; }
 };

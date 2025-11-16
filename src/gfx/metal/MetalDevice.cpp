@@ -215,7 +215,7 @@ void MetalDevice::destroy(rhi::BufferHandle handle) {
   }
 
   if (buf->desc().usage & rhi::BufferUsage_Indirect) {
-    indirect_buffer_handle_to_icb_.erase(handle.to64());
+    icb_mgr_.remove(handle);
   }
 
   buffer_pool_.destroy(handle);
@@ -392,9 +392,7 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   main_res_set_->commit();
   frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
   curr_cmd_list_idx_ = 0;
-  for (auto& [k, v] : indirect_buffer_handle_to_icb_) {
-    v.curr_id = 0;
-  }
+
   {
     // wait on shared event
     if (frame_num_ > info_.frames_in_flight) {
@@ -404,6 +402,9 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
       }
     }
   }
+
+  icb_mgr_.reset_for_frame();
+
   push_constant_allocator_->reset(frame_idx());
   test_allocator_->reset(frame_idx());
   arg_buf_allocator_->reset(frame_idx());
@@ -488,3 +489,47 @@ void MetalDevice::set_vsync(bool vsync) {
 }
 
 bool MetalDevice::get_vsync() const { return [(CAMetalLayer*)metal_layer_ displaySyncEnabled]; }
+MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle indirect_buf_handle,
+                                                            uint32_t draw_cnt) {
+  auto it = indirect_buffer_handle_to_icb_.find(indirect_buf_handle.to64());
+  if (it == indirect_buffer_handle_to_icb_.end()) {
+    it = indirect_buffer_handle_to_icb_.emplace(indirect_buf_handle.to64(), ICB_Data{}).first;
+  }
+  uint32_t indirect_buf_id = it->second.curr_id;
+  it->second.curr_id++;
+
+  MTL::IndirectCommandBuffer* icb{};
+  if (indirect_buf_id < it->second.icbs.size()) {
+    icb = it->second.icbs[indirect_buf_id];
+  } else {
+    MTL::IndirectCommandBufferDescriptor* desc =
+        MTL::IndirectCommandBufferDescriptor::alloc()->init();
+    desc->setInheritBuffers(false);
+    desc->setInheritPipelineState(true);
+    desc->setCommandTypes(MTL::IndirectCommandTypeDrawIndexed);
+    desc->setMaxVertexBufferBindCount(3);
+    desc->setMaxFragmentBufferBindCount(3);
+    icb = device_->get_device()->newIndirectCommandBuffer(desc, draw_cnt,
+                                                          MTL::ResourceStorageModePrivate);
+    desc->release();
+    device_->get_main_residency_set()->addAllocation(icb);
+    it->second.icbs.emplace_back(icb);
+  }
+
+  return {.id = indirect_buf_id, .icb = icb};
+}
+MTL::IndirectCommandBuffer* MetalDevice::ICB_Mgr::get(rhi::BufferHandle indirect_buf, uint32_t id) {
+  auto it = indirect_buffer_handle_to_icb_.find(indirect_buf.to64());
+  ASSERT(it != indirect_buffer_handle_to_icb_.end());
+  ASSERT(id < it->second.icbs.size());
+  return it->second.icbs[id];
+}
+void MetalDevice::ICB_Mgr::reset_for_frame() {
+  for (auto& [k, v] : indirect_buffer_handle_to_icb_) {
+    v.curr_id = 0;
+  }
+}
+
+void MetalDevice::ICB_Mgr::remove(rhi::BufferHandle indirect_buf) {
+  indirect_buffer_handle_to_icb_.erase(indirect_buf.to64());
+}

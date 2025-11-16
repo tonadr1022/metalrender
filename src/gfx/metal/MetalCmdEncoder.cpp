@@ -231,33 +231,7 @@ uint32_t MetalCmdEncoder::prepare_indexed_indirect_draws(
   ASSERT(device_->dispatch_indirect_pso_);
   ASSERT(device_->get_buf(indirect_buf)->desc().usage & rhi::BufferUsage_Indirect);
 
-  auto it = device_->indirect_buffer_handle_to_icb_.find(indirect_buf.to64());
-  MTL::IndirectCommandBuffer* icb{};
-  uint32_t indirect_buf_id{};
-  if (it == device_->indirect_buffer_handle_to_icb_.end()) {
-    it = device_->indirect_buffer_handle_to_icb_
-             .emplace(indirect_buf.to64(), MetalDevice::ICB_Data{})
-             .first;
-  }
-
-  indirect_buf_id = it->second.curr_id;
-  it->second.curr_id++;
-  if (indirect_buf_id < it->second.icbs.size()) {
-    icb = it->second.icbs[indirect_buf_id];
-  } else {
-    MTL::IndirectCommandBufferDescriptor* desc =
-        MTL::IndirectCommandBufferDescriptor::alloc()->init();
-    desc->setInheritBuffers(false);
-    desc->setInheritPipelineState(true);
-    desc->setCommandTypes(MTL::IndirectCommandTypeDrawIndexed);
-    desc->setMaxVertexBufferBindCount(3);
-    desc->setMaxFragmentBufferBindCount(3);
-    icb = device_->get_device()->newIndirectCommandBuffer(desc, draw_cnt,
-                                                          MTL::ResourceStorageModePrivate);
-    desc->release();
-    device_->get_main_residency_set()->addAllocation(icb);
-    it->second.icbs.emplace_back(icb);
-  }
+  auto [indirect_buf_id, icb] = device_->icb_mgr_.alloc(indirect_buf, draw_cnt);
 
   init_icb_arg_encoder_and_buf();
   main_icb_container_arg_enc_->setArgumentBuffer(device_->get_mtl_buf(main_icb_container_buf_), 0);
@@ -340,10 +314,7 @@ void MetalCmdEncoder::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
                                             size_t draw_cnt) {
   ASSERT(render_enc_);
   ALWAYS_ASSERT(offset == 0);
-  auto it = device_->indirect_buffer_handle_to_icb_.find(indirect_buf.to64());
-  ALWAYS_ASSERT(it != device_->indirect_buffer_handle_to_icb_.end());
-  ASSERT(indirect_buf_id < it->second.icbs.size());
-  render_enc_->executeCommandsInBuffer(it->second.icbs[indirect_buf_id],
+  render_enc_->executeCommandsInBuffer(device_->icb_mgr_.get(indirect_buf, indirect_buf_id),
                                        NS::Range::Make(0, draw_cnt));
 }
 
