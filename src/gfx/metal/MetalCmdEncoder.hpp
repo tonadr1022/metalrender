@@ -57,9 +57,10 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
                        rhi::BufferHandle dst_buf, size_t dst_offset) override;
 
   // must call push_constants AND bind_index_buf first
-  void prepare_indexed_indirect_draws(rhi::BufferHandle indirect_buf, size_t offset,
-                                      size_t draw_cnt, rhi::BufferHandle index_buf,
-                                      size_t index_buf_offset) override;
+  uint32_t prepare_indexed_indirect_draws(rhi::BufferHandle indirect_buf, size_t offset,
+                                          size_t draw_cnt, rhi::BufferHandle index_buf,
+                                          size_t index_buf_offset, void* push_constant_data,
+                                          size_t push_constant_size) override;
   // void bind_index_buf(rhi::BufferHandle index_buf, size_t offset) override {
   //   curr_bound_index_buf_ = index_buf;
   //   curr_bound_index_buf_offset_ = offset;
@@ -67,8 +68,8 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
 
-  void draw_indexed_indirect(rhi::BufferHandle indirect_buf, size_t offset,
-                             size_t draw_cnt) override;
+  void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
+                             size_t offset, size_t draw_cnt) override;
 
  private:
   void init_icb_arg_encoder_and_buf();
@@ -83,10 +84,6 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   MTL4::RenderCommandEncoder* render_enc_{};
   MTL4::ComputeCommandEncoder* compute_enc_{};
   MTL4::ArgumentTable* arg_table_{};
-  // MTL::GPUAddress tlab_buf_{};
-  // size_t tlab_size_{};
-  MTL::GPUAddress pc_buf_{};
-  size_t pc_buf_size_{};
   MTL::Stages compute_enc_flush_stages_{};
   MTL::Stages render_enc_flush_stages_{};
   MTL::Stages compute_enc_dst_stages_{};

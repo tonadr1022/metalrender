@@ -90,14 +90,14 @@ class CmdEncoder {
   // virtual void bind_index_buf(rhi::BufferHandle index_buf, size_t offset) = 0;
   // virtual void bind_index_buf(rhi::BufferHandle index_buf) { bind_index_buf(index_buf, 0); }
 
-  virtual void prepare_indexed_indirect_draws(rhi::BufferHandle indirect_buf, size_t offset,
-                                              size_t draw_cnt, rhi::BufferHandle index_buf,
-                                              size_t index_buf_offset) = 0;
+  [[nodiscard]] virtual uint32_t prepare_indexed_indirect_draws(
+      rhi::BufferHandle indirect_buf, size_t offset, size_t draw_cnt, rhi::BufferHandle index_buf,
+      size_t index_buf_offset, void* push_constant_data, size_t push_constant_size) = 0;
 
   virtual void barrier(PipelineStage src_stage, AccessFlags src_access, PipelineStage dst_stage,
                        AccessFlags dst_access) = 0;
-  virtual void draw_indexed_indirect(rhi::BufferHandle indirect_buf, size_t offset,
-                                     size_t draw_cnt) = 0;
+  virtual void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
+                                     size_t offset, size_t draw_cnt) = 0;
 };
 
 }  // namespace rhi

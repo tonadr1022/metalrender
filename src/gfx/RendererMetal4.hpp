@@ -116,6 +116,7 @@ class RendererMetal4 {
 
   rhi::TextureHandleHolder default_white_tex_;
   void add_render_graph_passes(const RenderArgs& args);
+  std::vector<uint32_t> indirect_cmd_buf_ids_;
 };
 
 }  // namespace gfx

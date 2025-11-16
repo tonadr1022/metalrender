@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Metal/MTLIndirectCommandBuffer.hpp>
 #include <Metal/Metal.hpp>
 #include <filesystem>
 
@@ -193,10 +194,13 @@ class MetalDevice : public rhi::Device {
   std::unordered_map<std::string, MTL::Library*> path_to_lib_;
 
   MTL::ResidencySet* make_residency_set();
-  struct ICB {
-    MTL::IndirectCommandBuffer* icb;
+
+  struct ICB_Data {
+    uint64_t curr_id{};
+    std::vector<MTL::IndirectCommandBuffer*> icbs;
   };
-  std::unordered_map<uint64_t, ICB> indirect_buffer_handle_to_icb_;
+  std::unordered_map<uint64_t, ICB_Data> indirect_buffer_handle_to_icb_;
+
   MTL::ResidencySet* get_main_residency_set() const { return main_res_set_; }
 };
 

@@ -143,8 +143,8 @@ void MetalCmdEncoder::push_constants(void* data, size_t size) {
   ASSERT(size <= k_pc_size);
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_pc_size);
   memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, data, size);
-  pc_buf_ = pc_buf->gpuAddress() + pc_buf_offset;
-  pc_buf_size_ = k_pc_size;
+  // pc_buf_ = pc_buf->gpuAddress() + pc_buf_offset;
+  // pc_buf_size_ = k_pc_size;
 }
 
 void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
@@ -214,15 +214,15 @@ void MetalCmdEncoder::end_compute_encoder() {
 void MetalCmdEncoder::start_compute_encoder() {
   if (!compute_enc_) {
     compute_enc_ = cmd_buf_->computeCommandEncoder();
-    // TODO: diabolical
-    // compute_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll,
-    //                                       MTL4::VisibilityOptionDevice);
   }
 }
 
-void MetalCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle indirect_buf, size_t offset,
-                                                     size_t draw_cnt, rhi::BufferHandle index_buf,
-                                                     size_t index_buf_offset) {
+uint32_t MetalCmdEncoder::prepare_indexed_indirect_draws(
+    rhi::BufferHandle indirect_buf, size_t offset, size_t draw_cnt, rhi::BufferHandle index_buf,
+    size_t index_buf_offset, void* push_constant_data, size_t push_constant_size) {
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_pc_size);
+  memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, push_constant_data, push_constant_size);
+
   curr_bound_index_buf_ = index_buf;
   curr_bound_index_buf_offset_ = index_buf_offset;
 
@@ -233,7 +233,18 @@ void MetalCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle indirect_
 
   auto it = device_->indirect_buffer_handle_to_icb_.find(indirect_buf.to64());
   MTL::IndirectCommandBuffer* icb{};
+  uint32_t indirect_buf_id{};
   if (it == device_->indirect_buffer_handle_to_icb_.end()) {
+    it = device_->indirect_buffer_handle_to_icb_
+             .emplace(indirect_buf.to64(), MetalDevice::ICB_Data{})
+             .first;
+  }
+
+  indirect_buf_id = it->second.curr_id;
+  it->second.curr_id++;
+  if (indirect_buf_id < it->second.icbs.size()) {
+    icb = it->second.icbs[indirect_buf_id];
+  } else {
     MTL::IndirectCommandBufferDescriptor* desc =
         MTL::IndirectCommandBufferDescriptor::alloc()->init();
     desc->setInheritBuffers(false);
@@ -241,27 +252,21 @@ void MetalCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle indirect_
     desc->setCommandTypes(MTL::IndirectCommandTypeDrawIndexed);
     desc->setMaxVertexBufferBindCount(3);
     desc->setMaxFragmentBufferBindCount(3);
-    auto* mtl_icb = device_->get_device()->newIndirectCommandBuffer(
-        desc, draw_cnt, MTL::ResourceStorageModePrivate);
+    icb = device_->get_device()->newIndirectCommandBuffer(desc, draw_cnt,
+                                                          MTL::ResourceStorageModePrivate);
     desc->release();
-    device_->get_main_residency_set()->addAllocation(mtl_icb);
-    icb = mtl_icb;
-    device_->indirect_buffer_handle_to_icb_.emplace(indirect_buf.to64(),
-                                                    MetalDevice::ICB{.icb = mtl_icb});
-  } else {
-    icb = it->second.icb;
+    device_->get_main_residency_set()->addAllocation(icb);
+    it->second.icbs.emplace_back(icb);
   }
 
   init_icb_arg_encoder_and_buf();
   main_icb_container_arg_enc_->setArgumentBuffer(device_->get_mtl_buf(main_icb_container_buf_), 0);
   main_icb_container_arg_enc_->setIndirectCommandBuffer(icb, 0);
 
-  // compute_enc_->barrierAfterStages(MTL::StageAll, MTL::StageAll, MTL4::VisibilityOptionDevice);
-
   compute_enc_->setComputePipelineState(device_->dispatch_indirect_pso_);
   compute_enc_->setArgumentTable(arg_table_);
 
-  arg_table_->setAddress(pc_buf_, 0);
+  arg_table_->setAddress(pc_buf->gpuAddress(), 0);
 
   struct Args2 {
     uint32_t draw_cnt;
@@ -295,6 +300,7 @@ void MetalCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle indirect_
   uint32_t tg_x = (draw_cnt + threads_per_tg_x - 1) / threads_per_tg_x;
   compute_enc_->dispatchThreadgroups(MTL::Size::Make(tg_x, 1, 1),
                                      MTL::Size::Make(threads_per_tg_x, 1, 1));
+  return indirect_buf_id;
 }
 
 void MetalCmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
@@ -329,13 +335,16 @@ void MetalCmdEncoder::flush_render_barriers() {
   }
 }
 
-void MetalCmdEncoder::draw_indexed_indirect(rhi::BufferHandle indirect_buf, size_t offset,
+void MetalCmdEncoder::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
+                                            uint32_t indirect_buf_id, size_t offset,
                                             size_t draw_cnt) {
   ASSERT(render_enc_);
   ALWAYS_ASSERT(offset == 0);
   auto it = device_->indirect_buffer_handle_to_icb_.find(indirect_buf.to64());
   ALWAYS_ASSERT(it != device_->indirect_buffer_handle_to_icb_.end());
-  render_enc_->executeCommandsInBuffer(it->second.icb, NS::Range::Make(0, draw_cnt));
+  ASSERT(indirect_buf_id < it->second.icbs.size());
+  render_enc_->executeCommandsInBuffer(it->second.icbs[indirect_buf_id],
+                                       NS::Range::Make(0, draw_cnt));
 }
 
 void MetalCmdEncoder::copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice,

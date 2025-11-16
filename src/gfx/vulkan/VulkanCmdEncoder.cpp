@@ -34,12 +34,17 @@ void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle /*src_buf*/, size_t
 void VulkanCmdEncoder::copy_tex_to_buf(rhi::TextureHandle /*src_tex*/, size_t /*src_slice*/,
                                        size_t /*src_level*/, rhi::BufferHandle /*dst_buf*/,
                                        size_t /*dst_offset*/) {}
-void VulkanCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle /*indirect_buf*/,
-                                                      size_t /*offset*/, size_t /*draw_cnt*/,
-                                                      rhi::BufferHandle /*index_buf*/,
-                                                      size_t /*index_buf_offset*/) {}
+uint32_t VulkanCmdEncoder::prepare_indexed_indirect_draws(rhi::BufferHandle /* indirect_buf */,
+                                                          size_t /*offset*/, size_t /*draw_cnt*/,
+                                                          rhi::BufferHandle /*index_buf*/,
+                                                          size_t /*index_buf_offset*/,
+                                                          void* /*push_constant_data*/,
+                                                          size_t /*push_constant_size*/) {
+  exit(1);
+}
 void VulkanCmdEncoder::barrier(rhi::PipelineStage /*src_stage*/, rhi::AccessFlags /*src_access*/,
                                rhi::PipelineStage /*dst_stage*/, rhi::AccessFlags /*dst_access*/) {}
-void VulkanCmdEncoder::draw_indexed_indirect(rhi::BufferHandle /*indirect_buf*/, size_t /*offset*/,
+void VulkanCmdEncoder::draw_indexed_indirect(rhi::BufferHandle /*indirect_buf*/,
+                                             uint32_t /* indirect_buf_id */, size_t /*offset*/,
                                              size_t /*draw_cnt*/) {}
 }  // namespace gfx::vk

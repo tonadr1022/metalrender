@@ -210,6 +210,8 @@ void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
     return;
   }
 
+  indirect_cmd_buf_ids_.clear();
+
   add_render_graph_passes(args);
   static int i = 0;
   rg_.bake(i++ == 0);
@@ -306,9 +308,10 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
           .instance_data_buf_idx = get_bindless_idx(instance_data_buf_),
           .mat_buf_idx = get_bindless_idx(all_material_buf_),
       };
-      enc->push_constants(&pc, sizeof(pc));
-      enc->prepare_indexed_indirect_draws(indirect_cmd_buf_.handle, 0, draw_cmd_count_,
-                                          all_static_indices_buf_.handle, 0);
+
+      indirect_cmd_buf_ids_.emplace_back(
+          enc->prepare_indexed_indirect_draws(indirect_cmd_buf_.handle, 0, draw_cmd_count_,
+                                              all_static_indices_buf_.handle, 0, &pc, sizeof(pc)));
     });
   }
 
@@ -340,7 +343,8 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
       //                              cmd.index_count, 1, cmd.vertex_offset / sizeof(DefaultVertex),
       //                              i);
       // }
-      enc->draw_indexed_indirect(indirect_cmd_buf_.handle, 0, draw_cmd_count_);
+      enc->draw_indexed_indirect(indirect_cmd_buf_.handle, indirect_cmd_buf_ids_[0], 0,
+                                 draw_cmd_count_);
     });
   }
   {

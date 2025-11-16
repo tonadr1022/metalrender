@@ -392,6 +392,9 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   main_res_set_->commit();
   frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
   curr_cmd_list_idx_ = 0;
+  for (auto& [k, v] : indirect_buffer_handle_to_icb_) {
+    v.curr_id = 0;
+  }
   {
     // wait on shared event
     if (frame_num_ > info_.frames_in_flight) {
