@@ -1,7 +1,12 @@
 #include "MetalCmdEncoder.hpp"
 
-#include <Metal/MTLCommandEncoder.hpp>
+// clang-format off
 #include <Metal/Metal.hpp>
+#define IR_RUNTIME_METALCPP
+#include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
+// clang-format on
+
+#include <Metal/MTLCommandEncoder.hpp>
 
 #include "core/EAssert.hpp"
 #include "gfx/CmdEncoder.hpp"
@@ -16,7 +21,14 @@ struct Cbuffer2 {
   uint32_t vertex_id_base;
 };
 
-constexpr size_t k_pc_size = 160 + sizeof(Cbuffer2);
+constexpr size_t k_pc_size = 160;
+
+struct TLAB_Layout {
+  uint8_t pc_data[k_pc_size];
+  Cbuffer2 cbuffer2;
+};
+
+constexpr size_t k_tlab_size = sizeof(TLAB_Layout);
 
 MTL::Stages convert_stage(rhi::PipelineStage stage) {
   MTL::Stages result{};
@@ -140,11 +152,14 @@ void MetalCmdEncoder::draw_primitives(rhi::PrimitiveTopology topology, size_t ve
 }
 
 void MetalCmdEncoder::push_constants(void* data, size_t size) {
-  ASSERT(size <= k_pc_size);
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_pc_size);
+  ASSERT(size <= k_tlab_size);
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
   memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, data, size);
-  // pc_buf_ = pc_buf->gpuAddress() + pc_buf_offset;
-  // pc_buf_size_ = k_pc_size;
+  arg_table_->setAddress(device_->get_mtl_buf(device_->resource_descriptor_table_)->gpuAddress(),
+                         kIRDescriptorHeapBindPoint);
+  arg_table_->setAddress(device_->get_mtl_buf(device_->sampler_descriptor_table_)->gpuAddress(),
+                         kIRSamplerHeapBindPoint);
+  memcpy(pc_data_, data, size);
 }
 
 void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
@@ -152,9 +167,17 @@ void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
                                               size_t count, size_t instance_count,
                                               size_t base_vertex, size_t base_instance) {
   auto* buf = device_->get_mtl_buf(index_buf);
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
+
+  auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
+  memcpy(tlab->pc_data, pc_data_, k_pc_size);
+  tlab->cbuffer2.draw_id = base_instance;
+  tlab->cbuffer2.vertex_id_base = base_vertex;
+  arg_table_->setAddress(pc_buf->gpuAddress() + pc_buf_offset, kIRArgumentBufferBindPoint);
+
   render_enc_->drawIndexedPrimitives(mtl::util::convert(topology), count, MTL::IndexTypeUInt32,
-                                     buf->gpuAddress() + index_start, buf->length(), instance_count,
-                                     base_vertex, base_instance);
+                                     buf->gpuAddress() + index_start * sizeof(uint32_t),
+                                     buf->length(), instance_count, 0, 0);
 }
 
 void MetalCmdEncoder::set_depth_stencil_state(rhi::CompareOp depth_compare_op,
@@ -220,7 +243,7 @@ void MetalCmdEncoder::start_compute_encoder() {
 uint32_t MetalCmdEncoder::prepare_indexed_indirect_draws(
     rhi::BufferHandle indirect_buf, size_t offset, size_t draw_cnt, rhi::BufferHandle index_buf,
     size_t index_buf_offset, void* push_constant_data, size_t push_constant_size) {
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_pc_size);
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
   memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, push_constant_data, push_constant_size);
 
   curr_bound_index_buf_ = index_buf;

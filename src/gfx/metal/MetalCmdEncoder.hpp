@@ -94,4 +94,6 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
 
   rhi::BufferHandleHolder main_icb_container_buf_;
   MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
+
+  uint8_t pc_data_[168]{};
 };
