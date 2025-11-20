@@ -7,12 +7,10 @@
 
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
-// #include "gfx/ResourceManager.hpp"
 #include "gfx/Device.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
 #include "tracy/Tracy.hpp"
-// #include "voxels/VoxelWorld.hpp"
 
 namespace {
 
@@ -43,7 +41,7 @@ App::App() {
 
   on_hide_mouse_change();
 
-  // ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_});
+  ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_});
   renderer_.init(
       gfx::RendererMetal4::CreateInfo{.device = device_.get(),
                                       .window = window_.get(),
@@ -76,16 +74,16 @@ float get_float(float min, float max) {
 
 void App::run() {
   ZoneScoped;
-  int scene = 3;
+  int scene = 0;
   if (scene == 0) {
     glm::ivec3 iter{};
-    int n = 0;
+    int n = 1;
     glm::ivec3 dims{n, 1, n};
     float dist = 40.0;
     for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
       for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
         glm::vec3 pos = glm::vec3{iter} * dist;
-        load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, pos));
+        load_model(config_.paths[1], glm::translate(glm::mat4{1}, pos));
       }
     }
     // load_model(config_.initial_model_path);
@@ -100,20 +98,20 @@ void App::run() {
       glm::vec3 randomAxis = glm::linearRand(glm::vec3(-1.0f), glm::vec3(1.0f));
       float randomAngle = glm::linearRand(0.0f, glm::two_pi<float>());
       auto rot = glm::angleAxis(randomAngle, glm::normalize(randomAxis));
-      load_model(config_.initial_model_path, glm::translate(glm::mat4{1}, pos) *
-                                                 glm::mat4_cast(rot) *
-                                                 glm::scale(glm::mat4{1}, glm::vec3{scale}));
+      load_model(config_.paths[0], glm::translate(glm::mat4{1}, pos) * glm::mat4_cast(rot) *
+                                       glm::scale(glm::mat4{1}, glm::vec3{scale}));
     }
   } else if (scene == 2) {
     glm::vec3 positions[] = {glm::vec3{0, 0, 0}, glm::vec3{-10, 0, 0}};
     float scales[] = {3, 1};
     for (size_t i = 0; i < ARRAY_SIZE(scales); i++) {
       auto p = positions[i];
-      load_model(config_.initial_model_path,
+      load_model(config_.paths[0],
                  glm::translate(glm::mat4{1}, p) * glm::scale(glm::mat4{1}, glm::vec3{scales[i]}));
     }
   }
 
+  load_model(config_.paths[0], glm::translate(glm::mat4{1}, glm::vec3{0, 0, 0}));
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
     ZoneScopedN("main loop");
@@ -140,7 +138,7 @@ void App::run() {
   //   voxel_world_->shutdown();
   // }
 
-  // ResourceManager::shutdown();
+  ResourceManager::shutdown();
   window_->shutdown();
   device_->shutdown();
 }
@@ -193,7 +191,10 @@ void App::load_config() {
     return;
   }
 
-  f >> config_.initial_model_path;
+  std::string path;
+  while (f >> path) {
+    config_.paths.emplace_back(path);
+  }
 }
 
 void App::on_imgui() {
@@ -210,8 +211,8 @@ void App::on_imgui() {
   ImGui::End();
 }
 
-void App::load_model(const std::filesystem::path&, const glm::mat4&) {
-  // auto full_path =
-  //     path.string().starts_with("Models") ? resource_dir_ / "models" / "gltf" / path : path;
-  // models_.push_back(ResourceManager::get().load_model(full_path, transform));
+void App::load_model(const std::filesystem::path& path, const glm::mat4& transform) {
+  auto full_path =
+      path.string().starts_with("Models") ? resource_dir_ / "models" / "gltf" / path : path;
+  models_.push_back(ResourceManager::get().load_model(full_path, transform));
 }

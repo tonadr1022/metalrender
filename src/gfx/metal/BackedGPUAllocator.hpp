@@ -56,6 +56,7 @@ class BackedGPUAllocator {
   }
 
   [[nodiscard]] rhi::Buffer* get_buffer() const { return device_.get_buf(backing_buffer_); }
+  [[nodiscard]] rhi::BufferHandle get_buffer_handle() const { return backing_buffer_.handle; }
   [[nodiscard]] const OffsetAllocator::Allocator& get_allocator() const { return allocator_; }
   [[nodiscard]] uint32_t allocated_element_count() const { return allocated_element_count_; }
   [[nodiscard]] uint32_t allocated_elements_size_bytes() const {

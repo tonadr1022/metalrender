@@ -4,9 +4,7 @@
 #include "Camera.hpp"
 #include "Window.hpp"
 #include "gfx/RendererMetal4.hpp"
-// #include "gfx/ResourceManager.hpp"
-// #include "voxels/VoxelRenderer.hpp"
-// #include "voxels/VoxelWorld.hpp"
+#include "gfx/ResourceManager.hpp"
 
 struct App {
   App();
@@ -24,10 +22,10 @@ struct App {
   void on_hide_mouse_change();
   void load_config();
   void on_imgui();
-  void load_model(const std::filesystem::path &path, const glm::mat4 &transform = glm::mat4{1});
+  void load_model(const std::filesystem::path &path, const glm::mat4 &transform);
 
   struct Config {
-    std::filesystem::path initial_model_path;
+    std::vector<std::filesystem::path> paths;
   };
   Config config_;
   std::filesystem::path resource_dir_;
@@ -35,7 +33,7 @@ struct App {
   std::unique_ptr<rhi::Device> device_;
   std::unique_ptr<Window> window_;
   Camera camera_;
-  // std::vector<ModelHandle> models_;
+  std::vector<ModelHandle> models_;
   bool first_mouse_{true};
   bool hide_mouse_{false};
   bool imgui_enabled_{true};

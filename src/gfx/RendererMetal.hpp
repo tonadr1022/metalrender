@@ -51,6 +51,8 @@ class RenderPipelineState;
 
 }  // namespace MTL
 
+namespace lol {
+
 struct FuncConst {
   std::string name;
   void* val;
@@ -410,3 +412,5 @@ class RendererMetal {
 };
 
 static constexpr const char* to_string(RendererMetal::RenderMode mode);
+
+}  // namespace lol

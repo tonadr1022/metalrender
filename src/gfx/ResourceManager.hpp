@@ -6,7 +6,9 @@
 #include "ModelLoader.hpp"
 #include "core/Pool.hpp"
 
-class RendererMetal;
+namespace gfx {
+class RendererMetal4;
+}
 
 struct ModelInstance;
 using ModelHandle = GenerationalHandle<ModelInstance>;
@@ -14,7 +16,7 @@ using ModelHandle = GenerationalHandle<ModelInstance>;
 class ResourceManager {
  public:
   struct CreateInfo {
-    RendererMetal *renderer;
+    gfx::RendererMetal4 *renderer;
   };
 
  private:
@@ -58,6 +60,6 @@ class ResourceManager {
   Pool<ModelHandle, ModelInstancePoolEntry> model_instance_pool_;
   std::vector<size_t> model_to_resource_cache_key_;
 
-  RendererMetal *renderer_{};
+  gfx::RendererMetal4 *renderer_{};
   inline static ResourceManager *instance_{};
 };

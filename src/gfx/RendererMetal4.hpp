@@ -2,15 +2,19 @@
 
 #include <filesystem>
 #include <functional>
+#include <span>
 
 #include "core/Math.hpp"  // IWYU pragma: keep
 #include "gfx/Config.hpp"
 #include "gfx/Device.hpp"
+#include "gfx/GFXTypes.hpp"
 #include "gfx/ModelInstance.hpp"
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
+#include "gfx/metal/BackedGPUAllocator.hpp"
 #include "hlsl/shared_indirect.h"
+#include "offsetAllocator.hpp"
 
 class Window;
 
@@ -26,21 +30,21 @@ struct RenderArgs {
   bool draw_imgui;
 };
 
-struct MyMeshOld {
-  rhi::BufferHandleHolder vertex_buf;
-  rhi::BufferHandleHolder index_buf;
-  size_t material_id;
-  size_t vertex_count;
-  size_t index_count;
-};
+// struct MyMeshOld {
+//   rhi::BufferHandleHolder vertex_buf;
+//   rhi::BufferHandleHolder index_buf;
+//   size_t material_id;
+//   size_t vertex_count;
+//   size_t index_count;
+// };
 
-struct MyMesh {
-  rhi::BufferHandleHolder vertex_buf;
-  rhi::BufferHandleHolder index_buf;
-  size_t material_id;
-  size_t vertex_count;
-  size_t index_count;
-};
+// struct MyMesh {
+//   rhi::BufferHandleHolder vertex_buf;
+//   rhi::BufferHandleHolder index_buf;
+//   size_t material_id;
+//   size_t vertex_count;
+//   size_t index_count;
+// };
 
 class ScratchBufferPool {
  public:
@@ -59,13 +63,124 @@ class ScratchBufferPool {
   rhi::Device* device_;
 };
 
+enum class DrawBatchType {
+  Static,
+};
+
+struct DrawBatch {
+  struct CreateInfo {
+    uint32_t initial_vertex_capacity;
+    uint32_t initial_index_capacity;
+    uint32_t initial_meshlet_capacity;
+    uint32_t initial_mesh_capacity;
+    uint32_t initial_meshlet_triangle_capacity;
+    uint32_t initial_meshlet_vertex_capacity;
+  };
+
+  struct Stats {
+    uint32_t vertex_count;
+    uint32_t index_count;
+    uint32_t meshlet_count;
+    uint32_t meshlet_triangle_count;
+    uint32_t meshlet_vertex_count;
+  };
+
+  [[nodiscard]] Stats get_stats() const;
+
+  DrawBatch(DrawBatchType type, rhi::Device& device, const CreateInfo& cinfo);
+
+  struct Alloc {
+    OffsetAllocator::Allocation vertex_alloc;
+    OffsetAllocator::Allocation index_alloc;
+    OffsetAllocator::Allocation meshlet_alloc;
+    // OffsetAllocator::Allocation mesh_alloc;
+    OffsetAllocator::Allocation meshlet_triangles_alloc;
+    OffsetAllocator::Allocation meshlet_vertices_alloc;
+  };
+
+  void free(const Alloc& alloc) {
+    // if (alloc.mesh_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+    //   mesh_buf.free(alloc.mesh_alloc);
+    // }
+    if (alloc.meshlet_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      meshlet_buf.free(alloc.meshlet_alloc);
+    }
+    if (alloc.vertex_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      vertex_buf.free(alloc.vertex_alloc);
+    }
+    if (alloc.index_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      index_buf.free(alloc.index_alloc);
+    }
+    if (alloc.meshlet_triangles_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      meshlet_triangles_buf.free(alloc.meshlet_triangles_alloc);
+    }
+    if (alloc.meshlet_vertices_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      meshlet_vertices_buf.free(alloc.meshlet_vertices_alloc);
+    }
+  }
+
+  BackedGPUAllocator vertex_buf;
+  BackedGPUAllocator index_buf;
+  BackedGPUAllocator meshlet_buf;
+  // BackedGPUAllocator mesh_buf;
+  BackedGPUAllocator meshlet_triangles_buf;
+  BackedGPUAllocator meshlet_vertices_buf;
+  const DrawBatchType type;
+};
+
+struct ModelGPUResources {
+  OffsetAllocator::Allocation material_alloc;
+  // TODO: class lmao
+  std::vector<MTL::Texture*> textures;
+  DrawBatch::Alloc static_draw_batch_alloc;
+  std::vector<InstanceData> base_instance_datas;
+  std::vector<Mesh> meshes;
+  std::vector<uint32_t> instance_id_to_node;
+  struct Totals {
+    uint32_t meshlets;
+    uint32_t vertices;
+    uint32_t instance_vertices;
+  };
+  Totals totals{};
+};
+
+struct ModelInstanceGPUResources {
+  OffsetAllocator::Allocation instance_data_gpu_alloc;
+  OffsetAllocator::Allocation meshlet_vis_buf_alloc;
+};
+
+class InstanceDataMgr {
+ public:
+  void init(size_t initial_element_cap, rhi::Device* device) {
+    allocator_.emplace(initial_element_cap);
+    device_ = device;
+    allocate_buffers(initial_element_cap);
+  }
+  OffsetAllocator::Allocation allocate(size_t element_count);
+
+  [[nodiscard]] size_t allocation_size(OffsetAllocator::Allocation alloc) const {
+    return allocator_->allocationSize(alloc);
+  }
+
+  void free(OffsetAllocator::Allocation alloc);
+  [[nodiscard]] uint32_t max_seen_size() const { return max_seen_size_; }
+  [[nodiscard]] rhi::BufferHandle get_instance_data_buf() const {
+    return instance_data_buf_.handle;
+  }
+  [[nodiscard]] rhi::BufferHandle get_draw_cmd_buf() const { return draw_cmd_buf_.handle; }
+
+ private:
+  void allocate_buffers(size_t element_count);
+  std::optional<OffsetAllocator::Allocator> allocator_;
+  rhi::BufferHandleHolder instance_data_buf_;
+  rhi::BufferHandleHolder draw_cmd_buf_;
+  uint32_t max_seen_size_{};
+  uint32_t curr_element_count_{};
+  rhi::Device* device_{};
+};
+
 class RendererMetal4 {
  public:
-  // TODO: cursed
-  ModelInstance out_instance;
-  ModelLoadResult out_result;
-  std::vector<IndexedIndirectDrawCmd> cmds;
-  std::vector<InstData> instance_datas;
   struct CreateInfo {
     rhi::Device* device;
     Window* window;
@@ -75,29 +190,62 @@ class RendererMetal4 {
   void init(const CreateInfo& cinfo);
   void render(const RenderArgs& args);
   void on_imgui() {}
-  void load_model();
+  bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
+                  ModelInstance& model, ModelGPUHandle& out_handle);
+  [[nodiscard]] ModelInstanceGPUHandle add_model_instance(const ModelInstance& model,
+                                                          ModelGPUHandle model_gpu_handle);
   ScratchBufferPool& get_scratch_buffer_pool() { return scratch_buffer_pool_.value(); }
+  void free_instance(ModelInstanceGPUHandle handle);
+  void free_model(ModelGPUHandle handle);
 
  private:
+  void create_render_target_textures();
+  void flush_pending_texture_uploads(rhi::CmdEncoder* enc);
+  [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandleHolder& buf) const;
+  void add_render_graph_passes(const RenderArgs& args);
+  DrawBatch::Alloc upload_geometry(DrawBatchType type, const std::vector<DefaultVertex>& vertices,
+                                   const std::vector<rhi::DefaultIndexT>& indices,
+                                   const MeshletProcessResult& meshlets, std::span<Mesh> meshes);
+  struct AllModelData {
+    uint32_t max_objects;
+  };
+
+  AllModelData all_model_data_{};
+
+  struct FinalDrawResults {
+    uint32_t drawn_meshlets;
+    uint32_t drawn_vertices;
+  };
+
+  struct Stats {
+    uint32_t total_instance_meshlets{};
+    uint32_t total_instance_vertices{};
+    FinalDrawResults draw_results{};
+  };
+  Stats stats_;
+
   rhi::Device* device_{};
   Window* window_{};
   rhi::PipelineHandleHolder test2_pso_;
-  rhi::BufferHandleHolder all_material_buf_;
+  std::optional<BackedGPUAllocator> materials_buf_;
   rhi::TextureHandleHolder depth_tex_;
-
-  rhi::BufferHandleHolder indirect_cmd_buf_;
-  rhi::BufferHandleHolder instance_data_buf_;
-  rhi::BufferHandleHolder all_static_vertices_buf_;
-  rhi::BufferHandleHolder all_static_indices_buf_;
-  size_t draw_cmd_count_{};
 
   size_t frame_num_{};
   size_t curr_frame_idx_{};
   std::filesystem::path resource_dir_;
   std::vector<rhi::TextureHandleHolder> all_textures_;
   std::optional<ScratchBufferPool> scratch_buffer_pool_;
+  InstanceDataMgr instance_data_mgr_;
+  std::optional<DrawBatch> static_draw_batch_;
+
+  BlockPool<ModelGPUHandle, ModelGPUResources> model_gpu_resource_pool_{20, 1, true};
+  BlockPool<ModelInstanceGPUHandle, ModelInstanceGPUResources> model_instance_gpu_resource_pool_{
+      100, 1, true};
 
   gfx::RenderGraph rg_;
+
+  std::optional<BackedGPUAllocator> meshlet_vis_buf_;
+  bool meshlet_vis_buf_dirty_{};
 
   struct GPUTexUpload {
     void* data;
@@ -107,15 +255,9 @@ class RendererMetal4 {
 
   std::vector<GPUTexUpload> pending_texture_uploads_;
 
-  std::vector<MyMesh> meshes_;
-  void create_render_target_textures();
-  void flush_pending_texture_uploads(rhi::CmdEncoder* enc);
-
   std::vector<rhi::SamplerHandleHolder> samplers_;
-  [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandleHolder& buf) const;
 
   rhi::TextureHandleHolder default_white_tex_;
-  void add_render_graph_passes(const RenderArgs& args);
   std::vector<uint32_t> indirect_cmd_buf_ids_;
   bool indirect_rendering_enabled_{true};
 };

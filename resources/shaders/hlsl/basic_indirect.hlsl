@@ -28,15 +28,15 @@ float3 rotate_quat(float3 v, float4 q) {
 
 [RootSignature(ROOT_SIGNATURE)]
 VOut vert_main(uint vert_id : SV_VertexID) {
-    StructuredBuffer<InstData> instance_data_buf = ResourceDescriptorHeap[instance_data_buf_idx];
-    InstData instance_data = instance_data_buf[gDrawID.did];
+    StructuredBuffer<InstanceData> instance_data_buf = ResourceDescriptorHeap[instance_data_buf_idx];
+    InstanceData instance_data = instance_data_buf[gDrawID.did];
     StructuredBuffer<DefaultVertex> v_buf = ResourceDescriptorHeap[vert_buf_idx];
     DefaultVertex v = v_buf[vert_id + gDrawID.vert_id];
     VOut o;
     o.uv = v.uv;
     float3 pos = rotate_quat(instance_data.scale * v.pos.xyz, instance_data.rotation) + instance_data.translation;
     o.pos = mul(vp, float4(pos, 1.0));
-    o.material_id = instance_data.material_id;
+    o.material_id = instance_data.mat_id;
     return o;
 }
 

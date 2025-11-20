@@ -22,11 +22,6 @@ using rhi::RenderingAttachmentInfo;
 using rhi::ShaderType;
 using rhi::TextureFormat;
 
-// glm::mat4 calc_matrix(const TRS& trs) {
-//   return glm::translate(glm::mat4{1}, trs.translation) * glm::mat4_cast(trs.rotation) *
-//          glm::scale(glm::mat4{1}, glm::vec3{trs.scale});
-// }
-
 }  // namespace
 
 namespace gfx {
@@ -77,124 +72,23 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
     });
   }
 
-  all_material_buf_ = device_->create_buf_h({
-      .usage = rhi::BufferUsage_Storage,
-      .size = k_max_materials * sizeof(M4Material),
-      .bindless = true,
-      .name = "all materials buf",
-  });
-
-  // ALWAYS_ASSERT(model::load_model(resource_dir_ / "models/glTF/Models/Cube/glTF/Cube.gltf",
-  //                                 glm::mat4{1}, out_instance, out_result));
-  // ALWAYS_ASSERT(model::load_model(resource_dir_ / "models/Cube/glTF/Cube.gltf", glm::mat4{1},
-  //                                 out_instance, out_result));
-  ALWAYS_ASSERT(model::load_model(resource_dir_ / "models/glTF/Models/Sponza/glTF/Sponza.gltf",
-                                  glm::mat4{1}, out_instance, out_result));
-
-  std::vector<uint32_t> img_upload_bindless_indices;
-  img_upload_bindless_indices.resize(out_result.texture_uploads.size());
-  {
-    size_t i = 0;
-    for (auto& upload : out_result.texture_uploads) {
-      if (upload.data) {
-        auto tex = device_->create_tex_h(upload.desc);
-        ASSERT(tex.handle.is_valid());
-        img_upload_bindless_indices[i] = device_->get_tex(tex)->bindless_idx();
-        pending_texture_uploads_.push_back(GPUTexUpload{
-            .data = upload.data,
-            .tex = std::move(tex),
-            .bytes_per_row = upload.bytes_per_row,
-        });
-      }
-      i++;
-    }
-  }
-
-  constexpr size_t k_max_draws = 1024;
-  constexpr size_t k_max_vertices = 2'000'000;
-  constexpr size_t k_max_indices = 2'000'000;
-
-  indirect_cmd_buf_ = device_->create_buf_h({
-      .usage = (rhi::BufferUsage)(rhi::BufferUsage_Indirect | rhi::BufferUsage_Storage),
-      .size = sizeof(IndexedIndirectDrawCmd) * k_max_draws,
-      .bindless = true,
-  });
-  instance_data_buf_ = device_->create_buf_h({
-      .usage = rhi::BufferUsage_Storage,
-      .size = sizeof(InstData) * k_max_draws,
-      .bindless = true,
-  });
-  all_static_vertices_buf_ = device_->create_buf_h({
-      .usage = rhi::BufferUsage_Storage,
-      .size = sizeof(DefaultVertex) * k_max_vertices,
-      .bindless = true,
-  });
-  all_static_indices_buf_ = device_->create_buf_h({
-      .usage = rhi::BufferUsage_Index,
-      .size = sizeof(rhi::DefaultIndexT) * k_max_indices,
-      .bindless = true,
-  });
-
-  {
-    const auto tot_draws = out_instance.tot_mesh_nodes;
-    cmds.reserve(tot_draws);
-    draw_cmd_count_ = tot_draws;
-    instance_datas.reserve(tot_draws);
-
-    uint32_t draw_cmd_idx = 0;
-    for (size_t node = 0; node < out_instance.nodes.size(); node++) {
-      auto mesh_id = out_instance.mesh_ids[node];
-      if (mesh_id == Mesh::k_invalid_mesh_id) {
-        continue;
-      }
-      // if (draw_cmd_idx > 0) break;
-      const auto& mesh = out_result.meshes[mesh_id];
-      cmds.emplace_back(IndexedIndirectDrawCmd{
-          .index_count = mesh.index_count,
-          .instance_count = 1,
-          .first_index = static_cast<uint32_t>(mesh.index_offset / sizeof(rhi::DefaultIndexT)),
-          .vertex_offset = static_cast<int32_t>(mesh.vertex_offset_bytes),
-          .first_instance = draw_cmd_idx,
-      });
-      const auto& trs = out_instance.global_transforms[node];
-      instance_datas.emplace_back(InstData{
-          .translation = trs.translation,
-          .rotation = glm::vec4{trs.rotation.x, trs.rotation.y, trs.rotation.z, trs.rotation.w},
-          .scale = trs.scale,
-          .material_id = mesh.material_id,
-      });
-      // LINFO("material idx {}", mesh.material_id);
-      draw_cmd_idx++;
-    }
-
-    device_->copy_to_buffer(instance_datas.data(), draw_cmd_count_ * sizeof(InstData),
-                            instance_data_buf_.handle, 0);
-    device_->copy_to_buffer(cmds.data(), draw_cmd_count_ * sizeof(IndexedIndirectDrawCmd),
-                            indirect_cmd_buf_.handle, 0);
-  }
-  {
-    std::vector<M4Material> materials;
-    materials.reserve(out_result.materials.size());
-    // TODO: this texture index is the upload index, which is not going to work with multiple models
-    for (auto& m : out_result.materials) {
-      // if (i++ > 0) break;
-      m.albedo_tex = img_upload_bindless_indices[m.albedo_tex];
-      materials.emplace_back(M4Material{.albedo_tex_idx = m.albedo_tex});
-    }
-    device_->copy_to_buffer(materials.data(), materials.size() * sizeof(M4Material),
-                            all_material_buf_.handle, 0);
-  }
-
-  // draw_cmd_count_ = ;
-
-  {
-    size_t vert_copy_size = out_result.vertices.size() * sizeof(DefaultVertex);
-    size_t index_copy_size = out_result.indices.size() * sizeof(rhi::DefaultIndexT);
-    device_->copy_to_buffer(out_result.vertices.data(), vert_copy_size,
-                            all_static_vertices_buf_.handle, 0);
-    device_->copy_to_buffer(out_result.indices.data(), index_copy_size,
-                            all_static_indices_buf_.handle, 0);
-  }
+  materials_buf_.emplace(*device_,
+                         rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
+                                         .usage = rhi::BufferUsage_Storage,
+                                         .size = k_max_materials * sizeof(M4Material),
+                                         .bindless = true,
+                                         .name = "all materials buf"},
+                         sizeof(M4Material));
+  instance_data_mgr_.init(128, device_);
+  static_draw_batch_.emplace(DrawBatchType::Static, *device_,
+                             DrawBatch::CreateInfo{
+                                 .initial_vertex_capacity = 1'000'00,
+                                 .initial_index_capacity = 1'000'00,
+                                 .initial_meshlet_capacity = 100'000,
+                                 .initial_mesh_capacity = 20'000,
+                                 .initial_meshlet_triangle_capacity = 1'00'000,
+                                 .initial_meshlet_vertex_capacity = 1'000'00,
+                             });
 
   create_render_target_textures();
   scratch_buffer_pool_.emplace(device_);
@@ -213,7 +107,7 @@ void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
   indirect_cmd_buf_ids_.clear();
 
   add_render_graph_passes(args);
-  static int i = 0;
+  static int i = 1;
   rg_.bake(i++ == 0);
   rg_.execute();
 
@@ -232,8 +126,6 @@ void RendererMetal4::create_render_target_textures() {
       .dims = glm::uvec3{dims, 1},
   });
 }
-
-void RendererMetal4::load_model() {}
 
 uint32_t RendererMetal4::get_bindless_idx(const rhi::BufferHandleHolder& buf) const {
   return device_->get_buf(buf)->bindless_idx();
@@ -296,7 +188,7 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
 
   if (indirect_rendering_enabled_) {
     auto& prepare_indirect_pass = rg_.add_pass("prepare_indirect");
-    prepare_indirect_pass.add_buf("indirect_buffer", indirect_cmd_buf_.handle,
+    prepare_indirect_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
                                   RGAccess::ComputeWrite);
     prepare_indirect_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
       auto win_dims = window_->get_window_size();
@@ -304,27 +196,29 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
       glm::mat4 mv = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
       BasicIndirectPC pc{
           .vp = mv,
-          .vert_buf_idx = get_bindless_idx(all_static_vertices_buf_),
-          .instance_data_buf_idx = get_bindless_idx(instance_data_buf_),
-          .mat_buf_idx = get_bindless_idx(all_material_buf_),
+          .vert_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
+          .instance_data_buf_idx =
+              device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
+          .mat_buf_idx = materials_buf_->get_buffer()->bindless_idx(),
       };
 
-      indirect_cmd_buf_ids_.emplace_back(
-          enc->prepare_indexed_indirect_draws(indirect_cmd_buf_.handle, 0, draw_cmd_count_,
-                                              all_static_indices_buf_.handle, 0, &pc, sizeof(pc)));
+      indirect_cmd_buf_ids_.emplace_back(enc->prepare_indexed_indirect_draws(
+          instance_data_mgr_.get_draw_cmd_buf(), 0, all_model_data_.max_objects,
+          static_draw_batch_->index_buf.get_buffer_handle(), 0, &pc, sizeof(pc)));
     });
   }
 
   {
     if (indirect_rendering_enabled_) {
-      gbuffer_pass.add_buf("indirect_buffer", indirect_cmd_buf_.handle, RGAccess::IndirectRead);
+      gbuffer_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
+                           RGAccess::IndirectRead);
     }
     gbuffer_pass.add_tex("gbuffer_a", {}, RGAccess::ColorWrite);
     for (const auto& t : pending_texture_uploads_) {
       gbuffer_pass.add_tex(t.tex.handle, RGAccess::FragmentSample);
     }
 
-    gbuffer_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
+    gbuffer_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
       enc->begin_rendering({
           RenderingAttachmentInfo::color_att(device_->get_swapchain().get_texture(curr_frame_idx_),
                                              rhi::LoadOp::Clear, {.color = {0.1, 0.2, 0.1, 1}}),
@@ -338,27 +232,27 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
 
-      auto win_dims = window_->get_window_size();
-      float aspect = (float)win_dims.x / win_dims.y;
-      glm::mat4 mv = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
-      BasicIndirectPC pc{
-          .vp = mv,
-          .vert_buf_idx = get_bindless_idx(all_static_vertices_buf_),
-          .instance_data_buf_idx = get_bindless_idx(instance_data_buf_),
-          .mat_buf_idx = get_bindless_idx(all_material_buf_),
-      };
-      enc->push_constants(&pc, sizeof(pc));
-
       if (indirect_rendering_enabled_) {
-        enc->draw_indexed_indirect(indirect_cmd_buf_.handle, indirect_cmd_buf_ids_[0], 0,
-                                   draw_cmd_count_);
+        enc->draw_indexed_indirect(instance_data_mgr_.get_draw_cmd_buf(), indirect_cmd_buf_ids_[0],
+                                   0, all_model_data_.max_objects);
       } else {
-        for (size_t i = 0; i < std::min(draw_cmd_count_, cmds.size()); i++) {
-          auto& cmd = cmds[i];
-          enc->draw_indexed_primitives(
-              rhi::PrimitiveTopology::TriangleList, all_static_indices_buf_.handle, cmd.first_index,
-              cmd.index_count, 1, cmd.vertex_offset / sizeof(DefaultVertex), i);
-        }
+        // auto win_dims = window_->get_window_size();
+        // float aspect = (float)win_dims.x / win_dims.y;
+        //   glm::mat4 mv =
+        //       glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
+        // BasicIndirectPC pc{
+        //     .vp = mv,
+        //     .vert_buf_idx = get_bindless_idx(all_static_vertices_buf_),
+        //     .instance_data_buf_idx = get_bindless_idx(instance_data_buf_),
+        //     .mat_buf_idx = get_bindless_idx(all_material_buf_),
+        // };
+        // enc->push_constants(&pc, sizeof(pc));
+        // for (size_t i = 0; i < std::min(draw_cmd_count_, cmds.size()); i++) {
+        //   auto& cmd = cmds[i];
+        //   enc->draw_indexed_primitives(
+        //       rhi::PrimitiveTopology::TriangleList, all_static_indices_buf_.handle,
+        //       cmd.first_index, cmd.index_count, 1, cmd.vertex_offset / sizeof(DefaultVertex), i);
+        // }
       }
     });
   }
@@ -396,4 +290,352 @@ void RendererMetal4::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
 
   pending_texture_uploads_.clear();
 }
+
+bool RendererMetal4::load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
+                                ModelInstance& model, ModelGPUHandle& out_handle) {
+  ModelLoadResult result;
+  if (!model::load_model(path, root_transform, model, result)) {
+    return false;
+  }
+
+  pending_texture_uploads_.reserve(pending_texture_uploads_.size() + result.texture_uploads.size());
+
+  size_t i = 0;
+  // TODO: save elsewhere
+  std::vector<uint32_t> img_upload_bindless_indices;
+  img_upload_bindless_indices.resize(result.texture_uploads.size());
+  for (auto& upload : result.texture_uploads) {
+    if (upload.data) {
+      auto tex = device_->create_tex_h(upload.desc);
+      img_upload_bindless_indices[i] = device_->get_tex(tex)->bindless_idx();
+      pending_texture_uploads_.push_back(GPUTexUpload{
+          .data = upload.data, .tex = std::move(tex), .bytes_per_row = upload.bytes_per_row});
+    }
+    i++;
+  }
+  bool resized{};
+  assert(!result.materials.empty());
+  auto material_alloc = materials_buf_->allocate(result.materials.size(), resized);
+  {
+    // TODO: NO MEMCPY
+    std::vector<M4Material> mats;
+    mats.reserve(result.materials.size());
+    for (const auto& m : result.materials) {
+      mats.push_back(M4Material{.albedo_tex_idx = img_upload_bindless_indices[m.albedo_tex]});
+    }
+    device_->copy_to_buffer(mats.data(), mats.size() * sizeof(M4Material),
+                            materials_buf_->get_buffer_handle(),
+                            material_alloc.offset * sizeof(M4Material));
+    if (resized) {
+      LINFO("materials resized");
+      ASSERT(0);
+    }
+  }
+
+  if (k_use_mesh_shader) {
+    result.indices.clear();
+  }
+  auto draw_batch_alloc = upload_geometry(DrawBatchType::Static, result.vertices, result.indices,
+                                          result.meshlet_process_result, result.meshes);
+
+  std::vector<InstanceData> base_instance_datas;
+  std::vector<uint32_t> instance_id_to_node;
+  base_instance_datas.reserve(model.tot_mesh_nodes);
+  instance_id_to_node.reserve(model.tot_mesh_nodes);
+
+  uint32_t total_instance_vertices{};
+  {
+    // uint32_t instance_copy_idx = 0;
+    // uint32_t curr_meshlet_vis_buf_offset = 0;
+    for (size_t node = 0; node < model.nodes.size(); node++) {
+      auto mesh_id = model.mesh_ids[node];
+      if (model.mesh_ids[node] == Mesh::k_invalid_mesh_id) {
+        continue;
+      }
+      base_instance_datas.emplace_back(InstanceData{
+          .mat_id = result.meshes[mesh_id].material_id + material_alloc.offset,
+          // .mesh_id = draw_batch_alloc.mesh_alloc.offset + mesh_id,
+          // .meshlet_vis_base = curr_meshlet_vis_buf_offset
+      });
+      instance_id_to_node.push_back(node);
+      // instance_copy_idx++;
+      // curr_meshlet_vis_buf_offset +=
+      //     result.meshlet_process_result.meshlet_datas[mesh_id].meshlets.size();
+      total_instance_vertices += result.meshes[mesh_id].vertex_count;
+    }
+  }
+
+  out_handle = model_gpu_resource_pool_.alloc(ModelGPUResources{
+      .material_alloc = material_alloc,
+      .static_draw_batch_alloc = draw_batch_alloc,
+      .base_instance_datas = std::move(base_instance_datas),
+      .meshes = std::move(result.meshes),
+      .instance_id_to_node = instance_id_to_node,
+      .totals = ModelGPUResources::Totals{.meshlets = static_cast<uint32_t>(
+                                              result.meshlet_process_result.tot_meshlet_count),
+                                          .vertices = static_cast<uint32_t>(result.vertices.size()),
+                                          .instance_vertices = total_instance_vertices},
+  });
+  return true;
+}
+
+DrawBatch::Alloc RendererMetal4::upload_geometry([[maybe_unused]] DrawBatchType type,
+                                                 const std::vector<DefaultVertex>& vertices,
+                                                 const std::vector<rhi::DefaultIndexT>& indices,
+                                                 const MeshletProcessResult& meshlets,
+                                                 std::span<Mesh>) {
+  auto& draw_batch = static_draw_batch_;
+  ASSERT(!vertices.empty());
+  ASSERT(!meshlets.meshlet_datas.empty());
+
+  bool resized{};
+  const auto vertex_alloc = draw_batch->vertex_buf.allocate(vertices.size(), resized);
+  memcpy((reinterpret_cast<DefaultVertex*>(draw_batch->vertex_buf.get_buffer()->contents()) +
+          vertex_alloc.offset),
+         vertices.data(), vertices.size() * sizeof(DefaultVertex));
+
+  OffsetAllocator::Allocation index_alloc{};
+  if (!indices.empty()) {
+    index_alloc = draw_batch->index_buf.allocate(indices.size(), resized);
+    memcpy((reinterpret_cast<rhi::DefaultIndexT*>(draw_batch->index_buf.get_buffer()->contents()) +
+            index_alloc.offset),
+           indices.data(), indices.size() * sizeof(rhi::DefaultIndexT));
+  }
+
+  const auto meshlet_alloc = draw_batch->meshlet_buf.allocate(meshlets.tot_meshlet_count, resized);
+  const auto meshlet_vertices_alloc =
+      draw_batch->meshlet_vertices_buf.allocate(meshlets.tot_meshlet_verts_count, resized);
+  const auto meshlet_triangles_alloc =
+      draw_batch->meshlet_triangles_buf.allocate(meshlets.tot_meshlet_tri_count, resized);
+  // const auto mesh_alloc = draw_batch->mesh_buf.allocate(meshlets.meshlet_datas.size(), resized);
+
+  size_t meshlet_offset{};
+  size_t meshlet_triangles_offset{};
+  size_t meshlet_vertices_offset{};
+  // size_t mesh_i{};
+  for (const auto& meshlet_data : meshlets.meshlet_datas) {
+    memcpy((reinterpret_cast<Meshlet*>(draw_batch->meshlet_buf.get_buffer()->contents()) +
+            meshlet_alloc.offset + meshlet_offset),
+           meshlet_data.meshlets.data(), meshlet_data.meshlets.size() * sizeof(Meshlet));
+    meshlet_offset += meshlet_data.meshlets.size();
+
+    memcpy((reinterpret_cast<uint32_t*>(draw_batch->meshlet_vertices_buf.get_buffer()->contents()) +
+            meshlet_vertices_alloc.offset + meshlet_vertices_offset),
+           meshlet_data.meshlet_vertices.data(),
+           meshlet_data.meshlet_vertices.size() * sizeof(uint32_t));
+    meshlet_vertices_offset += meshlet_data.meshlet_vertices.size();
+
+    memcpy((reinterpret_cast<uint8_t*>(draw_batch->meshlet_triangles_buf.get_buffer()->contents()) +
+            meshlet_triangles_alloc.offset + meshlet_triangles_offset),
+           meshlet_data.meshlet_triangles.data(),
+           meshlet_data.meshlet_triangles.size() * sizeof(uint8_t));
+    meshlet_triangles_offset += meshlet_data.meshlet_triangles.size();
+
+    // MeshData d{
+    //     .meshlet_base = meshlet_data.meshlet_base,
+    //     .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size()),
+    //     .meshlet_vertices_offset = meshlet_data.meshlet_vertices_offset,
+    //     .meshlet_triangles_offset = meshlet_data.meshlet_triangles_offset,
+    //     .index_count = meshes[mesh_i].index_count,
+    //     .index_offset = meshes[mesh_i].index_offset,
+    //     .vertex_base = meshes[mesh_i].vertex_offset_bytes,
+    //     .vertex_count = meshes[mesh_i].vertex_count,
+    //     .center = meshes[mesh_i].center,
+    //     .radius = meshes[mesh_i].radius,
+    // };
+    // memcpy((reinterpret_cast<MeshData*>(draw_batch->mesh_buf.get_buffer()->contents()) + mesh_i +
+    //         mesh_alloc.offset),
+    //        &d, sizeof(MeshData));
+    // mesh_i++;
+  }
+
+  return DrawBatch::Alloc{.vertex_alloc = vertex_alloc,
+                          .index_alloc = index_alloc,
+                          .meshlet_alloc = meshlet_alloc,
+                          // .mesh_alloc = mesh_alloc,
+                          .meshlet_triangles_alloc = meshlet_triangles_alloc,
+                          .meshlet_vertices_alloc = meshlet_vertices_alloc};
+}
+
+ModelInstanceGPUHandle RendererMetal4::add_model_instance(const ModelInstance& model,
+                                                          ModelGPUHandle model_gpu_handle) {
+  ZoneScoped;
+  auto* model_resources = model_gpu_resource_pool_.get(model_gpu_handle);
+  ALWAYS_ASSERT(model_resources);
+  auto& model_instance_datas = model_resources->base_instance_datas;
+  auto& instance_id_to_node = model_resources->instance_id_to_node;
+  std::vector<TRS> instance_transforms;
+  instance_transforms.reserve(model_instance_datas.size());
+  // TODO: no allocs
+  std::vector<InstanceData> instance_datas = {model_instance_datas.begin(),
+                                              model_instance_datas.end()};
+  std::vector<IndexedIndirectDrawCmd> cmds;
+  cmds.reserve(instance_datas.size());
+  ASSERT(instance_datas.size() == instance_id_to_node.size());
+
+  const OffsetAllocator::Allocation instance_data_gpu_alloc =
+      instance_data_mgr_.allocate(model_instance_datas.size());
+  all_model_data_.max_objects = instance_data_mgr_.max_seen_size();
+
+  stats_.total_instance_meshlets += model_resources->totals.meshlets;
+  stats_.total_instance_vertices += model_resources->totals.instance_vertices;
+  OffsetAllocator::Allocation meshlet_vis_buf_alloc{};
+  if (k_use_mesh_shader) {
+    bool resized{};
+    meshlet_vis_buf_alloc = meshlet_vis_buf_->allocate(model_resources->totals.meshlets, resized);
+    meshlet_vis_buf_dirty_ = true;
+  }
+
+  for (size_t i = 0; i < instance_datas.size(); i++) {
+    auto node_i = instance_id_to_node[i];
+    instance_transforms.push_back(model.global_transforms[node_i]);
+    const auto& transform = model.global_transforms[node_i];
+    const auto rot = transform.rotation;
+    // TODO: do this initially?
+    instance_datas[i].translation = transform.translation;
+    instance_datas[i].rotation = glm::vec4{rot[0], rot[1], rot[2], rot[3]};
+    instance_datas[i].scale = transform.scale;
+    // instance_datas[i].meshlet_vis_base += meshlet_vis_buf_alloc.offset;
+    auto& mesh = model_resources->meshes[model.mesh_ids[node_i]];
+    cmds.push_back(IndexedIndirectDrawCmd{
+        .index_count = mesh.index_count,
+        .instance_count = 1,
+        .first_index = static_cast<uint32_t>(
+            (mesh.index_offset + model_resources->static_draw_batch_alloc.index_alloc.offset *
+                                     sizeof(rhi::DefaultIndexT)) /
+            sizeof(rhi::DefaultIndexT)),
+        .vertex_offset = static_cast<int32_t>(
+            mesh.vertex_offset_bytes +
+            model_resources->static_draw_batch_alloc.vertex_alloc.offset * sizeof(DefaultVertex)),
+        .first_instance = static_cast<uint32_t>(i + instance_data_gpu_alloc.offset),
+    });
+  }
+
+  device_->copy_to_buffer(instance_datas.data(), instance_datas.size() * sizeof(InstanceData),
+                          instance_data_mgr_.get_instance_data_buf(),
+                          instance_data_gpu_alloc.offset * sizeof(InstanceData));
+  device_->copy_to_buffer(cmds.data(), cmds.size() * sizeof(IndexedIndirectDrawCmd),
+                          instance_data_mgr_.get_draw_cmd_buf(),
+                          instance_data_gpu_alloc.offset * sizeof(IndexedIndirectDrawCmd));
+
+  return model_instance_gpu_resource_pool_.alloc(
+      ModelInstanceGPUResources{.instance_data_gpu_alloc = instance_data_gpu_alloc,
+                                .meshlet_vis_buf_alloc = meshlet_vis_buf_alloc});
+}
+
+void RendererMetal4::free_instance(ModelInstanceGPUHandle handle) {
+  auto* gpu_resources = model_instance_gpu_resource_pool_.get(handle);
+  ASSERT(gpu_resources);
+  if (!gpu_resources) {
+    return;
+  }
+  // TODO: anything else?
+  instance_data_mgr_.free(gpu_resources->instance_data_gpu_alloc);
+}
+
+void RendererMetal4::free_model(ModelGPUHandle handle) {
+  auto* gpu_resources = model_gpu_resource_pool_.get(handle);
+  ASSERT(gpu_resources);
+  if (!gpu_resources) {
+    return;
+  }
+  // TODO: free textures
+
+  materials_buf_->free(gpu_resources->material_alloc);
+  static_draw_batch_->free(gpu_resources->static_draw_batch_alloc);
+  model_gpu_resource_pool_.destroy(handle);
+}
+
+DrawBatch::DrawBatch(DrawBatchType type, rhi::Device& device, const CreateInfo& cinfo)
+    : vertex_buf(device,
+                 rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
+                                 .size = cinfo.initial_vertex_capacity * sizeof(DefaultVertex),
+                                 .bindless = true},
+                 sizeof(DefaultVertex)),
+      index_buf(device,
+                rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
+                                .size = cinfo.initial_index_capacity * sizeof(rhi::DefaultIndexT),
+                                .bindless = true},
+                sizeof(rhi::DefaultIndexT)),
+      meshlet_buf(device,
+                  rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
+                                  .size = cinfo.initial_meshlet_capacity * sizeof(Meshlet),
+                                  .bindless = true},
+                  sizeof(Meshlet)),
+      // mesh_buf(device,
+      //          rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
+      //                          .size = cinfo.initial_mesh_capacity * sizeof(MeshData),
+      //                          .bindless = true},
+      //          sizeof(MeshData)),
+      meshlet_triangles_buf(
+          device,
+          rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
+                          .size = cinfo.initial_meshlet_triangle_capacity * sizeof(uint8_t),
+                          .bindless = true},
+          sizeof(uint8_t)),
+      meshlet_vertices_buf(
+          device,
+          rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
+                          .size = cinfo.initial_meshlet_vertex_capacity * sizeof(uint32_t),
+                          .bindless = true},
+          sizeof(uint32_t)),
+      type(type) {}
+
+DrawBatch::Stats DrawBatch::get_stats() const {
+  return {
+      .vertex_count = vertex_buf.allocated_element_count(),
+      .index_count = index_buf.allocated_element_count(),
+      .meshlet_count = meshlet_buf.allocated_element_count(),
+      .meshlet_triangle_count = meshlet_triangles_buf.allocated_element_count(),
+      .meshlet_vertex_count = meshlet_vertices_buf.allocated_element_count(),
+  };
+}
+
+OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
+  const OffsetAllocator::Allocation alloc = allocator_->allocate(element_count);
+  if (alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
+    auto old_capacity = allocator_->capacity();
+    auto new_capacity = old_capacity * 2;
+    allocator_->grow(allocator_->capacity());
+    ASSERT(new_capacity <= allocator_->capacity());
+    auto old_instance_data_buf = std::move(instance_data_buf_);
+    auto old_draw_cmd_buf = std::move(draw_cmd_buf_);
+    allocate_buffers(new_capacity);
+    device_->copy_to_buffer(device_->get_buf(old_instance_data_buf)->contents(),
+                            old_capacity * sizeof(InstanceData), instance_data_buf_.handle);
+    device_->copy_to_buffer(device_->get_buf(old_draw_cmd_buf)->contents(),
+                            old_capacity * sizeof(IndexedIndirectDrawCmd), draw_cmd_buf_.handle);
+    return allocate(element_count);
+  }
+  curr_element_count_ += element_count;
+  max_seen_size_ = std::max(max_seen_size_, curr_element_count_);
+  return alloc;
+}
+
+void InstanceDataMgr::free(OffsetAllocator::Allocation alloc) {
+  auto element_count = allocator_->allocationSize(alloc);
+  // TODO: nooooooooooo memset
+  memset(reinterpret_cast<InstanceData*>(device_->get_buf(instance_data_buf_)->contents()) +
+             alloc.offset,
+         0, element_count * sizeof(InstanceData));
+  memset(reinterpret_cast<IndexedIndirectDrawCmd*>(device_->get_buf(draw_cmd_buf_)->contents()) +
+             alloc.offset,
+         0, element_count * sizeof(IndexedIndirectDrawCmd));
+  allocator_->free(alloc);
+  curr_element_count_ -= element_count;
+}
+
+void InstanceDataMgr::allocate_buffers(size_t element_count) {
+  instance_data_buf_ =
+      device_->create_buf_h(rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
+                                            .usage = rhi::BufferUsage_Storage,
+                                            .size = sizeof(InstanceData) * element_count,
+                                            .bindless = true});
+  draw_cmd_buf_ =
+      device_->create_buf_h(rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
+                                            .usage = rhi::BufferUsage_Indirect,
+                                            .size = sizeof(IndexedIndirectDrawCmd) * element_count,
+                                            .bindless = true});
+}
+
 }  // namespace gfx

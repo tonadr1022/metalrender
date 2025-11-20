@@ -2,7 +2,7 @@
 
 #include <tracy/Tracy.hpp>
 
-#include "RendererMetal.hpp"
+#include "RendererMetal4.hpp"
 #include "core/EAssert.hpp"
 
 ModelHandle ResourceManager::load_model(const std::filesystem::path &path,

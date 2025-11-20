@@ -11,11 +11,21 @@ struct IndexedIndirectDrawCmd {
   uint32_t first_instance;
 };
 
-struct InstData {
-  float3 translation;
-  float4 rotation;
+struct InstanceData {
+  // uint32_t instance_id;
+  // uint32_t mesh_id;
+  // uint32_t meshlet_vis_base;
+  packed_float3 translation;
   float scale;
-  uint material_id;
+  packed_float4 rotation;
+  uint32_t mat_id;
 };
+
+// struct InstData {
+//   float3 translation;
+//   float4 rotation;
+//   float scale;
+//   uint material_id;
+// };
 
 #endif  // SHARED_INDIRECT_H

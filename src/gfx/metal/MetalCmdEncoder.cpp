@@ -2,6 +2,7 @@
 
 // clang-format off
 #include <Metal/Metal.hpp>
+#include "hlsl/shared_indirect.h"
 #define IR_RUNTIME_METALCPP
 #include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
 // clang-format on
