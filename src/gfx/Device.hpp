@@ -72,11 +72,13 @@ class Device {
   [[nodiscard]] virtual const Info& get_info() const = 0;
   // TODO: is there a better spot for setting window dims, ie on event
   virtual bool begin_frame(glm::uvec2 window_dims) = 0;
-  virtual void copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf,
+  virtual void copy_to_buffer(const void* src, size_t src_size, rhi::BufferHandle buf,
                               size_t dst_offset) = 0;
-  void copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf) {
+  void copy_to_buffer(const void* src, size_t src_size, rhi::BufferHandle buf) {
     copy_to_buffer(src, src_size, buf, 0);
   }
+  virtual void fill_buffer(rhi::BufferHandle handle, size_t size, size_t offset,
+                           uint32_t fill_value) = 0;
 
   // commands
   virtual CmdEncoder* begin_command_list() = 0;

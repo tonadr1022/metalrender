@@ -6,6 +6,7 @@
 
 #include "Window.hpp"
 #include "core/EAssert.hpp"
+#include "default_vertex.h"
 #include "gfx/CmdEncoder.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/ModelLoader.hpp"
@@ -317,7 +318,6 @@ bool RendererMetal4::load_model(const std::filesystem::path& path, const glm::ma
   assert(!result.materials.empty());
   auto material_alloc = materials_buf_->allocate(result.materials.size(), resized);
   {
-    // TODO: NO MEMCPY
     std::vector<M4Material> mats;
     mats.reserve(result.materials.size());
     for (const auto& m : result.materials) {
@@ -390,9 +390,9 @@ DrawBatch::Alloc RendererMetal4::upload_geometry([[maybe_unused]] DrawBatchType 
 
   bool resized{};
   const auto vertex_alloc = draw_batch->vertex_buf.allocate(vertices.size(), resized);
-  memcpy((reinterpret_cast<DefaultVertex*>(draw_batch->vertex_buf.get_buffer()->contents()) +
-          vertex_alloc.offset),
-         vertices.data(), vertices.size() * sizeof(DefaultVertex));
+  device_->copy_to_buffer(vertices.data(), vertices.size() * sizeof(DefaultVertex),
+                          draw_batch->vertex_buf.get_buffer_handle(),
+                          vertex_alloc.offset * sizeof(DefaultVertex));
 
   OffsetAllocator::Allocation index_alloc{};
   if (!indices.empty()) {
@@ -414,21 +414,26 @@ DrawBatch::Alloc RendererMetal4::upload_geometry([[maybe_unused]] DrawBatchType 
   size_t meshlet_vertices_offset{};
   // size_t mesh_i{};
   for (const auto& meshlet_data : meshlets.meshlet_datas) {
-    memcpy((reinterpret_cast<Meshlet*>(draw_batch->meshlet_buf.get_buffer()->contents()) +
-            meshlet_alloc.offset + meshlet_offset),
-           meshlet_data.meshlets.data(), meshlet_data.meshlets.size() * sizeof(Meshlet));
+    device_->copy_to_buffer(meshlet_data.meshlets.data(),
+                            meshlet_data.meshlets.size() * sizeof(Meshlet),
+                            draw_batch->meshlet_buf.get_buffer_handle(),
+                            (meshlet_alloc.offset + meshlet_offset) * sizeof(Meshlet));
     meshlet_offset += meshlet_data.meshlets.size();
 
-    memcpy((reinterpret_cast<uint32_t*>(draw_batch->meshlet_vertices_buf.get_buffer()->contents()) +
-            meshlet_vertices_alloc.offset + meshlet_vertices_offset),
-           meshlet_data.meshlet_vertices.data(),
-           meshlet_data.meshlet_vertices.size() * sizeof(uint32_t));
+    device_->copy_to_buffer(
+        meshlet_data.meshlet_vertices.data(),
+        meshlet_data.meshlet_vertices.size() * sizeof(uint32_t),
+        draw_batch->meshlet_vertices_buf.get_buffer_handle(),
+        (meshlet_vertices_alloc.offset + meshlet_vertices_offset) * sizeof(uint32_t));
+
     meshlet_vertices_offset += meshlet_data.meshlet_vertices.size();
 
-    memcpy((reinterpret_cast<uint8_t*>(draw_batch->meshlet_triangles_buf.get_buffer()->contents()) +
-            meshlet_triangles_alloc.offset + meshlet_triangles_offset),
-           meshlet_data.meshlet_triangles.data(),
-           meshlet_data.meshlet_triangles.size() * sizeof(uint8_t));
+    device_->copy_to_buffer(
+        meshlet_data.meshlet_triangles.data(),
+        meshlet_data.meshlet_triangles.size() * sizeof(uint8_t),
+        draw_batch->meshlet_triangles_buf.get_buffer_handle(),
+        (meshlet_triangles_alloc.offset + meshlet_triangles_offset) * sizeof(uint8_t));
+
     meshlet_triangles_offset += meshlet_data.meshlet_triangles.size();
 
     // MeshData d{
@@ -443,7 +448,8 @@ DrawBatch::Alloc RendererMetal4::upload_geometry([[maybe_unused]] DrawBatchType 
     //     .center = meshes[mesh_i].center,
     //     .radius = meshes[mesh_i].radius,
     // };
-    // memcpy((reinterpret_cast<MeshData*>(draw_batch->mesh_buf.get_buffer()->contents()) + mesh_i +
+    // memcpy((reinterpret_cast<MeshData*>(draw_batch->mesh_buf.get_buffer()->contents()) +
+    // mesh_i +
     //         mesh_alloc.offset),
     //        &d, sizeof(MeshData));
     // mesh_i++;
@@ -615,12 +621,10 @@ OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
 void InstanceDataMgr::free(OffsetAllocator::Allocation alloc) {
   auto element_count = allocator_->allocationSize(alloc);
   // TODO: nooooooooooo memset
-  memset(reinterpret_cast<InstanceData*>(device_->get_buf(instance_data_buf_)->contents()) +
-             alloc.offset,
-         0, element_count * sizeof(InstanceData));
-  memset(reinterpret_cast<IndexedIndirectDrawCmd*>(device_->get_buf(draw_cmd_buf_)->contents()) +
-             alloc.offset,
-         0, element_count * sizeof(IndexedIndirectDrawCmd));
+  device_->fill_buffer(instance_data_buf_.handle, element_count * sizeof(InstanceData),
+                       alloc.offset * sizeof(InstanceData), 0);
+  device_->fill_buffer(draw_cmd_buf_.handle, element_count * sizeof(IndexedIndirectDrawCmd),
+                       alloc.offset * sizeof(IndexedIndirectDrawCmd), 0);
   allocator_->free(alloc);
   curr_element_count_ -= element_count;
 }

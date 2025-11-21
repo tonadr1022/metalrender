@@ -452,7 +452,7 @@ void MetalDevice::init_bindless() {
   create_descriptor_table(&sampler_descriptor_table_, k_max_samplers);
 }
 
-void MetalDevice::copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf,
+void MetalDevice::copy_to_buffer(const void* src, size_t src_size, rhi::BufferHandle buf,
                                  size_t dst_offset) {
   auto* buffer = get_buf(buf);
   ASSERT(buffer);
@@ -532,4 +532,10 @@ void MetalDevice::ICB_Mgr::reset_for_frame() {
 
 void MetalDevice::ICB_Mgr::remove(rhi::BufferHandle indirect_buf) {
   indirect_buffer_handle_to_icb_.erase(indirect_buf.to64());
+}
+
+void MetalDevice::fill_buffer(rhi::BufferHandle handle, size_t size, size_t offset,
+                              uint32_t fill_value) {
+  // TODO: gpu only buffers!
+  memset((uint8_t*)get_buf(handle)->contents() + offset, fill_value, size);
 }

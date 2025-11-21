@@ -65,12 +65,9 @@ class VulkanDevice : public rhi::Device {
 
   // TODO: is there a better spot for setting window dims, ie on event
   bool begin_frame(glm::uvec2) override { exit(1); }
-  void copy_to_buffer(void* /*src*/, size_t /*src_size*/, rhi::BufferHandle /*buf*/,
+  void copy_to_buffer(const void* /*src*/, size_t /*src_size*/, rhi::BufferHandle /*buf*/,
                       size_t /*dst_offset*/) override {
     exit(1);
-  }
-  void copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf) {
-    copy_to_buffer(src, src_size, buf, 0);
   }
 
   // commands
@@ -101,6 +98,11 @@ class VulkanDevice : public rhi::Device {
   bool get_vsync() const override {
     exit(1);
     return vsync_enabled_;
+  }
+
+  void fill_buffer(rhi::BufferHandle /*handle*/, size_t /*size*/, size_t /*offset*/,
+                   uint32_t /*fill_value*/) override {
+    exit(1);
   }
 
  private:

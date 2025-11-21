@@ -70,6 +70,8 @@ class MetalDevice : public rhi::Device {
   rhi::Pipeline* get_pipeline(rhi::PipelineHandle handle) override {
     return pipeline_pool_.get(handle);
   }
+  void fill_buffer(rhi::BufferHandle handle, size_t size, size_t offset,
+                   uint32_t fill_value) override;
 
   void destroy(rhi::BufferHandle handle) override;
   void destroy(rhi::TextureHandle handle) override;
@@ -94,7 +96,7 @@ class MetalDevice : public rhi::Device {
   const rhi::Swapchain& get_swapchain() const override { return swapchain_; }
 
   void init_bindless();
-  void copy_to_buffer(void* src, size_t src_size, rhi::BufferHandle buf,
+  void copy_to_buffer(const void* src, size_t src_size, rhi::BufferHandle buf,
                       size_t dst_offset) override;
 
  private:
