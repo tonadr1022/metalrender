@@ -114,10 +114,10 @@ constexpr VkPipelineColorBlendAttachmentState convert_color_blend_attachment(
   return VkPipelineColorBlendAttachmentState{
       .blendEnable = a.enable,
       .srcColorBlendFactor = convert_blend_factor(a.src_color_factor),
-      .dstColorBlendFactor = convert_blend_factor(a.dst_color_blend_factor),
+      .dstColorBlendFactor = convert_blend_factor(a.dst_color_factor),
       .colorBlendOp = convert_blend_op(a.color_blend_op),
       .srcAlphaBlendFactor = convert_blend_factor(a.src_alpha_factor),
-      .dstAlphaBlendFactor = convert_blend_factor(a.dst_alpha_blend_factor),
+      .dstAlphaBlendFactor = convert_blend_factor(a.dst_alpha_factor),
       .alphaBlendOp = convert_blend_op(a.alpha_blend_op),
       .colorWriteMask = convert_color_component_flags(a.color_write_mask),
   };

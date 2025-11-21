@@ -149,6 +149,14 @@ struct ModelInstanceGPUResources {
   OffsetAllocator::Allocation meshlet_vis_buf_alloc;
 };
 
+class ImGuiRenderer {
+ public:
+  explicit ImGuiRenderer(rhi::Device* device);
+
+ private:
+  rhi::Device* device_;
+};
+
 class InstanceDataMgr {
  public:
   void init(size_t initial_element_cap, rhi::Device* device) {
@@ -252,6 +260,7 @@ class RendererMetal4 {
     rhi::TextureHandleHolder tex;
     uint32_t bytes_per_row;
   };
+  std::optional<ImGuiRenderer> imgui_renderer_;
 
   std::vector<GPUTexUpload> pending_texture_uploads_;
 

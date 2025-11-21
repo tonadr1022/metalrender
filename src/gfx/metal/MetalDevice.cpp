@@ -3,6 +3,7 @@
 #include <QuartzCore/QuartzCore.h>
 
 #include <Foundation/NSObject.hpp>
+#include <Metal/MTLRenderPipeline.hpp>
 #include <Metal/Metal.hpp>
 #include <QuartzCore/CAMetalLayer.hpp>
 
@@ -22,6 +23,65 @@
 #include "gfx/metal/MetalUtil.hpp"
 
 namespace {
+MTL::BlendFactor convert(rhi::BlendFactor factor) {
+  switch (factor) {
+    case rhi::BlendFactor::Zero:
+      return MTL::BlendFactorZero;
+    case rhi::BlendFactor::One:
+      return MTL::BlendFactorOne;
+    case rhi::BlendFactor::SrcColor:
+      return MTL::BlendFactorSourceColor;
+    case rhi::BlendFactor::OneMinusSrcColor:
+      return MTL::BlendFactorOneMinusSourceColor;
+    case rhi::BlendFactor::DstColor:
+      return MTL::BlendFactorDestinationColor;
+    case rhi::BlendFactor::OneMinusDstColor:
+      return MTL::BlendFactorOneMinusDestinationColor;
+    case rhi::BlendFactor::SrcAlpha:
+      return MTL::BlendFactorSourceAlpha;
+    case rhi::BlendFactor::OneMinusSrcAlpha:
+      return MTL::BlendFactorOneMinusSourceAlpha;
+    case rhi::BlendFactor::DstAlpha:
+      return MTL::BlendFactorDestinationAlpha;
+    case rhi::BlendFactor::OneMinusDstAlpha:
+      return MTL::BlendFactorOneMinusDestinationAlpha;
+    case rhi::BlendFactor::ConstantColor:
+      return MTL::BlendFactorBlendColor;
+    case rhi::BlendFactor::OneMinusConstantColor:
+      return MTL::BlendFactorOneMinusBlendColor;
+    case rhi::BlendFactor::ConstantAlpha:
+      return MTL::BlendFactorBlendAlpha;
+    case rhi::BlendFactor::OneMinusConstantAlpha:
+      return MTL::BlendFactorOneMinusBlendAlpha;
+    case rhi::BlendFactor::SrcAlphaSaturate:
+      return MTL::BlendFactorSourceAlphaSaturated;
+    case rhi::BlendFactor::OneMinusSrc1Color:
+      return MTL::BlendFactorOneMinusSource1Color;
+    case rhi::BlendFactor::OneMinusSrc1Alpha:
+      return MTL::BlendFactorOneMinusSource1Alpha;
+    case rhi::BlendFactor::Src1Color:
+      return MTL::BlendFactorSource1Color;
+    case rhi::BlendFactor::Src1Alpha:
+      return MTL::BlendFactorSource1Alpha;
+      break;
+  }
+}
+
+MTL::BlendOperation convert(rhi::BlendOp op) {
+  switch (op) {
+    case rhi::BlendOp::Add:
+      return MTL::BlendOperationAdd;
+    case rhi::BlendOp::Subtract:
+      return MTL::BlendOperationSubtract;
+    case rhi::BlendOp::ReverseSubtract:
+      return MTL::BlendOperationReverseSubtract;
+    case rhi::BlendOp::Min:
+      return MTL::BlendOperationMin;
+    case rhi::BlendOp::Max:
+      return MTL::BlendOperationMax;
+      break;
+  }
+}
 
 MTL::SamplerAddressMode convert(rhi::AddressMode m) {
   using rhi::AddressMode;
@@ -321,6 +381,21 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
   for (int i = 0; i < color_format_cnt; i++) {
     rhi::TextureFormat format = cinfo.rendering.color_formats[i];
     desc->colorAttachments()->object(i)->setPixelFormat(mtl::util::convert(format));
+  }
+
+  if (cinfo.blend.attachments.size() > 0) {
+    ALWAYS_ASSERT(cinfo.blend.attachments.size() == (size_t)color_format_cnt);
+  }
+
+  for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
+    const auto& info_att = cinfo.blend.attachments[i];
+    auto* att = desc->colorAttachments()->object(i);
+    att->setSourceRGBBlendFactor(convert(info_att.src_color_factor));
+    att->setDestinationRGBBlendFactor(convert(info_att.dst_color_factor));
+    att->setRgbBlendOperation(convert(info_att.color_blend_op));
+    att->setSourceAlphaBlendFactor(convert(info_att.src_alpha_factor));
+    att->setDestinationAlphaBlendFactor(convert(info_att.dst_alpha_factor));
+    att->setAlphaBlendOperation(convert(info_att.alpha_blend_op));
   }
 
   desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);

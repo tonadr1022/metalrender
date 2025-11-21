@@ -31,10 +31,10 @@ struct GraphicsPipelineCreateInfo {
   struct ColorBlendAttachment {
     bool enable{false};
     BlendFactor src_color_factor;
-    BlendFactor dst_color_blend_factor;
+    BlendFactor dst_color_factor;
     BlendOp color_blend_op;
     BlendFactor src_alpha_factor;
-    BlendFactor dst_alpha_blend_factor;
+    BlendFactor dst_alpha_factor;
     BlendOp alpha_blend_op;
     ColorComponentFlags color_write_mask{ColorComponentRBit | ColorComponentGBit |
                                          ColorComponentBBit | ColorComponentABit};

@@ -93,6 +93,7 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
 
   create_render_target_textures();
   scratch_buffer_pool_.emplace(device_);
+  imgui_renderer_.emplace(device_);
 
   rg_.init(device_);
 }
@@ -640,6 +641,26 @@ void InstanceDataMgr::allocate_buffers(size_t element_count) {
                                             .usage = rhi::BufferUsage_Indirect,
                                             .size = sizeof(IndexedIndirectDrawCmd) * element_count,
                                             .bindless = true});
+}
+
+ImGuiRenderer::ImGuiRenderer(rhi::Device* device) : device_(device) {
+  device_->create_graphics_pipeline_h(rhi::GraphicsPipelineCreateInfo{
+      .shaders = {{
+          {"imgui", ShaderType::Vertex},
+          {"imgui", ShaderType::Fragment},
+      }},
+      // TODO: don't use this necessarily
+      .rendering = {.color_formats{TextureFormat::R8G8B8A8Srgb}},
+      .blend = {.attachments = {{
+                    .enable = true,
+                    .src_color_factor = rhi::BlendFactor::SrcAlpha,
+                    .dst_color_factor = rhi::BlendFactor::OneMinusSrcAlpha,
+                    .color_blend_op = rhi::BlendOp::Add,
+                    .src_alpha_factor = rhi::BlendFactor::One,
+                    .dst_alpha_factor = rhi::BlendFactor::OneMinusSrcAlpha,
+                    .alpha_blend_op = rhi::BlendOp::Add,
+                }}},
+  });
 }
 
 }  // namespace gfx
