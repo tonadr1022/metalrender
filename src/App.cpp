@@ -121,10 +121,6 @@ void App::run() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    ImGui::Begin("hello");
-    ImGui::Text("hello text");
-    ImGui::End();
-    ImGui::ShowDemoWindow();
     const double curr_time = glfwGetTime();
     auto dt = static_cast<float>(curr_time - last_time);
     last_time = curr_time;
@@ -141,6 +137,10 @@ void App::run() {
                                .camera_pos = camera_.pos,
                                .draw_imgui = imgui_enabled_};
 
+    ImGui::ShowDemoWindow();
+    ImGui::Begin("Renderer");
+    renderer_.on_imgui();
+    ImGui::End();
     ImGui::Render();
     renderer_.render(args);
     ImGui::EndFrame();

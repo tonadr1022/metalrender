@@ -173,7 +173,7 @@ class RendererMetal4 {
   };
   void init(const CreateInfo& cinfo);
   void render(const RenderArgs& args);
-  void on_imgui() {}
+  void on_imgui() { device_->on_imgui(); }
   bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
                   ModelInstance& model, ModelGPUHandle& out_handle);
   [[nodiscard]] ModelInstanceGPUHandle add_model_instance(const ModelInstance& model,
@@ -185,7 +185,6 @@ class RendererMetal4 {
  private:
   void init_imgui();
   void shutdown_imgui();
-  void create_render_target_textures();
   void flush_pending_texture_uploads(rhi::CmdEncoder* enc);
   [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandleHolder& buf) const;
   [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandle& buf) const {
@@ -217,7 +216,6 @@ class RendererMetal4 {
   Window* window_{};
   rhi::PipelineHandleHolder test2_pso_;
   std::optional<BackedGPUAllocator> materials_buf_;
-  rhi::TextureHandleHolder depth_tex_;
 
   size_t frame_num_{};
   size_t curr_frame_idx_{};

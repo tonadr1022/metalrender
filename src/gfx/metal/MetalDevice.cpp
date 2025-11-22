@@ -9,6 +9,7 @@
 
 #include "Window.hpp"
 #include "gfx/metal/Metal3CmdEncoder.hpp"
+#include "imgui.h"
 #include "shader_constants.h"
 
 #define IR_RUNTIME_METALCPP
@@ -758,4 +759,9 @@ void MetalDevice::fill_buffer(rhi::BufferHandle handle, size_t size, size_t offs
 
 void MetalDevice::set_name(rhi::BufferHandle handle, const char* name) {
   get_mtl_buf(handle)->setLabel(mtl::util::string(name));
+}
+
+void MetalDevice::on_imgui() {
+  ImGui::Text("Active Textures: %zu\nActive Buffers: %zu", texture_pool_.size(),
+              buffer_pool_.size());
 }

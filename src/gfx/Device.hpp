@@ -81,7 +81,6 @@ class Device {
   virtual void fill_buffer(rhi::BufferHandle handle, size_t size, size_t offset,
                            uint32_t fill_value) = 0;
 
-  // commands
   virtual CmdEncoder* begin_command_list() = 0;
   virtual void submit_frame() = 0;
 
@@ -89,6 +88,8 @@ class Device {
   virtual void destroy(SamplerHandle handle) = 0;
 
   virtual rhi::Swapchain& get_swapchain() = 0;
+
+  virtual void on_imgui() {}
   [[nodiscard]] virtual const rhi::Swapchain& get_swapchain() const = 0;
 };
 

@@ -59,6 +59,7 @@ class MetalDevice : public rhi::Device {
   void init(const InitInfo& init_info, const MetalDeviceInitInfo& metal_init_info);
   void init(const InitInfo& init_info) override;
   void set_vsync(bool vsync) override;
+  void on_imgui() override;
   bool get_vsync() const override;
   [[nodiscard]] void* get_native_device() const override { return device_; }
 

@@ -1,6 +1,7 @@
 #include "RenderGraph.hpp"
 
 #include <algorithm>
+#include <ranges>
 
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
@@ -255,11 +256,13 @@ void RenderGraph::execute() {
   tex_handle_to_handle_.clear();
   resource_pass_usages_[0].clear();
   resource_pass_usages_[1].clear();
+
+  rg_resource_handle_to_actual_att_.clear();
 }
 
 void RenderGraph::reset() {}
 
-void RenderGraph::bake(bool verbose) {
+void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   if (verbose) {
     LINFO("//////////// Baking Render Graph ////////////");
   }
@@ -269,6 +272,39 @@ void RenderGraph::bake(bool verbose) {
     intermed_pass_visited_.clear();
     intermed_pass_stack_.clear();
     pass_stack_.clear();
+
+    free_atts_.clear();
+    {
+      static std::vector<size_t> del_indices;
+      size_t i = 0;
+      for (const auto& a : actual_atts_) {
+        ASSERT(!a.att_info.is_swapchain_tex);
+        if (a.att_info.size_class == SizeClass::Swapchain && a.att_info.dims != fb_size) {
+          del_indices.emplace_back(i);
+        } else {
+          free_atts_[a.att_info].emplace_back(a.tex_handle.handle);
+        }
+        i++;
+      }
+
+      for (unsigned int i : std::ranges::reverse_view(del_indices)) {
+        actual_atts_[i] = std::move(actual_atts_.back());
+        actual_atts_.pop_back();
+      }
+      del_indices.clear();
+    }
+
+    // clear old swapchain images if swapchain resized
+    std::vector<rhi::TextureHandle> stale_img_handles;
+    for (const auto& a : actual_atts_) {
+      if (a.att_info.size_class != SizeClass::Swapchain) {
+        continue;
+      }
+      ASSERT(!a.att_info.is_swapchain_tex);
+      if (a.att_info.dims != fb_size) {
+        stale_img_handles.emplace_back(a.tex_handle.handle);
+      }
+    }
   }
 
   // find sink nodes, ie nodes that don't write to anything
@@ -332,6 +368,48 @@ void RenderGraph::bake(bool verbose) {
       }
     }
     LINFO("");
+  }
+
+  // create attachment images
+  for (const auto& usage : tex_usages_) {
+    if (usage.handle.is_valid() || usage.att_info.is_swapchain_tex) {
+      continue;
+    }
+    auto att_info = usage.att_info;
+    if (att_info.size_class == SizeClass::Swapchain) {
+      att_info.dims = fb_size;
+    }
+    rhi::TextureHandle actual_att_handle{};
+    auto free_att_it = free_atts_.find(att_info);
+    if (free_att_it != free_atts_.end()) {
+      auto& texture_handles = free_att_it->second;
+      if (!texture_handles.empty()) {
+        actual_att_handle = texture_handles.back();
+        texture_handles.pop_back();
+      }
+    }
+
+    if (!actual_att_handle.is_valid()) {
+      glm::uvec2 dims = att_info.dims;
+      if (att_info.size_class == SizeClass::Swapchain) {
+        dims = fb_size;
+      }
+      auto att_tx_handle = device_->create_tex_h(rhi::TextureDesc{
+          .format = att_info.format,
+          .usage = is_depth_format(att_info.format) ? rhi::TextureUsageColorAttachment
+                                                    : rhi::TextureUsageDepthStencilAttachment,
+          .dims = glm::uvec3{dims.x, dims.y, 1},
+          .mip_levels = att_info.mip_levels,
+          .array_length = att_info.array_layers,
+          .bindless = true,
+          .name = "render_graph_tex_att"});
+      actual_att_handle = att_tx_handle.handle;
+      actual_atts_.emplace_back(att_info, std::move(att_tx_handle));
+    }
+
+    for (const auto& handle : usage.handles_using) {
+      rg_resource_handle_to_actual_att_.emplace(handle.to64(), actual_att_handle);
+    }
   }
 
   struct ResourceState {
@@ -465,12 +543,8 @@ RGResourceHandle RenderGraph::add_tex_usage(rhi::TextureHandle tex_handle, RGAcc
   }
 
   std::string name = "external_texture_" + std::to_string(external_texture_count_++);
-  resource_handle_to_name_.emplace(resource_handle.to_64(), name);
-  resource_name_to_handle_.emplace(name, resource_handle.to_64());
-
-  // auto* usage = get_tex_usage(resource_handle);
-  // usage->accesses |= access_bits;
-  // usage->stages |= stage_bits;
+  resource_handle_to_name_.emplace(resource_handle.to64(), name);
+  resource_name_to_handle_.emplace(name, resource_handle.to64());
 
   if (access & AnyRead) {
     add_resource_to_pass_reads(resource_handle, pass);
@@ -488,22 +562,19 @@ RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, const Attac
   convert_rg_access(access, access_bits, stage_bits);
 
   auto resource_handle_it = resource_name_to_handle_.find(name);
+  RGResourceHandle handle{};
   if (resource_handle_it != resource_name_to_handle_.end()) {
-    auto handle = resource_handle_it->second;
-    // auto* usage = get_tex_usage(handle);
-    // usage->accesses |= access_bits;
-    // usage->stages |= stage_bits;
-    return handle;
+    handle = resource_handle_it->second;
+  } else {
+    handle = {.idx = static_cast<uint32_t>(tex_usages_.size()), .type = RGResourceType::Texture};
+    TextureUsage tex_use{.att_info = att_info};
+    emplace_back_tex_usage(tex_use);
   }
 
-  RGResourceHandle handle = {.idx = static_cast<uint32_t>(tex_usages_.size()),
-                             .type = RGResourceType::Texture};
-
-  resource_handle_to_name_.emplace(handle.to_64(), name);
+  resource_handle_to_name_.emplace(handle.to64(), name);
   resource_name_to_handle_.emplace(name, handle);
 
-  TextureUsage tex_use{.att_info = att_info};
-  emplace_back_tex_usage(tex_use);
+  tex_usages_.back().handles_using.emplace_back(handle);
 
   if (access & AnyRead) {
     add_resource_to_pass_reads(handle, pass);
@@ -533,7 +604,7 @@ RGResourceHandle RenderGraph::add_buf_usage(const std::string& name, rhi::Buffer
   RGResourceHandle handle = {.idx = static_cast<uint32_t>(buf_usages_.size()),
                              .type = RGResourceType::Buffer};
 
-  resource_handle_to_name_.emplace(handle.to_64(), name);
+  resource_handle_to_name_.emplace(handle.to64(), name);
   resource_name_to_handle_.emplace(name, handle);
 
   BufferUsage buf_usage{.handle = buf_handle};
@@ -602,7 +673,11 @@ const char* to_string(RGResourceType type) {
   }
 }
 
-}  // namespace gfx
+rhi::TextureHandle RenderGraph::get_att_img(RGResourceHandle tex_handle) {
+  auto it = rg_resource_handle_to_actual_att_.find(tex_handle.to64());
+  ALWAYS_ASSERT(it != rg_resource_handle_to_actual_att_.end());
+  ASSERT(it->second.is_valid());
+  return it->second;
+}
 
-#undef ACCESS_FLAG_OR
-#undef STAGE_OR
+}  // namespace gfx

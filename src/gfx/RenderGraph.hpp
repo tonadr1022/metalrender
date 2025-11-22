@@ -3,7 +3,47 @@
 #include <functional>
 #include <unordered_set>
 
+#include "core/Hash.hpp"
 #include "gfx/CmdEncoder.hpp"
+
+namespace gfx {
+
+enum class SizeClass : uint8_t { Swapchain, Custom };
+
+inline bool is_depth_format(rhi::TextureFormat format) {
+  return format == rhi::TextureFormat::D32float;
+}
+
+struct AttachmentInfo {
+  rhi::TextureFormat format{rhi::TextureFormat::Undefined};
+  glm::uvec2 dims{};
+  uint32_t mip_levels{1};
+  uint32_t array_layers{1};
+  SizeClass size_class{SizeClass::Swapchain};
+  bool is_swapchain_tex{};
+
+  bool operator==(const AttachmentInfo& other) const {
+    return is_swapchain_tex == other.is_swapchain_tex && format == other.format &&
+           dims == other.dims && mip_levels == other.mip_levels &&
+           array_layers == other.array_layers && size_class == other.size_class;
+  }
+};
+
+}  // namespace gfx
+
+namespace std {
+
+template <>
+struct hash<gfx::AttachmentInfo> {
+  size_t operator()(const gfx::AttachmentInfo& att_info) const {
+    auto h = std::make_tuple((uint32_t)att_info.size_class, att_info.array_layers,
+                             att_info.mip_levels, att_info.dims.x, att_info.dims.y,
+                             (uint32_t)att_info.format, att_info.is_swapchain_tex);
+    return util::hash::tuple_hash<decltype(h)>{}(h);
+  }
+};
+
+}  // namespace std
 
 namespace gfx {
 
@@ -23,7 +63,7 @@ struct RGResourceHandle {
     return idx == other.idx && type == other.type;
   }
 
-  [[nodiscard]] uint64_t to_64() const {
+  [[nodiscard]] uint64_t to64() const {
     return static_cast<uint64_t>(idx) | static_cast<uint64_t>(type) << 32;
   }
 };
@@ -54,15 +94,6 @@ enum RGAccess : uint16_t {
 
 void convert_rg_access(RGAccess access, rhi::AccessFlagsBits& out_access,
                        rhi::PipelineStageBits& out_stages);
-
-enum class SizeClass : uint8_t { Swapchain, Custom };
-
-struct AttachmentInfo {
-  glm::uvec3 dims{};
-  uint32_t mip_levels{1};
-  uint32_t array_layers{1};
-  SizeClass size_class{SizeClass::Swapchain};
-};
 
 struct BufferInfo {
   size_t size;
@@ -117,7 +148,7 @@ class RenderGraph {
   void depend_passes(RGPass& pre_pass, RGPass& post_pass, rhi::AccessFlags access,
                      rhi::PipelineStage stage);
 
-  void bake(bool verbose = false);
+  void bake(glm::uvec2 fb_size, bool verbose = false);
 
   void execute();
 
@@ -141,6 +172,8 @@ class RenderGraph {
                                  RGAccess access, RGPass& pass);
   RGResourceHandle add_tex_usage(rhi::TextureHandle handle, RGAccess access, RGPass& pass);
 
+  rhi::TextureHandle get_att_img(RGResourceHandle tex_handle);
+
  private:
   struct ResourceUsage {
     // rhi::AccessFlagsBits accesses;
@@ -149,6 +182,7 @@ class RenderGraph {
   struct TextureUsage : public ResourceUsage {
     AttachmentInfo att_info;
     rhi::TextureHandle handle;
+    std::vector<RGResourceHandle> handles_using;
   };
 
   struct BufferUsage : public ResourceUsage {
@@ -196,7 +230,7 @@ class RenderGraph {
   std::vector<BufferUsage> buf_usages_;
   std::vector<ResourcePassUsages> resource_pass_usages_[2];
   std::string get_resource_name(RGResourceHandle handle) {
-    auto it = resource_handle_to_name_.find(handle.to_64());
+    auto it = resource_handle_to_name_.find(handle.to64());
     return it == resource_handle_to_name_.end() ? "" : it->second;
   }
 
@@ -213,6 +247,15 @@ class RenderGraph {
   std::unordered_map<std::string, RGResourceHandle> resource_name_to_handle_;
   std::unordered_map<uint64_t, std::string> resource_handle_to_name_;
   std::unordered_map<uint64_t, RGResourceHandle> tex_handle_to_handle_;
+
+  std::unordered_map<gfx::AttachmentInfo, std::vector<rhi::TextureHandle>> free_atts_;
+  struct AttInfoAndTex {
+    AttachmentInfo att_info;
+    rhi::TextureHandleHolder tex_handle;
+  };
+
+  std::vector<AttInfoAndTex> actual_atts_;
+  std::unordered_map<uint64_t, rhi::TextureHandle> rg_resource_handle_to_actual_att_;
 
   std::vector<uint32_t> sink_passes_;
   std::vector<uint32_t> pass_stack_;

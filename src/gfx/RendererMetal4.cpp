@@ -96,7 +96,6 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
                                  .initial_meshlet_vertex_capacity = 1'000'00,
                              });
 
-  create_render_target_textures();
   scratch_buffer_pool_.emplace(device_);
   imgui_renderer_.emplace(device_);
 
@@ -116,23 +115,12 @@ void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
 
   add_render_graph_passes(args);
   static int i = 1;
-  rg_.bake(i++ == 0);
+  rg_.bake(window_->get_window_size(), i++ == 0);
   rg_.execute();
 
   device_->submit_frame();
 
   frame_num_++;
-}
-
-void RendererMetal4::create_render_target_textures() {
-  auto dims = window_->get_window_size();
-  depth_tex_ = device_->create_tex_h(rhi::TextureDesc{
-      .format = rhi::TextureFormat::D32float,
-      .storage_mode = rhi::StorageMode::GPUOnly,
-      .usage = static_cast<rhi::TextureUsage>(rhi::TextureUsageDepthStencilAttachment |
-                                              rhi::TextureUsageStorage),
-      .dims = glm::uvec3{dims, 1},
-  });
 }
 
 uint32_t RendererMetal4::get_bindless_idx(const rhi::BufferHandleHolder& buf) const {
@@ -182,8 +170,6 @@ void ScratchBufferPool::reset(size_t frame_idx) {
 }
 
 void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
-  auto& gbuffer_pass = rg_.add_pass("gbuffer");
-
   bool imgui_has_dirty_textures = imgui_renderer_->has_dirty_textures();
   if (!pending_texture_uploads_.empty() || imgui_has_dirty_textures) {
     auto& tex_flush_pass = rg_.add_pass("flush_textures");
@@ -220,21 +206,26 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
   }
 
   {
+    auto& gbuffer_pass = rg_.add_pass("gbuffer");
     if (indirect_rendering_enabled_) {
       gbuffer_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
                            RGAccess::IndirectRead);
     }
-    gbuffer_pass.add_tex("gbuffer_a", {}, RGAccess::ColorWrite);
+    gbuffer_pass.add_tex("gbuffer_a", {.is_swapchain_tex = true}, RGAccess::ColorWrite);
+    auto rg_depth_handle = gbuffer_pass.add_tex(
+        "depth_tex", {.format = rhi::TextureFormat::D32float}, RGAccess::ColorWrite);
     for (const auto& t : pending_texture_uploads_) {
       gbuffer_pass.add_tex(t.tex.handle, RGAccess::FragmentSample);
     }
     imgui_renderer_->add_dirty_textures_to_pass(gbuffer_pass, true);
 
-    gbuffer_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
+    gbuffer_pass.set_execute_fn([this, rg_depth_handle](rhi::CmdEncoder* enc) {
+      auto depth_handle = rg_.get_att_img(rg_depth_handle);
+      ASSERT(depth_handle.is_valid());
       enc->begin_rendering({
           RenderingAttachmentInfo::color_att(device_->get_swapchain().get_texture(curr_frame_idx_),
                                              rhi::LoadOp::Clear, {.color = {0.1, 0.2, 0.1, 0}}),
-          RenderingAttachmentInfo::depth_stencil_att(depth_tex_.handle, rhi::LoadOp::Clear,
+          RenderingAttachmentInfo::depth_stencil_att(depth_handle, rhi::LoadOp::Clear,
                                                      {.depth_stencil = {.depth = 1}}),
       });
 
@@ -273,7 +264,7 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
   }
   {
     auto& pass = rg_.add_pass("shade");
-    pass.add_tex("gbuffer_a", {}, RGAccess::ComputeRead);
+    pass.add_tex("gbuffer_a", {.is_swapchain_tex = true}, RGAccess::ComputeRead);
     pass.set_execute_fn([](rhi::CmdEncoder*) {});
   }
 }
