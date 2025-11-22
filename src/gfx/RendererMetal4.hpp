@@ -4,7 +4,9 @@
 #include <functional>
 #include <span>
 
+#include "ImGuiRenderer.hpp"
 #include "core/Math.hpp"  // IWYU pragma: keep
+#include "gfx/BackedGPUAllocator.hpp"
 #include "gfx/Config.hpp"
 #include "gfx/Device.hpp"
 #include "gfx/GFXTypes.hpp"
@@ -12,7 +14,6 @@
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
-#include "gfx/metal/BackedGPUAllocator.hpp"
 #include "hlsl/shared_indirect.h"
 #include "offsetAllocator.hpp"
 
@@ -30,22 +31,6 @@ struct RenderArgs {
   glm::vec3 camera_pos;
   bool draw_imgui;
 };
-
-// struct MyMeshOld {
-//   rhi::BufferHandleHolder vertex_buf;
-//   rhi::BufferHandleHolder index_buf;
-//   size_t material_id;
-//   size_t vertex_count;
-//   size_t index_count;
-// };
-
-// struct MyMesh {
-//   rhi::BufferHandleHolder vertex_buf;
-//   rhi::BufferHandleHolder index_buf;
-//   size_t material_id;
-//   size_t vertex_count;
-//   size_t index_count;
-// };
 
 class ScratchBufferPool {
  public:
@@ -131,8 +116,6 @@ struct DrawBatch {
 
 struct ModelGPUResources {
   OffsetAllocator::Allocation material_alloc;
-  // TODO: class lmao
-  std::vector<MTL::Texture*> textures;
   DrawBatch::Alloc static_draw_batch_alloc;
   std::vector<InstanceData> base_instance_datas;
   std::vector<Mesh> meshes;
@@ -148,22 +131,6 @@ struct ModelGPUResources {
 struct ModelInstanceGPUResources {
   OffsetAllocator::Allocation instance_data_gpu_alloc;
   OffsetAllocator::Allocation meshlet_vis_buf_alloc;
-};
-
-class ImGuiRenderer {
- public:
-  explicit ImGuiRenderer(rhi::Device* device);
-  void render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t frame_in_flight);
-  void flush_pending_texture_uploads(rhi::CmdEncoder* enc);
-  rhi::PipelineHandleHolder pso_;
-
-  std::vector<rhi::BufferHandleHolder> buffers_[k_max_frames_in_flight];
-  rhi::BufferHandleHolder get_buffer_of_size(size_t size, size_t frame_in_flight,
-                                             const char* name = "imgui_renderer_buf");
-  void return_buffer(rhi::BufferHandleHolder&& handle, size_t frame_in_flight);
-
- private:
-  rhi::Device* device_;
 };
 
 class InstanceDataMgr {
@@ -282,7 +249,7 @@ class RendererMetal4 {
 
   rhi::TextureHandleHolder default_white_tex_;
   std::vector<uint32_t> indirect_cmd_buf_ids_;
-  bool indirect_rendering_enabled_{true};
+  bool indirect_rendering_enabled_{false};
 };
 
 }  // namespace gfx

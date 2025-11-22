@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Metal/MTLBuffer.hpp>
 #include <bit>
 #include <offsetAllocator.hpp>
 
@@ -65,8 +64,10 @@ class BackedGPUAllocator {
   [[nodiscard]] uint32_t max_seen_size() const { return max_seen_size_; }
 
   void free(OffsetAllocator::Allocation alloc) {
-    allocated_element_count_ -= allocator_.allocationSize(alloc);
-    allocator_.free(alloc);
+    if (alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      allocated_element_count_ -= allocator_.allocationSize(alloc);
+      allocator_.free(alloc);
+    }
   }
 
  private:

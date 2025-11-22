@@ -1,0 +1,26 @@
+#pragma once
+
+#include "gfx/Config.hpp"
+#include "gfx/Device.hpp"
+
+namespace gfx {
+class RGPass;
+class ImGuiRenderer {
+ public:
+  explicit ImGuiRenderer(rhi::Device* device);
+  void render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t frame_in_flight);
+  void flush_pending_texture_uploads(rhi::CmdEncoder* enc);
+  rhi::PipelineHandleHolder pso_;
+
+  std::vector<rhi::BufferHandleHolder> buffers_[k_max_frames_in_flight];
+  rhi::BufferHandleHolder get_buffer_of_size(size_t size, size_t frame_in_flight,
+                                             const char* name = "imgui_renderer_buf");
+  void return_buffer(rhi::BufferHandleHolder&& handle, size_t frame_in_flight);
+  bool has_dirty_textures();
+  void add_dirty_textures_to_pass(gfx::RGPass& pass, bool read_access);
+
+ private:
+  rhi::Device* device_;
+};
+
+}  // namespace gfx

@@ -1,6 +1,7 @@
 #include "ModelLoader.hpp"
 
 #include "core/EAssert.hpp"
+#include "core/Logger.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "shader_constants.h"
 
@@ -156,6 +157,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
       int w{}, h{}, comp{};
       const std::filesystem::path full_img_path = directory_path / img.uri;
       uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
+      LINFO("comps: {}", comp);
       const uint32_t mip_levels = math::get_mip_levels(w, h);
       const rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
                                   .storage_mode = rhi::StorageMode::Default,

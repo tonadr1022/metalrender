@@ -2,7 +2,6 @@
 
 // clang-format off
 #include <Metal/Metal.hpp>
-#include "hlsl/shared_indirect.h"
 #define IR_RUNTIME_METALCPP
 #include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
 // clang-format on
@@ -207,18 +206,24 @@ void MetalCmdEncoder::set_wind_order(rhi::WindOrder wind_order) {
 
 void MetalCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
                                           size_t src_bytes_per_row, rhi::TextureHandle dst_tex) {
+  upload_texture_data(src_buf, src_offset, src_bytes_per_row, dst_tex,
+                      device_->get_tex(dst_tex)->desc().dims, glm::uvec3{0, 0, 0});
+}
+
+void MetalCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
+                                          size_t src_bytes_per_row, rhi::TextureHandle dst_tex,
+                                          glm::uvec3 src_size, glm::uvec3 dst_origin) {
   end_render_encoder();
   start_compute_encoder();
-
   auto* buf = device_->get_mtl_buf(src_buf);
   auto* tex = device_->get_mtl_tex(dst_tex);
   ALWAYS_ASSERT(buf);
   ALWAYS_ASSERT(tex);
-  MTL::Size img_size = MTL::Size::Make(tex->width(), tex->height(), tex->depth());
+  MTL::Size img_size = MTL::Size::Make(src_size.x, src_size.y, src_size.z);
   ALWAYS_ASSERT(img_size.width * img_size.depth * img_size.height * 4 <=
                 device_->get_buf(src_buf)->size());
   compute_enc_->copyFromBuffer(buf, src_offset, src_bytes_per_row, 0, img_size, tex, 0, 0,
-                               MTL::Origin::Make(0, 0, 0));
+                               MTL::Origin::Make(dst_origin.x, dst_origin.y, dst_origin.z));
   compute_enc_->barrierAfterEncoderStages(MTL::StageBlit, MTL::StageBlit,
                                           MTL4::VisibilityOptionDevice);
   if (tex->mipmapLevelCount() > 1) {

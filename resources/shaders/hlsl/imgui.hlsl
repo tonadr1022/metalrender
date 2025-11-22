@@ -28,7 +28,6 @@ VOut vert_main(uint vert_id : SV_VertexID) {
     StructuredBuffer<ImGuiVertex> vert_buf = ResourceDescriptorHeap[vert_buf_idx];
     ImGuiVertex vert = vert_buf[vert_id + gDrawID.vert_id];
     o.pos = mul(proj, float4(vert.position, 0.0, 1.0));
-    
     o.uv = vert.tex_coords;
     o.color = ConvertUint32RGBAtoFloat4(vert.color);
     return o;

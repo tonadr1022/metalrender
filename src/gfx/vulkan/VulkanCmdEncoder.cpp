@@ -48,4 +48,10 @@ void VulkanCmdEncoder::barrier(rhi::PipelineStage /*src_stage*/, rhi::AccessFlag
 void VulkanCmdEncoder::draw_indexed_indirect(rhi::BufferHandle /*indirect_buf*/,
                                              uint32_t /* indirect_buf_id */, size_t /*offset*/,
                                              size_t /*draw_cnt*/) {}
+void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle /*src_buf*/, size_t /*src_offset*/,
+                                           size_t /*src_bytes_per_row*/,
+                                           rhi::TextureHandle /*dst_tex*/, glm::uvec3 /*src_size*/,
+                                           glm::uvec3 /*dst_origin*/) {
+  exit(1);
+}
 }  // namespace gfx::vk

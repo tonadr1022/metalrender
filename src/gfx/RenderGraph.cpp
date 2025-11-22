@@ -252,6 +252,7 @@ void RenderGraph::execute() {
   buf_usages_.clear();
   resource_name_to_handle_.clear();
   resource_handle_to_name_.clear();
+  tex_handle_to_handle_.clear();
   resource_pass_usages_[0].clear();
   resource_pass_usages_[1].clear();
 }

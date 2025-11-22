@@ -185,7 +185,7 @@ struct BlockPool {
     }
     entry.gen_++;
     if (do_destroy_) {
-      if (do_destroy_) entry.object.~ObjectT();
+      if (do_destroy_) entry.object = {};
     }
     entry.live_ = false;
     free_list_.emplace_back(entry_key);
@@ -231,8 +231,16 @@ struct BlockPool {
   uint16_t element_count_per_block_{};
   bool do_destroy_{};
 
-  Entry& get_entry(EntryKey key) { return all_entries_[key.block][key.idx]; }
-  const Entry& get_entry(EntryKey key) const { return all_entries_[key.block][key.idx]; }
+  Entry& get_entry(EntryKey key) {
+    ASSERT(key.block < all_entries_.size());
+    ASSERT(key.idx < all_entries_[key.block].size());
+    return all_entries_[key.block][key.idx];
+  }
+  const Entry& get_entry(EntryKey key) const {
+    ASSERT(key.block < all_entries_.size());
+    ASSERT(key.idx < all_entries_[key.block].size());
+    return all_entries_[key.block][key.idx];
+  }
   bool entry_key_valid(EntryKey key) const {
     return key.block < all_entries_.size() && key.idx < element_count_per_block_;
   }
