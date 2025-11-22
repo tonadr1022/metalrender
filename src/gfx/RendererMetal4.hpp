@@ -249,7 +249,7 @@ class RendererMetal4 {
 
   rhi::TextureHandleHolder default_white_tex_;
   std::vector<uint32_t> indirect_cmd_buf_ids_;
-  bool indirect_rendering_enabled_{false};
+  bool indirect_rendering_enabled_{true};
 };
 
 }  // namespace gfx

@@ -7,34 +7,27 @@
 
 class MetalDevice;
 
-namespace MTL4 {
-
-class CommandBuffer;
-class RenderCommandEncoder;
-class ComputeCommandEncoder;
-class ArgumentTable;
-
-}  // namespace MTL4
-
 namespace MTL {
 
+class BlitCommandEncoder;
+class ComputeCommandEncoder;
+class RenderCommandEncoder;
 class CommandBuffer;
 class ArgumentEncoder;
 class Buffer;
 
 }  // namespace MTL
 
-class MetalCmdEncoder : public rhi::CmdEncoder {
+class Metal3CmdEncoder : public rhi::CmdEncoder {
  public:
-  MetalCmdEncoder() = default;
-  MetalCmdEncoder(const MetalCmdEncoder&) = delete;
-  MetalCmdEncoder(MetalCmdEncoder&&) = delete;
-  MetalCmdEncoder& operator=(const MetalCmdEncoder&) = delete;
-  MetalCmdEncoder& operator=(MetalCmdEncoder&&) = delete;
-  ~MetalCmdEncoder() override;
+  Metal3CmdEncoder() = default;
+  Metal3CmdEncoder(const Metal3CmdEncoder&) = delete;
+  Metal3CmdEncoder(Metal3CmdEncoder&&) = delete;
+  Metal3CmdEncoder& operator=(const Metal3CmdEncoder&) = delete;
+  Metal3CmdEncoder& operator=(Metal3CmdEncoder&&) = delete;
+  ~Metal3CmdEncoder() override;
 
-  MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_buf);
-  MetalCmdEncoder(MetalDevice* device, MTL::CommandBuffer* cmd_buf);
+  Metal3CmdEncoder(MetalDevice* device, MTL::CommandBuffer* cmd_buf);
 
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
   void end_encoding() override;
@@ -74,19 +67,25 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   void init_icb_arg_encoder_and_buf();
   void flush_compute_barriers();
   void flush_render_barriers();
-  void end_render_encoder();
-  void end_compute_encoder();
-  void start_compute_encoder();
 
+  enum EncoderType {
+    EncoderType_Render = 1,
+    EncoderType_Compute = 1 << 1,
+    EncoderType_Blit = 1 << 2,
+  };
+  void end_encoders_of_types(EncoderType types);
+  void start_compute_encoder();
+  void start_blit_encoder();
+
+ public:
+  MTL::CommandBuffer* cmd_buf_{};
+
+ private:
+  MTL::ComputeCommandEncoder* compute_enc_{};
+  MTL::BlitCommandEncoder* blit_enc_{};
+
+  MTL::RenderCommandEncoder* render_enc_{};
   MetalDevice* device_{};
-  MTL4::CommandBuffer* cmd_buf_{};
-  MTL4::RenderCommandEncoder* render_enc_{};
-  MTL4::ComputeCommandEncoder* compute_enc_{};
-  MTL4::ArgumentTable* arg_table_{};
-  MTL::Stages compute_enc_flush_stages_{};
-  MTL::Stages render_enc_flush_stages_{};
-  MTL::Stages compute_enc_dst_stages_{};
-  MTL::Stages render_enc_dst_stages_{};
 
   rhi::BufferHandle curr_bound_index_buf_;
   size_t curr_bound_index_buf_offset_;

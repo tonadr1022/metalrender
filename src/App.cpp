@@ -78,7 +78,7 @@ void App::run() {
   int scene = 0;
   if (scene == 0) {
     glm::ivec3 iter{};
-    int n = 0;
+    int n = 1;
     glm::ivec3 dims{n, 1, n};
     float dist = 40.0;
     for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
@@ -228,5 +228,5 @@ void App::on_imgui() {
 void App::load_model(const std::filesystem::path& path, const glm::mat4& transform) {
   auto full_path =
       path.string().starts_with("Models") ? resource_dir_ / "models" / "gltf" / path : path;
-  // models_.push_back(ResourceManager::get().load_model(full_path, transform));
+  models_.push_back(ResourceManager::get().load_model(full_path, transform));
 }

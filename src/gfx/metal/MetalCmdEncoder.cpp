@@ -11,24 +11,13 @@
 #include "core/EAssert.hpp"
 #include "gfx/CmdEncoder.hpp"
 #include "gfx/GFXTypes.hpp"
+#include "gfx/metal/MetalCmdEncoderCommon.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "gfx/metal/MetalUtil.hpp"
 
+using namespace gfx::mtl;
+
 namespace {
-
-struct Cbuffer2 {
-  uint32_t draw_id;
-  uint32_t vertex_id_base;
-};
-
-constexpr size_t k_pc_size = 160;
-
-struct TLAB_Layout {
-  uint8_t pc_data[k_pc_size];
-  Cbuffer2 cbuffer2;
-};
-
-constexpr size_t k_tlab_size = sizeof(TLAB_Layout);
 
 MTL::Stages convert_stage(rhi::PipelineStage stage) {
   MTL::Stages result{};
@@ -158,8 +147,6 @@ void MetalCmdEncoder::draw_primitives(rhi::PrimitiveTopology topology, size_t ve
 
 void MetalCmdEncoder::push_constants(void* data, size_t size) {
   ASSERT(size <= k_tlab_size);
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
-  memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, data, size);
   arg_table_->setAddress(device_->get_mtl_buf(device_->resource_descriptor_table_)->gpuAddress(),
                          kIRDescriptorHeapBindPoint);
   arg_table_->setAddress(device_->get_mtl_buf(device_->sampler_descriptor_table_)->gpuAddress(),
@@ -264,7 +251,7 @@ uint32_t MetalCmdEncoder::prepare_indexed_indirect_draws(
 
   end_render_encoder();
   start_compute_encoder();
-  ASSERT(device_->dispatch_indirect_pso_);
+  ASSERT(device_->get_psos().dispatch_indirect_pso);
   ASSERT(device_->get_buf(indirect_buf)->desc().usage & rhi::BufferUsage_Indirect);
 
   auto [indirect_buf_id, icb] = device_->icb_mgr_.alloc(indirect_buf, draw_cnt);
@@ -273,10 +260,10 @@ uint32_t MetalCmdEncoder::prepare_indexed_indirect_draws(
   main_icb_container_arg_enc_->setArgumentBuffer(device_->get_mtl_buf(main_icb_container_buf_), 0);
   main_icb_container_arg_enc_->setIndirectCommandBuffer(icb, 0);
 
-  compute_enc_->setComputePipelineState(device_->dispatch_indirect_pso_);
+  compute_enc_->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
   compute_enc_->setArgumentTable(arg_table_);
 
-  arg_table_->setAddress(pc_buf->gpuAddress(), 0);
+  arg_table_->setAddress(pc_buf->gpuAddress() + pc_buf_offset, 0);
 
   struct Args2 {
     uint32_t draw_cnt;
@@ -290,7 +277,7 @@ uint32_t MetalCmdEncoder::prepare_indexed_indirect_draws(
   arg_table_->setAddress(device_->get_mtl_buf(main_icb_container_buf_)->gpuAddress(), 2);
 
   auto [out_pc_arg_buf, out_pc_arg_buf_offset] =
-      device_->test_allocator_->alloc(draw_cnt * sizeof(TLAB));
+      device_->test_allocator_->alloc(draw_cnt * sizeof(TLAB_Layout));
   arg_table_->setAddress(out_pc_arg_buf->gpuAddress() + out_pc_arg_buf_offset, 3);
 
   auto* indirect_buffer = device_->get_mtl_buf(indirect_buf);

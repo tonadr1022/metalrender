@@ -18,6 +18,7 @@ cmake --preset Release
 cmake --build build/Release
 # Download glTF Sample Assets: https://github.com/KhronosGroup/glTF-Sample-Assets
 ./scripts/download_gltf_models.sh $HOME/gltf_sample_assets
+ln -s $HOME/gltf_sample_assets/models/gltf
 ./build/Release/src/metalrender
 ```
 

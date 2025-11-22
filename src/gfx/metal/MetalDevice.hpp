@@ -13,6 +13,7 @@
 #include "core/Util.hpp"
 #include "gfx/Config.hpp"
 #include "gfx/Device.hpp"
+#include "gfx/metal/Metal3CmdEncoder.hpp"
 #include "gfx/metal/MetalCmdEncoder.hpp"
 #include "gfx/metal/MetalSampler.hpp"
 #include "gfx/metal/MetalSwapchain.hpp"
@@ -45,7 +46,9 @@ class RenderCommandEncoder;
 
 }  // namespace MTL
 
-class MetalDevice;
+struct MetalDeviceInitInfo {
+  bool prefer_mtl4{};
+};
 
 class MetalDevice : public rhi::Device {
  public:
@@ -53,6 +56,7 @@ class MetalDevice : public rhi::Device {
   using rhi::Device::get_pipeline;
   using rhi::Device::get_tex;
   void shutdown() override;
+  void init(const InitInfo& init_info, const MetalDeviceInitInfo& metal_init_info);
   void init(const InitInfo& init_info) override;
   void set_vsync(bool vsync) override;
   bool get_vsync() const override;
@@ -101,6 +105,12 @@ class MetalDevice : public rhi::Device {
 
   void set_name(rhi::BufferHandle handle, const char* name) override;
 
+  struct MetalPSOs {
+    MTL::ComputePipelineState* dispatch_indirect_pso{};
+  };
+
+  const MetalPSOs& get_psos() const { return psos_; }
+
  private:
   MTL::ComputePipelineState* compile_mtl_compute_pipeline(const std::filesystem::path& path);
 
@@ -111,28 +121,37 @@ class MetalDevice : public rhi::Device {
   BlockPool<rhi::SamplerHandle, MetalSampler> sampler_pool_{16, 1, true};
   Info info_{};
   std::filesystem::path metal_shader_dir_;
-  MTL4::Compiler* shader_compiler_{};
+  struct MTL4_Resources {
+    MTL4::Compiler* shader_compiler{};
+    std::array<MTL4::CommandAllocator*, k_max_frames_in_flight> cmd_allocators{};
+    MTL4::CommandBuffer* main_cmd_buf{};
+    MTL4::CommandQueue* main_cmd_q{};
+    std::vector<std::unique_ptr<MetalCmdEncoder>> cmd_lists_;
+  };
+  std::optional<MTL4_Resources> mtl4_resources_;
+
+  struct MTL3_Resources {
+    MTL::CommandBuffer* main_cmd_buf{};
+    MTL::CommandQueue* main_cmd_q{};
+    std::vector<std::unique_ptr<Metal3CmdEncoder>> cmd_lists_;
+  };
+  std::optional<MTL3_Resources> mtl3_resources_;
+
   IndexAllocator resource_desc_heap_allocator_{k_max_textures + k_max_buffers};
   IndexAllocator sampler_desc_heap_allocator_{k_max_samplers};
-  std::array<MTL4::CommandAllocator*, k_max_frames_in_flight> cmd_allocators_{};
-  std::vector<std::unique_ptr<MetalCmdEncoder>> cmd_lists_;
-  MTL4::CommandBuffer* main_cmd_buf_{};
-  MTL4::CommandQueue* main_cmd_q_{};
   MetalSwapchain swapchain_;
 
   size_t frame_num_{};
 
-  NS::AutoreleasePool* ar_pool_{};
   MTL::Device* device_{};
   CA::MetalLayer* metal_layer_{};
   CA::MetalDrawable* curr_drawable_{};
   NS::AutoreleasePool* frame_ar_pool_{};
   MTL::ResidencySet* main_res_set_{};
 
- public:  // TODO: fix
-  // TODO: use handle and also figure out a better way than this
-  MTL::ComputePipelineState* dispatch_indirect_pso_{};
+  MetalPSOs psos_;
 
+ public:  // TODO: fix
   // rhi::BufferHandleHolder top_level_arg_buf_;
   struct GPUFrameAllocator {
     struct Alloc {
@@ -153,7 +172,7 @@ class MetalDevice : public rhi::Device {
       size = align_up(size, 8);
       ASSERT(size + offset_ <= capacity_);
       auto* buf = device_->get_mtl_buf(buffers[frame_idx_]);
-      auto offset = offset_;
+      size_t offset = offset_;
       offset_ += size;
       return {buf, offset};
     }
@@ -171,6 +190,7 @@ class MetalDevice : public rhi::Device {
   };
 
  private:
+  bool mtl4_enabled_{};
   std::filesystem::path shader_lib_dir_;
   MTL::SharedEvent* shared_event_;
 

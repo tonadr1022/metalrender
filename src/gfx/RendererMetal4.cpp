@@ -73,7 +73,8 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
     test2_pso_ = device_->create_graphics_pipeline_h({
         .shaders = {{{"basic_indirect", ShaderType::Vertex},
                      {"basic_indirect", ShaderType::Fragment}}},
-        .rendering = {.color_formats{TextureFormat::R8G8B8A8Srgb}},
+        .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
+                      .depth_format = TextureFormat::D32float},
     });
   }
 
