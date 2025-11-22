@@ -1,10 +1,13 @@
-# Metal Renderer (maybe minecraft 2)
+# Another Renderer
 
 I've been working on this renderer to enlighten myself on the wonders
 of the Metal API while I don't have access to a desktop.
-So far, it's been focused on meshlet rendering, with the possibility to expand it into Minecraft 2 (LOL).
 
-The mtl4 branch is an ongoing attempt at a render hardware interface (RHI) wrapping metal and eventually Vulkan to enable all of the main branch rendering to be re-written in an API agnostic fashion. This would enable a cross platform renderer (for Minecraft 2).
+The pre_rhi branch contains meshlet occlusion culling and primitive voxel rendering. The main branch is an ongoing attempt at a render hardware interface (RHI) wrapping Metal and eventually Vulkan to enable a single renderer path to run on multiple platforms.
+
+Initially written in Metal 3, I switched to Metal 4 for the first implementation of the RHI, recently realizing it's practically unusable without GPU debugging tools. I'm now supporting both Metal 3 and 4, since working without a GPU debugger/profiler is mega cursed.
+
+Here's some Suzanne meshlets:
 
 ![Suzanne Meshlets](./screenshots/suzanne_meshlets.png "Suzanne_Meshlets")
 
