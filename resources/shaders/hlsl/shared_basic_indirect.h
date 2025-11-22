@@ -9,7 +9,6 @@ cbuffer BasicIndirectPC HLSL_PC_REG {
   uint instance_data_buf_idx;
   uint mat_buf_idx;
   uint inst_id;
-  uint _pad[20];
 };
 
 #endif  // SHARED_BASIC_INDIRECT_H

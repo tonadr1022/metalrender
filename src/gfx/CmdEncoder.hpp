@@ -68,10 +68,11 @@ class CmdEncoder {
 
   virtual void draw_indexed_primitives(PrimitiveTopology topology, BufferHandle index_buf,
                                        size_t index_start, size_t count, size_t instance_count,
-                                       size_t base_vertex, size_t base_instance) = 0;
+                                       size_t base_vertex, size_t base_instance,
+                                       IndexType index_type) = 0;
   void draw_indexed_primitives(PrimitiveTopology topology, BufferHandle index_buf,
-                               size_t index_start, size_t count) {
-    draw_indexed_primitives(topology, index_buf, index_start, count, 1, 0, 0);
+                               size_t index_start, size_t count, IndexType index_type) {
+    draw_indexed_primitives(topology, index_buf, index_start, count, 1, 0, 0, index_type);
   }
   virtual void set_depth_stencil_state(CompareOp depth_compare_op, bool depth_write_enabled) = 0;
   virtual void set_wind_order(WindOrder wind_order) = 0;
@@ -82,6 +83,7 @@ class CmdEncoder {
   virtual ~CmdEncoder() = default;
   virtual void end_encoding() = 0;
   virtual void set_viewport(glm::uvec2 min, glm::uvec2 extent) = 0;
+  virtual void set_scissor(glm::uvec2 min, glm::uvec2 extent) = 0;
 
   virtual void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
                                    size_t src_bytes_per_row, rhi::TextureHandle dst_tex) = 0;

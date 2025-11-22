@@ -248,6 +248,9 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   texture_desc->setUsage(usage);
   auto* tex = device_->newTexture(texture_desc);
   tex->retain();
+  if (desc.name) {
+    tex->setLabel(mtl::util::string(desc.name));
+  }
   texture_desc->release();
   uint32_t idx = rhi::k_invalid_bindless_idx;
   if (desc.bindless) {
@@ -390,6 +393,7 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
   for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
     const auto& info_att = cinfo.blend.attachments[i];
     auto* att = desc->colorAttachments()->object(i);
+    att->setBlendingState(info_att.enable ? MTL4::BlendStateEnabled : MTL4::BlendStateDisabled);
     att->setSourceRGBBlendFactor(convert(info_att.src_color_factor));
     att->setDestinationRGBBlendFactor(convert(info_att.dst_color_factor));
     att->setRgbBlendOperation(convert(info_att.color_blend_op));
@@ -613,4 +617,8 @@ void MetalDevice::fill_buffer(rhi::BufferHandle handle, size_t size, size_t offs
                               uint32_t fill_value) {
   // TODO: gpu only buffers!
   memset((uint8_t*)get_buf(handle)->contents() + offset, fill_value, size);
+}
+
+void MetalDevice::set_name(rhi::BufferHandle handle, const char* name) {
+  get_mtl_buf(handle)->setLabel(mtl::util::string(name));
 }

@@ -251,7 +251,7 @@ void RenderGraph::execute() {
   tex_usages_.clear();
   buf_usages_.clear();
   resource_name_to_handle_.clear();
-  resource_name_to_handle_.clear();
+  resource_handle_to_name_.clear();
   resource_pass_usages_[0].clear();
   resource_pass_usages_[1].clear();
 }
@@ -266,6 +266,7 @@ void RenderGraph::bake(bool verbose) {
     sink_passes_.clear();
     pass_dependencies_.clear();
     intermed_pass_visited_.clear();
+    intermed_pass_stack_.clear();
     pass_stack_.clear();
   }
 
@@ -296,6 +297,9 @@ void RenderGraph::bake(bool verbose) {
   }
 
   // traverse pass dependencies
+  for (auto& p : pass_dependencies_) {
+    p.clear();
+  }
   pass_dependencies_.resize(passes_.size());
   for (uint32_t pass_i : sink_passes_) {
     intermed_pass_stack_.push_back(pass_i);
@@ -305,6 +309,7 @@ void RenderGraph::bake(bool verbose) {
   {
     // remove duplicates and assemble pass stack
     for (auto pass_i : intermed_pass_stack_) {
+      ASSERT(pass_i < passes_.size());
       if (intermed_pass_visited_.contains(pass_i)) {
         continue;
       }
@@ -342,10 +347,14 @@ void RenderGraph::bake(bool verbose) {
                                                   : buf_states_[handle.idx];
   };
 
+  for (auto& b : pass_barrier_infos_) {
+    b.clear();
+  }
   if (pass_barrier_infos_.size() < passes_.size()) {
     pass_barrier_infos_.resize(passes_.size());
   }
   for (auto pass_i : pass_stack_) {
+    ASSERT(pass_i < passes_.size());
     const auto& pass = passes_[pass_i];
     auto& barriers = pass_barrier_infos_[pass_i];
     for (const auto& resource_usage : pass.get_resource_usages()) {

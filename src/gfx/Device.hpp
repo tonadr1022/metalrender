@@ -42,11 +42,12 @@ class Device {
 
   // resource CRUD
   virtual BufferHandle create_buf(const rhi::BufferDesc& desc) = 0;
-  BufferHandleHolder create_buf_h(const rhi::BufferDesc& desc) {
+  [[nodiscard]] BufferHandleHolder create_buf_h(const rhi::BufferDesc& desc) {
     return BufferHandleHolder{create_buf(desc), this};
   }
+  virtual void set_name(rhi::BufferHandle handle, const char* name) = 0;
   virtual TextureHandle create_tex(const rhi::TextureDesc& desc) = 0;
-  TextureHandleHolder create_tex_h(const rhi::TextureDesc& desc) {
+  [[nodiscard]] TextureHandleHolder create_tex_h(const rhi::TextureDesc& desc) {
     return TextureHandleHolder{create_tex(desc), this};
   }
   virtual Texture* get_tex(TextureHandle handle) = 0;
@@ -61,12 +62,12 @@ class Device {
   virtual void destroy(PipelineHandle handle) = 0;
   virtual rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) = 0;
-  rhi::PipelineHandleHolder create_graphics_pipeline_h(
+  [[nodiscard]] rhi::PipelineHandleHolder create_graphics_pipeline_h(
       const rhi::GraphicsPipelineCreateInfo& cinfo) {
     return rhi::PipelineHandleHolder{create_graphics_pipeline(cinfo), this};
   }
   virtual rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) = 0;
-  rhi::SamplerHandleHolder create_sampler_h(const rhi::SamplerDesc& desc) {
+  [[nodiscard]] rhi::SamplerHandleHolder create_sampler_h(const rhi::SamplerDesc& desc) {
     return SamplerHandleHolder{create_sampler(desc), this};
   }
   [[nodiscard]] virtual const Info& get_info() const = 0;

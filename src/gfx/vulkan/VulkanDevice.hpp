@@ -105,6 +105,8 @@ class VulkanDevice : public rhi::Device {
     exit(1);
   }
 
+  void set_name(rhi::BufferHandle /*handle*/, const char* /*name*/) override { exit(1); }
+
  private:
   struct Queue {
     VkQueue queue;

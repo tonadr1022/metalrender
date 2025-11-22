@@ -25,11 +25,8 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
 
   void draw_indexed_primitives(rhi::PrimitiveTopology topology, rhi::BufferHandle index_buf,
                                size_t index_start, size_t count, size_t instance_count,
-                               size_t base_vertex, size_t base_instance) override;
-  void draw_indexed_primitives(rhi::PrimitiveTopology topology, rhi::BufferHandle index_buf,
-                               size_t index_start, size_t count) {
-    draw_indexed_primitives(topology, index_buf, index_start, count, 1, 0, 0);
-  }
+                               size_t base_vertex, size_t base_instance,
+                               rhi::IndexType index_type) override;
   void set_depth_stencil_state(rhi::CompareOp depth_compare_op, bool depth_write_enabled) override;
   void set_wind_order(rhi::WindOrder wind_order) override;
   void set_cull_mode(rhi::CullMode cull_mode) override;
@@ -37,6 +34,7 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   void push_constants(void* data, size_t size) override;
   void end_encoding() override;
   void set_viewport(glm::uvec2 min, glm::uvec2 extent) override;
+  void set_scissor(glm::uvec2 /*min*/, glm::uvec2 /*extent*/) override { exit(1); }
 
   void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset, size_t src_bytes_per_row,
                            rhi::TextureHandle dst_tex) override;

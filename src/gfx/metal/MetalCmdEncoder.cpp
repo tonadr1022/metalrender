@@ -142,9 +142,14 @@ void MetalCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 extent) {
   vp.originY = min.y;
   vp.width = extent.x;
   vp.height = extent.y;
-  vp.znear = 0.00f;
+  vp.znear = 0.0f;
   vp.zfar = 1.f;
   render_enc_->setViewport(vp);
+}
+
+void MetalCmdEncoder::set_scissor(glm::uvec2 min, glm::uvec2 extent) {
+  MTL::ScissorRect r{.x = min.x, .y = min.y, .width = extent.x, .height = extent.y};
+  render_enc_->setScissorRect(r);
 }
 
 void MetalCmdEncoder::draw_primitives(rhi::PrimitiveTopology topology, size_t vertex_start,
@@ -166,7 +171,8 @@ void MetalCmdEncoder::push_constants(void* data, size_t size) {
 void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
                                               rhi::BufferHandle index_buf, size_t index_start,
                                               size_t count, size_t instance_count,
-                                              size_t base_vertex, size_t base_instance) {
+                                              size_t base_vertex, size_t base_instance,
+                                              rhi::IndexType index_type) {
   auto* buf = device_->get_mtl_buf(index_buf);
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
 
@@ -176,9 +182,10 @@ void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
   tlab->cbuffer2.vertex_id_base = base_vertex;
   arg_table_->setAddress(pc_buf->gpuAddress() + pc_buf_offset, kIRArgumentBufferBindPoint);
 
-  render_enc_->drawIndexedPrimitives(mtl::util::convert(topology), count, MTL::IndexTypeUInt32,
-                                     buf->gpuAddress() + index_start * sizeof(uint32_t),
-                                     buf->length(), instance_count, 0, 0);
+  render_enc_->drawIndexedPrimitives(
+      mtl::util::convert(topology), count,
+      index_type == rhi::IndexType::Uint32 ? MTL::IndexTypeUInt32 : MTL::IndexTypeUInt16,
+      buf->gpuAddress() + index_start, buf->length(), instance_count, 0, 0);
 }
 
 void MetalCmdEncoder::set_depth_stencil_state(rhi::CompareOp depth_compare_op,

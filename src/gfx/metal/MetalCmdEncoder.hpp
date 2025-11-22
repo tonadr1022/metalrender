@@ -41,12 +41,14 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   void end_encoding() override;
   void bind_pipeline(rhi::PipelineHandle handle) override;
   void set_viewport(glm::uvec2 min, glm::uvec2 extent) override;
+  void set_scissor(glm::uvec2 min, glm::uvec2 extent) override;
   void draw_primitives(rhi::PrimitiveTopology topology, size_t vertex_start, size_t count,
                        size_t instance_count) override;
   void push_constants(void* data, size_t size) override;
   void draw_indexed_primitives(rhi::PrimitiveTopology topology, rhi::BufferHandle index_buf,
                                size_t index_start, size_t count, size_t instance_count,
-                               size_t base_vertex, size_t base_instance) override;
+                               size_t base_vertex, size_t base_instance,
+                               rhi::IndexType index_type) override;
   void set_depth_stencil_state(rhi::CompareOp depth_compare_op, bool depth_write_enabled) override;
   void set_wind_order(rhi::WindOrder wind_order) override;
   void set_cull_mode(rhi::CullMode cull_mode) override;

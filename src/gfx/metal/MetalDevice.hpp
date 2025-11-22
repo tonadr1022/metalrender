@@ -99,6 +99,8 @@ class MetalDevice : public rhi::Device {
   void copy_to_buffer(const void* src, size_t src_size, rhi::BufferHandle buf,
                       size_t dst_offset) override;
 
+  void set_name(rhi::BufferHandle handle, const char* name) override;
+
  private:
   MTL::ComputePipelineState* compile_mtl_compute_pipeline(const std::filesystem::path& path);
 

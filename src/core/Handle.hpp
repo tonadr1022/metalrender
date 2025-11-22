@@ -28,6 +28,9 @@ struct GenerationalHandle {
     return static_cast<uint64_t>(gen_) << 32 | static_cast<uint64_t>(idx_);
   }
 
+  explicit GenerationalHandle(uint64_t packed)
+      : idx_(packed & UINT32_MAX), gen_((packed >> 32) & UINT32_MAX) {}
+
  private:
   uint32_t idx_{};
   uint32_t gen_{};

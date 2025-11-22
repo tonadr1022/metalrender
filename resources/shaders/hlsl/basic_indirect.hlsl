@@ -4,11 +4,6 @@
 #include "shared_basic_indirect.h"
 #include "shared_indirect.h"
 
-#include "bindless.hlsli"
-
-#define NEAREST_SAMPLER_IDX 0
-#define LINEAR_SAMPLER_IDX 1
-
 struct VOut {
     float4 pos : SV_Position;
     float2 uv : TEXCOORD0;

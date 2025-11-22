@@ -15,7 +15,8 @@ void VulkanCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology /*topology
                                                rhi::BufferHandle /*index_buf*/,
                                                size_t /*index_start*/, size_t /*count*/,
                                                size_t /*instance_count*/, size_t /*base_vertex*/,
-                                               size_t /*base_instance*/) {}
+                                               size_t /*base_instance*/,
+                                               rhi::IndexType /*index_type*/) {}
 void VulkanCmdEncoder::set_depth_stencil_state(rhi::CompareOp /*depth_compare_op*/,
                                                bool /*depth_write_enabled*/) {}
 void VulkanCmdEncoder::set_wind_order(rhi::WindOrder /*wind_order*/) {}

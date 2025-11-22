@@ -2,6 +2,7 @@
 
 #include <Foundation/NSAutoreleasePool.hpp>
 #include <QuartzCore/CAMetalLayer.hpp>
+#include <algorithm>
 #include <tracy/Tracy.hpp>
 
 #include "Window.hpp"
@@ -11,11 +12,15 @@
 #include "gfx/GFXTypes.hpp"
 #include "gfx/ModelLoader.hpp"
 #include "gfx/Pipeline.hpp"
+#include "gfx/RenderGraph.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "hlsl/material.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
+#include "hlsl/shared_imgui.h"
 #include "hlsl/shared_indirect.h"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
 
 namespace {
 
@@ -96,6 +101,7 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
   imgui_renderer_.emplace(device_);
 
   rg_.init(device_);
+  init_imgui();
 }
 
 void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
@@ -176,6 +182,11 @@ void ScratchBufferPool::reset(size_t frame_idx) {
 }
 
 void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
+  ImGui_ImplGlfw_NewFrame();
+  ImGui::NewFrame();
+  ImGui::ShowDemoWindow();
+  ImGui::Render();
+
   auto& gbuffer_pass = rg_.add_pass("gbuffer");
 
   if (!pending_texture_uploads_.empty()) {
@@ -223,7 +234,7 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
     gbuffer_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
       enc->begin_rendering({
           RenderingAttachmentInfo::color_att(device_->get_swapchain().get_texture(curr_frame_idx_),
-                                             rhi::LoadOp::Clear, {.color = {0.1, 0.2, 0.1, 1}}),
+                                             rhi::LoadOp::Clear, {.color = {0.1, 0.2, 0.1, 0}}),
           RenderingAttachmentInfo::depth_stencil_att(depth_tex_.handle, rhi::LoadOp::Clear,
                                                      {.depth_stencil = {.depth = 1}}),
       });
@@ -240,22 +251,26 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
       } else {
         // auto win_dims = window_->get_window_size();
         // float aspect = (float)win_dims.x / win_dims.y;
-        //   glm::mat4 mv =
-        //       glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
+        // glm::mat4 mv =
+        //     glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
         // BasicIndirectPC pc{
         //     .vp = mv,
-        //     .vert_buf_idx = get_bindless_idx(all_static_vertices_buf_),
-        //     .instance_data_buf_idx = get_bindless_idx(instance_data_buf_),
-        //     .mat_buf_idx = get_bindless_idx(all_material_buf_),
+        //     .vert_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
+        //     .instance_data_buf_idx =
+        //     get_bindless_idx(instance_data_mgr_.get_instance_data_buf()), .mat_buf_idx =
+        //     get_bindless_idx(materials_buf_->get_buffer_handle()),
         // };
         // enc->push_constants(&pc, sizeof(pc));
-        // for (size_t i = 0; i < std::min(draw_cmd_count_, cmds.size()); i++) {
-        //   auto& cmd = cmds[i];
-        //   enc->draw_indexed_primitives(
-        //       rhi::PrimitiveTopology::TriangleList, all_static_indices_buf_.handle,
-        //       cmd.first_index, cmd.index_count, 1, cmd.vertex_offset / sizeof(DefaultVertex), i);
+        // for (size_t i = 0; i < std::min(all_model_data_.max_objects, cmds_.size()); i++) {
+        //   auto& cmd = cmds_[i];
+        //   enc->draw_indexed_primitives(rhi::PrimitiveTopology::TriangleList,
+        //                                static_draw_batch_->index_buf.get_buffer_handle(),
+        //                                cmd.first_index, cmd.index_count, 1,
+        //                                cmd.vertex_offset / sizeof(DefaultVertex), i);
         // }
       }
+      imgui_renderer_->render(enc, window_->get_window_size(), curr_frame_idx_);
+      ImGui::EndFrame();
     });
   }
   {
@@ -266,6 +281,8 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
 }
 
 void RendererMetal4::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
+  imgui_renderer_->flush_pending_texture_uploads(enc);
+
   while (pending_texture_uploads_.size()) {
     auto& upload = pending_texture_uploads_.back();
     auto* tex = device_->get_tex(upload.tex);
@@ -273,6 +290,7 @@ void RendererMetal4::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
     ASSERT(upload.data);
     size_t bytes_per_element = 4;
     size_t bytes_per_row = align_up(tex->desc().dims.x * bytes_per_element, 256);
+    // TODO: staging buffer pool
     auto upload_buf_handle = device_->create_buf({.size = bytes_per_row * tex->desc().dims.y});
     auto* upload_buf = device_->get_buf(upload_buf_handle);
     size_t dst_offset = 0;
@@ -569,11 +587,6 @@ DrawBatch::DrawBatch(DrawBatchType type, rhi::Device& device, const CreateInfo& 
                                   .size = cinfo.initial_meshlet_capacity * sizeof(Meshlet),
                                   .bindless = true},
                   sizeof(Meshlet)),
-      // mesh_buf(device,
-      //          rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
-      //                          .size = cinfo.initial_mesh_capacity * sizeof(MeshData),
-      //                          .bindless = true},
-      //          sizeof(MeshData)),
       meshlet_triangles_buf(
           device,
           rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
@@ -644,13 +657,13 @@ void InstanceDataMgr::allocate_buffers(size_t element_count) {
 }
 
 ImGuiRenderer::ImGuiRenderer(rhi::Device* device) : device_(device) {
-  device_->create_graphics_pipeline_h(rhi::GraphicsPipelineCreateInfo{
+  pso_ = device_->create_graphics_pipeline_h(rhi::GraphicsPipelineCreateInfo{
       .shaders = {{
           {"imgui", ShaderType::Vertex},
           {"imgui", ShaderType::Fragment},
       }},
       // TODO: don't use this necessarily
-      .rendering = {.color_formats{TextureFormat::R8G8B8A8Srgb}},
+      .rendering = {.color_formats{TextureFormat::R8G8B8A8Unorm}},
       .blend = {.attachments = {{
                     .enable = true,
                     .src_color_factor = rhi::BlendFactor::SrcAlpha,
@@ -663,4 +676,202 @@ ImGuiRenderer::ImGuiRenderer(rhi::Device* device) : device_(device) {
   });
 }
 
+void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t frame_in_flight) {
+  auto* draw_data = ImGui::GetDrawData();
+  ASSERT(draw_data);
+  if (draw_data->TotalVtxCount == 0) {
+    return;
+  }
+  ASSERT(pso_.is_valid());
+  enc->bind_pipeline(pso_);
+  enc->set_cull_mode(rhi::CullMode::None);
+  enc->set_depth_stencil_state(rhi::CompareOp::Always, false);
+  enc->set_viewport(glm::uvec2{}, fb_size);
+
+  size_t vert_buf_len = (size_t)draw_data->TotalVtxCount * sizeof(ImDrawVert);
+  size_t index_buf_len = (size_t)draw_data->TotalIdxCount * sizeof(ImDrawIdx);
+  auto vert_buf_handle = get_buffer_of_size(vert_buf_len, frame_in_flight, "imgui_vertex_buf");
+  auto index_buf_handle = get_buffer_of_size(index_buf_len, frame_in_flight, "imgui_index_buf");
+  auto* vert_buf = device_->get_buf(vert_buf_handle);
+  auto* index_buf = device_->get_buf(index_buf_handle);
+
+  float L = draw_data->DisplayPos.x;
+  float R = draw_data->DisplayPos.x + draw_data->DisplaySize.x;
+  float T = draw_data->DisplayPos.y;
+  float B = draw_data->DisplayPos.y + draw_data->DisplaySize.y;
+  float N = 0.0;
+  float F = 1.0;
+  auto proj = glm::orthoZO(L, R, B, T, N, F);
+  [[maybe_unused]] ImGuiPC pc{
+      .proj = proj,
+      .vert_buf_idx = vert_buf->bindless_idx(),
+      .tex_idx = 0,
+  };
+  enc->push_constants(&pc, sizeof(pc));
+
+  ImVec2 clip_off = draw_data->DisplayPos;  // (0,0) unless using multi-viewports
+  ImVec2 clip_scale =
+      draw_data->FramebufferScale;  // (1,1) unless using retina display which are often (2,2)
+
+  size_t vertexBufferOffset = 0;
+  size_t indexBufferOffset = 0;
+  for (const ImDrawList* draw_list : draw_data->CmdLists) {
+    memcpy((char*)vert_buf->contents() + vertexBufferOffset, draw_list->VtxBuffer.Data,
+           (size_t)draw_list->VtxBuffer.Size * sizeof(ImDrawVert));
+    memcpy((char*)index_buf->contents() + indexBufferOffset, draw_list->IdxBuffer.Data,
+           (size_t)draw_list->IdxBuffer.Size * sizeof(ImDrawIdx));
+
+    for (int cmd_i = 0; cmd_i < draw_list->CmdBuffer.Size; cmd_i++) {
+      const ImDrawCmd* pcmd = &draw_list->CmdBuffer[cmd_i];
+      if (pcmd->UserCallback) {
+        ALWAYS_ASSERT(0 && "user callback not handled");
+      } else {
+        ImVec2 clip_min((pcmd->ClipRect.x - clip_off.x) * clip_scale.x,
+                        (pcmd->ClipRect.y - clip_off.y) * clip_scale.y);
+        ImVec2 clip_max((pcmd->ClipRect.z - clip_off.x) * clip_scale.x,
+                        (pcmd->ClipRect.w - clip_off.y) * clip_scale.y);
+
+        clip_min.x = std::max(clip_min.x, 0.0f);
+        clip_min.y = std::max(clip_min.y, 0.0f);
+
+        clip_max.x = std::min<float>(clip_max.x, fb_size.x);
+        clip_max.y = std::min<float>(clip_max.y, fb_size.y);
+        if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y) continue;
+        if (pcmd->ElemCount == 0) {
+          continue;
+        }
+
+        enc->set_scissor(glm::uvec2{clip_min.x, clip_min.y},
+                         glm::uvec2{clip_max.x - clip_min.x, clip_max.y - clip_min.y});
+
+        if (ImTextureID tex_id = pcmd->GetTexID()) {
+          pc.tex_idx = device_->get_tex(rhi::TextureHandle{tex_id})->bindless_idx();
+        }
+        pc.vert_buf_idx = vert_buf->bindless_idx();
+        enc->push_constants(&pc, sizeof(pc));
+        enc->draw_indexed_primitives(
+            rhi::PrimitiveTopology::TriangleList, index_buf_handle.handle,
+            indexBufferOffset + pcmd->IdxOffset * sizeof(ImDrawIdx), pcmd->ElemCount, 1,
+            vertexBufferOffset + pcmd->VtxOffset * sizeof(ImDrawVert), 0,
+            sizeof(ImDrawIdx) == 2 ? rhi::IndexType::Uint16 : rhi::IndexType::Uint32);
+      }
+    }
+
+    vertexBufferOffset += (size_t)draw_list->VtxBuffer.Size * sizeof(ImDrawVert);
+    indexBufferOffset += (size_t)draw_list->IdxBuffer.Size * sizeof(ImDrawIdx);
+  }
+  return_buffer(std::move(index_buf_handle), frame_in_flight);
+  return_buffer(std::move(vert_buf_handle), frame_in_flight);
+}
+
+rhi::BufferHandleHolder ImGuiRenderer::get_buffer_of_size(size_t size, size_t frame_in_flight,
+                                                          const char* name) {
+  auto& bufs = buffers_[frame_in_flight];
+  size_t best_i{SIZE_T_MAX};
+
+  for (size_t i = 0; i < bufs.size(); i++) {
+    auto* buf = device_->get_buf(bufs[i]);
+    ASSERT(buf);
+    if (buf->size() >= size) {
+      best_i = i;
+      break;
+    }
+  }
+
+  if (best_i != SIZE_T_MAX) {
+    auto buf_handle = std::move(bufs[best_i]);
+    if (best_i != bufs.size() - 1) {
+      bufs[best_i] = std::move(bufs.back());
+    }
+    bufs.pop_back();
+    device_->set_name(buf_handle.handle, name);
+    return buf_handle;
+  }
+
+  return device_->create_buf_h({
+      .storage_mode = rhi::StorageMode::CPUAndGPU,
+      .usage = (rhi::BufferUsage)(rhi::BufferUsage_Storage | rhi::BufferUsage_Index),
+      .size = size * 2,
+      .bindless = true,
+      .name = name,
+  });
+}
+
+void ImGuiRenderer::return_buffer(rhi::BufferHandleHolder&& handle, size_t frame_in_flight) {
+  buffers_[frame_in_flight].push_back(std::move(handle));
+}
+
+void ImGuiRenderer::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
+  auto* draw_data = ImGui::GetDrawData();
+  ASSERT(draw_data);
+  if (draw_data->Textures) {
+    for (ImTextureData* im_tex : *draw_data->Textures) {
+      if (im_tex->Status != ImTextureStatus_OK) {
+        if (im_tex->Status == ImTextureStatus_WantCreate) {
+          IM_ASSERT(im_tex->TexID == ImTextureID_Invalid && im_tex->BackendUserData == nullptr);
+          IM_ASSERT(im_tex->Format == ImTextureFormat_RGBA32);
+
+          auto tex_handle = device_->create_tex({
+              .format = rhi::TextureFormat::R8G8B8A8Unorm,
+              .usage = rhi::TextureUsageSample,
+              .dims = glm::uvec3{im_tex->Width, im_tex->Height, 1},
+              .mip_levels = 1,
+              .bindless = true,
+              .name = "imgui_tex",
+          });
+          im_tex->SetTexID(tex_handle.to64());
+          im_tex->SetStatus(ImTextureStatus_OK);
+
+          auto* tex = device_->get_tex(tex_handle);
+          size_t bytes_per_element = 4;
+          size_t bytes_per_row = align_up(tex->desc().dims.x * bytes_per_element, 256);
+          // TODO: staging buffer pool
+          auto upload_buf_handle =
+              device_->create_buf({.size = bytes_per_row * tex->desc().dims.y});
+          auto* upload_buf = device_->get_buf(upload_buf_handle);
+          size_t dst_offset = 0;
+          size_t src_offset = 0;
+          for (size_t row = 0; row < tex->desc().dims.y; row++) {
+            memcpy((uint8_t*)upload_buf->contents() + dst_offset,
+                   (uint8_t*)im_tex->Pixels + src_offset, bytes_per_row);
+            dst_offset += bytes_per_row;
+            src_offset += tex->desc().dims.x * bytes_per_element;
+          }
+
+          enc->upload_texture_data(upload_buf_handle, 0, bytes_per_row, tex_handle);
+        } else if (im_tex->Status == ImTextureStatus_WantUpdates) {
+          im_tex->SetStatus(ImTextureStatus_OK);
+        } else if (im_tex->Status == ImTextureStatus_WantDestroy && im_tex->UnusedFrames > 0) {
+          auto id = rhi::TextureHandle{im_tex->GetTexID()};
+          device_->destroy(id);
+          im_tex->SetTexID(ImTextureID_Invalid);
+          im_tex->SetStatus(ImTextureStatus_Destroyed);
+          im_tex->BackendUserData = nullptr;
+        }
+      }
+    }
+  }
+}
+
+void RendererMetal4::init_imgui() {
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  [[maybe_unused]] ImGuiIO& io = ImGui::GetIO();
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+  io.BackendRendererName = "imgui_impl_metal";
+  io.BackendFlags |=
+      ImGuiBackendFlags_RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field,
+                                               // allowing for large meshes.
+  io.BackendFlags |=
+      ImGuiBackendFlags_RendererHasTextures;  // We can honor ImGuiPlatformIO::Textures[] requests
+                                              // during render.
+  ImGui::StyleColorsDark();
+  // TODO: uuuuuhhhhhhhhhh
+  ImGui_ImplGlfw_InitForOther(window_->get_handle(), true);
+}
+
+void RendererMetal4::shutdown_imgui() {
+  ImGui_ImplGlfw_Shutdown();
+  ImGui::DestroyContext();
+}
 }  // namespace gfx

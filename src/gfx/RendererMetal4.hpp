@@ -16,6 +16,7 @@
 #include "hlsl/shared_indirect.h"
 #include "offsetAllocator.hpp"
 
+struct ImDrawData;
 class Window;
 
 namespace rhi {
@@ -152,6 +153,14 @@ struct ModelInstanceGPUResources {
 class ImGuiRenderer {
  public:
   explicit ImGuiRenderer(rhi::Device* device);
+  void render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t frame_in_flight);
+  void flush_pending_texture_uploads(rhi::CmdEncoder* enc);
+  rhi::PipelineHandleHolder pso_;
+
+  std::vector<rhi::BufferHandleHolder> buffers_[k_max_frames_in_flight];
+  rhi::BufferHandleHolder get_buffer_of_size(size_t size, size_t frame_in_flight,
+                                             const char* name = "imgui_renderer_buf");
+  void return_buffer(rhi::BufferHandleHolder&& handle, size_t frame_in_flight);
 
  private:
   rhi::Device* device_;
@@ -207,9 +216,14 @@ class RendererMetal4 {
   void free_model(ModelGPUHandle handle);
 
  private:
+  void init_imgui();
+  void shutdown_imgui();
   void create_render_target_textures();
   void flush_pending_texture_uploads(rhi::CmdEncoder* enc);
   [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandleHolder& buf) const;
+  [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandle& buf) const {
+    return device_->get_buf(buf)->bindless_idx();
+  }
   void add_render_graph_passes(const RenderArgs& args);
   DrawBatch::Alloc upload_geometry(DrawBatchType type, const std::vector<DefaultVertex>& vertices,
                                    const std::vector<rhi::DefaultIndexT>& indices,

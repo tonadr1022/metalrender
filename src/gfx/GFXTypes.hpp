@@ -6,7 +6,7 @@ namespace rhi {
 
 constexpr uint32_t k_invalid_bindless_idx = UINT32_MAX;
 
-enum class TextureFormat {
+enum class TextureFormat : uint8_t {
   Undefined,
   R8G8B8A8Srgb,
   R8G8B8A8Unorm,
@@ -15,14 +15,14 @@ enum class TextureFormat {
   R32float,
 };
 
-enum class StorageMode {
+enum class StorageMode : uint8_t {
   GPUOnly,
   CPUAndGPU,
   // GPU optimal. On apple silicon, this is shared
   Default
 };
 
-enum TextureUsage {
+enum TextureUsage : uint8_t {
   TextureUsageNone,
   TextureUsageStorage,
   TextureUsageSample,
@@ -32,6 +32,11 @@ enum TextureUsage {
 };
 
 using DefaultIndexT = uint32_t;
+
+enum class IndexType : uint8_t {
+  Uint16,
+  Uint32,
+};
 
 enum TextureDescFlags { TextureDescFlags_None, TextureDescFlags_PixelFormatView };
 
@@ -44,6 +49,7 @@ struct TextureDesc {
   uint32_t array_length{1};
   bool bindless{};
   TextureDescFlags flags{};
+  const char* name{};
 };
 
 enum BufferUsage : uint8_t {
