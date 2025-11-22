@@ -11,7 +11,7 @@
 #define packed_float4 float4
 #define packed_char4 int8_t4_packed
 
-#define ATTR_POSITION
+#define ATTR_POSITION : POSITION
 
 #elif defined(__METAL__)
 

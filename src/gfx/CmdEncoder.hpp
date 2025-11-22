@@ -68,7 +68,7 @@ class CmdEncoder {
 
   virtual void draw_indexed_primitives(PrimitiveTopology topology, BufferHandle index_buf,
                                        size_t index_start, size_t count, size_t instance_count,
-                                       size_t base_vertex, size_t base_instance,
+                                       size_t base_vertex_idx, size_t base_instance,
                                        IndexType index_type) = 0;
   void draw_indexed_primitives(PrimitiveTopology topology, BufferHandle index_buf,
                                size_t index_start, size_t count, IndexType index_type) {

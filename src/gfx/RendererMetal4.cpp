@@ -182,11 +182,6 @@ void ScratchBufferPool::reset(size_t frame_idx) {
 }
 
 void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
-  ImGui_ImplGlfw_NewFrame();
-  ImGui::NewFrame();
-  ImGui::ShowDemoWindow();
-  ImGui::Render();
-
   auto& gbuffer_pass = rg_.add_pass("gbuffer");
 
   if (!pending_texture_uploads_.empty()) {
@@ -270,7 +265,6 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
         // }
       }
       imgui_renderer_->render(enc, window_->get_window_size(), curr_frame_idx_);
-      ImGui::EndFrame();
     });
   }
   {
@@ -679,7 +673,7 @@ ImGuiRenderer::ImGuiRenderer(rhi::Device* device) : device_(device) {
 void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t frame_in_flight) {
   auto* draw_data = ImGui::GetDrawData();
   ASSERT(draw_data);
-  if (draw_data->TotalVtxCount == 0) {
+  if (draw_data->TotalVtxCount == 0 || draw_data->CmdLists.empty()) {
     return;
   }
   ASSERT(pso_.is_valid());
@@ -752,7 +746,7 @@ void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t fram
         enc->draw_indexed_primitives(
             rhi::PrimitiveTopology::TriangleList, index_buf_handle.handle,
             indexBufferOffset + pcmd->IdxOffset * sizeof(ImDrawIdx), pcmd->ElemCount, 1,
-            vertexBufferOffset + pcmd->VtxOffset * sizeof(ImDrawVert), 0,
+            (vertexBufferOffset + pcmd->VtxOffset * sizeof(ImDrawVert)) / sizeof(ImDrawVert), 0,
             sizeof(ImDrawIdx) == 2 ? rhi::IndexType::Uint16 : rhi::IndexType::Uint32);
       }
     }
@@ -760,8 +754,8 @@ void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t fram
     vertexBufferOffset += (size_t)draw_list->VtxBuffer.Size * sizeof(ImDrawVert);
     indexBufferOffset += (size_t)draw_list->IdxBuffer.Size * sizeof(ImDrawIdx);
   }
-  return_buffer(std::move(index_buf_handle), frame_in_flight);
   return_buffer(std::move(vert_buf_handle), frame_in_flight);
+  return_buffer(std::move(index_buf_handle), frame_in_flight);
 }
 
 rhi::BufferHandleHolder ImGuiRenderer::get_buffer_of_size(size_t size, size_t frame_in_flight,

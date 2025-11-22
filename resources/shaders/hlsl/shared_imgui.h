@@ -1,3 +1,6 @@
+#ifndef SHARED_IMGUI_H
+#define SHARED_IMGUI_H
+
 #include "../shader_core.h"
 
 cbuffer ImGuiPC HLSL_PC_REG {
@@ -11,3 +14,5 @@ struct ImGuiVertex {
   float2 tex_coords;
   uint color;
 };
+
+#endif

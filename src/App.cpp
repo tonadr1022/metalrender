@@ -10,6 +10,7 @@
 #include "gfx/Device.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
+#include "imgui_impl_glfw.h"
 #include "tracy/Tracy.hpp"
 
 namespace {
@@ -116,6 +117,14 @@ void App::run() {
   while (!window_->should_close()) {
     ZoneScopedN("main loop");
     window_->poll_events();
+
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
+    ImGui::Begin("hello");
+    ImGui::Text("hello text");
+    ImGui::End();
+    ImGui::ShowDemoWindow();
     const double curr_time = glfwGetTime();
     auto dt = static_cast<float>(curr_time - last_time);
     last_time = curr_time;
@@ -131,7 +140,10 @@ void App::run() {
     const gfx::RenderArgs args{.view_mat = camera_.get_view_mat(),
                                .camera_pos = camera_.pos,
                                .draw_imgui = imgui_enabled_};
+
+    ImGui::Render();
     renderer_.render(args);
+    ImGui::EndFrame();
   }
 
   // if (voxel_world_) {

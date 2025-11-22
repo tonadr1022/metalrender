@@ -171,7 +171,7 @@ void MetalCmdEncoder::push_constants(void* data, size_t size) {
 void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
                                               rhi::BufferHandle index_buf, size_t index_start,
                                               size_t count, size_t instance_count,
-                                              size_t base_vertex, size_t base_instance,
+                                              size_t base_vertex_idx, size_t base_instance,
                                               rhi::IndexType index_type) {
   auto* buf = device_->get_mtl_buf(index_buf);
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
@@ -179,7 +179,7 @@ void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
   auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
   memcpy(tlab->pc_data, pc_data_, k_pc_size);
   tlab->cbuffer2.draw_id = base_instance;
-  tlab->cbuffer2.vertex_id_base = base_vertex;
+  tlab->cbuffer2.vertex_id_base = base_vertex_idx;
   arg_table_->setAddress(pc_buf->gpuAddress() + pc_buf_offset, kIRArgumentBufferBindPoint);
 
   render_enc_->drawIndexedPrimitives(
