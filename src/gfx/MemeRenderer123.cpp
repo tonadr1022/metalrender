@@ -1,25 +1,26 @@
-#include "RendererMetal4.hpp"
+#include "MemeRenderer123.hpp"
 
-#include <Foundation/NSAutoreleasePool.hpp>
-#include <QuartzCore/CAMetalLayer.hpp>
 #include <algorithm>
 #include <tracy/Tracy.hpp>
 
 #include "Window.hpp"
 #include "core/EAssert.hpp"
+#include "core/Logger.hpp"
+#include "core/Util.hpp"
 #include "default_vertex.h"
 #include "gfx/CmdEncoder.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/ModelLoader.hpp"
 #include "gfx/Pipeline.hpp"
 #include "gfx/RenderGraph.hpp"
-#include "gfx/metal/MetalDevice.hpp"
+#include "gfx/Swapchain.hpp"
 #include "hlsl/material.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
 #include "hlsl/shared_indirect.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
+#include "shader_constants.h"
 
 namespace {
 
@@ -31,7 +32,7 @@ using rhi::TextureFormat;
 
 namespace gfx {
 
-void RendererMetal4::init(const CreateInfo& cinfo) {
+void MemeRenderer123::init(const CreateInfo& cinfo) {
   device_ = cinfo.device;
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
@@ -101,7 +102,7 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
   init_imgui();
 }
 
-void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
+void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   ZoneScoped;
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
 
@@ -121,7 +122,7 @@ void RendererMetal4::render([[maybe_unused]] const RenderArgs& args) {
   frame_num_++;
 }
 
-uint32_t RendererMetal4::get_bindless_idx(const rhi::BufferHandleHolder& buf) const {
+uint32_t MemeRenderer123::get_bindless_idx(const rhi::BufferHandleHolder& buf) const {
   return device_->get_buf(buf)->bindless_idx();
 }
 
@@ -167,7 +168,7 @@ void ScratchBufferPool::reset(size_t frame_idx) {
   in_use_entries.clear();
 }
 
-void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
+void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   bool imgui_has_dirty_textures = imgui_renderer_->has_dirty_textures();
   if (!pending_texture_uploads_.empty() || imgui_has_dirty_textures) {
     auto& tex_flush_pass = rg_.add_pass("flush_textures");
@@ -268,7 +269,7 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
   }
 }
 
-void RendererMetal4::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
+void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
   imgui_renderer_->flush_pending_texture_uploads(enc);
 
   while (pending_texture_uploads_.size()) {
@@ -299,8 +300,8 @@ void RendererMetal4::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
   pending_texture_uploads_.clear();
 }
 
-bool RendererMetal4::load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
-                                ModelInstance& model, ModelGPUHandle& out_handle) {
+bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
+                                 ModelInstance& model, ModelGPUHandle& out_handle) {
   ModelLoadResult result;
   if (!model::load_model(path, root_transform, model, result)) {
     return false;
@@ -389,11 +390,11 @@ bool RendererMetal4::load_model(const std::filesystem::path& path, const glm::ma
   return true;
 }
 
-DrawBatch::Alloc RendererMetal4::upload_geometry([[maybe_unused]] DrawBatchType type,
-                                                 const std::vector<DefaultVertex>& vertices,
-                                                 const std::vector<rhi::DefaultIndexT>& indices,
-                                                 const MeshletProcessResult& meshlets,
-                                                 std::span<Mesh>) {
+DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType type,
+                                                  const std::vector<DefaultVertex>& vertices,
+                                                  const std::vector<rhi::DefaultIndexT>& indices,
+                                                  const MeshletProcessResult& meshlets,
+                                                  std::span<Mesh>) {
   auto& draw_batch = static_draw_batch_;
   ASSERT(!vertices.empty());
   ASSERT(!meshlets.meshlet_datas.empty());
@@ -473,8 +474,8 @@ DrawBatch::Alloc RendererMetal4::upload_geometry([[maybe_unused]] DrawBatchType 
                           .meshlet_vertices_alloc = meshlet_vertices_alloc};
 }
 
-ModelInstanceGPUHandle RendererMetal4::add_model_instance(const ModelInstance& model,
-                                                          ModelGPUHandle model_gpu_handle) {
+ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& model,
+                                                           ModelGPUHandle model_gpu_handle) {
   ZoneScoped;
   auto* model_resources = model_gpu_resource_pool_.get(model_gpu_handle);
   ALWAYS_ASSERT(model_resources);
@@ -539,7 +540,7 @@ ModelInstanceGPUHandle RendererMetal4::add_model_instance(const ModelInstance& m
                                 .meshlet_vis_buf_alloc = meshlet_vis_buf_alloc});
 }
 
-void RendererMetal4::free_instance(ModelInstanceGPUHandle handle) {
+void MemeRenderer123::free_instance(ModelInstanceGPUHandle handle) {
   auto* gpu_resources = model_instance_gpu_resource_pool_.get(handle);
   ASSERT(gpu_resources);
   if (!gpu_resources) {
@@ -553,7 +554,7 @@ void RendererMetal4::free_instance(ModelInstanceGPUHandle handle) {
   model_instance_gpu_resource_pool_.destroy(handle);
 }
 
-void RendererMetal4::free_model(ModelGPUHandle handle) {
+void MemeRenderer123::free_model(ModelGPUHandle handle) {
   auto* gpu_resources = model_gpu_resource_pool_.get(handle);
   ASSERT(gpu_resources);
   if (!gpu_resources) {
@@ -651,7 +652,7 @@ void InstanceDataMgr::allocate_buffers(size_t element_count) {
                                             .bindless = true});
 }
 
-void RendererMetal4::init_imgui() {
+void MemeRenderer123::init_imgui() {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
 
@@ -666,12 +667,12 @@ void RendererMetal4::init_imgui() {
   ImGui_ImplGlfw_InitForOther(window_->get_handle(), true);
 }
 
-void RendererMetal4::shutdown_imgui() {
+void MemeRenderer123::shutdown_imgui() {
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
 }
 
-void RendererMetal4::on_imgui() {
+void MemeRenderer123::on_imgui() {
   if (ImGui::TreeNodeEx("Device", ImGuiTreeNodeFlags_DefaultOpen)) {
     device_->on_imgui();
     ImGui::TreePop();

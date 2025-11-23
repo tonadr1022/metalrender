@@ -3,11 +3,13 @@
 #include <filesystem>
 #include <glm/mat4x4.hpp>
 
-#include "ModelLoader.hpp"
+#include "core/Handle.hpp"
 #include "core/Pool.hpp"
+#include "gfx/ModelInstance.hpp"
+#include "gfx/RendererTypes.hpp"
 
 namespace gfx {
-class RendererMetal4;
+class MemeRenderer123;
 }
 
 struct ModelInstance;
@@ -16,7 +18,7 @@ using ModelHandle = GenerationalHandle<ModelInstance>;
 class ResourceManager {
  public:
   struct CreateInfo {
-    gfx::RendererMetal4 *renderer;
+    gfx::MemeRenderer123 *renderer;
   };
 
  private:
@@ -60,6 +62,6 @@ class ResourceManager {
   Pool<ModelHandle, ModelInstancePoolEntry> model_instance_pool_;
   std::vector<size_t> model_to_resource_cache_key_;
 
-  gfx::RendererMetal4 *renderer_{};
+  gfx::MemeRenderer123 *renderer_{};
   inline static ResourceManager *instance_{};
 };

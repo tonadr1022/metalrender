@@ -7,7 +7,7 @@ add_executable(${target_name}
     core/FileUtil.cpp
     core/Util.cpp
     gfx/ModelLoader.cpp
-    gfx/RendererMetal4.cpp
+    gfx/MemeRenderer123.cpp
     gfx/Pipeline.cpp
     gfx/ModelInstance.cpp
     gfx/ResourceManager.cpp

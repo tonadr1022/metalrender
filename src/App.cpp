@@ -43,7 +43,7 @@ App::App() {
   on_hide_mouse_change();
 
   ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_});
-  renderer_.init(gfx::RendererMetal4::CreateInfo{
+  renderer_.init(gfx::MemeRenderer123::CreateInfo{
       .device = device_.get(), .window = window_.get(), .resource_dir = resource_dir_});
   // voxel_renderer_ = std::make_unique<vox::Renderer>();
   // voxel_renderer_->init(&renderer_);

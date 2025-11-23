@@ -3,7 +3,7 @@
 
 #include "Camera.hpp"
 #include "Window.hpp"
-#include "gfx/RendererMetal4.hpp"
+#include "gfx/MemeRenderer123.hpp"
 #include "gfx/ResourceManager.hpp"
 
 struct App {
@@ -40,7 +40,7 @@ struct App {
 
   glm::vec2 last_pos_{};
   // TODO: ptr for impl/RHI
-  gfx::RendererMetal4 renderer_;
+  gfx::MemeRenderer123 renderer_;
   // std::unique_ptr<vox::Renderer> voxel_renderer_;
   // std::unique_ptr<vox::World> voxel_world_;
 };

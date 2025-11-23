@@ -164,7 +164,7 @@ class InstanceDataMgr {
   rhi::Device* device_{};
 };
 
-class RendererMetal4 {
+class MemeRenderer123 {
  public:
   struct CreateInfo {
     rhi::Device* device;
