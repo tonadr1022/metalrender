@@ -17,6 +17,7 @@
 #include "gfx/metal/MetalCmdEncoder.hpp"
 #include "gfx/metal/MetalSampler.hpp"
 #include "gfx/metal/MetalSwapchain.hpp"
+#include "gfx/metal/MetalUtil.hpp"
 #include "shader_constants.h"
 
 class Window;
@@ -113,7 +114,11 @@ class MetalDevice : public rhi::Device {
   const MetalPSOs& get_psos() const { return psos_; }
 
  private:
-  MTL::ComputePipelineState* compile_mtl_compute_pipeline(const std::filesystem::path& path);
+  MTL::ComputePipelineState* compile_mtl_compute_pipeline(const std::filesystem::path& path,
+                                                          const char* entry_point = "comp_main");
+
+  std::filesystem::path get_metallib_path_from_shader_info(
+      const rhi::ShaderCreateInfo& shader_info);
 
   size_t curr_cmd_list_idx_{};
   BlockPool<rhi::BufferHandle, MetalBuffer> buffer_pool_{128, 1, true};

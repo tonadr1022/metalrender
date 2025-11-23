@@ -12,7 +12,7 @@ else()
     set(BUILD_METAL OFF)
 endif()
 
-option(BUILD_VULKAN "Build Vulkan" ON)
+option(BUILD_VULKAN "Build Vulkan" OFF)
 if (BUILD_VULKAN)
     set(BUILD_VULKAN ON)
 endif()

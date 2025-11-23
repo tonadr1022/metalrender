@@ -11,4 +11,14 @@ cbuffer BasicIndirectPC HLSL_PC_REG {
   uint inst_id;
 };
 
+#ifdef __HLSL__
+
+struct VOut {
+  float4 pos : SV_Position;
+  float2 uv : TEXCOORD0;
+  nointerpolation uint material_id : MATERIAL_ID;
+};
+
+#endif
+
 #endif  // SHARED_BASIC_INDIRECT_H

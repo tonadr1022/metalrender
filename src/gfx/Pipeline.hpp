@@ -85,7 +85,7 @@ struct GraphicsPipelineCreateInfo {
     bool stencil_test_enable{false};
   };
 
-  std::array<ShaderCreateInfo, 2> shaders{};
+  std::array<ShaderCreateInfo, 3> shaders{};
 
   PrimitiveTopology topology{PrimitiveTopology::TriangleList};
   RenderingInfo rendering{};

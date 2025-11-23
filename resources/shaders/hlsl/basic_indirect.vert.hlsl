@@ -4,13 +4,8 @@
 #include "shared_basic_indirect.h"
 #include "shared_indirect.h"
 
-struct VOut {
-    float4 pos : SV_Position;
-    float2 uv : TEXCOORD0;
-    nointerpolation uint material_id : MATERIAL_ID;
-};
-
-struct DrawID {
+struct DrawID
+{
     uint did;
     uint vert_id;
 };
@@ -22,9 +17,10 @@ float3 rotate_quat(float3 v, float4 q) {
 }
 
 [RootSignature(ROOT_SIGNATURE)]
-VOut vert_main(uint vert_id : SV_VertexID) {
+VOut main(uint vert_id : SV_VertexID) {
     StructuredBuffer<InstanceData> instance_data_buf = ResourceDescriptorHeap[instance_data_buf_idx];
     InstanceData instance_data = instance_data_buf[gDrawID.did];
+
     StructuredBuffer<DefaultVertex> v_buf = ResourceDescriptorHeap[vert_buf_idx];
     DefaultVertex v = v_buf[vert_id + gDrawID.vert_id];
     VOut o;
@@ -33,21 +29,4 @@ VOut vert_main(uint vert_id : SV_VertexID) {
     o.pos = mul(vp, float4(pos, 1.0));
     o.material_id = instance_data.mat_id;
     return o;
-}
-
-[RootSignature(ROOT_SIGNATURE)]
-float4 frag_main(VOut input) : SV_Target0 {
-    StructuredBuffer<M4Material> material_buf = ResourceDescriptorHeap[mat_buf_idx];
-    M4Material material = material_buf[input.material_id];
-    SamplerState samp = SamplerDescriptorHeap[LINEAR_SAMPLER_IDX];
-    float4 albedo = material.color;
-    if (material.albedo_tex_idx != 0) {
-        Texture2D albedo_tex = ResourceDescriptorHeap[material.albedo_tex_idx];
-        albedo *= albedo_tex.Sample(samp, input.uv);
-    }
-    if (albedo.a < 0.5) {
-        discard;
-    }
-    return float4(albedo.xyz , 1.0);
-    
 }

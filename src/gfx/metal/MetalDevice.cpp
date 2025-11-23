@@ -340,52 +340,74 @@ MTL::ResidencySet* MetalDevice::make_residency_set() {
   return set;
 }
 
+namespace {
+
+template <typename T>
+void set_shader_stage_functions(const rhi::ShaderCreateInfo& shader_info, T& desc,
+                                const char* entry_point_name, MTL::Library* lib) {
+  if constexpr (std::is_same_v<T, MTL4::RenderPipelineDescriptor*> ||
+                std::is_same_v<T, MTL4::MeshRenderPipelineDescriptor*>) {
+    MTL4::LibraryFunctionDescriptor* func_desc = MTL4::LibraryFunctionDescriptor::alloc()->init();
+    func_desc->setLibrary(lib);
+    func_desc->setName(mtl::util::string(entry_point_name));
+    switch (shader_info.type) {
+      case rhi::ShaderType::Fragment: {
+        desc->setFragmentFunctionDescriptor(func_desc);
+        break;
+      }
+      case rhi::ShaderType::Vertex: {
+        if constexpr (std::is_same_v<T, MTL4::RenderPipelineDescriptor*>) {
+          desc->setVertexFunctionDescriptor(func_desc);
+        }
+        break;
+      }
+      case rhi::ShaderType::Mesh: {
+        if constexpr (std::is_same_v<T, MTL4::MeshRenderPipelineDescriptor*>) {
+          desc->setMeshFunctionDescriptor(func_desc);
+        }
+        break;
+      }
+      default: {
+        LERROR("Invalid shader type for GraphicsPipeline creation: {}",
+               to_string(shader_info.type));
+      }
+    }
+  } else {
+    MTL::Function* func = lib->newFunction(mtl::util::string(entry_point_name));
+    switch (shader_info.type) {
+      case rhi::ShaderType::Fragment:
+        desc->setFragmentFunction(func);
+        break;
+      case rhi::ShaderType::Vertex:
+        if constexpr (std::is_same_v<T, MTL::RenderPipelineDescriptor*>) {
+          desc->setVertexFunction(func);
+        }
+        break;
+      case rhi::ShaderType::Mesh:
+        if constexpr (std::is_same_v<T, MTL::MeshRenderPipelineDescriptor*>) {
+          desc->setMeshFunction(func);
+        }
+        break;
+      default:
+        ALWAYS_ASSERT(0 && "unsupported type rn");
+    }
+  }
+  lib->release();
+}
+}  // namespace
 rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
     const rhi::GraphicsPipelineCreateInfo& cinfo) {
   using ShaderType = rhi::ShaderType;
-  if (mtl4_enabled_) {
-    MTL4::RenderPipelineDescriptor* desc = MTL4::RenderPipelineDescriptor::alloc()->init();
-    // TODO: LMAO this is cursed
-    for (const auto& shader_info : cinfo.shaders) {
-      const char* type_str{};
-      switch (shader_info.type) {
-        case rhi::ShaderType::Fragment:
-          type_str = "frag";
-          break;
-        case rhi::ShaderType::Vertex:
-          type_str = "vert";
-          break;
-        default:
-          type_str = "";
-          break;
-      }
-      // TODO: this logic should go elsewhere
-      auto path = (shader_lib_dir_ / shader_info.path)
-                      .concat("_")
-                      .concat(type_str)
-                      .replace_extension(".metallib");
-      MTL::Library* lib = create_or_get_lib(path);
-      MTL4::LibraryFunctionDescriptor* func_desc = MTL4::LibraryFunctionDescriptor::alloc()->init();
-      func_desc->setLibrary(lib);
-      switch (shader_info.type) {
-        case ShaderType::Fragment: {
-          func_desc->setName(mtl::util::string("frag_main"));
-          desc->setFragmentFunctionDescriptor(func_desc);
-          break;
-        }
-        case ShaderType::Vertex: {
-          func_desc->setName(mtl::util::string("vert_main"));
-          desc->setVertexFunctionDescriptor(func_desc);
-          break;
-        }
-        default: {
-          LERROR("Invalid shader type for GraphicsPipeline creation: {}",
-                 to_string(shader_info.type));
-        }
-      }
-      lib->release();
-    }
 
+  bool is_vertex_pipeline{};
+  for (const auto& shader_info : cinfo.shaders) {
+    if (shader_info.type == ShaderType::Vertex) {
+      is_vertex_pipeline = true;
+      break;
+    }
+  }
+
+  auto set_color_blend_atts = [&cinfo](auto& desc) {
     int color_format_cnt = 0;
     for (auto format : cinfo.rendering.color_formats) {
       if (format != rhi::TextureFormat::Undefined) {
@@ -398,7 +420,6 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
       rhi::TextureFormat format = cinfo.rendering.color_formats[i];
       desc->colorAttachments()->object(i)->setPixelFormat(mtl::util::convert(format));
     }
-
     if (cinfo.blend.attachments.size() > 0) {
       ALWAYS_ASSERT(cinfo.blend.attachments.size() == (size_t)color_format_cnt);
     }
@@ -406,7 +427,6 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
     for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
       const auto& info_att = cinfo.blend.attachments[i];
       auto* att = desc->colorAttachments()->object(i);
-      att->setBlendingState(info_att.enable ? MTL4::BlendStateEnabled : MTL4::BlendStateDisabled);
       att->setSourceRGBBlendFactor(convert(info_att.src_color_factor));
       att->setDestinationRGBBlendFactor(convert(info_att.dst_color_factor));
       att->setRgbBlendOperation(convert(info_att.color_blend_op));
@@ -414,92 +434,74 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
       att->setDestinationAlphaBlendFactor(convert(info_att.dst_alpha_factor));
       att->setAlphaBlendOperation(convert(info_att.alpha_blend_op));
     }
+  };
 
-    desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);
-    NS::Error* err{};
-
-    auto* result = mtl4_resources_->shader_compiler->newRenderPipelineState(desc, nullptr, &err);
-    if (!result) {
-      LERROR("Failed to create MTL4 render pipeline {}", mtl::util::get_err_string(err));
-    }
-
-    return pipeline_pool_.alloc(MetalPipeline{result, nullptr});
-  }
-
-  // MTL 3 path
-  MTL::RenderPipelineDescriptor* desc = MTL::RenderPipelineDescriptor::alloc()->init();
-  for (const auto& shader_info : cinfo.shaders) {
-    const char* type_str{};
-    const char* entry_point_name{};
-    switch (shader_info.type) {
-      case ShaderType::Fragment:
-        type_str = "frag";
-        entry_point_name = "frag_main";
-        break;
-      case ShaderType::Vertex:
-        type_str = "vert";
-        entry_point_name = "vert_main";
-        break;
-      default:
-        type_str = "";
-        break;
-    }
-
-    desc->setDepthAttachmentPixelFormat(mtl::util::convert(cinfo.rendering.depth_format));
-    auto path = (shader_lib_dir_ / shader_info.path)
-                    .concat("_")
-                    .concat(type_str)
-                    .replace_extension(".metallib");
-    MTL::Library* lib = create_or_get_lib(path);
-    MTL::Function* func = lib->newFunction(mtl::util::string(entry_point_name));
-    switch (shader_info.type) {
-      case ShaderType::Fragment:
-        desc->setFragmentFunction(func);
-        break;
-      case ShaderType::Vertex:
-        desc->setVertexFunction(func);
-        break;
-      default:
-        ALWAYS_ASSERT(0 && "unsupported type rn");
-    }
-    lib->release();
-  }
-
-  int color_format_cnt = 0;
-  for (auto format : cinfo.rendering.color_formats) {
-    if (format != rhi::TextureFormat::Undefined) {
-      color_format_cnt++;
-    } else {
-      break;
-    }
-  }
-  for (int i = 0; i < color_format_cnt; i++) {
-    rhi::TextureFormat format = cinfo.rendering.color_formats[i];
-    desc->colorAttachments()->object(i)->setPixelFormat(mtl::util::convert(format));
-  }
-
-  if (cinfo.blend.attachments.size() > 0) {
-    ALWAYS_ASSERT(cinfo.blend.attachments.size() == (size_t)color_format_cnt);
-  }
-
-  for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
-    const auto& info_att = cinfo.blend.attachments[i];
-    auto* att = desc->colorAttachments()->object(i);
-    att->setBlendingEnabled(info_att.enable);
-    att->setSourceRGBBlendFactor(convert(info_att.src_color_factor));
-    att->setDestinationRGBBlendFactor(convert(info_att.dst_color_factor));
-    att->setRgbBlendOperation(convert(info_att.color_blend_op));
-    att->setSourceAlphaBlendFactor(convert(info_att.src_alpha_factor));
-    att->setDestinationAlphaBlendFactor(convert(info_att.dst_alpha_factor));
-    att->setAlphaBlendOperation(convert(info_att.alpha_blend_op));
-  }
-
-  desc->setSupportIndirectCommandBuffers(true);
+  MTL::RenderPipelineState* result{};
   NS::Error* err{};
-  auto* result = device_->newRenderPipelineState(desc, &err);
+
+  if (mtl4_enabled_) {
+    MTL4::RenderPipelineDescriptor* desc = MTL4::RenderPipelineDescriptor::alloc()->init();
+    for (const auto& shader_info : cinfo.shaders) {
+      if (shader_info.type == ShaderType::None) {
+        break;
+      }
+      set_shader_stage_functions(
+          shader_info, desc, "main",
+          create_or_get_lib(get_metallib_path_from_shader_info(shader_info)));
+    }
+
+    set_color_blend_atts(desc);
+
+    for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
+      desc->colorAttachments()->object(i)->setBlendingState(
+          cinfo.blend.attachments[i].enable ? MTL4::BlendStateEnabled : MTL4::BlendStateDisabled);
+    }
+    desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);
+
+    result = mtl4_resources_->shader_compiler->newRenderPipelineState(desc, nullptr, &err);
+
+  } else {
+    auto set_shader_stage_functions_for_desc = [this, &cinfo](auto desc) {
+      for (const auto& shader_info : cinfo.shaders) {
+        if (shader_info.type == ShaderType::None) {
+          break;
+        }
+        set_shader_stage_functions(
+            shader_info, desc, "main",
+            create_or_get_lib(get_metallib_path_from_shader_info(shader_info)));
+      }
+    };
+
+    auto create_pso = [this, &set_shader_stage_functions_for_desc, &set_color_blend_atts, &cinfo](
+                          auto desc, NS::Error** err) {
+      desc->setDepthAttachmentPixelFormat(mtl::util::convert(cinfo.rendering.depth_format));
+      set_shader_stage_functions_for_desc(desc);
+      set_color_blend_atts(desc);
+      for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
+        desc->colorAttachments()->object(i)->setBlendingEnabled(cinfo.blend.attachments[i].enable);
+      }
+      desc->setSupportIndirectCommandBuffers(true);
+      if constexpr (std::is_same_v<decltype(desc), MTL::RenderPipelineDescriptor*>) {
+        return device_->newRenderPipelineState(desc, err);
+      } else {
+        return device_->newRenderPipelineState(desc, MTL::PipelineOptionNone, nullptr, err);
+      }
+    };
+
+    if (!is_vertex_pipeline) {
+      MTL::MeshRenderPipelineDescriptor* desc = MTL::MeshRenderPipelineDescriptor::alloc()->init();
+      desc->setDepthAttachmentPixelFormat(mtl::util::convert(cinfo.rendering.depth_format));
+      result = create_pso(desc, &err);
+    } else {
+      MTL::RenderPipelineDescriptor* desc = MTL::RenderPipelineDescriptor::alloc()->init();
+      result = create_pso(desc, &err);
+    }
+  }
+
   if (!result) {
     LERROR("Failed to create MTL3 render pipeline {}", mtl::util::get_err_string(err));
   }
+
   return pipeline_pool_.alloc(MetalPipeline{result, nullptr});
 }
 
@@ -662,8 +664,7 @@ void MetalDevice::copy_to_buffer(const void* src, size_t src_size, rhi::BufferHa
 }
 
 MTL::ComputePipelineState* MetalDevice::compile_mtl_compute_pipeline(
-    const std::filesystem::path& path) {
-  const char* entry_point = "comp_main";
+    const std::filesystem::path& path, const char* entry_point) {
   if (mtl4_enabled_) {
     MTL4::ComputePipelineDescriptor* desc = MTL4::ComputePipelineDescriptor::alloc()->init();
     MTL::Library* lib = create_or_get_lib(path.string());
@@ -765,4 +766,24 @@ void MetalDevice::set_name(rhi::BufferHandle handle, const char* name) {
 void MetalDevice::on_imgui() {
   ImGui::Text("Active Textures: %zu\nActive Buffers: %zu", texture_pool_.size(),
               buffer_pool_.size());
+}
+
+std::filesystem::path MetalDevice::get_metallib_path_from_shader_info(
+    const rhi::ShaderCreateInfo& shader_info) {
+  const char* type_str{};
+  switch (shader_info.type) {
+    case rhi::ShaderType::Fragment:
+      type_str = "frag";
+      break;
+    case rhi::ShaderType::Vertex:
+      type_str = "vert";
+      break;
+    case rhi::ShaderType::Mesh:
+      type_str = "mesh";
+      break;
+    default:
+      ASSERT(0);
+      break;
+  }
+  return (shader_lib_dir_ / shader_info.path).concat(".").concat(type_str).concat(".metallib");
 }

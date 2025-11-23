@@ -60,7 +60,7 @@ endif()
 
 add_custom_target(compile_shaders ALL
     COMMAND ${CMAKE_COMMAND} -E echo "Compile shaders"
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/compile_hlsl.sh
+    COMMAND python3 ${CMAKE_SOURCE_DIR}/scripts/compile_hlsl.py --verbose
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 

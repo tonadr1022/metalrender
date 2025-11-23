@@ -62,6 +62,8 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
 
   void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
                              size_t offset, size_t draw_cnt) override;
+  void draw_mesh_threadgroups(glm::uvec3 thread_groups, glm::uvec3 threads_per_task_thread_group,
+                              glm::uvec3 threads_per_mesh_thread_group) override;
 
  private:
   void init_icb_arg_encoder_and_buf();

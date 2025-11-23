@@ -15,4 +15,14 @@ struct ImGuiVertex {
   uint color;
 };
 
+#ifdef __HLSL__
+
+struct VOut {
+  float4 pos : SV_Position;
+  float2 uv : TEXCOORD0;
+  float4 color : COLOR0;
+};
+
+#endif
+
 #endif

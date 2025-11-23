@@ -77,6 +77,11 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
         .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
                       .depth_format = TextureFormat::D32float},
     });
+    test_mesh_pso_ = device_->create_graphics_pipeline_h({
+        .shaders = {{{"test_mesh", ShaderType::Mesh}, {"test_mesh", ShaderType::Fragment}}},
+        .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
+                      .depth_format = TextureFormat::D32float},
+    });
   }
 
   materials_buf_.emplace(*device_,
@@ -223,11 +228,15 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       auto depth_handle = rg_.get_att_img(rg_depth_handle);
       ASSERT(depth_handle.is_valid());
       enc->begin_rendering({
-          RenderingAttachmentInfo::color_att(device_->get_swapchain().get_texture(curr_frame_idx_),
-                                             rhi::LoadOp::Clear, {.color = {0.1, 0.2, 0.1, 0.5}}),
+          RenderingAttachmentInfo::color_att(
+              device_->get_swapchain().get_texture(curr_frame_idx_), rhi::LoadOp::Clear,
+              {.color = {17.f / 255.f, 25.f / 255.f, 25.f / 255.f, 0.0}}),
           RenderingAttachmentInfo::depth_stencil_att(depth_handle, rhi::LoadOp::Clear,
                                                      {.depth_stencil = {.depth = 1}}),
       });
+
+      enc->bind_pipeline(test_mesh_pso_);
+      enc->draw_mesh_threadgroups({1, 1, 1}, {32, 1, 1}, {32, 1, 1});
 
       enc->bind_pipeline(test2_pso_);
       enc->set_depth_stencil_state(rhi::CompareOp::LessOrEqual, true);

@@ -215,6 +215,7 @@ class MemeRenderer123 {
   rhi::Device* device_{};
   Window* window_{};
   rhi::PipelineHandleHolder test2_pso_;
+  rhi::PipelineHandleHolder test_mesh_pso_;
   std::optional<BackedGPUAllocator> materials_buf_;
 
   size_t frame_num_{};

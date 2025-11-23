@@ -324,3 +324,14 @@ Metal3CmdEncoder::~Metal3CmdEncoder() {
     main_icb_container_arg_enc_->release();
   }
 }
+
+void Metal3CmdEncoder::draw_mesh_threadgroups(glm::uvec3 thread_groups,
+                                              glm::uvec3 threads_per_task_thread_group,
+                                              glm::uvec3 threads_per_mesh_thread_group) {
+  render_enc_->drawMeshThreadgroups(
+      MTL::Size::Make(thread_groups.x, thread_groups.y, thread_groups.z),
+      MTL::Size::Make(threads_per_task_thread_group.x, threads_per_task_thread_group.y,
+                      threads_per_task_thread_group.z),
+      MTL::Size::Make(threads_per_mesh_thread_group.x, threads_per_mesh_thread_group.y,
+                      threads_per_mesh_thread_group.z));
+}

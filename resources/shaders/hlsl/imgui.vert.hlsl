@@ -1,12 +1,6 @@
 #include "root_sig.h"
 #include "shared_imgui.h"
 
-struct VOut {
-    float4 pos : SV_Position;
-    float2 uv : TEXCOORD0;
-    float4 color : COLOR0;
-};
-
 struct DrawID {
     uint did;
     uint vert_id;
@@ -23,7 +17,7 @@ float4 ConvertUint32RGBAtoFloat4(uint c) {
 }
 
 [RootSignature(ROOT_SIGNATURE)]
-VOut vert_main(uint vert_id : SV_VertexID) {
+VOut main(uint vert_id : SV_VertexID) {
     VOut o;
     StructuredBuffer<ImGuiVertex> vert_buf = ResourceDescriptorHeap[vert_buf_idx];
     ImGuiVertex vert = vert_buf[vert_id + gDrawID.vert_id];
@@ -33,10 +27,3 @@ VOut vert_main(uint vert_id : SV_VertexID) {
     return o;
 }
 
-[RootSignature(ROOT_SIGNATURE)]
-float4 frag_main(VOut input) : SV_Target {
-    Texture2D tex = ResourceDescriptorHeap[tex_idx];
-    SamplerState samp = SamplerDescriptorHeap[LINEAR_SAMPLER_IDX];
-    float4 c = input.color * tex.Sample(samp, input.uv);
-    return c;
-}
