@@ -40,10 +40,10 @@ float4 frag_main(VOut input) : SV_Target0 {
     StructuredBuffer<M4Material> material_buf = ResourceDescriptorHeap[mat_buf_idx];
     M4Material material = material_buf[input.material_id];
     SamplerState samp = SamplerDescriptorHeap[LINEAR_SAMPLER_IDX];
-    float4 albedo = float4(1.0,1.0,1.0,1.0);
+    float4 albedo = material.color;
     if (material.albedo_tex_idx != 0) {
         Texture2D albedo_tex = ResourceDescriptorHeap[material.albedo_tex_idx];
-        albedo = albedo_tex.Sample(samp, input.uv);
+        albedo *= albedo_tex.Sample(samp, input.uv);
     }
     if (albedo.a < 0.5) {
         discard;

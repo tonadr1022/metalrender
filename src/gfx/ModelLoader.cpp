@@ -148,16 +148,13 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
   auto &texture_uploads = out_load_result.texture_uploads;
   texture_uploads.resize(gltf->images_count);
 
-  auto load_img = [&](uint32_t gltf_img_i) -> uint32_t {
-    if (texture_uploads[gltf_img_i].data) {
-      return gltf_img_i;
-    }
+  auto load_img = [&](uint32_t gltf_img_i, rhi::TextureFormat format) -> uint32_t {
     const cgltf_image &img = gltf->images[gltf_img_i];
     if (!img.buffer_view) {
       int w{}, h{}, comp{};
       const std::filesystem::path full_img_path = directory_path / img.uri;
       uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
-      LINFO("comps: {}", comp);
+      LINFO("{}", comp);
       const uint32_t mip_levels = math::get_mip_levels(w, h);
       const rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
                                   .storage_mode = rhi::StorageMode::Default,
@@ -166,16 +163,18 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
                                   .mip_levels = mip_levels,
                                   .array_length = 1,
                                   .bindless = true};
-      texture_uploads[gltf_img_i] =
-          TextureUpload{.data = data, .desc = desc, .bytes_per_row = desc.dims.x * 4};
       if (!data) {
-        assert(0);
+        ASSERT(0);
       }
-      return gltf_img_i;
+      auto &upload = texture_uploads[gltf_img_i];
+      upload.data = std::unique_ptr<void, UntypedDeleterFuncPtr>(data, &stbi_image_free);
+      upload.desc = desc;
+      upload.bytes_per_row = desc.dims.x * 4;
+      upload.desc.format = format;
+    } else {
+      ASSERT(0 && "need to handle yet");
     }
-
-    assert(0 && "need to handle yet");
-    return UINT32_MAX;
+    return gltf_img_i;
   };
 
   auto &materials = out_load_result.materials;
@@ -194,7 +193,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
 
     auto set_and_load_material_img = [&gltf, &load_img, &texture_uploads](
                                          const cgltf_texture_view *tex_view,
-                                         uint32_t &result_tex_id) {
+                                         uint32_t &result_tex_id, rhi::TextureFormat format) {
       if (!tex_view || !tex_view->texture || !tex_view->texture->image) {
         return;
       }
@@ -202,12 +201,12 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
       if (texture_uploads[gltf_image_i].data) {
         result_tex_id = gltf_image_i;
       } else {
-        result_tex_id = load_img(gltf_image_i);
+        result_tex_id = load_img(gltf_image_i, format);
       }
     };
 
     set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.base_color_texture,
-                              material.albedo_tex);
+                              material.albedo_tex, rhi::TextureFormat::R8G8B8A8Srgb);
     // set_and_load_material_img(&gltf_mat->normal_texture, material.normal_tex);
     // if (gltf_mat->has_pbr_metallic_roughness) {
     //   uint32_t tx{};
@@ -430,11 +429,3 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
 }
 
 }  // namespace model
-
-void free_texture(void *data, CPUTextureLoadType type) {
-  switch (type) {
-    case CPUTextureLoadType::StbImage: {
-      stbi_image_free(data);
-    }
-  }
-}

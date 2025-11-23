@@ -40,7 +40,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   {
     // TODO: streamline
     default_white_tex_ =
-        device_->create_tex_h(rhi::TextureDesc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
+        device_->create_tex_h(rhi::TextureDesc{.format = rhi::TextureFormat::R8G8B8A8Srgb,
                                                .storage_mode = rhi::StorageMode::GPUOnly,
                                                .dims = glm::uvec3{1, 1, 1},
                                                .mip_levels = 1,
@@ -50,7 +50,9 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
     auto* data = reinterpret_cast<uint64_t*>(malloc(sizeof(uint64_t)));
     *data = 0xFFFFFFFF;
     pending_texture_uploads_.push_back(
-        GPUTexUpload{.data = data, .tex = default_white_tex_.handle, .bytes_per_row = 4});
+        GPUTexUpload{.data = std::unique_ptr<void, UntypedDeleterFuncPtr>(data, &free),
+                     .tex = default_white_tex_.handle,
+                     .bytes_per_row = 4});
   }
   {
     samplers_.emplace_back(device_->create_sampler_h(rhi::SamplerDesc{
@@ -287,8 +289,8 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
     size_t src_offset = 0;
     for (size_t row = 0; row < tex->desc().dims.y; row++) {
       ASSERT(dst_offset + bytes_per_row <= upload_buf->size());
-      memcpy((uint8_t*)upload_buf->contents() + dst_offset, (uint8_t*)upload.data + src_offset,
-             src_row_bytes);
+      memcpy((uint8_t*)upload_buf->contents() + dst_offset,
+             (uint8_t*)upload.data.get() + src_offset, src_row_bytes);
       dst_offset += bytes_per_row;
       src_offset += tex->desc().dims.x * bytes_per_element;
     }
@@ -318,8 +320,9 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
     if (upload.data) {
       auto tex = device_->create_tex_h(upload.desc);
       img_upload_bindless_indices[i] = device_->get_tex(tex)->bindless_idx();
-      pending_texture_uploads_.push_back(GPUTexUpload{
-          .data = upload.data, .tex = tex.handle, .bytes_per_row = upload.bytes_per_row});
+      pending_texture_uploads_.push_back(GPUTexUpload{.data = std::move(upload.data),
+                                                      .tex = tex.handle,
+                                                      .bytes_per_row = upload.bytes_per_row});
       out_tex_handles.emplace_back(std::move(tex));
     }
     i++;
@@ -331,7 +334,8 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
     std::vector<M4Material> mats;
     mats.reserve(result.materials.size());
     for (const auto& m : result.materials) {
-      mats.push_back(M4Material{.albedo_tex_idx = img_upload_bindless_indices[m.albedo_tex]});
+      mats.push_back(M4Material{.albedo_tex_idx = img_upload_bindless_indices[m.albedo_tex],
+                                .color = glm::vec4{m.albedo_factors}});
     }
     device_->copy_to_buffer(mats.data(), mats.size() * sizeof(M4Material),
                             materials_buf_->get_buffer_handle(),

@@ -28,3 +28,5 @@ using SamplerHandle = GenerationalHandle<Sampler>;
 using SamplerHandleHolder = Holder<SamplerHandle, ::rhi::Device>;
 
 }  // namespace rhi
+
+using UntypedDeleterFuncPtr = void (*)(void*);

@@ -19,9 +19,11 @@ enum class CPUTextureLoadType : uint8_t {
 };
 
 struct TextureUpload {
-  void *data{};
+  std::unique_ptr<void, UntypedDeleterFuncPtr> data;
   rhi::TextureDesc desc;
   uint32_t bytes_per_row;
+
+  TextureUpload() : data(nullptr, free) {}
 };
 
 struct TextureArrayUpload {
@@ -82,4 +84,3 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
                 ModelInstance &out_model, ModelLoadResult &out_load_result);
 
 }
-void free_texture(void *data, CPUTextureLoadType type);

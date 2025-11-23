@@ -234,7 +234,7 @@ class MemeRenderer123 {
   bool meshlet_vis_buf_dirty_{};
 
   struct GPUTexUpload {
-    void* data;
+    std::unique_ptr<void, UntypedDeleterFuncPtr> data;
     rhi::TextureHandle tex;
     uint32_t bytes_per_row;
   };
