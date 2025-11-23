@@ -43,11 +43,8 @@ App::App() {
   on_hide_mouse_change();
 
   ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_});
-  renderer_.init(
-      gfx::RendererMetal4::CreateInfo{.device = device_.get(),
-                                      .window = window_.get(),
-                                      .resource_dir = resource_dir_,
-                                      .render_imgui_callback = [this]() { on_imgui(); }});
+  renderer_.init(gfx::RendererMetal4::CreateInfo{
+      .device = device_.get(), .window = window_.get(), .resource_dir = resource_dir_});
   // voxel_renderer_ = std::make_unique<vox::Renderer>();
   // voxel_renderer_->init(&renderer_);
   // voxel_world_ = std::make_unique<vox::World>();
@@ -133,16 +130,18 @@ void App::run() {
     // for (const auto model : models_) {
     //   ResourceManager::get().get_model(model)->update_transforms();
     // }
+
+    if (imgui_enabled_) {
+      on_imgui();
+    }
+
+    ImGui::Render();
+
     const gfx::RenderArgs args{.view_mat = camera_.get_view_mat(),
                                .camera_pos = camera_.pos,
                                .draw_imgui = imgui_enabled_};
-
-    ImGui::ShowDemoWindow();
-    ImGui::Begin("Renderer");
-    renderer_.on_imgui();
-    ImGui::End();
-    ImGui::Render();
     renderer_.render(args);
+
     ImGui::EndFrame();
   }
 
@@ -212,8 +211,7 @@ void App::load_config() {
 }
 
 void App::on_imgui() {
-  ImGui::ShowDemoWindow();
-  ImGui::Begin("Hello world");
+  ImGui::Begin("Renderer");
   renderer_.on_imgui();
   if (ImGui::TreeNodeEx("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Position: %f %f %f", camera_.pos.x, camera_.pos.y, camera_.pos.z);
@@ -223,6 +221,8 @@ void App::on_imgui() {
   //   voxel_world_->on_imgui();
   // }
   ImGui::End();
+
+  ImGui::ShowDemoWindow();
 }
 
 void App::load_model(const std::filesystem::path& path, const glm::mat4& transform) {

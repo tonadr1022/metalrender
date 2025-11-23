@@ -117,6 +117,7 @@ struct DrawBatch {
 struct ModelGPUResources {
   OffsetAllocator::Allocation material_alloc;
   DrawBatch::Alloc static_draw_batch_alloc;
+  std::vector<rhi::TextureHandleHolder> textures;
   std::vector<InstanceData> base_instance_datas;
   std::vector<Mesh> meshes;
   std::vector<uint32_t> instance_id_to_node;
@@ -169,11 +170,10 @@ class RendererMetal4 {
     rhi::Device* device;
     Window* window;
     std::filesystem::path resource_dir;
-    std::function<void()> render_imgui_callback;
   };
   void init(const CreateInfo& cinfo);
   void render(const RenderArgs& args);
-  void on_imgui() { device_->on_imgui(); }
+  void on_imgui();
   bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
                   ModelInstance& model, ModelGPUHandle& out_handle);
   [[nodiscard]] ModelInstanceGPUHandle add_model_instance(const ModelInstance& model,
@@ -220,7 +220,6 @@ class RendererMetal4 {
   size_t frame_num_{};
   size_t curr_frame_idx_{};
   std::filesystem::path resource_dir_;
-  std::vector<rhi::TextureHandleHolder> all_textures_;
   std::optional<ScratchBufferPool> scratch_buffer_pool_;
   InstanceDataMgr instance_data_mgr_;
   std::optional<DrawBatch> static_draw_batch_;
@@ -236,7 +235,7 @@ class RendererMetal4 {
 
   struct GPUTexUpload {
     void* data;
-    rhi::TextureHandleHolder tex;
+    rhi::TextureHandle tex;
     uint32_t bytes_per_row;
   };
   std::optional<ImGuiRenderer> imgui_renderer_;

@@ -36,8 +36,6 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
 
-  all_textures_.resize(k_max_textures);
-
   {
     // TODO: streamline
     default_white_tex_ =
@@ -51,7 +49,7 @@ void RendererMetal4::init(const CreateInfo& cinfo) {
     auto* data = reinterpret_cast<uint64_t*>(malloc(sizeof(uint64_t)));
     *data = 0xFFFFFFFF;
     pending_texture_uploads_.push_back(
-        GPUTexUpload{.data = data, .tex = std::move(default_white_tex_), .bytes_per_row = 4});
+        GPUTexUpload{.data = data, .tex = default_white_tex_.handle, .bytes_per_row = 4});
   }
   {
     samplers_.emplace_back(device_->create_sampler_h(rhi::SamplerDesc{
@@ -174,8 +172,7 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
   if (!pending_texture_uploads_.empty() || imgui_has_dirty_textures) {
     auto& tex_flush_pass = rg_.add_pass("flush_textures");
     for (const auto& t : pending_texture_uploads_) {
-      tex_flush_pass.add_tex(t.tex.handle,
-                             (RGAccess)(RGAccess::ComputeWrite | RGAccess::TransferWrite));
+      tex_flush_pass.add_tex(t.tex, (RGAccess)(RGAccess::ComputeWrite | RGAccess::TransferWrite));
     }
     imgui_renderer_->add_dirty_textures_to_pass(tex_flush_pass, false);
 
@@ -215,11 +212,11 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
     auto rg_depth_handle = gbuffer_pass.add_tex(
         "depth_tex", {.format = rhi::TextureFormat::D32float}, RGAccess::ColorWrite);
     for (const auto& t : pending_texture_uploads_) {
-      gbuffer_pass.add_tex(t.tex.handle, RGAccess::FragmentSample);
+      gbuffer_pass.add_tex(t.tex, RGAccess::FragmentSample);
     }
     imgui_renderer_->add_dirty_textures_to_pass(gbuffer_pass, true);
 
-    gbuffer_pass.set_execute_fn([this, rg_depth_handle](rhi::CmdEncoder* enc) {
+    gbuffer_pass.set_execute_fn([this, rg_depth_handle, &args](rhi::CmdEncoder* enc) {
       auto depth_handle = rg_.get_att_img(rg_depth_handle);
       ASSERT(depth_handle.is_valid());
       enc->begin_rendering({
@@ -259,7 +256,9 @@ void RendererMetal4::add_render_graph_passes(const RenderArgs& args) {
         //                                cmd.vertex_offset / sizeof(DefaultVertex), i);
         // }
       }
-      imgui_renderer_->render(enc, window_->get_window_size(), curr_frame_idx_);
+      if (args.draw_imgui) {
+        imgui_renderer_->render(enc, window_->get_window_size(), curr_frame_idx_);
+      }
     });
   }
   {
@@ -293,9 +292,7 @@ void RendererMetal4::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
       src_offset += tex->desc().dims.x * bytes_per_element;
     }
 
-    enc->upload_texture_data(upload_buf_handle, 0, bytes_per_row, upload.tex.handle);
-    // TODO: mipmaps
-    all_textures_[tex->bindless_idx()] = std::move(upload.tex);
+    enc->upload_texture_data(upload_buf_handle, 0, bytes_per_row, upload.tex);
     pending_texture_uploads_.pop_back();
   }
 
@@ -314,13 +311,15 @@ bool RendererMetal4::load_model(const std::filesystem::path& path, const glm::ma
   size_t i = 0;
   // TODO: save elsewhere
   std::vector<uint32_t> img_upload_bindless_indices;
+  std::vector<rhi::TextureHandleHolder> out_tex_handles;
   img_upload_bindless_indices.resize(result.texture_uploads.size());
   for (auto& upload : result.texture_uploads) {
     if (upload.data) {
       auto tex = device_->create_tex_h(upload.desc);
       img_upload_bindless_indices[i] = device_->get_tex(tex)->bindless_idx();
       pending_texture_uploads_.push_back(GPUTexUpload{
-          .data = upload.data, .tex = std::move(tex), .bytes_per_row = upload.bytes_per_row});
+          .data = upload.data, .tex = tex.handle, .bytes_per_row = upload.bytes_per_row});
+      out_tex_handles.emplace_back(std::move(tex));
     }
     i++;
   }
@@ -378,6 +377,7 @@ bool RendererMetal4::load_model(const std::filesystem::path& path, const glm::ma
   out_handle = model_gpu_resource_pool_.alloc(ModelGPUResources{
       .material_alloc = material_alloc,
       .static_draw_batch_alloc = draw_batch_alloc,
+      .textures = std::move(out_tex_handles),
       .base_instance_datas = std::move(base_instance_datas),
       .meshes = std::move(result.meshes),
       .instance_id_to_node = instance_id_to_node,
@@ -656,7 +656,7 @@ void RendererMetal4::init_imgui() {
   ImGui::CreateContext();
 
   ImGuiIO& io = ImGui::GetIO();
-  auto path = (resource_dir_ / "fonts" / "Roboto-Regular.ttf");
+  auto path = (resource_dir_ / "fonts" / "Comic_Sans_MS.ttf");
   io.Fonts->AddFontFromFileTTF(path.c_str(), 16.0f, nullptr, io.Fonts->GetGlyphRangesDefault());
 
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -670,4 +670,12 @@ void RendererMetal4::shutdown_imgui() {
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
 }
+
+void RendererMetal4::on_imgui() {
+  if (ImGui::TreeNodeEx("Device", ImGuiTreeNodeFlags_DefaultOpen)) {
+    device_->on_imgui();
+    ImGui::TreePop();
+  }
+}
+
 }  // namespace gfx
