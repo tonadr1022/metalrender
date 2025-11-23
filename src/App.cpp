@@ -11,6 +11,7 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
+#include "platform/apple/AppleWindow.hpp"
 #include "tracy/Tracy.hpp"
 
 namespace {
@@ -34,7 +35,7 @@ App::App() {
   shader_dir_ = resource_dir_ / "shaders";
   load_config();
   device_ = rhi::create_device(rhi::GfxAPI::Metal);
-  window_ = std::make_unique<Window>();
+  window_ = std::make_unique<AppleWindow>();
   bool transparent_window = true;
   window_->init([this](int key, int action, int mods) { on_key_event(key, action, mods); },
                 [this](double x_pos, double y_pos) { on_curse_pos_event(x_pos, y_pos); },
@@ -93,11 +94,12 @@ void App::run() {
     // load_model(config_.initial_model_path);
   } else if (scene == 1) {
     rando::seed(10000000);
-    size_t count = 100;
+    size_t count = 1000;
     float scale = 10;
+    float radius = 200;
 
     for (size_t i = 0; i < count; i++) {
-      auto rand_f = []() { return rando::get_float(-100, 100); };
+      auto rand_f = [radius]() { return rando::get_float(-radius, radius); };
       auto pos = glm::vec3{rand_f(), rand_f(), rand_f()};
       glm::vec3 randomAxis = glm::linearRand(glm::vec3(-1.0f), glm::vec3(1.0f));
       float randomAngle = glm::linearRand(0.0f, glm::two_pi<float>());
@@ -195,6 +197,13 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
       }
     }
   }
+
+  if (action == GLFW_PRESS || action == GLFW_REPEAT) {
+    if (key == GLFW_KEY_F11) {
+      LINFO("setting to fullscreen: {}", !window_->get_fullscreen());
+      window_->set_fullscreen(!window_->get_fullscreen());
+    }
+  }
 }
 
 void App::on_hide_mouse_change() {
@@ -223,6 +232,7 @@ void App::on_imgui() {
     ImGui::Text("Position: %f %f %f", camera_.pos.x, camera_.pos.y, camera_.pos.z);
     ImGui::TreePop();
   }
+
   // if (voxel_world_) {
   //   voxel_world_->on_imgui();
   // }

@@ -37,7 +37,8 @@ Checks: >
   -performance-enum-size,
   -math-missing-parentheses,
   -const-correctness,
-  -readability-math-missing-parentheses
+  -readability-math-missing-parentheses,
+  -google-objc-function-naming
 WarningsAsErrors: "*"
 CheckOptions:
   - { key: readability-identifier-naming.NamespaceCase, value: lower_case }

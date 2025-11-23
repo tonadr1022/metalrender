@@ -16,18 +16,20 @@ class Window {
   using KeyCallbackFn = std::function<void(int key, int action, int mods)>;
   using CursorPosCallbackFn = std::function<void(double x_pos, double y_pos)>;
 
-  void init(KeyCallbackFn key_callback_fn, CursorPosCallbackFn cursor_pos_callback_fn,
-            bool transparent_window);
+  virtual void init(KeyCallbackFn key_callback_fn, CursorPosCallbackFn cursor_pos_callback_fn,
+                    bool transparent_window);
   void shutdown();
-  ~Window() = default;
+  virtual ~Window() = default;
 
   [[nodiscard]] bool should_close() const;
   void poll_events();
   glm::uvec2 get_window_size();
   glm::uvec2 get_window_not_framebuffer_size();
   [[nodiscard]] GLFWwindow* get_handle() const { return window_; }
+  virtual void set_fullscreen([[maybe_unused]] bool fullscreen) {}
+  [[nodiscard]] virtual bool get_fullscreen() const = 0;
 
- private:
+ protected:
   KeyCallbackFn key_callback_fn_;
   CursorPosCallbackFn cursor_pos_callback_fn_;
   GLFWwindow* window_{};

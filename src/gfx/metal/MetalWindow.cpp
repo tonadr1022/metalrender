@@ -25,6 +25,9 @@ CA::MetalLayer *init_metal_window(GLFWwindow *window, MTL::Device *device,
     [mtl_layer setOpacity:(1.0)];
   }
 
+  NSWindowCollectionBehavior behavior = ns_window.collectionBehavior;
+  behavior |= NSWindowCollectionBehaviorFullScreenPrimary;
+  [ns_window setCollectionBehavior:behavior];
   mtl_layer.contentsScale = [ns_window backingScaleFactor];
   mtl_layer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
   mtl_layer.frame = ns_view.bounds;

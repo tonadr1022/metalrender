@@ -691,6 +691,7 @@ void MemeRenderer123::on_imgui() {
     auto win_dims = window_->get_window_not_framebuffer_size();
     ImGui::Text("Framebuffer dims: %u %u", dims.x, dims.y);
     ImGui::Text("Window dims: %u %u", win_dims.x, win_dims.y);
+    ImGui::Text("Fullscreen: %d", window_->get_fullscreen());
     ImGui::TreePop();
   }
   if (ImGui::TreeNodeEx("Device", ImGuiTreeNodeFlags_DefaultOpen)) {
