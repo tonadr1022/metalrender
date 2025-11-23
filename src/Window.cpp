@@ -2,13 +2,25 @@
 
 #include "core/Logger.hpp"
 
-void Window::init(KeyCallbackFn key_callback_fn, CursorPosCallbackFn cursor_pos_callback_fn) {
+void Window::init(KeyCallbackFn key_callback_fn, CursorPosCallbackFn cursor_pos_callback_fn,
+                  bool transparent_window) {
   this->key_callback_fn_ = std::move(key_callback_fn);
   this->cursor_pos_callback_fn_ = std::move(cursor_pos_callback_fn);
-  glfwInitHint(GLFW_COCOA_CHDIR_RESOURCES, GLFW_FALSE);
   glfwInit();
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  window_ = glfwCreateWindow(1024, 1024, "Metal Engine", nullptr, nullptr);
+  if (transparent_window) {
+    glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
+  }
+
+  int w = 1024;
+  int h = 1024;
+  GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+  const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+  if (mode) {
+    w = mode->width;
+    h = mode->height;
+  }
+  window_ = glfwCreateWindow(w, h, "Memes", nullptr, nullptr);
   if (!window_) {
     LCRITICAL("Failed to create glfw window");
     glfwTerminate();
@@ -35,5 +47,11 @@ bool Window::should_close() const { return glfwWindowShouldClose(window_); }
 glm::uvec2 Window::get_window_size() {
   int x, y;
   glfwGetFramebufferSize(window_, &x, &y);
+  return {x, y};
+}
+
+glm::uvec2 Window::get_window_not_framebuffer_size() {
+  int x, y;
+  glfwGetWindowSize(window_, &x, &y);
   return {x, y};
 }

@@ -151,7 +151,8 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
     return;
   }
   device_ = MTL::CreateSystemDefaultDevice();
-  metal_layer_ = init_metal_window(init_info.window->get_handle(), device_);
+  metal_layer_ =
+      init_metal_window(init_info.window->get_handle(), device_, init_info.transparent_window);
   ALWAYS_ASSERT(metal_layer_);
 
   // TODO: parameterize

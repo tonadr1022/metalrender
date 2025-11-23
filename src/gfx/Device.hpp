@@ -30,6 +30,7 @@ class Device {
     std::filesystem::path shader_lib_dir;
     std::string app_name;
     bool validation_layers_enabled{true};
+    bool transparent_window{true};
     size_t frames_in_flight{2};
   };
   virtual ~Device() = default;

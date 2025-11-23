@@ -35,10 +35,16 @@ App::App() {
   load_config();
   device_ = rhi::create_device(rhi::GfxAPI::Metal);
   window_ = std::make_unique<Window>();
+  bool transparent_window = true;
   window_->init([this](int key, int action, int mods) { on_key_event(key, action, mods); },
-                [this](double x_pos, double y_pos) { on_curse_pos_event(x_pos, y_pos); });
-  device_->init(
-      {.window = window_.get(), .shader_lib_dir = resource_dir_ / "shader_out", .app_name = "lol"});
+                [this](double x_pos, double y_pos) { on_curse_pos_event(x_pos, y_pos); },
+                transparent_window);
+  device_->init({
+      .window = window_.get(),
+      .shader_lib_dir = resource_dir_ / "shader_out",
+      .app_name = "lol",
+      .transparent_window = true,
+  });
 
   on_hide_mouse_change();
 
@@ -72,16 +78,16 @@ float get_float(float min, float max) {
 
 void App::run() {
   ZoneScoped;
-  int scene = 0;
+  int scene = 1;
   if (scene == 0) {
     glm::ivec3 iter{};
-    int n = 1;
+    int n = 0;
     glm::ivec3 dims{n, 1, n};
     float dist = 40.0;
     for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
       for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
         glm::vec3 pos = glm::vec3{iter} * dist;
-        load_model(config_.paths[1], glm::translate(glm::mat4{1}, pos));
+        load_model(config_.paths[0], glm::translate(glm::mat4{1}, pos));
       }
     }
     // load_model(config_.initial_model_path);
@@ -109,7 +115,7 @@ void App::run() {
     }
   }
 
-  load_model(config_.paths[0], glm::translate(glm::mat4{1}, glm::vec3{0, 0, 0}));
+  // load_model(config_.paths[0], glm::translate(glm::mat4{1}, glm::vec3{0, 0, 0}));
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
     ZoneScopedN("main loop");
@@ -227,6 +233,6 @@ void App::on_imgui() {
 
 void App::load_model(const std::filesystem::path& path, const glm::mat4& transform) {
   auto full_path =
-      path.string().starts_with("Models") ? resource_dir_ / "models" / "gltf" / path : path;
+      path.string().contains("Models") ? resource_dir_ / "models" / "gltf" / path : path;
   models_.push_back(ResourceManager::get().load_model(full_path, transform));
 }

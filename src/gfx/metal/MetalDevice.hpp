@@ -250,4 +250,5 @@ class MetalDevice : public rhi::Device {
 
 struct GLFWwindow;
 
-CA::MetalLayer* init_metal_window(GLFWwindow* window, MTL::Device* device);
+CA::MetalLayer* init_metal_window(GLFWwindow* window, MTL::Device* device,
+                                  bool transparent_allowed);

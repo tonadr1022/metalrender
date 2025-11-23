@@ -11,13 +11,19 @@
 
 #include "MetalDevice.hpp"
 
-CA::MetalLayer *init_metal_window(GLFWwindow *window, MTL::Device *device) {
+CA::MetalLayer *init_metal_window(GLFWwindow *window, MTL::Device *device,
+                                  bool transparent_allowed) {
   auto *init_pool = NS::AutoreleasePool::alloc()->init();
   NSView *ns_view = glfwGetCocoaView(window);
   NSWindow *ns_window = glfwGetCocoaWindow(window);
   [ns_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
 
   CAMetalLayer *mtl_layer = [CAMetalLayer layer];
+  if (transparent_allowed) {
+    [ns_view setAlphaValue:0.0];
+    [mtl_layer setOpaque:FALSE];
+    [mtl_layer setOpacity:(1.0)];
+  }
 
   mtl_layer.contentsScale = [ns_window backingScaleFactor];
   mtl_layer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
@@ -28,7 +34,7 @@ CA::MetalLayer *init_metal_window(GLFWwindow *window, MTL::Device *device) {
   mtl_layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
 
   CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
-  CGFloat bg_color[] = {0.0, 0.0, 1.0, 1.0};
+  CGFloat bg_color[] = {0.0, 0.0, 0.0, 0.0};
   CGColorRef bg_color_ref = CGColorCreate(color_space, bg_color);
   mtl_layer.backgroundColor = bg_color_ref;
 

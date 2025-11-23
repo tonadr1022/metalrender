@@ -224,7 +224,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       ASSERT(depth_handle.is_valid());
       enc->begin_rendering({
           RenderingAttachmentInfo::color_att(device_->get_swapchain().get_texture(curr_frame_idx_),
-                                             rhi::LoadOp::Clear, {.color = {0.1, 0.2, 0.1, 0}}),
+                                             rhi::LoadOp::Clear, {.color = {0.1, 0.2, 0.1, 0.5}}),
           RenderingAttachmentInfo::depth_stencil_att(depth_handle, rhi::LoadOp::Clear,
                                                      {.depth_stencil = {.depth = 1}}),
       });
@@ -677,6 +677,13 @@ void MemeRenderer123::shutdown_imgui() {
 }
 
 void MemeRenderer123::on_imgui() {
+  if (ImGui::TreeNodeEx("Window", ImGuiTreeNodeFlags_DefaultOpen)) {
+    auto dims = window_->get_window_size();
+    auto win_dims = window_->get_window_not_framebuffer_size();
+    ImGui::Text("Framebuffer dims: %u %u", dims.x, dims.y);
+    ImGui::Text("Window dims: %u %u", win_dims.x, win_dims.y);
+    ImGui::TreePop();
+  }
   if (ImGui::TreeNodeEx("Device", ImGuiTreeNodeFlags_DefaultOpen)) {
     device_->on_imgui();
     ImGui::TreePop();
