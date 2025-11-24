@@ -2,6 +2,7 @@
 #define SHARED_INDIRECT_H
 
 #include "../shader_core.h"
+#include "shared_instance_data.h"
 
 struct IndexedIndirectDrawCmd {
   uint32_t index_count;
@@ -9,16 +10,6 @@ struct IndexedIndirectDrawCmd {
   uint32_t first_index;
   int32_t vertex_offset;
   uint32_t first_instance;
-};
-
-struct InstanceData {
-  // uint32_t instance_id;
-  // uint32_t mesh_id;
-  // uint32_t meshlet_vis_base;
-  packed_float3 translation;
-  float scale;
-  packed_float4 rotation;
-  uint32_t mat_id;
 };
 
 // struct InstData {

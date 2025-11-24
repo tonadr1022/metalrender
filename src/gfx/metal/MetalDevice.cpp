@@ -367,6 +367,12 @@ void set_shader_stage_functions(const rhi::ShaderCreateInfo& shader_info, T& des
         }
         break;
       }
+      case rhi::ShaderType::Task: {
+        if constexpr (std::is_same_v<T, MTL4::MeshRenderPipelineDescriptor*>) {
+          desc->setObjectFunctionDescriptor(func_desc);
+        }
+        break;
+      }
       default: {
         LERROR("Invalid shader type for GraphicsPipeline creation: {}",
                to_string(shader_info.type));
@@ -374,6 +380,7 @@ void set_shader_stage_functions(const rhi::ShaderCreateInfo& shader_info, T& des
     }
   } else {
     MTL::Function* func = lib->newFunction(mtl::util::string(entry_point_name));
+    ASSERT(func);
     switch (shader_info.type) {
       case rhi::ShaderType::Fragment:
         desc->setFragmentFunction(func);
@@ -386,6 +393,11 @@ void set_shader_stage_functions(const rhi::ShaderCreateInfo& shader_info, T& des
       case rhi::ShaderType::Mesh:
         if constexpr (std::is_same_v<T, MTL::MeshRenderPipelineDescriptor*>) {
           desc->setMeshFunction(func);
+        }
+        break;
+      case rhi::ShaderType::Task:
+        if constexpr (std::is_same_v<T, MTL::MeshRenderPipelineDescriptor*>) {
+          desc->setObjectFunction(func);
         }
         break;
       default:
@@ -743,6 +755,7 @@ MTL::IndirectCommandBuffer* MetalDevice::ICB_Mgr::get(rhi::BufferHandle indirect
   ASSERT(id < it->second.icbs.size());
   return it->second.icbs[id];
 }
+
 void MetalDevice::ICB_Mgr::reset_for_frame() {
   for (auto& [k, v] : indirect_buffer_handle_to_icb_) {
     v.curr_id = 0;
@@ -780,6 +793,9 @@ std::filesystem::path MetalDevice::get_metallib_path_from_shader_info(
       break;
     case rhi::ShaderType::Mesh:
       type_str = "mesh";
+      break;
+    case rhi::ShaderType::Task:
+      type_str = "task";
       break;
     default:
       ASSERT(0);

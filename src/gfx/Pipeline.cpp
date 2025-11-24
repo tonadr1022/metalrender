@@ -8,7 +8,7 @@ const char* to_string(ShaderType type) {
       return "Fragment";
     case ShaderType::Vertex:
       return "Vertex";
-    case ShaderType::Object:
+    case ShaderType::Task:
       return "Object";
     case ShaderType::Mesh:
       return "Mesh";

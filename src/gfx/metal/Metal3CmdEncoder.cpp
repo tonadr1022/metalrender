@@ -48,6 +48,14 @@ void Metal3CmdEncoder::begin_rendering(
     ASSERT(cmd_buf_);
     render_enc_ = cmd_buf_->renderCommandEncoder(desc);
   }
+  render_enc_->setObjectBuffer(device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
+                               kIRDescriptorHeapBindPoint);
+  render_enc_->setObjectBuffer(device_->get_mtl_buf(device_->sampler_descriptor_table_), 0,
+                               kIRSamplerHeapBindPoint);
+  render_enc_->setMeshBuffer(device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
+                             kIRDescriptorHeapBindPoint);
+  render_enc_->setMeshBuffer(device_->get_mtl_buf(device_->sampler_descriptor_table_), 0,
+                             kIRSamplerHeapBindPoint);
   render_enc_->setVertexBuffer(device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
                                kIRDescriptorHeapBindPoint);
   render_enc_->setVertexBuffer(device_->get_mtl_buf(device_->sampler_descriptor_table_), 0,
@@ -328,6 +336,14 @@ Metal3CmdEncoder::~Metal3CmdEncoder() {
 void Metal3CmdEncoder::draw_mesh_threadgroups(glm::uvec3 thread_groups,
                                               glm::uvec3 threads_per_task_thread_group,
                                               glm::uvec3 threads_per_mesh_thread_group) {
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
+  auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
+  memcpy(tlab->pc_data, pc_data_, k_pc_size);
+  tlab->cbuffer2.draw_id = 0;  // TODO: don't use this root signature
+  tlab->cbuffer2.vertex_id_base = 0;
+  render_enc_->setObjectBuffer(pc_buf, pc_buf_offset, kIRArgumentBufferBindPoint);
+  render_enc_->setMeshBuffer(pc_buf, pc_buf_offset, kIRArgumentBufferBindPoint);
+  render_enc_->setFragmentBuffer(pc_buf, pc_buf_offset, kIRArgumentBufferBindPoint);
   render_enc_->drawMeshThreadgroups(
       MTL::Size::Make(thread_groups.x, thread_groups.y, thread_groups.z),
       MTL::Size::Make(threads_per_task_thread_group.x, threads_per_task_thread_group.y,

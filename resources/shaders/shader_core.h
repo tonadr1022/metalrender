@@ -9,7 +9,7 @@
 #define packed_float2 float2
 #define packed_float3 float3
 #define packed_float4 float4
-#define packed_char4 int8_t4_packed
+#define packed_char4 uint
 
 #define ATTR_POSITION : POSITION
 

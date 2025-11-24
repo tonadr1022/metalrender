@@ -6,7 +6,7 @@
 
 namespace rhi {
 
-enum class ShaderType : uint8_t { None, Vertex, Fragment, Object, Mesh, Compute };
+enum class ShaderType : uint8_t { None, Vertex, Fragment, Task, Mesh, Compute };
 
 const char* to_string(ShaderType type);
 

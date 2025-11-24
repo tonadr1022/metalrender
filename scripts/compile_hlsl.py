@@ -45,7 +45,7 @@ def run_cmds(commands: List[List[str]]):
 
 def get_files_walk(path: Path, endswith: str = "") -> List[Path]:
     result = []
-    for root, _, files in path.walk():
+    for root, _, files in os.walk(path):
         for file in files:
             if endswith and file.endswith(endswith):
                 result.append(Path(os.path.join(root, file)))
@@ -88,11 +88,12 @@ def get_args_forcompile_hlsl_to_dxil_or_spirv(
     ]
     if is_spirv:
         args.append("-spirv")
+        args.append(("-fspv-target-env=vulkan1.3"))
     return args
 
 
 def get_argscompile_dxil_to_metallib(path: Path, output_reflection=False):
-    metallib_path = path.with_suffix(path.suffixes[0] + ".metallib")
+    metallib_path = path.with_suffix(".metallib")
     args = [
         "metal-shaderconverter",
         str(path),

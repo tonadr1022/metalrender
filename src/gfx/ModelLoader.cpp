@@ -76,7 +76,7 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
   const float cone_weight{0.25f};
   std::vector<meshopt_Meshlet> meshopt_meshlets(max_meshlets);
   std::vector<uint32_t> meshlet_vertices(max_meshlets * k_max_vertices_per_meshlet);
-  std::vector<uint8_t> meshlet_triangles(max_meshlets * k_max_vertices_per_meshlet * 3);
+  std::vector<uint8_t> meshlet_triangles(max_meshlets * k_max_triangles_per_meshlet);
 
   const size_t meshlet_count = meshopt_buildMeshlets(
       meshopt_meshlets.data(), meshlet_vertices.data(), meshlet_triangles.data(), indices.data(),

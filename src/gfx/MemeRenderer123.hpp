@@ -1,7 +1,6 @@
 #pragma once
 
 #include <filesystem>
-#include <functional>
 #include <span>
 
 #include "ImGuiRenderer.hpp"
@@ -14,7 +13,7 @@
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
-#include "hlsl/shared_indirect.h"
+#include "hlsl/shared_instance_data.h"
 #include "offsetAllocator.hpp"
 
 struct ImDrawData;
@@ -79,7 +78,7 @@ struct DrawBatch {
     OffsetAllocator::Allocation vertex_alloc;
     OffsetAllocator::Allocation index_alloc;
     OffsetAllocator::Allocation meshlet_alloc;
-    // OffsetAllocator::Allocation mesh_alloc;
+    OffsetAllocator::Allocation mesh_alloc;
     OffsetAllocator::Allocation meshlet_triangles_alloc;
     OffsetAllocator::Allocation meshlet_vertices_alloc;
   };
@@ -108,7 +107,7 @@ struct DrawBatch {
   BackedGPUAllocator vertex_buf;
   BackedGPUAllocator index_buf;
   BackedGPUAllocator meshlet_buf;
-  // BackedGPUAllocator mesh_buf;
+  BackedGPUAllocator mesh_buf;
   BackedGPUAllocator meshlet_triangles_buf;
   BackedGPUAllocator meshlet_vertices_buf;
   const DrawBatchType type;
@@ -216,6 +215,7 @@ class MemeRenderer123 {
   Window* window_{};
   rhi::PipelineHandleHolder test2_pso_;
   rhi::PipelineHandleHolder test_mesh_pso_;
+  rhi::PipelineHandleHolder test_task_pso_;
   std::optional<BackedGPUAllocator> materials_buf_;
 
   size_t frame_num_{};

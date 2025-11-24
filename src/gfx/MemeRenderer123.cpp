@@ -18,6 +18,8 @@
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
 #include "hlsl/shared_indirect.h"
+#include "hlsl/shared_mesh_data.h"
+#include "hlsl/shared_test_task.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "shader_constants.h"
@@ -82,6 +84,13 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
         .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
                       .depth_format = TextureFormat::D32float},
     });
+    test_task_pso_ = device_->create_graphics_pipeline_h({
+        .shaders = {{{"test_task", ShaderType::Task},
+                     {"test_task", ShaderType::Mesh},
+                     {"test_task", ShaderType::Fragment}}},
+        .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
+                      .depth_format = TextureFormat::D32float},
+    });
   }
 
   materials_buf_.emplace(*device_,
@@ -101,6 +110,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
                                  .initial_meshlet_triangle_capacity = 1'00'000,
                                  .initial_meshlet_vertex_capacity = 1'000'00,
                              });
+  meshlet_vis_buf_.emplace(*device_, rhi::BufferDesc{.size = 100'0000}, sizeof(uint32_t));
 
   scratch_buffer_pool_.emplace(device_);
   imgui_renderer_.emplace(device_);
@@ -195,9 +205,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     prepare_indirect_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
       auto win_dims = window_->get_window_size();
       float aspect = (float)win_dims.x / win_dims.y;
-      glm::mat4 mv = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
+      glm::mat4 vp = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
       BasicIndirectPC pc{
-          .vp = mv,
+          .vp = vp,
           .vert_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
           .instance_data_buf_idx =
               device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
@@ -235,18 +245,44 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                                                      {.depth_stencil = {.depth = 1}}),
       });
 
-      enc->bind_pipeline(test_mesh_pso_);
-      enc->draw_mesh_threadgroups({1, 1, 1}, {32, 1, 1}, {32, 1, 1});
-
-      enc->bind_pipeline(test2_pso_);
+      enc->bind_pipeline(test_task_pso_);
       enc->set_depth_stencil_state(rhi::CompareOp::LessOrEqual, true);
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
 
+      auto win_dims = window_->get_window_size();
+      float aspect = (float)win_dims.x / win_dims.y;
+      glm::mat4 vp = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
+      TestTaskPC pc{
+          .vp = vp,
+          .task_cmd_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
+          .task_cmd_idx = 0,
+          .meshlet_buf_idx = static_draw_batch_->meshlet_buf.get_buffer()->bindless_idx(),
+          .meshlet_tri_buf_idx =
+              static_draw_batch_->meshlet_triangles_buf.get_buffer()->bindless_idx(),
+          .meshlet_vertex_buf_idx =
+              static_draw_batch_->meshlet_vertices_buf.get_buffer()->bindless_idx(),
+          .vertex_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
+          .instance_data_buf_idx =
+              device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
+          .instance_data_idx = 0,
+      };
+      enc->push_constants(&pc, sizeof(pc));
+      int num_meshlets = 94;
+
+      auto f = (num_meshlets + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
+      enc->draw_mesh_threadgroups({f, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+
+      // enc->bind_pipeline(test_mesh_pso_);
+      // enc->draw_mesh_threadgroups({1, 1, 1}, {32, 1, 1}, {32, 1, 1});
+
+      enc->bind_pipeline(test2_pso_);
+
       if (indirect_rendering_enabled_) {
-        enc->draw_indexed_indirect(instance_data_mgr_.get_draw_cmd_buf(), indirect_cmd_buf_ids_[0],
-                                   0, all_model_data_.max_objects);
+        // enc->draw_indexed_indirect(instance_data_mgr_.get_draw_cmd_buf(),
+        // indirect_cmd_buf_ids_[0],
+        //                            0, all_model_data_.max_objects);
       } else {
         // auto win_dims = window_->get_window_size();
         // float aspect = (float)win_dims.x / win_dims.y;
@@ -355,9 +391,7 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
     }
   }
 
-  if (k_use_mesh_shader) {
-    result.indices.clear();
-  }
+  // result.indices.clear();
   auto draw_batch_alloc = upload_geometry(DrawBatchType::Static, result.vertices, result.indices,
                                           result.meshlet_process_result, result.meshes);
 
@@ -378,12 +412,12 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
       base_instance_datas.emplace_back(InstanceData{
           .mat_id = result.meshes[mesh_id].material_id + material_alloc.offset,
           // .mesh_id = draw_batch_alloc.mesh_alloc.offset + mesh_id,
-          // .meshlet_vis_base = curr_meshlet_vis_buf_offset
+          // .meshlet_vis_base = curr_meshlet_vis_buf_offset,
       });
       instance_id_to_node.push_back(node);
       // instance_copy_idx++;
       // curr_meshlet_vis_buf_offset +=
-      //     result.meshlet_process_result.meshlet_datas[mesh_id].meshlets.size();
+      result.meshlet_process_result.meshlet_datas[mesh_id].meshlets.size();
       total_instance_vertices += result.meshes[mesh_id].vertex_count;
     }
   }
@@ -407,7 +441,7 @@ DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType
                                                   const std::vector<DefaultVertex>& vertices,
                                                   const std::vector<rhi::DefaultIndexT>& indices,
                                                   const MeshletProcessResult& meshlets,
-                                                  std::span<Mesh>) {
+                                                  std::span<Mesh> meshes) {
   auto& draw_batch = static_draw_batch_;
   ASSERT(!vertices.empty());
   ASSERT(!meshlets.meshlet_datas.empty());
@@ -431,12 +465,14 @@ DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType
       draw_batch->meshlet_vertices_buf.allocate(meshlets.tot_meshlet_verts_count, resized);
   const auto meshlet_triangles_alloc =
       draw_batch->meshlet_triangles_buf.allocate(meshlets.tot_meshlet_tri_count, resized);
-  // const auto mesh_alloc = draw_batch->mesh_buf.allocate(meshlets.meshlet_datas.size(), resized);
+  const auto mesh_alloc = draw_batch->mesh_buf.allocate(meshlets.meshlet_datas.size(), resized);
 
   size_t meshlet_offset{};
   size_t meshlet_triangles_offset{};
   size_t meshlet_vertices_offset{};
-  // size_t mesh_i{};
+  size_t mesh_i{};
+
+  // TODO: explicit staging buffer. this is writing all over the place and probably blowing caches.
   for (const auto& meshlet_data : meshlets.meshlet_datas) {
     device_->copy_to_buffer(meshlet_data.meshlets.data(),
                             meshlet_data.meshlets.size() * sizeof(Meshlet),
@@ -460,29 +496,27 @@ DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType
 
     meshlet_triangles_offset += meshlet_data.meshlet_triangles.size();
 
-    // MeshData d{
-    //     .meshlet_base = meshlet_data.meshlet_base,
-    //     .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size()),
-    //     .meshlet_vertices_offset = meshlet_data.meshlet_vertices_offset,
-    //     .meshlet_triangles_offset = meshlet_data.meshlet_triangles_offset,
-    //     .index_count = meshes[mesh_i].index_count,
-    //     .index_offset = meshes[mesh_i].index_offset,
-    //     .vertex_base = meshes[mesh_i].vertex_offset_bytes,
-    //     .vertex_count = meshes[mesh_i].vertex_count,
-    //     .center = meshes[mesh_i].center,
-    //     .radius = meshes[mesh_i].radius,
-    // };
-    // memcpy((reinterpret_cast<MeshData*>(draw_batch->mesh_buf.get_buffer()->contents()) +
-    // mesh_i +
-    //         mesh_alloc.offset),
-    //        &d, sizeof(MeshData));
-    // mesh_i++;
+    MeshData d{
+        .meshlet_base = meshlet_data.meshlet_base,
+        .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size()),
+        .meshlet_vertices_offset = meshlet_data.meshlet_vertices_offset,
+        .meshlet_triangles_offset = meshlet_data.meshlet_triangles_offset,
+        .index_count = meshes[mesh_i].index_count,
+        .index_offset = meshes[mesh_i].index_offset,
+        .vertex_base = meshes[mesh_i].vertex_offset_bytes,
+        .vertex_count = meshes[mesh_i].vertex_count,
+        .center = meshes[mesh_i].center,
+        .radius = meshes[mesh_i].radius,
+    };
+    device_->copy_to_buffer(&d, sizeof(d), draw_batch->mesh_buf.get_buffer_handle(),
+                            (mesh_i + mesh_alloc.offset) * sizeof(MeshData));
+    mesh_i++;
   }
 
   return DrawBatch::Alloc{.vertex_alloc = vertex_alloc,
                           .index_alloc = index_alloc,
                           .meshlet_alloc = meshlet_alloc,
-                          // .mesh_alloc = mesh_alloc,
+                          .mesh_alloc = mesh_alloc,
                           .meshlet_triangles_alloc = meshlet_triangles_alloc,
                           .meshlet_vertices_alloc = meshlet_vertices_alloc};
 }
@@ -582,32 +616,53 @@ void MemeRenderer123::free_model(ModelGPUHandle handle) {
 
 DrawBatch::DrawBatch(DrawBatchType type, rhi::Device& device, const CreateInfo& cinfo)
     : vertex_buf(device,
-                 rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
-                                 .size = cinfo.initial_vertex_capacity * sizeof(DefaultVertex),
-                                 .bindless = true},
+                 {
+                     .storage_mode = rhi::StorageMode::CPUAndGPU,
+                     .size = cinfo.initial_vertex_capacity * sizeof(DefaultVertex),
+                     .bindless = true,
+                     .name = "vertex buf",
+                 },
                  sizeof(DefaultVertex)),
       index_buf(device,
-                rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
-                                .size = cinfo.initial_index_capacity * sizeof(rhi::DefaultIndexT),
-                                .bindless = true},
+                {
+                    .storage_mode = rhi::StorageMode::CPUAndGPU,
+                    .size = cinfo.initial_index_capacity * sizeof(rhi::DefaultIndexT),
+                    .bindless = true,
+                    .name = "index buf",
+                },
                 sizeof(rhi::DefaultIndexT)),
       meshlet_buf(device,
-                  rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
-                                  .size = cinfo.initial_meshlet_capacity * sizeof(Meshlet),
-                                  .bindless = true},
+                  {
+                      .storage_mode = rhi::StorageMode::CPUAndGPU,
+                      .size = cinfo.initial_meshlet_capacity * sizeof(Meshlet),
+                      .bindless = true,
+                      .name = "meshlet buf",
+                  },
                   sizeof(Meshlet)),
-      meshlet_triangles_buf(
-          device,
-          rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
-                          .size = cinfo.initial_meshlet_triangle_capacity * sizeof(uint8_t),
-                          .bindless = true},
-          sizeof(uint8_t)),
-      meshlet_vertices_buf(
-          device,
-          rhi::BufferDesc{.storage_mode = rhi::StorageMode::CPUAndGPU,
-                          .size = cinfo.initial_meshlet_vertex_capacity * sizeof(uint32_t),
-                          .bindless = true},
-          sizeof(uint32_t)),
+      mesh_buf(device,
+               {
+                   .storage_mode = rhi::StorageMode::CPUAndGPU,
+                   .size = cinfo.initial_mesh_capacity * sizeof(MeshData),
+                   .bindless = true,
+                   .name = "mesh buf",
+               },
+               sizeof(MeshData)),
+      meshlet_triangles_buf(device,
+                            {
+                                .storage_mode = rhi::StorageMode::CPUAndGPU,
+                                .size = cinfo.initial_meshlet_triangle_capacity * sizeof(uint8_t),
+                                .bindless = true,
+                                .name = "meshlet_triangles_buf",
+                            },
+                            sizeof(uint8_t)),
+      meshlet_vertices_buf(device,
+                           {
+                               .storage_mode = rhi::StorageMode::CPUAndGPU,
+                               .size = cinfo.initial_meshlet_vertex_capacity * sizeof(uint32_t),
+                               .bindless = true,
+                               .name = "meshlet_vertices_buf",
+                           },
+                           sizeof(uint32_t)),
       type(type) {}
 
 DrawBatch::Stats DrawBatch::get_stats() const {
@@ -643,7 +698,6 @@ OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
 
 void InstanceDataMgr::free(OffsetAllocator::Allocation alloc) {
   auto element_count = allocator_->allocationSize(alloc);
-  // TODO: nooooooooooo memset
   device_->fill_buffer(instance_data_buf_.handle, element_count * sizeof(InstanceData),
                        alloc.offset * sizeof(InstanceData), 0);
   device_->fill_buffer(draw_cmd_buf_.handle, element_count * sizeof(IndexedIndirectDrawCmd),
@@ -674,7 +728,7 @@ void MemeRenderer123::init_imgui() {
   io.Fonts->AddFontFromFileTTF(path.c_str(), 16.0f, nullptr, io.Fonts->GetGlyphRangesDefault());
 
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-  io.BackendRendererName = "imgui_impl_metal";
+  io.BackendRendererName = "imgui_impl_memes";
   io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_RendererHasTextures;
   // TODO: uuuuuhhhhhhhhhh
   ImGui_ImplGlfw_InitForOther(window_->get_handle(), true);

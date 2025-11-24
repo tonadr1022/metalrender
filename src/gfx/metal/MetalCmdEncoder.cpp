@@ -159,7 +159,6 @@ void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
                                               size_t count, size_t instance_count,
                                               size_t base_vertex_idx, size_t base_instance,
                                               rhi::IndexType index_type) {
-  auto* buf = device_->get_mtl_buf(index_buf);
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
 
   auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
@@ -168,6 +167,8 @@ void MetalCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
   tlab->cbuffer2.vertex_id_base = base_vertex_idx;
   arg_table_->setAddress(pc_buf->gpuAddress() + pc_buf_offset, kIRArgumentBufferBindPoint);
 
+  auto* buf = device_->get_mtl_buf(index_buf);
+  ASSERT(buf);
   render_enc_->drawIndexedPrimitives(
       mtl::util::convert(topology), count,
       index_type == rhi::IndexType::Uint32 ? MTL::IndexTypeUInt32 : MTL::IndexTypeUInt16,
@@ -337,6 +338,7 @@ void MetalCmdEncoder::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
                                             size_t draw_cnt) {
   ASSERT(render_enc_);
   ALWAYS_ASSERT(offset == 0);
+  ASSERT(indirect_buf.is_valid());
   render_enc_->executeCommandsInBuffer(device_->icb_mgr_.get(indirect_buf, indirect_buf_id),
                                        NS::Range::Make(0, draw_cnt));
 }

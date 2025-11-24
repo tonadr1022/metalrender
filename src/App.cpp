@@ -79,7 +79,7 @@ float get_float(float min, float max) {
 
 void App::run() {
   ZoneScoped;
-  int scene = 1;
+  int scene = 0;
   if (scene == 0) {
     glm::ivec3 iter{};
     int n = 0;
