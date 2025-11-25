@@ -188,8 +188,11 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
   init_bindless();
 
   main_res_set_->requestResidency();
+
   psos_.dispatch_indirect_pso =
       compile_mtl_compute_pipeline(shader_lib_dir_ / "dispatch_indirect.metallib");
+  psos_.dispatch_mesh_pso =
+      compile_mtl_compute_pipeline(shader_lib_dir_ / "dispatch_mesh.metallib");
 
   shared_event_ = device_->newSharedEvent();
 }
@@ -290,7 +293,9 @@ void MetalDevice::destroy(rhi::BufferHandle handle) {
   }
 
   if (buf->desc().usage & rhi::BufferUsage_Indirect) {
-    icb_mgr_.remove(handle);
+    // TODO: improve this cringe
+    icb_mgr_draw_indexed_.remove(handle);
+    icb_mgr_draw_mesh_threadgroups_.remove(handle);
   }
 
   buffer_pool_.destroy(handle);
@@ -406,7 +411,9 @@ void set_shader_stage_functions(const rhi::ShaderCreateInfo& shader_info, T& des
   }
   lib->release();
 }
+
 }  // namespace
+
 rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
     const rhi::GraphicsPipelineCreateInfo& cinfo) {
   using ShaderType = rhi::ShaderType;
@@ -517,6 +524,13 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
   return pipeline_pool_.alloc(MetalPipeline{result, nullptr});
 }
 
+rhi::PipelineHandle MetalDevice::create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo) {
+  auto path = (shader_lib_dir_ / cinfo.path).concat(".comp.metallib");
+  MTL::ComputePipelineState* pso = compile_mtl_compute_pipeline(path, "main");
+  ASSERT(pso);
+  return pipeline_pool_.alloc(MetalPipeline{nullptr, pso});
+}
+
 rhi::SamplerHandle MetalDevice::create_sampler(const rhi::SamplerDesc& desc) {
   MTL::SamplerDescriptor* samp_desc = MTL::SamplerDescriptor::alloc()->init();
   samp_desc->setBorderColor(convert(desc.border_color));
@@ -600,7 +614,7 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
     }
   }
 
-  icb_mgr_.reset_for_frame();
+  icb_mgr_draw_indexed_.reset_for_frame();
 
   push_constant_allocator_->reset(frame_idx());
   test_allocator_->reset(frame_idx());
@@ -679,38 +693,38 @@ MTL::ComputePipelineState* MetalDevice::compile_mtl_compute_pipeline(
     const std::filesystem::path& path, const char* entry_point) {
   if (mtl4_enabled_) {
     MTL4::ComputePipelineDescriptor* desc = MTL4::ComputePipelineDescriptor::alloc()->init();
-    MTL::Library* lib = create_or_get_lib(path.string());
+    MTL::Library* lib = create_or_get_lib(path);
+    ASSERT(lib);
     desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);
     MTL4::LibraryFunctionDescriptor* func_desc = MTL4::LibraryFunctionDescriptor::alloc()->init();
     func_desc->setName(mtl::util::string(entry_point));
     func_desc->setLibrary(lib);
     desc->setComputeFunctionDescriptor(func_desc);
-
-    lib->release();
     NS::Error* err{};
     auto* pso = mtl4_resources_->shader_compiler->newComputePipelineState(desc, nullptr, &err);
     if (err) {
       LERROR("Failed to create compute pipeline {}", mtl::util::get_err_string(err));
     }
+    lib->release();
+    desc->release();
     return pso;
   }
   // MTL3 path
-  MTL::ComputePipelineDescriptor* pipeline_desc = MTL::ComputePipelineDescriptor::alloc()->init();
+  MTL::ComputePipelineDescriptor* desc = MTL::ComputePipelineDescriptor::alloc()->init();
 
-  MTL::Library* lib = create_or_get_lib(path.string());
-  pipeline_desc->setSupportIndirectCommandBuffers(true);
-  pipeline_desc->setComputeFunction(lib->newFunction(mtl::util::string(entry_point)));
-  pipeline_desc->setLabel(mtl::util::string(path / entry_point));
+  MTL::Library* lib = create_or_get_lib(path);
+  desc->setSupportIndirectCommandBuffers(true);
+  desc->setComputeFunction(lib->newFunction(mtl::util::string(entry_point)));
+  desc->setLabel(mtl::util::string(path / entry_point));
   NS::Error* err{};
-  auto* pso =
-      device_->newComputePipelineState(pipeline_desc, MTL::PipelineOptionNone, nullptr, &err);
+  auto* pso = device_->newComputePipelineState(desc, MTL::PipelineOptionNone, nullptr, &err);
   if (err) {
     mtl::util::print_err(err);
     exit(1);
   }
 
   lib->release();
-  pipeline_desc->release();
+  desc->release();
   return pso;
   return {};
 }
@@ -720,6 +734,7 @@ void MetalDevice::set_vsync(bool vsync) {
 }
 
 bool MetalDevice::get_vsync() const { return [(CAMetalLayer*)metal_layer_ displaySyncEnabled]; }
+
 MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle indirect_buf_handle,
                                                             uint32_t draw_cnt) {
   auto it = indirect_buffer_handle_to_icb_.find(indirect_buf_handle.to64());
@@ -735,11 +750,18 @@ MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle in
   } else {
     MTL::IndirectCommandBufferDescriptor* desc =
         MTL::IndirectCommandBufferDescriptor::alloc()->init();
+    // TODO: try not to do this at least for mesh shaders
     desc->setInheritBuffers(false);
     desc->setInheritPipelineState(true);
-    desc->setCommandTypes(MTL::IndirectCommandTypeDrawIndexed);
-    desc->setMaxVertexBufferBindCount(3);
-    desc->setMaxFragmentBufferBindCount(3);
+    desc->setCommandTypes(cmd_types_);
+    if (cmd_types_ & MTL::IndirectCommandTypeDrawIndexed) {
+      desc->setMaxVertexBufferBindCount(3);
+      desc->setMaxFragmentBufferBindCount(3);
+    } else if (cmd_types_ & MTL::IndirectCommandTypeDrawMeshThreadgroups) {
+      desc->setMaxObjectBufferBindCount(3);
+      desc->setMaxMeshBufferBindCount(3);
+      desc->setMaxFragmentBufferBindCount(3);
+    }
     icb = device_->get_device()->newIndirectCommandBuffer(desc, draw_cnt,
                                                           MTL::ResourceStorageModePrivate);
     desc->release();
@@ -749,6 +771,7 @@ MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle in
 
   return {.id = indirect_buf_id, .icb = icb};
 }
+
 MTL::IndirectCommandBuffer* MetalDevice::ICB_Mgr::get(rhi::BufferHandle indirect_buf, uint32_t id) {
   auto it = indirect_buffer_handle_to_icb_.find(indirect_buf.to64());
   ASSERT(it != indirect_buffer_handle_to_icb_.end());

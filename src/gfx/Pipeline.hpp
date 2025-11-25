@@ -102,6 +102,11 @@ struct GraphicsPipelineCreateInfo {
   std::string name;
 };
 
+// struct ComputePipelineCreateInfo {
+//   ShaderCreateInfo info;
+//   std::string name;
+// };
+
 class Pipeline {
  public:
   Pipeline() = default;

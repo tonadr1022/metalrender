@@ -1,7 +1,6 @@
 #ifndef SHARED_TEST_TASK_H
 #define SHARED_TEST_TASK_H
 
-#include "../shader_constants.h"
 #include "../shader_core.h"
 
 cbuffer TestTaskPC HLSL_PC_REG {
@@ -17,6 +16,8 @@ cbuffer TestTaskPC HLSL_PC_REG {
 };
 
 #ifdef __HLSL__
+
+#include "../shader_constants.h"
 
 struct Payload {
   uint meshlet_indices[K_TASK_TG_SIZE];

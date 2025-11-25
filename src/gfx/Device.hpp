@@ -2,9 +2,7 @@
 
 #include <filesystem>
 
-#include "Buffer.hpp"
 #include "RendererTypes.hpp"
-#include "Texture.hpp"
 #include "gfx/Sampler.hpp"
 
 class Window;
@@ -16,6 +14,8 @@ class Texture;
 namespace rhi {
 
 struct GraphicsPipelineCreateInfo;
+struct ComputePipelineCreateInfo;
+struct ShaderCreateInfo;
 class Device;
 class CmdEncoder;
 class Swapchain;
@@ -66,6 +66,12 @@ class Device {
   [[nodiscard]] rhi::PipelineHandleHolder create_graphics_pipeline_h(
       const rhi::GraphicsPipelineCreateInfo& cinfo) {
     return rhi::PipelineHandleHolder{create_graphics_pipeline(cinfo), this};
+  }
+  [[nodiscard]] virtual rhi::PipelineHandle create_compute_pipeline(
+      const rhi::ShaderCreateInfo&) = 0;
+  [[nodiscard]] rhi::PipelineHandleHolder create_compute_pipeline_h(
+      const rhi::ShaderCreateInfo& cinfo) {
+    return rhi::PipelineHandleHolder{create_compute_pipeline(cinfo), this};
   }
   virtual rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) = 0;
   [[nodiscard]] rhi::SamplerHandleHolder create_sampler_h(const rhi::SamplerDesc& desc) {

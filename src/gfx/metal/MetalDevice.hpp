@@ -86,6 +86,7 @@ class MetalDevice : public rhi::Device {
 
   rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) override;
+  rhi::PipelineHandle create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo) override;
 
   void submit_frame() override;
   [[nodiscard]] const Info& get_info() const override { return info_; }
@@ -109,6 +110,7 @@ class MetalDevice : public rhi::Device {
 
   struct MetalPSOs {
     MTL::ComputePipelineState* dispatch_indirect_pso{};
+    MTL::ComputePipelineState* dispatch_mesh_pso{};
   };
 
   const MetalPSOs& get_psos() const { return psos_; }
@@ -227,7 +229,8 @@ class MetalDevice : public rhi::Device {
 
   class ICB_Mgr {
    public:
-    explicit ICB_Mgr(MetalDevice* device) : device_(device) {}
+    ICB_Mgr(MetalDevice* device, MTL::IndirectCommandType cmd_types)
+        : device_(device), cmd_types_(cmd_types) {}
 
     struct ICB_Data {
       uint64_t curr_id{};
@@ -246,9 +249,11 @@ class MetalDevice : public rhi::Device {
 
     std::unordered_map<uint64_t, ICB_Data> indirect_buffer_handle_to_icb_;
     MetalDevice* device_{};
+    MTL::IndirectCommandType cmd_types_{};
   };
 
-  ICB_Mgr icb_mgr_{this};
+  ICB_Mgr icb_mgr_draw_indexed_{this, MTL::IndirectCommandTypeDrawIndexed};
+  ICB_Mgr icb_mgr_draw_mesh_threadgroups_{this, MTL::IndirectCommandTypeDrawMeshThreadgroups};
 
   MTL::ResidencySet* get_main_residency_set() const { return main_res_set_; }
 };

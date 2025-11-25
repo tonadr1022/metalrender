@@ -4,6 +4,7 @@
 #include <offsetAllocator.hpp>
 
 #include "core/EAssert.hpp"
+#include "gfx/Buffer.hpp"
 #include "gfx/Device.hpp"
 
 class BackedGPUAllocator {

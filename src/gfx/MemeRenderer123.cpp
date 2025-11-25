@@ -8,18 +8,19 @@
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "default_vertex.h"
+#include "gfx/Buffer.hpp"
 #include "gfx/CmdEncoder.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/ModelLoader.hpp"
 #include "gfx/Pipeline.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/Swapchain.hpp"
+#include "gfx/Texture.hpp"
 #include "hlsl/material.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
 #include "hlsl/shared_indirect.h"
 #include "hlsl/shared_mesh_data.h"
-#include "hlsl/shared_test_task.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "shader_constants.h"
@@ -91,6 +92,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
         .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
                       .depth_format = TextureFormat::D32float},
     });
+    test_draw_cull_pso_ = device_->create_compute_pipeline_h({"draw_cull"});
   }
 
   materials_buf_.emplace(*device_,
@@ -251,28 +253,28 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
 
-      auto win_dims = window_->get_window_size();
-      float aspect = (float)win_dims.x / win_dims.y;
-      glm::mat4 vp = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
-      TestTaskPC pc{
-          .vp = vp,
-          .task_cmd_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
-          .task_cmd_idx = 0,
-          .meshlet_buf_idx = static_draw_batch_->meshlet_buf.get_buffer()->bindless_idx(),
-          .meshlet_tri_buf_idx =
-              static_draw_batch_->meshlet_triangles_buf.get_buffer()->bindless_idx(),
-          .meshlet_vertex_buf_idx =
-              static_draw_batch_->meshlet_vertices_buf.get_buffer()->bindless_idx(),
-          .vertex_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
-          .instance_data_buf_idx =
-              device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
-          .instance_data_idx = 0,
-      };
-      enc->push_constants(&pc, sizeof(pc));
-      int num_meshlets = 94;
+      // auto win_dims = window_->get_window_size();
+      // float aspect = (float)win_dims.x / win_dims.y;
+      // glm::mat4 vp = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) *
+      // args.view_mat; TestTaskPC pc{
+      //     .vp = vp,
+      //     .task_cmd_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
+      //     .task_cmd_idx = 0,
+      //     .meshlet_buf_idx = static_draw_batch_->meshlet_buf.get_buffer()->bindless_idx(),
+      //     .meshlet_tri_buf_idx =
+      //         static_draw_batch_->meshlet_triangles_buf.get_buffer()->bindless_idx(),
+      //     .meshlet_vertex_buf_idx =
+      //         static_draw_batch_->meshlet_vertices_buf.get_buffer()->bindless_idx(),
+      //     .vertex_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
+      //     .instance_data_buf_idx =
+      //         device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
+      //     .instance_data_idx = 0,
+      // };
+      // enc->push_constants(&pc, sizeof(pc));
 
-      auto f = (num_meshlets + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
-      enc->draw_mesh_threadgroups({f, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+      // int num_meshlets = 94;
+      // auto f = (num_meshlets + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
+      // enc->draw_mesh_threadgroups({f, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
 
       // enc->bind_pipeline(test_mesh_pso_);
       // enc->draw_mesh_threadgroups({1, 1, 1}, {32, 1, 1}, {32, 1, 1});
@@ -280,9 +282,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->bind_pipeline(test2_pso_);
 
       if (indirect_rendering_enabled_) {
-        // enc->draw_indexed_indirect(instance_data_mgr_.get_draw_cmd_buf(),
-        // indirect_cmd_buf_ids_[0],
-        //                            0, all_model_data_.max_objects);
+        enc->draw_indexed_indirect(instance_data_mgr_.get_draw_cmd_buf(), indirect_cmd_buf_ids_[0],
+                                   all_model_data_.max_objects);
       } else {
         // auto win_dims = window_->get_window_size();
         // float aspect = (float)win_dims.x / win_dims.y;

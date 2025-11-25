@@ -255,7 +255,7 @@ uint32_t MetalCmdEncoder::prepare_indexed_indirect_draws(
   ASSERT(device_->get_psos().dispatch_indirect_pso);
   ASSERT(device_->get_buf(indirect_buf)->desc().usage & rhi::BufferUsage_Indirect);
 
-  auto [indirect_buf_id, icb] = device_->icb_mgr_.alloc(indirect_buf, draw_cnt);
+  auto [indirect_buf_id, icb] = device_->icb_mgr_draw_indexed_.alloc(indirect_buf, draw_cnt);
 
   init_icb_arg_encoder_and_buf();
   main_icb_container_arg_enc_->setArgumentBuffer(device_->get_mtl_buf(main_icb_container_buf_), 0);
@@ -334,13 +334,12 @@ void MetalCmdEncoder::flush_render_barriers() {
 }
 
 void MetalCmdEncoder::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
-                                            uint32_t indirect_buf_id, size_t offset,
-                                            size_t draw_cnt) {
+                                            uint32_t indirect_buf_id, size_t draw_cnt) {
   ASSERT(render_enc_);
-  ALWAYS_ASSERT(offset == 0);
   ASSERT(indirect_buf.is_valid());
-  render_enc_->executeCommandsInBuffer(device_->icb_mgr_.get(indirect_buf, indirect_buf_id),
-                                       NS::Range::Make(0, draw_cnt));
+  render_enc_->executeCommandsInBuffer(
+      device_->icb_mgr_draw_indexed_.get(indirect_buf, indirect_buf_id),
+      NS::Range::Make(0, draw_cnt));
 }
 
 void MetalCmdEncoder::copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice,

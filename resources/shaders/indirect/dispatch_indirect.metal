@@ -62,7 +62,6 @@ kernel void comp_main(const device uint8_t* pc [[buffer(0)]],
                                 cmd.index_count,
                                 reinterpret_cast<const device uint*>(index_buf + cmd.first_index * sizeof(uint)),
                                 1,
-                                cmd.vertex_offset, // does nothing
-                                // TODO: when culling, this needs updating, ie atomic
-                                cmd.first_instance); // does nothing
+                                0, // does nothing
+                                0); // does nothing
 }

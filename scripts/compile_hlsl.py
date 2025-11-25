@@ -63,6 +63,8 @@ def shader_model_from_hlsl_path(path: Path):
         shader_model_prefix = "ms"
     if shader_type == "task":
         shader_model_prefix = "as"
+    if shader_type == "comp":
+        shader_model_prefix = "cs"
     return shader_model_prefix + "_6_7"
 
 
@@ -116,9 +118,10 @@ def main():
             [get_args_forcompile_hlsl_to_dxil_or_spirv(file, shader_model, False)]
         )
         cmds[-1].append(get_argscompile_dxil_to_metallib(Path(cmds[-1][0][3])))
-        cmds.append(
-            [get_args_forcompile_hlsl_to_dxil_or_spirv(file, shader_model, True)]
-        )
+        # TODO: spirv OR metal, not both, not hardcoded metal, not hardcoded spirv
+        # cmds.append(
+        #     [get_args_forcompile_hlsl_to_dxil_or_spirv(file, shader_model, True)]
+        # )
     run_cmds(cmds)
 
 

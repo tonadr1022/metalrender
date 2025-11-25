@@ -68,9 +68,19 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
 
   void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
-                             size_t offset, size_t draw_cnt) override;
+                             size_t draw_cnt) override;
   void draw_mesh_threadgroups(glm::uvec3 thread_groups, glm::uvec3 threads_per_task_thread_group,
                               glm::uvec3 threads_per_mesh_thread_group) override;
+  void prepare_mesh_threadgroups_indirect(
+      rhi::BufferHandle /*mesh_cmd_indirect_buf*/, size_t /*mesh_cmd_indirect_buf_offset*/,
+      glm::uvec3 /*threads_per_task_thread_group*/, glm::uvec3 /*threads_per_mesh_thread_group*/,
+      void* /*push_constant_data*/, size_t /*push_constant_size*/, uint32_t /*draw_cnt*/) override {
+    exit(1);
+  }
+  void draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indirect_buf*/,
+                                       uint32_t /*indirect_buf_id*/, size_t /*draw_cnt*/) override {
+    exit(1);
+  }
 
  private:
   void init_icb_arg_encoder_and_buf();

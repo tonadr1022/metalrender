@@ -79,12 +79,12 @@ float get_float(float min, float max) {
 
 void App::run() {
   ZoneScoped;
-  int scene = 0;
+  int scene = 1;
   if (scene == 0) {
     glm::ivec3 iter{};
-    int n = 0;
+    int n = 1;
     glm::ivec3 dims{n, 1, n};
-    float dist = 40.0;
+    float dist = 4.0;
     for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
       for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
         glm::vec3 pos = glm::vec3{iter} * dist;

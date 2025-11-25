@@ -216,6 +216,7 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder test2_pso_;
   rhi::PipelineHandleHolder test_mesh_pso_;
   rhi::PipelineHandleHolder test_task_pso_;
+  rhi::PipelineHandleHolder test_draw_cull_pso_;
   std::optional<BackedGPUAllocator> materials_buf_;
 
   size_t frame_num_{};
