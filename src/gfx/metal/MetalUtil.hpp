@@ -25,7 +25,8 @@ inline NS::String *string(const char *v) { return NS::String::string(v, NS::ASCI
 inline NS::String *string(const std::string &v) { return string(v.c_str()); }
 
 MTL::TextureUsage convert(rhi::TextureUsage usage);
-MTL::StorageMode convert(rhi::StorageMode mode);
+MTL::ResourceOptions convert(rhi::StorageMode mode);
+MTL::StorageMode convert_storage_mode(rhi::StorageMode mode);
 MTL::PixelFormat convert(rhi::TextureFormat format);
 MTL::CullMode convert(rhi::CullMode mode);
 MTL::Winding convert(rhi::WindOrder wind_order);

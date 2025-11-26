@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <functional>
 #include <unordered_set>
 
@@ -59,10 +60,6 @@ struct RGResourceHandle {
   uint32_t idx{UINT32_MAX};
   RGResourceType type{};
 
-  bool operator==(const RGResourceHandle& other) const {
-    return idx == other.idx && type == other.type;
-  }
-
   [[nodiscard]] uint64_t to64() const {
     return static_cast<uint64_t>(idx) | static_cast<uint64_t>(type) << 32;
   }
@@ -112,7 +109,8 @@ class RGPass {
 
   RGResourceHandle add_tex(const std::string& name, AttachmentInfo att_info, RGAccess access);
   RGResourceHandle add_tex(rhi::TextureHandle tex_handle, RGAccess access);
-  RGResourceHandle add_buf(const std::string& name, rhi::BufferHandle buf_handle, RGAccess access);
+  RGResourceHandle add_buf(std::string name, rhi::BufferHandle buf_handle, RGAccess access,
+                           const std::string& input_name = "");
 
   RGResourceHandle use_buf(BufferInfo, RGAccess) { return {}; }
 
@@ -124,8 +122,14 @@ class RGPass {
     return resource_read_indices_;
   }
 
+  [[nodiscard]] const std::vector<std::string>& get_resource_read_names() const {
+    return resource_read_names_;
+  }
+
   [[nodiscard]] bool has_resource_writes() const {
-    return resource_usages_.size() > resource_read_indices_.size();
+    return std::ranges::any_of(resource_usages_, [](const ResourceAndUsage& usage) {
+      return usage.access & rhi::AccessFlags_AnyWrite;
+    });
   }
 
   [[nodiscard]] uint32_t get_idx() const { return pass_i_; }
@@ -135,6 +139,7 @@ class RGPass {
 
  private:
   std::vector<ResourceAndUsage> resource_usages_;
+  std::vector<std::string> resource_read_names_;  // same as resource_usages_.size();
   std::vector<uint32_t> resource_read_indices_;
   ExecuteFn execute_fn_;
   RenderGraph* rg_;
@@ -167,33 +172,28 @@ class RenderGraph {
 
   RGResourceHandle add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                  RGAccess access, RGPass& pass);
-
-  RGResourceHandle add_buf_usage(const std::string& name, rhi::BufferHandle buf_handle,
-                                 RGAccess access, RGPass& pass);
+  RGResourceHandle add_buf_usage(std::string name, rhi::BufferHandle buf_handle, RGAccess access,
+                                 RGPass& pass, const std::string& input_name);
   RGResourceHandle add_tex_usage(rhi::TextureHandle handle, RGAccess access, RGPass& pass);
 
   rhi::TextureHandle get_att_img(RGResourceHandle tex_handle);
 
  private:
-  struct ResourceUsage {
-    // rhi::AccessFlagsBits accesses;
-    // rhi::PipelineStageBits stages;
-  };
-  struct TextureUsage : public ResourceUsage {
+  struct TextureUsage {
     AttachmentInfo att_info;
     rhi::TextureHandle handle;
     std::vector<RGResourceHandle> handles_using;
   };
 
-  struct BufferUsage : public ResourceUsage {
+  struct BufferUsage {
     rhi::BufferHandle handle;
+    std::vector<std::string> name_stack;
   };
 
   void reset();
 
   TextureUsage* get_tex_usage(RGResourceHandle handle);
   BufferUsage* get_buf_usage(RGResourceHandle handle);
-  ResourceUsage* get_resource_usage(RGResourceHandle handle);
 
   void find_deps_recursive(uint32_t pass_i, uint32_t stack_size);
 
@@ -247,6 +247,7 @@ class RenderGraph {
   std::unordered_map<std::string, RGResourceHandle> resource_name_to_handle_;
   std::unordered_map<uint64_t, std::string> resource_handle_to_name_;
   std::unordered_map<uint64_t, RGResourceHandle> tex_handle_to_handle_;
+  std::unordered_map<std::string, uint32_t> resource_read_name_to_writer_pass_;
 
   std::unordered_map<gfx::AttachmentInfo, std::vector<rhi::TextureHandle>> free_atts_;
   struct AttInfoAndTex {

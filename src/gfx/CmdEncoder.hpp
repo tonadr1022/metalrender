@@ -47,6 +47,17 @@ enum AccessFlags : uint64_t {
   AccessFlags_ShaderSampledRead = 0X100000000ULL,
   AccessFlags_ShaderStorageRead = 0X200000000ULL,
   AccessFlags_ShaderStorageWrite = 0X400000000ULL,
+  AccessFlags_AnyRead = rhi::AccessFlags_IndirectCommandRead | rhi::AccessFlags_IndexRead |
+                        rhi::AccessFlags_VertexAttributeRead | rhi::AccessFlags_UniformRead |
+                        rhi::AccessFlags_InputAttachmentRead | rhi::AccessFlags_ShaderRead |
+                        rhi::AccessFlags_ColorAttachmentRead | rhi::AccessFlags_DepthStencilRead |
+                        rhi::AccessFlags_TransferRead | rhi::AccessFlags_HostRead |
+                        rhi::AccessFlags_MemoryRead | rhi::AccessFlags_ShaderSampledRead |
+                        rhi::AccessFlags_ShaderStorageRead,
+  AccessFlags_AnyWrite = rhi::AccessFlags_ShaderWrite | rhi::AccessFlags_ColorAttachmentWrite |
+                         rhi::AccessFlags_DepthStencilWrite | rhi::AccessFlags_TransferWrite |
+                         rhi::AccessFlags_HostWrite | rhi::AccessFlags_MemoryWrite |
+                         rhi::AccessFlags_ShaderStorageWrite,
 };
 
 using AccessFlagsBits = uint64_t;
@@ -114,6 +125,9 @@ class CmdEncoder {
                                                   glm::uvec3 threads_per_mesh_thread_group,
                                                   void* push_constant_data,
                                                   size_t push_constant_size, uint32_t draw_cnt) = 0;
+  virtual void dispatch_compute(glm::uvec3 thread_groups, glm::uvec3 threads_per_threadgroup) = 0;
+  virtual void fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes, uint32_t size,
+                           uint32_t value) = 0;
 };
 
 }  // namespace rhi

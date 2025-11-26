@@ -219,6 +219,9 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder test_draw_cull_pso_;
   std::optional<BackedGPUAllocator> materials_buf_;
 
+  rhi::BufferHandleHolder tmp_out_draw_cnt_buf_;
+  rhi::BufferHandleHolder tmp_test_buf_;
+
   size_t frame_num_{};
   size_t curr_frame_idx_{};
   std::filesystem::path resource_dir_;
@@ -228,7 +231,7 @@ class MemeRenderer123 {
 
   BlockPool<ModelGPUHandle, ModelGPUResources> model_gpu_resource_pool_{20, 1, true};
   BlockPool<ModelInstanceGPUHandle, ModelInstanceGPUResources> model_instance_gpu_resource_pool_{
-      100, 1, true};
+      1000, 5, true};
 
   gfx::RenderGraph rg_;
 

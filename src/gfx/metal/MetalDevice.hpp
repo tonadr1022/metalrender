@@ -1,6 +1,5 @@
 #pragma once
 
-#include <Metal/MTLIndirectCommandBuffer.hpp>
 #include <Metal/Metal.hpp>
 #include <filesystem>
 
@@ -17,7 +16,6 @@
 #include "gfx/metal/MetalCmdEncoder.hpp"
 #include "gfx/metal/MetalSampler.hpp"
 #include "gfx/metal/MetalSwapchain.hpp"
-#include "gfx/metal/MetalUtil.hpp"
 #include "shader_constants.h"
 
 class Window;
@@ -178,7 +176,7 @@ class MetalDevice : public rhi::Device {
 
     Alloc alloc(size_t size) {
       size = align_up(size, 8);
-      ASSERT(size + offset_ <= capacity_);
+      ALWAYS_ASSERT(size + offset_ <= capacity_);
       auto* buf = device_->get_mtl_buf(buffers[frame_idx_]);
       size_t offset = offset_;
       offset_ += size;
@@ -256,6 +254,10 @@ class MetalDevice : public rhi::Device {
   ICB_Mgr icb_mgr_draw_mesh_threadgroups_{this, MTL::IndirectCommandTypeDrawMeshThreadgroups};
 
   MTL::ResidencySet* get_main_residency_set() const { return main_res_set_; }
+  struct RequestedAllocationSizes {
+    size_t total_buffer_space_allocated;
+  };
+  RequestedAllocationSizes req_alloc_sizes_{};
 };
 
 struct GLFWwindow;

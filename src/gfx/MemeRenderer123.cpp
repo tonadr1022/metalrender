@@ -19,6 +19,7 @@
 #include "hlsl/material.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
+#include "hlsl/shared_draw_cull.h"
 #include "hlsl/shared_indirect.h"
 #include "hlsl/shared_mesh_data.h"
 #include "imgui.h"
@@ -132,8 +133,8 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   indirect_cmd_buf_ids_.clear();
 
   add_render_graph_passes(args);
-  static int i = 1;
-  rg_.bake(window_->get_window_size(), i++ == 0);
+  static int i = 0;
+  rg_.bake(window_->get_window_size(), i++ == 2);
   rg_.execute();
 
   device_->submit_frame();
@@ -200,14 +201,44 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         [this](rhi::CmdEncoder* enc) { flush_pending_texture_uploads(enc); });
   }
 
+  {
+    // auto& test_buf_blit_pass = rg_.add_pass("test_buf_blit");
+    // if (!tmp_out_draw_cnt_buf_.is_valid()) {
+    //   tmp_out_draw_cnt_buf_ = device_->create_buf_h({.usage = rhi::BufferUsage_Storage,
+    //                                                  .size = sizeof(uint32_t) * 100,
+    //                                                  .bindless = true,
+    //                                                  .name = "tmp_out_draw_cnt_buf"});
+    // }
+    // if (!tmp_test_buf_.is_valid()) {
+    //   tmp_test_buf_ = device_->create_buf_h({.usage = rhi::BufferUsage_Storage,
+    //                                          .size = sizeof(uint32_t) * 2 * 100,
+    //                                          .bindless = true,
+    //                                          .name = "tmp_test_buf"});
+    // }
+    // test_buf_blit_pass.add_buf("tmp_out_draw_cnt_buf", tmp_out_draw_cnt_buf_.handle,
+    //                            RGAccess::TransferWrite);
+    // test_buf_blit_pass.add_buf("tmp_test_buf", tmp_test_buf_.handle, RGAccess::TransferWrite);
+    // test_buf_blit_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
+    //   enc->fill_buffer(tmp_out_draw_cnt_buf_.handle, 0,
+    //                    device_->get_buf(tmp_out_draw_cnt_buf_)->size(), 0);
+    //   enc->fill_buffer(tmp_test_buf_.handle, 0, device_->get_buf(tmp_test_buf_)->size(), 0);
+    // });
+  }
   if (indirect_rendering_enabled_) {
     auto& prepare_indirect_pass = rg_.add_pass("prepare_indirect");
+    // {
+    //   prepare_indirect_pass.add_buf("tmp_out_draw_cnt_buf_processed",
+    //   tmp_out_draw_cnt_buf_.handle,
+    //                                 RGAccess::ComputeRW, "tmp_out_draw_cnt_buf");
+    //   prepare_indirect_pass.add_buf("tmp_test_buf_processed", tmp_test_buf_.handle,
+    //                                 RGAccess::ComputeRW, "tmp_test_buf");
+    // }
     prepare_indirect_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
                                   RGAccess::ComputeWrite);
     prepare_indirect_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
       auto win_dims = window_->get_window_size();
       float aspect = (float)win_dims.x / win_dims.y;
-      glm::mat4 vp = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
+      glm::mat4 vp = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 10000.f) * args.view_mat;
       BasicIndirectPC pc{
           .vp = vp,
           .vert_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
@@ -219,11 +250,35 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       indirect_cmd_buf_ids_.emplace_back(enc->prepare_indexed_indirect_draws(
           instance_data_mgr_.get_draw_cmd_buf(), 0, all_model_data_.max_objects,
           static_draw_batch_->index_buf.get_buffer_handle(), 0, &pc, sizeof(pc)));
+
+      {
+        // enc->bind_pipeline(test_draw_cull_pso_);
+        // DrawCullPC pc{
+        //     .out_draw_cnt_buf_idx = device_->get_buf(tmp_out_draw_cnt_buf_)->bindless_idx(),
+        //     .test_buf_idx = device_->get_buf(tmp_test_buf_)->bindless_idx(),
+        //     .frame_num = static_cast<uint32_t>(frame_num_),
+        // };
+        // enc->push_constants(&pc, sizeof(pc));
+        // enc->dispatch_compute(glm::uvec3{1, 1, 1}, glm::uvec3{64, 1, 1});
+      }
     });
+  }
+  {
+    // auto& testpass2 = rg_.add_pass("test_buf_after_prepare_indirect_pass");
+    // testpass2.add_buf("tmp_out_draw_cnt_buf_processed_2", tmp_out_draw_cnt_buf_.handle,
+    //                   RGAccess::ComputeRW, "tmp_out_draw_cnt_buf_processed");
+    // testpass2.add_buf("tmp_test_buf_processed_2", tmp_test_buf_.handle, RGAccess::ComputeRW,
+    //                   "tmp_test_buf_processed");
+    // testpass2.set_execute_fn([](rhi::CmdEncoder*) {});
   }
 
   {
+    LINFO("frame");
     auto& gbuffer_pass = rg_.add_pass("gbuffer");
+    // gbuffer_pass.add_buf("tmp_out_draw_cnt_buf_processed_2", tmp_out_draw_cnt_buf_.handle,
+    //                      RGAccess::ComputeRead);
+    // gbuffer_pass.add_buf("tmp_test_buf_processed_2", tmp_test_buf_.handle,
+    // RGAccess::ComputeRead);
     if (indirect_rendering_enabled_) {
       gbuffer_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
                            RGAccess::IndirectRead);
@@ -247,7 +302,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                                                      {.depth_stencil = {.depth = 1}}),
       });
 
-      enc->bind_pipeline(test_task_pso_);
       enc->set_depth_stencil_state(rhi::CompareOp::LessOrEqual, true);
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
@@ -272,6 +326,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       // };
       // enc->push_constants(&pc, sizeof(pc));
 
+      // enc->bind_pipeline(test_task_pso_);
       // int num_meshlets = 94;
       // auto f = (num_meshlets + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
       // enc->draw_mesh_threadgroups({f, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
@@ -582,7 +637,6 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   device_->copy_to_buffer(cmds.data(), cmds.size() * sizeof(IndexedIndirectDrawCmd),
                           instance_data_mgr_.get_draw_cmd_buf(),
                           instance_data_gpu_alloc.offset * sizeof(IndexedIndirectDrawCmd));
-
   return model_instance_gpu_resource_pool_.alloc(
       ModelInstanceGPUResources{.instance_data_gpu_alloc = instance_data_gpu_alloc,
                                 .meshlet_vis_buf_alloc = meshlet_vis_buf_alloc});
@@ -749,6 +803,11 @@ void MemeRenderer123::on_imgui() {
     ImGui::Text("Fullscreen: %d", window_->get_fullscreen());
     ImGui::TreePop();
   }
+  if (ImGui::TreeNodeEx("Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
+    ImGui::Text("Total possible vertices drawn: %d", stats_.total_instance_vertices);
+    ImGui::TreePop();
+  }
+
   if (ImGui::TreeNodeEx("Device", ImGuiTreeNodeFlags_DefaultOpen)) {
     device_->on_imgui();
     ImGui::TreePop();

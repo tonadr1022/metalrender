@@ -9,6 +9,7 @@ class MetalDevice;
 
 namespace MTL {
 
+class Fence;
 class BlitCommandEncoder;
 class ComputeCommandEncoder;
 class RenderCommandEncoder;
@@ -74,6 +75,9 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
                                           glm::uvec3 threads_per_mesh_thread_group,
                                           void* push_constant_data, size_t push_constant_size,
                                           uint32_t draw_cnt) override;
+  void dispatch_compute(glm::uvec3 thread_groups, glm::uvec3 threads_per_threadgroup) override;
+  void fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes, uint32_t size,
+                   uint32_t value) override;
 
  private:
   void init_icb_arg_encoder_and_buf_and_set_icb(MTL::IndirectCommandBuffer* icb);
@@ -93,6 +97,12 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   MTL::CommandBuffer* cmd_buf_{};
 
  private:
+  MTL::Stages compute_enc_flush_stages_{};
+  MTL::Stages render_enc_flush_stages_{};
+  MTL::Stages compute_enc_dst_stages_{};
+  MTL::Stages render_enc_dst_stages_{};
+
+  MTL::Fence* test_fence_{};
   MTL::ComputeCommandEncoder* compute_enc_{};
   MTL::BlitCommandEncoder* blit_enc_{};
 

@@ -182,7 +182,7 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
   }
 
   push_constant_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
-  test_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
+  test_allocator_.emplace(1024ul * 1024 * 100, this, info_.frames_in_flight);
   arg_buf_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
 
   init_bindless();
@@ -205,7 +205,9 @@ void MetalDevice::shutdown() { device_->release(); }
 
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   auto options = mtl::util::convert(desc.storage_mode);
+  // options |= MTL::ResourceHazardTrackingModeUntracked;
   auto* mtl_buf = device_->newBuffer(desc.size, options);
+  ALWAYS_ASSERT(mtl_buf);
   if (desc.name) {
     mtl_buf->setLabel(mtl::util::string(desc.name));
   }
@@ -226,6 +228,7 @@ rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   }
   main_res_set_->addAllocation(mtl_buf);
   main_res_set_->commit();
+  req_alloc_sizes_.total_buffer_space_allocated += desc.size;
 
   return buffer_pool_.alloc(desc, mtl_buf, idx);
 }
@@ -251,7 +254,7 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   texture_desc->setDepth(desc.dims.z);
   texture_desc->setTextureType(get_texture_type(desc.dims, desc.array_length));
   texture_desc->setPixelFormat(mtl::util::convert(desc.format));
-  texture_desc->setStorageMode(mtl::util::convert(desc.storage_mode));
+  texture_desc->setStorageMode(mtl::util::convert_storage_mode(desc.storage_mode));
   texture_desc->setMipmapLevelCount(desc.mip_levels);
   texture_desc->setArrayLength(desc.array_length);
   // TODO: parameterize this?
@@ -262,6 +265,7 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   }
   texture_desc->setUsage(usage);
   auto* tex = device_->newTexture(texture_desc);
+  ALWAYS_ASSERT(tex);
   tex->retain();
   if (desc.name) {
     tex->setLabel(mtl::util::string(desc.name));
@@ -289,6 +293,7 @@ void MetalDevice::destroy(rhi::BufferHandle handle) {
   ASSERT(buf->buffer());
   if (buf->buffer()) {
     main_res_set_->removeAllocation(buf->buffer());
+    req_alloc_sizes_.total_buffer_space_allocated -= buf->desc().size;
     buf->buffer()->release();
   }
 
@@ -615,6 +620,7 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   }
 
   icb_mgr_draw_indexed_.reset_for_frame();
+  icb_mgr_draw_mesh_threadgroups_.reset_for_frame();
 
   push_constant_allocator_->reset(frame_idx());
   test_allocator_->reset(frame_idx());
@@ -640,6 +646,7 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
     mtl3_resources_->main_cmd_buf = mtl3_resources_->main_cmd_q->commandBuffer();
     mtl3_resources_->main_cmd_buf->useResidencySet(main_res_set_);
   }
+  LINFO(" frame begin {}", frame_num_);
   return true;
 }
 
@@ -658,6 +665,26 @@ void MetalDevice::submit_frame() {
   } else {
     mtl3_resources_->main_cmd_buf->presentDrawable(curr_drawable_);
     mtl3_resources_->main_cmd_buf->encodeSignalEvent(shared_event_, frame_num_);
+    std::function<void(MTL::CommandBuffer*)> f = [](MTL::CommandBuffer* cmd) {
+      if (cmd->error()) {
+        if (cmd->error()->debugDescription()) {
+          LINFO("{}", cmd->error()->debugDescription()->cString(NS::UTF8StringEncoding));
+        }
+        if (cmd->error()->localizedDescription()) {
+          LINFO("{}", cmd->error()->localizedDescription()->cString(NS::UTF8StringEncoding));
+        }
+        if (cmd->error()->localizedFailureReason()) {
+          LINFO("{}", cmd->error()->localizedFailureReason()->cString(NS::UTF8StringEncoding));
+        }
+        if (cmd->error()->domain()) {
+          LINFO("{}", cmd->error()->domain()->cString(NS::UTF8StringEncoding));
+        }
+        LINFO("err cmd buf");
+        ALWAYS_ASSERT(0);
+      }
+    };
+    mtl3_resources_->main_cmd_buf->addCompletedHandler(f);
+
     mtl3_resources_->main_cmd_buf->commit();
   }
 
@@ -764,6 +791,7 @@ MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle in
     }
     icb = device_->get_device()->newIndirectCommandBuffer(desc, draw_cnt,
                                                           MTL::ResourceStorageModePrivate);
+    icb->retain();
     desc->release();
     device_->get_main_residency_set()->addAllocation(icb);
     it->second.icbs.emplace_back(icb);
@@ -800,8 +828,10 @@ void MetalDevice::set_name(rhi::BufferHandle handle, const char* name) {
 }
 
 void MetalDevice::on_imgui() {
-  ImGui::Text("Active Textures: %zu\nActive Buffers: %zu", texture_pool_.size(),
-              buffer_pool_.size());
+  ImGui::Text("Active Textures: %zu\nActive Buffers: %zu\nGPU Buffer Space Requested: %zu",
+              texture_pool_.size(), buffer_pool_.size(),
+              req_alloc_sizes_.total_buffer_space_allocated);
+  LINFO("{}", req_alloc_sizes_.total_buffer_space_allocated);
 }
 
 std::filesystem::path MetalDevice::get_metallib_path_from_shader_info(

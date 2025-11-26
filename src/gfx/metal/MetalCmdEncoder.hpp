@@ -82,6 +82,15 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
     exit(1);
   }
 
+  void dispatch_compute(glm::uvec3 /*thread_groups*/,
+                        glm::uvec3 /*threads_per_threadgroup*/) override {
+    exit(1);
+  }
+  void fill_buffer(rhi::BufferHandle /*handle*/, uint32_t /*offset_bytes*/, uint32_t /*size*/,
+                   uint32_t /*value*/) override {
+    exit(1);
+  }
+
  private:
   void init_icb_arg_encoder_and_buf();
   void flush_compute_barriers();

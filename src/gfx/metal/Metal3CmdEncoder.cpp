@@ -13,6 +13,33 @@
 
 using namespace gfx::mtl;
 
+namespace {
+
+MTL::Stages convert_stage(rhi::PipelineStage stage) {
+  MTL::Stages result{};
+  if (stage & (rhi::PipelineStage_AllCommands)) {
+    result |= MTL::StageAll;
+  }
+  if (stage & (rhi::PipelineStage_FragmentShader | rhi::PipelineStage_EarlyFragmentTests |
+               rhi::PipelineStage_LateFragmentTests | rhi::PipelineStage_ColorAttachmentOutput |
+               rhi::PipelineStage_AllGraphics)) {
+    result |= MTL::StageFragment;
+  }
+  if (stage & (rhi::PipelineStage_VertexShader | rhi::PipelineStage_VertexInput |
+               rhi::PipelineStage_AllGraphics | rhi::PipelineStage_DrawIndirect)) {
+    result |= MTL::StageVertex;
+  }
+  if (stage & (rhi::PipelineStage_ComputeShader)) {
+    result |= MTL::StageDispatch;
+  }
+  if (stage & (rhi::PipelineStage_AllTransfer)) {
+    result |= MTL::StageBlit;
+  }
+  return result;
+}
+
+}  // namespace
+
 void Metal3CmdEncoder::begin_rendering(
     std::initializer_list<rhi::RenderingAttachmentInfo> attachments) {
   MTL::RenderPassDescriptor* desc = MTL::RenderPassDescriptor::alloc()->init();
@@ -246,7 +273,8 @@ uint32_t Metal3CmdEncoder::prepare_indexed_indirect_draws(
   compute_enc_->setBuffer(device_->get_mtl_buf(device_->resource_descriptor_table_), 0, 6);
   compute_enc_->setBuffer(device_->get_mtl_buf(device_->sampler_descriptor_table_), 0, 7);
 
-  uint32_t threads_per_tg_x = 32;
+  // TODO:  combine with mtl 4 logic pls
+  uint32_t threads_per_tg_x = 64;
   uint32_t tg_x = (draw_cnt + threads_per_tg_x - 1) / threads_per_tg_x;
   compute_enc_->dispatchThreadgroups(MTL::Size::Make(tg_x, 1, 1),
                                      MTL::Size::Make(threads_per_tg_x, 1, 1));
@@ -292,9 +320,19 @@ void Metal3CmdEncoder::prepare_mesh_threadgroups_indirect(
   compute_enc_->setBuffer(device_->get_mtl_buf(device_->sampler_descriptor_table_), 0, 5);
 }
 
-void Metal3CmdEncoder::barrier(rhi::PipelineStage, rhi::AccessFlags, rhi::PipelineStage,
-                               rhi::AccessFlags) {
+void Metal3CmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
+                               rhi::PipelineStage dst_stage, rhi::AccessFlags) {
   // TODO: fence or something else to enable concurrent anywhere?
+  auto src_mtl_stage = convert_stage(src_stage);
+  auto dst_mtl_stage = convert_stage(dst_stage);
+  if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
+    compute_enc_flush_stages_ |= src_mtl_stage;
+    compute_enc_dst_stages_ |= dst_mtl_stage;
+  }
+  if (dst_mtl_stage & (MTL::StageVertex | MTL::StageFragment | MTL::StageObject | MTL::StageMesh)) {
+    render_enc_flush_stages_ |= src_mtl_stage;
+    render_enc_dst_stages_ |= dst_mtl_stage;
+  }
 }
 
 void Metal3CmdEncoder::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
@@ -353,9 +391,17 @@ void Metal3CmdEncoder::start_blit_encoder() {
 }
 
 void Metal3CmdEncoder::init_icb_arg_encoder_and_buf_and_set_icb(MTL::IndirectCommandBuffer* icb) {
+  auto encode_icb = [this, icb]() {
+    main_icb_container_arg_enc_->setArgumentBuffer(device_->get_mtl_buf(main_icb_container_buf_),
+                                                   0);
+    main_icb_container_arg_enc_->setIndirectCommandBuffer(icb, 0);
+  };
+
   if (main_icb_container_arg_enc_) {
+    encode_icb();
     return;
   }
+
   MTL::ArgumentDescriptor* arg = MTL::ArgumentDescriptor::alloc()->init();
   arg->setIndex(0);
   arg->setAccess(MTL::BindingAccessReadWrite);
@@ -366,8 +412,7 @@ void Metal3CmdEncoder::init_icb_arg_encoder_and_buf_and_set_icb(MTL::IndirectCom
   main_icb_container_buf_ =
       device_->create_buf_h({.size = main_icb_container_arg_enc_->encodedLength()});
 
-  main_icb_container_arg_enc_->setArgumentBuffer(device_->get_mtl_buf(main_icb_container_buf_), 0);
-  main_icb_container_arg_enc_->setIndirectCommandBuffer(icb, 0);
+  encode_icb();
 }
 
 Metal3CmdEncoder::~Metal3CmdEncoder() {
@@ -393,4 +438,44 @@ void Metal3CmdEncoder::draw_mesh_threadgroups(glm::uvec3 thread_groups,
                       threads_per_task_thread_group.z),
       MTL::Size::Make(threads_per_mesh_thread_group.x, threads_per_mesh_thread_group.y,
                       threads_per_mesh_thread_group.z));
+}
+
+void Metal3CmdEncoder::dispatch_compute(glm::uvec3 thread_groups,
+                                        glm::uvec3 threads_per_threadgroup) {
+  start_compute_encoder();
+  // TODO: only do this if needed!
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(160);
+  auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
+  memcpy(tlab->pc_data, &pc_data_, sizeof(tlab->pc_data));
+
+  compute_enc_->setBuffer(device_->get_mtl_buf(device_->resource_descriptor_table_), 0, 0);
+  compute_enc_->setBuffer(device_->get_mtl_buf(device_->sampler_descriptor_table_), 0, 1);
+  compute_enc_->setBuffer(pc_buf, pc_buf_offset, 2);
+
+  compute_enc_->dispatchThreadgroups(
+      MTL::Size::Make(thread_groups.x, thread_groups.y, thread_groups.z),
+      MTL::Size::Make(threads_per_threadgroup.x, threads_per_threadgroup.y,
+                      threads_per_threadgroup.z));
+}
+
+void Metal3CmdEncoder::fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes, uint32_t size,
+                                   uint32_t value) {
+  auto* buf = device_->get_mtl_buf(handle);
+  ASSERT(buf);
+  start_blit_encoder();
+  blit_enc_->fillBuffer(buf, NS::Range::Make(offset_bytes, size), value);
+}
+
+void Metal3CmdEncoder::flush_compute_barriers() {
+  if (compute_enc_ && compute_enc_flush_stages_) {
+    compute_enc_->barrierAfterQueueStages(compute_enc_flush_stages_, compute_enc_dst_stages_);
+  }
+}
+
+void Metal3CmdEncoder::flush_render_barriers() {
+  if (render_enc_ && render_enc_flush_stages_) {
+    render_enc_->barrierAfterQueueStages(render_enc_flush_stages_, render_enc_dst_stages_);
+    render_enc_flush_stages_ = 0;
+    render_enc_dst_stages_ = 0;
+  }
 }

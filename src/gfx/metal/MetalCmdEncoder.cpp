@@ -256,6 +256,7 @@ uint32_t MetalCmdEncoder::prepare_indexed_indirect_draws(
   ASSERT(device_->get_buf(indirect_buf)->desc().usage & rhi::BufferUsage_Indirect);
 
   auto [indirect_buf_id, icb] = device_->icb_mgr_draw_indexed_.alloc(indirect_buf, draw_cnt);
+  ALWAYS_ASSERT(icb->size() >= draw_cnt);
 
   init_icb_arg_encoder_and_buf();
   main_icb_container_arg_enc_->setArgumentBuffer(device_->get_mtl_buf(main_icb_container_buf_), 0);

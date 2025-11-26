@@ -86,6 +86,23 @@ MTL::PrimitiveType convert(rhi::PrimitiveTopology top) {
       return MTL::PrimitiveTypeTriangle;
   }
 }
+
+MTL::StorageMode convert_storage_mode(rhi::StorageMode mode) {
+  using namespace rhi;
+  switch (mode) {
+    case StorageMode::CPUAndGPU:
+    case StorageMode::Default:
+      return MTL::StorageModeShared;
+    case StorageMode::GPUOnly:
+      return MTL::StorageModePrivate;
+    default:
+      ASSERT(0 && "invalid storage mode");
+      return MTL::StorageModePrivate;
+  }
+  ASSERT(0 && "unreachable");
+  return MTL::StorageModePrivate;
+}
+
 }  // namespace mtl::util
 MTL::PixelFormat mtl::util::convert(rhi::TextureFormat format) {
   using namespace rhi;
@@ -107,17 +124,17 @@ MTL::PixelFormat mtl::util::convert(rhi::TextureFormat format) {
   return MTL::PixelFormatInvalid;
 }
 
-MTL::StorageMode mtl::util::convert(rhi::StorageMode mode) {
+MTL::ResourceOptions mtl::util::convert(rhi::StorageMode mode) {
   using namespace rhi;
   switch (mode) {
     case StorageMode::CPUAndGPU:
     case StorageMode::Default:
-      return MTL::StorageModeShared;
+      return MTL::ResourceStorageModeShared;
     case StorageMode::GPUOnly:
-      return MTL::StorageModePrivate;
+      return MTL::ResourceStorageModePrivate;
     default:
       ASSERT(0 && "invalid storage mode");
-      return MTL::StorageModePrivate;
+      return MTL::ResourceStorageModePrivate;
   }
   ASSERT(0 && "unreachable");
   return MTL::StorageModePrivate;

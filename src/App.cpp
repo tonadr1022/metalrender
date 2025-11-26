@@ -94,9 +94,9 @@ void App::run() {
     // load_model(config_.initial_model_path);
   } else if (scene == 1) {
     rando::seed(10000000);
-    size_t count = 1000;
+    size_t count = 6000;
     float scale = 10;
-    float radius = 200;
+    float radius = 800;
 
     for (size_t i = 0; i < count; i++) {
       auto rand_f = [radius]() { return rando::get_float(-radius, radius); };
