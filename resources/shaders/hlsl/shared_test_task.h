@@ -13,6 +13,7 @@ cbuffer TestTaskPC HLSL_PC_REG {
   uint vertex_buf_idx;
   uint instance_data_buf_idx;
   uint instance_data_idx;
+  uint mat_buf_idx;
 };
 
 #ifdef __HLSL__
@@ -26,7 +27,8 @@ struct Payload {
 struct VOut {
   float4 pos : SV_Position;
   float2 uv : TEXCOORD0;
-  float4 color : COLOR;
+  nointerpolation float4 color : COLOR;
+  nointerpolation uint material_id : MATERIAL_ID;
 };
 
 #endif

@@ -79,12 +79,12 @@ float get_float(float min, float max) {
 
 void App::run() {
   ZoneScoped;
-  int scene = 1;
+  int scene = 0;
   if (scene == 0) {
     glm::ivec3 iter{};
-    int n = 0;
+    int n = 1;
     glm::ivec3 dims{n, 1, n};
-    float dist = 4.0;
+    float dist = 40.0;
     for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
       for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
         glm::vec3 pos = glm::vec3{iter} * dist;
@@ -94,7 +94,7 @@ void App::run() {
     // load_model(config_.initial_model_path);
   } else if (scene == 1) {
     rando::seed(10000000);
-    size_t count = 3000;
+    size_t count = 1000;
     float scale = 10;
     float radius = 400;
 

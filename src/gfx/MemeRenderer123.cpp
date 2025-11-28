@@ -10,6 +10,7 @@
 #include "default_vertex.h"
 #include "gfx/Buffer.hpp"
 #include "gfx/CmdEncoder.hpp"
+#include "gfx/Config.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/ModelLoader.hpp"
 #include "gfx/Pipeline.hpp"
@@ -21,6 +22,7 @@
 #include "hlsl/shared_basic_tri.h"
 #include "hlsl/shared_indirect.h"
 #include "hlsl/shared_mesh_data.h"
+#include "hlsl/shared_test_task.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "shader_constants.h"
@@ -80,18 +82,18 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
         .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
                       .depth_format = TextureFormat::D32float},
     });
-    // test_mesh_pso_ = device_->create_graphics_pipeline_h({
-    //     .shaders = {{{"test_mesh", ShaderType::Mesh}, {"test_mesh", ShaderType::Fragment}}},
-    //     .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
-    //                   .depth_format = TextureFormat::D32float},
-    // });
-    // test_task_pso_ = device_->create_graphics_pipeline_h({
-    //     .shaders = {{{"test_task", ShaderType::Task},
-    //                  {"test_task", ShaderType::Mesh},
-    //                  {"test_task", ShaderType::Fragment}}},
-    //     .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
-    //                   .depth_format = TextureFormat::D32float},
-    // });
+    test_mesh_pso_ = device_->create_graphics_pipeline_h({
+        .shaders = {{{"test_mesh", ShaderType::Mesh}, {"test_mesh", ShaderType::Fragment}}},
+        .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
+                      .depth_format = TextureFormat::D32float},
+    });
+    test_task_pso_ = device_->create_graphics_pipeline_h({
+        .shaders = {{{"test_task", ShaderType::Task},
+                     {"test_task", ShaderType::Mesh},
+                     {"test_task", ShaderType::Fragment}}},
+        .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
+                      .depth_format = TextureFormat::D32float},
+    });
     test_draw_cull_pso_ = device_->create_compute_pipeline_h({"draw_cull"});
   }
 
@@ -246,35 +248,39 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
 
-      // TestTaskPC pc{
-      //     .vp = vp,
-      //     .task_cmd_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
-      //     .task_cmd_idx = 0,
-      //     .meshlet_buf_idx = static_draw_batch_->meshlet_buf.get_buffer()->bindless_idx(),
-      //     .meshlet_tri_buf_idx =
-      //         static_draw_batch_->meshlet_triangles_buf.get_buffer()->bindless_idx(),
-      //     .meshlet_vertex_buf_idx =
-      //         static_draw_batch_->meshlet_vertices_buf.get_buffer()->bindless_idx(),
-      //     .vertex_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
-      //     .instance_data_buf_idx =
-      //         device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
-      //     .instance_data_idx = 0,
-      // };
-      // enc->push_constants(&pc, sizeof(pc));
+      if (k_use_mesh_shader) {
+        enc->bind_pipeline(test_task_pso_);
 
-      // enc->bind_pipeline(test_task_pso_);
-      // int num_meshlets = 94;
-      // auto f = (num_meshlets + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
-      // enc->draw_mesh_threadgroups({f, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+        TestTaskPC pc{
+            .vp = get_vp_matrix(args),
+            .task_cmd_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
+            .task_cmd_idx = 0,
+            .meshlet_buf_idx = static_draw_batch_->meshlet_buf.get_buffer()->bindless_idx(),
+            .meshlet_tri_buf_idx =
+                static_draw_batch_->meshlet_triangles_buf.get_buffer()->bindless_idx(),
+            .meshlet_vertex_buf_idx =
+                static_draw_batch_->meshlet_vertices_buf.get_buffer()->bindless_idx(),
+            .vertex_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
+            .instance_data_buf_idx =
+                device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
+            .mat_buf_idx = materials_buf_->get_buffer()->bindless_idx(),
+        };
 
-      // enc->bind_pipeline(test_mesh_pso_);
-      // enc->draw_mesh_threadgroups({1, 1, 1}, {32, 1, 1}, {32, 1, 1});
+        for (const auto& cmd : cmds_) {
+          pc.task_cmd_idx = cmd.task_cmd_idx;
+          pc.instance_data_idx = cmd.instance_data_idx;
+          size_t num_meshlets = mesh_datas_[cmd.task_cmd_idx].meshlet_count;
+          enc->push_constants(&pc, sizeof(pc));
+          auto f = (num_meshlets + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
+          enc->draw_mesh_threadgroups({f, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+        }
 
-      enc->bind_pipeline(test2_pso_);
-
-      ASSERT(indirect_cmd_buf_ids_.size());
-      enc->draw_indexed_indirect(instance_data_mgr_.get_draw_cmd_buf(), indirect_cmd_buf_ids_[0],
-                                 all_model_data_.max_objects, 0);
+      } else {
+        enc->bind_pipeline(test2_pso_);
+        ASSERT(indirect_cmd_buf_ids_.size());
+        enc->draw_indexed_indirect(instance_data_mgr_.get_draw_cmd_buf(), indirect_cmd_buf_ids_[0],
+                                   all_model_data_.max_objects, 0);
+      }
 
       if (args.draw_imgui) {
         imgui_renderer_->render(enc, window_->get_window_size(), curr_frame_idx_);
@@ -480,6 +486,7 @@ DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType
         .center = meshes[mesh_i].center,
         .radius = meshes[mesh_i].radius,
     };
+    mesh_datas_.emplace_back(d);
     device_->copy_to_buffer(&d, sizeof(d), draw_batch->mesh_buf.get_buffer_handle(),
                             (mesh_i + mesh_alloc.offset) * sizeof(MeshData));
     mesh_i++;
@@ -532,7 +539,8 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
     instance_datas[i].rotation = glm::vec4{rot[0], rot[1], rot[2], rot[3]};
     instance_datas[i].scale = transform.scale;
     // instance_datas[i].meshlet_vis_base += meshlet_vis_buf_alloc.offset;
-    auto& mesh = model_resources->meshes[model.mesh_ids[node_i]];
+    size_t mesh_id = model.mesh_ids[node_i];
+    auto& mesh = model_resources->meshes[mesh_id];
     cmds.push_back(IndexedIndirectDrawCmd{
         .index_count = mesh.index_count,
         .instance_count = 1,
@@ -544,6 +552,11 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
             mesh.vertex_offset_bytes +
             model_resources->static_draw_batch_alloc.vertex_alloc.offset * sizeof(DefaultVertex)),
         .first_instance = static_cast<uint32_t>(i + instance_data_gpu_alloc.offset),
+    });
+
+    cmds_.emplace_back(TaskCmd{
+        .task_cmd_idx = static_cast<uint32_t>(mesh_id),
+        .instance_data_idx = cmds.back().first_instance,
     });
   }
 

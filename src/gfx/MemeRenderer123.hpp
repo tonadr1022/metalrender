@@ -13,8 +13,8 @@
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
-#include "hlsl/shared_indirect.h"
 #include "hlsl/shared_instance_data.h"
+#include "hlsl/shared_mesh_data.h"
 #include "offsetAllocator.hpp"
 
 struct ImDrawData;
@@ -254,6 +254,13 @@ class MemeRenderer123 {
   rhi::TextureHandleHolder default_white_tex_;
   std::vector<uint32_t> indirect_cmd_buf_ids_;
   glm::mat4 get_vp_matrix(const RenderArgs& args);
+  struct TaskCmd {
+    uint32_t task_cmd_idx;
+    uint32_t instance_data_idx;
+    uint32_t num_meshlets;
+  };
+  std::vector<TaskCmd> cmds_;
+  std::vector<MeshData> mesh_datas_;
 };
 
 }  // namespace gfx

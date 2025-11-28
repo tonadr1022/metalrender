@@ -29,7 +29,7 @@ SHADER_CONSTANT k_max_triangles_per_meshlet = 128;
 #define K_THREADS_PER_WAVE 32
 #define K_TASK_TG_SIZE K_THREADS_PER_WAVE
 #define K_MESH_TG_SIZE 128
-#define K_MAX_TRIS_PER_MESHLET 256
+#define K_MAX_TRIS_PER_MESHLET 128
 #define K_MAX_VERTS_PER_MESHLET 128
 
 #define kMeshThreadgroups 32

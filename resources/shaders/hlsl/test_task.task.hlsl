@@ -1,8 +1,10 @@
+// clang-format off
 #include "root_sig.h"
 #include "../shader_constants.h"
 #include "../shader_core.h"
 #include "shared_test_task.h"
 #include "shared_mesh_data.h"
+// clang-format off
 
 groupshared Payload s_Payload;
 

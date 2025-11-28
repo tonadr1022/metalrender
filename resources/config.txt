@@ -1,7 +1,7 @@
+Models/Sponza/glTF/Sponza.gltf
 Models/Suzanne/glTF/Suzanne.gltf
 Models/Cube/glTF/Cube.gltf
 /Users/tony/testsuzanne/testsuzanne.gltf
 CompressedModels/Sponza/Sponza.gltf
-Models/Sponza/glTF/Sponza.gltf
 Models/ABeautifulGame/glTF/ABeautifulGame.gltf
 Models/Cube/glTF/Cube.gltf

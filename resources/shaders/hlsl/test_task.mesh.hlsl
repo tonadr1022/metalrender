@@ -9,13 +9,24 @@
 #include "shared_mesh_data.h"
 // clang-format on
 
-uint get_vertex_idx(Meshlet meshlet, uint gtid) {
-  uint idx = meshlet.vertex_offset + gtid;
+// https://www.ronja-tutorials.com/post/041-hsv-colorspace/
+float3 hue2rgb(float hue) {
+  hue = frac(hue);                 // only use fractional part of hue, making it loop
+  float r = abs(hue * 6 - 3) - 1;  // red
+  float g = 2 - abs(hue * 6 - 2);  // green
+  float b = 2 - abs(hue * 6 - 4);  // blue
+  float3 rgb = float3(r, g, b);    // combine components
+  rgb = saturate(rgb);             // clamp between 0 and 1
+  return rgb;
+}
+
+uint get_vertex_idx(Meshlet meshlet, uint gtid, uint base_meshlet_vertex) {
+  uint idx = meshlet.vertex_offset + gtid + base_meshlet_vertex;
   StructuredBuffer<uint> meshlet_vertex_buf = ResourceDescriptorHeap[meshlet_vertex_buf_idx];
   return meshlet_vertex_buf[idx];
 }
 
-VOut get_vertex_attributes(uint vertex_idx) {
+VOut get_vertex_attributes(uint vertex_idx, uint meshlet_idx) {
   StructuredBuffer<DefaultVertex> vertex_buf = ResourceDescriptorHeap[vertex_buf_idx];
   DefaultVertex vert = vertex_buf[vertex_idx];
 
@@ -26,9 +37,11 @@ VOut get_vertex_attributes(uint vertex_idx) {
                instance_data.translation;
   VOut v;
   v.pos = mul(vp, float4(pos, 1.0));
-  v.uv = float2(0.0, 0.0);
-  v.color = float4(float((vertex_idx % 3) == 0), float((vertex_idx % 3) == 1),
-                   float((vertex_idx % 3) == 2), 1.0);
+  v.uv = vert.uv;
+  // v.color = float4(float((vertex_idx % 3) == 0), float((vertex_idx % 3) == 1),
+  //                   float((vertex_idx % 3) == 2), 1.0);
+  v.color = float4(hue2rgb((instance_data_idx + meshlet_idx) * 1.71f), 1.0);
+  v.material_id = instance_data.mat_id;
   return v;
 }
 
@@ -59,24 +72,21 @@ main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload pay
 
   uint meshlet_idx = payload.meshlet_indices[gid];
 
-  if (meshlet_idx >= task_cmd.meshlet_count) {
-    return;
-  }
-
   StructuredBuffer<Meshlet> meshlet_buf = ResourceDescriptorHeap[meshlet_buf_idx];
-  Meshlet meshlet = meshlet_buf[meshlet_idx];
+  Meshlet meshlet = meshlet_buf[task_cmd.meshlet_base + meshlet_idx];
 
   SetMeshOutputCounts(meshlet.vertex_count, meshlet.triangle_count);
 
   if (gtid < meshlet.vertex_count) {
-    uint vertex_idx = get_vertex_idx(meshlet, gtid);
-    verts[gtid] = get_vertex_attributes(vertex_idx);
+    uint vertex_idx = get_vertex_idx(meshlet, gtid, task_cmd.meshlet_vertices_offset);
+    verts[gtid] = get_vertex_attributes(vertex_idx, meshlet_idx);
   }
 
   if (gtid < meshlet.triangle_count) {
     ByteAddressBuffer meshlet_tris = ResourceDescriptorHeap[meshlet_tri_buf_idx];
     // The byte value must be a multiple of four so that it is DWORD aligned. If any other value is
     // provided, behavior is undefined.
-    tris[gtid] = LoadThreeBytes(meshlet_tris, meshlet.triangle_offset + gtid * 3);
+    tris[gtid] = LoadThreeBytes(
+        meshlet_tris, task_cmd.meshlet_triangles_offset + meshlet.triangle_offset + gtid * 3);
   }
 }
