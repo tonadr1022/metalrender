@@ -107,12 +107,12 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   instance_data_mgr_.init(6000, device_);
   static_draw_batch_.emplace(DrawBatchType::Static, *device_,
                              DrawBatch::CreateInfo{
-                                 .initial_vertex_capacity = 1'000'00,
-                                 .initial_index_capacity = 1'000'00,
+                                 .initial_vertex_capacity = 10'000'000,
+                                 .initial_index_capacity = 1'000'000,
                                  .initial_meshlet_capacity = 100'000,
                                  .initial_mesh_capacity = 20'000,
-                                 .initial_meshlet_triangle_capacity = 1'00'000,
-                                 .initial_meshlet_vertex_capacity = 1'000'00,
+                                 .initial_meshlet_triangle_capacity = 1'000'000,
+                                 .initial_meshlet_vertex_capacity = 1'000'000,
                              });
   meshlet_vis_buf_.emplace(*device_, rhi::BufferDesc{.size = 100'0000}, sizeof(uint32_t));
 
@@ -389,8 +389,7 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
       }
       base_instance_datas.emplace_back(InstanceData{
           .mat_id = result.meshes[mesh_id].material_id + material_alloc.offset,
-          // .mesh_id = draw_batch_alloc.mesh_alloc.offset + mesh_id,
-          // .meshlet_vis_base = curr_meshlet_vis_buf_offset,
+          .mesh_id = draw_batch_alloc.mesh_alloc.offset + mesh_id,
       });
       instance_id_to_node.push_back(node);
       // instance_copy_idx++;
@@ -475,14 +474,13 @@ DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType
     meshlet_triangles_offset += meshlet_data.meshlet_triangles.size();
 
     MeshData d{
-        .meshlet_base = meshlet_data.meshlet_base,
+        .meshlet_base = meshlet_data.meshlet_base + meshlet_alloc.offset,
         .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size()),
-        .meshlet_vertices_offset = meshlet_data.meshlet_vertices_offset,
-        .meshlet_triangles_offset = meshlet_data.meshlet_triangles_offset,
-        .index_count = meshes[mesh_i].index_count,
-        .index_offset = meshes[mesh_i].index_offset,
-        .vertex_base = meshes[mesh_i].vertex_offset_bytes,
-        .vertex_count = meshes[mesh_i].vertex_count,
+        .meshlet_vertices_offset =
+            meshlet_data.meshlet_vertices_offset + meshlet_vertices_alloc.offset,
+        .meshlet_triangles_offset =
+            meshlet_data.meshlet_triangles_offset + meshlet_triangles_alloc.offset,
+        .vertex_base = vertex_alloc.offset,
         .center = meshes[mesh_i].center,
         .radius = meshes[mesh_i].radius,
     };
@@ -555,8 +553,10 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
     });
 
     cmds_.emplace_back(TaskCmd{
-        .task_cmd_idx = static_cast<uint32_t>(mesh_id),
+        .task_cmd_idx = static_cast<uint32_t>(
+            model_resources->static_draw_batch_alloc.mesh_alloc.offset + mesh_id),
         .instance_data_idx = cmds.back().first_instance,
+
     });
   }
 

@@ -82,7 +82,7 @@ void App::run() {
   int scene = 0;
   if (scene == 0) {
     glm::ivec3 iter{};
-    int n = 1;
+    int n = 0;
     glm::ivec3 dims{n, 1, n};
     float dist = 40.0;
     for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
@@ -91,7 +91,7 @@ void App::run() {
         load_model(config_.paths[0], glm::translate(glm::mat4{1}, pos));
       }
     }
-    // load_model(config_.initial_model_path);
+    load_model(config_.paths[1], glm::mat4{1});
   } else if (scene == 1) {
     rando::seed(10000000);
     size_t count = 1000;

@@ -20,12 +20,6 @@ float3 hue2rgb(float hue) {
   return rgb;
 }
 
-uint get_vertex_idx(Meshlet meshlet, uint gtid, uint base_meshlet_vertex) {
-  uint idx = meshlet.vertex_offset + gtid + base_meshlet_vertex;
-  StructuredBuffer<uint> meshlet_vertex_buf = ResourceDescriptorHeap[meshlet_vertex_buf_idx];
-  return meshlet_vertex_buf[idx];
-}
-
 VOut get_vertex_attributes(uint vertex_idx, uint meshlet_idx) {
   StructuredBuffer<DefaultVertex> vertex_buf = ResourceDescriptorHeap[vertex_buf_idx];
   DefaultVertex vert = vertex_buf[vertex_idx];
@@ -40,7 +34,7 @@ VOut get_vertex_attributes(uint vertex_idx, uint meshlet_idx) {
   v.uv = vert.uv;
   // v.color = float4(float((vertex_idx % 3) == 0), float((vertex_idx % 3) == 1),
   //                   float((vertex_idx % 3) == 2), 1.0);
-  v.color = float4(hue2rgb((instance_data_idx + meshlet_idx) * 1.71f), 1.0);
+  v.color = float4(hue2rgb((instance_data_idx) * 1.71f), 1.0);
   v.material_id = instance_data.mat_id;
   return v;
 }
@@ -70,16 +64,19 @@ main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload pay
   StructuredBuffer<MeshData> task_cmds = ResourceDescriptorHeap[task_cmd_buf_idx];
   MeshData task_cmd = task_cmds[task_cmd_idx];
 
-  uint meshlet_idx = payload.meshlet_indices[gid];
+  uint meshlet_idx = payload.meshlet_indices[gid] + task_cmd.meshlet_base;
 
   StructuredBuffer<Meshlet> meshlet_buf = ResourceDescriptorHeap[meshlet_buf_idx];
-  Meshlet meshlet = meshlet_buf[task_cmd.meshlet_base + meshlet_idx];
+  Meshlet meshlet = meshlet_buf[meshlet_idx];
 
   SetMeshOutputCounts(meshlet.vertex_count, meshlet.triangle_count);
 
+  StructuredBuffer<uint> meshlet_vertex_buf = ResourceDescriptorHeap[meshlet_vertex_buf_idx];
+
   if (gtid < meshlet.vertex_count) {
-    uint vertex_idx = get_vertex_idx(meshlet, gtid, task_cmd.meshlet_vertices_offset);
-    verts[gtid] = get_vertex_attributes(vertex_idx, meshlet_idx);
+    uint vertex_idx =
+        meshlet_vertex_buf[meshlet.vertex_offset + gtid + task_cmd.meshlet_vertices_offset];
+    verts[gtid] = get_vertex_attributes(vertex_idx + task_cmd.vertex_base, meshlet_idx);
   }
 
   if (gtid < meshlet.triangle_count) {

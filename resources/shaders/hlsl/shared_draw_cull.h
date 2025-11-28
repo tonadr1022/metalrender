@@ -4,9 +4,8 @@
 #include "../shader_core.h"
 
 cbuffer DrawCullPC HLSL_PC_REG {
-  uint out_draw_cnt_buf_idx;
-  uint test_buf_idx;
-  uint frame_num;
+  uint task_cmd_buf_idx;
+  uint draw_cnt_buf_idx;
 };
 
 #endif
