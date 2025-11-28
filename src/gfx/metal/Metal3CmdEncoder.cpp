@@ -2,6 +2,9 @@
 
 // clang-format off
 #include <Metal/Metal.hpp>
+#include <tracy/Tracy.hpp>
+#include "gfx/metal/Config.hpp"
+#include "hlsl/shared_indirect.h"
 #define IR_RUNTIME_METALCPP
 #include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
 // clang-format on
@@ -229,42 +232,13 @@ void Metal3CmdEncoder::copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_sl
 }
 
 uint32_t Metal3CmdEncoder::prepare_indexed_indirect_draws(
-    rhi::BufferHandle indirect_buf, size_t offset, size_t draw_cnt, rhi::BufferHandle index_buf,
+    rhi::BufferHandle indirect_buf, size_t offset, size_t tot_draw_cnt, rhi::BufferHandle index_buf,
     size_t index_buf_offset, void* push_constant_data, size_t push_constant_size) {
-  ALWAYS_ASSERT(draw_cnt > 0);
+  ALWAYS_ASSERT(tot_draw_cnt > 0);
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
   memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, push_constant_data, push_constant_size);
 
   start_compute_encoder();
-  ASSERT(device_->get_psos().dispatch_indirect_pso);
-  ASSERT(device_->get_buf(indirect_buf)->desc().usage & rhi::BufferUsage_Indirect);
-
-  auto [indirect_buf_id, icb] = device_->icb_mgr_draw_indexed_.alloc(indirect_buf, draw_cnt);
-
-  init_icb_arg_encoder_and_buf_and_set_icb(icb);
-
-  compute_enc_->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
-
-  compute_enc_->setBuffer(pc_buf, pc_buf_offset, 0);
-
-  struct Args2 {
-    uint32_t draw_cnt;
-  };
-
-  auto [args2_buf, args2_offset] = device_->test_allocator_->alloc(sizeof(Args2));
-  auto* args2 = (Args2*)((uint8_t*)args2_buf->contents() + args2_offset);
-  args2->draw_cnt = draw_cnt;
-  compute_enc_->setBuffer(args2_buf, args2_offset, 1);
-
-  compute_enc_->setBuffer(device_->get_mtl_buf(main_icb_container_buf_), 0, 2);
-
-  auto [out_pc_arg_buf, out_pc_arg_buf_offset] =
-      device_->test_allocator_->alloc(draw_cnt * sizeof(TLAB_Layout));
-  compute_enc_->setBuffer(out_pc_arg_buf, out_pc_arg_buf_offset, 3);
-
-  auto* indirect_buffer = device_->get_mtl_buf(indirect_buf);
-  ASSERT(indirect_buffer);
-  compute_enc_->setBuffer(indirect_buffer, offset, 4);
 
   auto* index_buffer = device_->get_mtl_buf(index_buf);
   ASSERT(index_buffer);
@@ -273,51 +247,99 @@ uint32_t Metal3CmdEncoder::prepare_indexed_indirect_draws(
   compute_enc_->setBuffer(device_->get_mtl_buf(device_->resource_descriptor_table_), 0, 6);
   compute_enc_->setBuffer(device_->get_mtl_buf(device_->sampler_descriptor_table_), 0, 7);
 
-  // TODO:  combine with mtl 4 logic pls
-  uint32_t threads_per_tg_x = 64;
-  uint32_t tg_x = (draw_cnt + threads_per_tg_x - 1) / threads_per_tg_x;
-  compute_enc_->dispatchThreadgroups(MTL::Size::Make(tg_x, 1, 1),
-                                     MTL::Size::Make(threads_per_tg_x, 1, 1));
+  ASSERT(device_->get_psos().dispatch_indirect_pso);
+  ASSERT(device_->get_buf(indirect_buf)->desc().usage & rhi::BufferUsage_Indirect);
+
+  compute_enc_->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
+
+  auto [indirect_buf_id, icbs] = device_->icb_mgr_draw_indexed_.alloc(indirect_buf, tot_draw_cnt);
+  for (size_t i = 0, rem_draw_count = tot_draw_cnt; i < icbs.size(); i++, rem_draw_count -= 1000) {
+    uint32_t draw_cnt = std::min<uint32_t>(1000, rem_draw_count);
+    auto* icb = icbs[i];
+    ASSERT((icb && icb->size() == draw_cnt));
+
+    cmd_icb_mgr_.init_icb_arg_encoder_and_buf_and_set_icb(icbs, i);
+
+    compute_enc_->setBuffer(pc_buf, pc_buf_offset, 0);
+
+    struct Args2 {
+      uint32_t draw_cnt;
+    };
+
+    auto [args2_buf, args2_offset] = device_->test_allocator_->alloc(sizeof(Args2));
+    auto* args2 = (Args2*)((uint8_t*)args2_buf->contents() + args2_offset);
+    args2->draw_cnt = draw_cnt;
+    compute_enc_->setBuffer(args2_buf, args2_offset, 1);
+
+    compute_enc_->setBuffer(cmd_icb_mgr_.get_icb(i), 0, 2);
+
+    auto [out_pc_arg_buf, out_pc_arg_buf_offset] =
+        device_->test_allocator_->alloc(draw_cnt * sizeof(TLAB_Layout));
+    compute_enc_->setBuffer(out_pc_arg_buf, out_pc_arg_buf_offset, 3);
+
+    auto* indirect_buffer = device_->get_mtl_buf(indirect_buf);
+    ASSERT(indirect_buffer);
+    size_t iter_offset = i * k_max_draws_per_icb * sizeof(IndexedIndirectDrawCmd);
+    compute_enc_->setBuffer(indirect_buffer, offset + iter_offset, 4);
+
+    // TODO:  combine with mtl 4 logic pls
+    uint32_t threads_per_tg_x = 64;
+    uint32_t tg_x = (draw_cnt + threads_per_tg_x - 1) / threads_per_tg_x;
+    compute_enc_->dispatchThreadgroups(MTL::Size::Make(tg_x, 1, 1),
+                                       MTL::Size::Make(threads_per_tg_x, 1, 1));
+  }
   return indirect_buf_id;
 }
 
 void Metal3CmdEncoder::prepare_mesh_threadgroups_indirect(
     rhi::BufferHandle mesh_cmd_indirect_buf, size_t mesh_cmd_indirect_buf_offset,
     glm::uvec3 threads_per_task_thread_group, glm::uvec3 threads_per_mesh_thread_group,
-    void* push_constant_data, size_t push_constant_size, uint32_t draw_cnt) {
+    void* push_constant_data, size_t push_constant_size, uint32_t total_draw_cnt) {
+  ZoneScoped;
+  exit(1);
   start_compute_encoder();
   compute_enc_->setComputePipelineState(device_->get_psos().dispatch_mesh_pso);
-
-  // allocate icb
-  auto [indirect_buf_id, icb] =
-      device_->icb_mgr_draw_mesh_threadgroups_.alloc(mesh_cmd_indirect_buf, draw_cnt);
-  init_icb_arg_encoder_and_buf_and_set_icb(icb);
-  compute_enc_->setBuffer(device_->get_mtl_buf(main_icb_container_buf_), 0, 0);
-
-  struct Args2 {
-    glm::uvec3 threads_per_object_thread_group;
-    glm::uvec3 threads_per_mesh_thread_group;
-    uint32_t draw_cnt;
-  };
-  auto [args2_buf, args2_offset] = device_->test_allocator_->alloc(sizeof(Args2));
-  auto* args2 = (Args2*)((uint8_t*)args2_buf->contents() + args2_offset);
-  args2->threads_per_object_thread_group = threads_per_task_thread_group;
-  args2->threads_per_mesh_thread_group = threads_per_mesh_thread_group;
-  args2->draw_cnt = draw_cnt;
-
-  compute_enc_->setBuffer(args2_buf, args2_offset, 1);
-
-  // TLAB layout is only push constants
-  // TODO: don't always allocate here, only do it if push constants change.
+  compute_enc_->setBuffer(device_->get_mtl_buf(device_->resource_descriptor_table_), 0, 4);
+  compute_enc_->setBuffer(device_->get_mtl_buf(device_->sampler_descriptor_table_), 0, 5);
+  // The TLAB layout is only push constants
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
   memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, push_constant_data, push_constant_size);
   compute_enc_->setBuffer(pc_buf, pc_buf_offset, 2);
 
-  auto* mesh_args_buf = device_->get_mtl_buf(mesh_cmd_indirect_buf);
-  ASSERT(mesh_args_buf);
-  compute_enc_->setBuffer(mesh_args_buf, mesh_cmd_indirect_buf_offset, 3);
-  compute_enc_->setBuffer(device_->get_mtl_buf(device_->resource_descriptor_table_), 0, 4);
-  compute_enc_->setBuffer(device_->get_mtl_buf(device_->sampler_descriptor_table_), 0, 5);
+  // allocate icb
+  auto [indirect_buf_id, icbs] =
+      device_->icb_mgr_draw_mesh_threadgroups_.alloc(mesh_cmd_indirect_buf, total_draw_cnt);
+  uint32_t prev_draw_count = UINT32_MAX;
+
+  for (uint32_t i = 0, rem_draw_count = total_draw_cnt; i < icbs.size();
+       i++, rem_draw_count -= 1000) {
+    uint32_t draw_cnt = std::min<uint32_t>(1000, rem_draw_count);
+
+    cmd_icb_mgr_.init_icb_arg_encoder_and_buf_and_set_icb(icbs, i);
+    compute_enc_->setBuffer(cmd_icb_mgr_.get_icb(i), 0, 0);
+
+    if (draw_cnt != prev_draw_count) {
+      struct Args2 {
+        glm::uvec3 threads_per_object_thread_group;
+        glm::uvec3 threads_per_mesh_thread_group;
+        uint32_t draw_cnt;
+      };
+
+      prev_draw_count = draw_cnt;
+      auto [args2_buf, args2_offset] = device_->test_allocator_->alloc(sizeof(Args2));
+      auto* args2 = (Args2*)((uint8_t*)args2_buf->contents() + args2_offset);
+      args2->threads_per_object_thread_group = threads_per_task_thread_group;
+      args2->threads_per_mesh_thread_group = threads_per_mesh_thread_group;
+      args2->draw_cnt = draw_cnt;
+      compute_enc_->setBuffer(args2_buf, args2_offset, 1);
+    }
+
+    auto* mesh_args_indirect_buf = device_->get_mtl_buf(mesh_cmd_indirect_buf);
+    ASSERT(mesh_args_indirect_buf);
+    exit(1);  // TODO: either pass the stride or use something real here
+    size_t iter_offset = 1000 * sizeof(IndexedIndirectDrawCmd) * i;
+    compute_enc_->setBuffer(mesh_args_indirect_buf, mesh_cmd_indirect_buf_offset + iter_offset, 3);
+  }
 }
 
 void Metal3CmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
@@ -336,23 +358,32 @@ void Metal3CmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
 }
 
 void Metal3CmdEncoder::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
-                                             uint32_t indirect_buf_id, size_t draw_cnt) {
+                                             uint32_t indirect_buf_id, size_t draw_cnt,
+                                             size_t offset_i) {
   ASSERT(render_enc_);
-  render_enc_->executeCommandsInBuffer(
-      device_->icb_mgr_draw_indexed_.get(indirect_buf, indirect_buf_id),
-      NS::Range::Make(0, draw_cnt));
+  ASSERT(indirect_buf.is_valid());
+  const auto& icbs = device_->icb_mgr_draw_indexed_.get(indirect_buf, indirect_buf_id);
+  size_t rem_draws = draw_cnt;
+  for (size_t i = 0, off = 0; i < icbs.size() && off < draw_cnt; i++, off += k_max_draws_per_icb) {
+    render_enc_->executeCommandsInBuffer(
+        icbs[i], NS::Range::Make(offset_i, std::min<uint32_t>(k_max_draws_per_icb, rem_draws)));
+    rem_draws -= k_max_draws_per_icb;
+  }
 }
 
-void Metal3CmdEncoder::draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf,
-                                                       uint32_t indirect_buf_id, size_t draw_cnt) {
+void Metal3CmdEncoder::draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indirect_buf*/,
+                                                       uint32_t /*indirect_buf_id*/,
+                                                       size_t /*draw_cnt*/) {
+  ZoneScoped;
+  exit(1);
   ASSERT(render_enc_);
-  render_enc_->executeCommandsInBuffer(
-      device_->icb_mgr_draw_mesh_threadgroups_.get(indirect_buf, indirect_buf_id),
-      NS::Range::Make(0, draw_cnt));
+  // render_enc_->executeCommandsInBuffer(
+  //     device_->icb_mgr_draw_mesh_threadgroups_.get(indirect_buf, indirect_buf_id),
+  //     NS::Range::Make(0, draw_cnt));
 }
 
 Metal3CmdEncoder::Metal3CmdEncoder(MetalDevice* device, MTL::CommandBuffer* cmd_buf)
-    : cmd_buf_(cmd_buf), device_(device) {}
+    : cmd_buf_(cmd_buf), device_(device), cmd_icb_mgr_(device_) {}
 
 void Metal3CmdEncoder::end_encoders_of_types(EncoderType types) {
   if (types & EncoderType_Blit) {
@@ -387,37 +418,6 @@ void Metal3CmdEncoder::start_blit_encoder() {
   end_encoders_of_types((EncoderType)(EncoderType_Compute | EncoderType_Render));
   if (!blit_enc_) {
     blit_enc_ = cmd_buf_->blitCommandEncoder();
-  }
-}
-
-void Metal3CmdEncoder::init_icb_arg_encoder_and_buf_and_set_icb(MTL::IndirectCommandBuffer* icb) {
-  auto encode_icb = [this, icb]() {
-    main_icb_container_arg_enc_->setArgumentBuffer(device_->get_mtl_buf(main_icb_container_buf_),
-                                                   0);
-    main_icb_container_arg_enc_->setIndirectCommandBuffer(icb, 0);
-  };
-
-  if (main_icb_container_arg_enc_) {
-    encode_icb();
-    return;
-  }
-
-  MTL::ArgumentDescriptor* arg = MTL::ArgumentDescriptor::alloc()->init();
-  arg->setIndex(0);
-  arg->setAccess(MTL::BindingAccessReadWrite);
-  arg->setDataType(MTL::DataTypeIndirectCommandBuffer);
-  std::array<NS::Object*, 1> args_arr{arg};
-  const NS::Array* args = NS::Array::array(args_arr.data(), args_arr.size());
-  main_icb_container_arg_enc_ = device_->get_device()->newArgumentEncoder(args);
-  main_icb_container_buf_ =
-      device_->create_buf_h({.size = main_icb_container_arg_enc_->encodedLength()});
-
-  encode_icb();
-}
-
-Metal3CmdEncoder::~Metal3CmdEncoder() {
-  if (main_icb_container_arg_enc_) {
-    main_icb_container_arg_enc_->release();
   }
 }
 

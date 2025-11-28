@@ -13,6 +13,7 @@
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
+#include "hlsl/shared_indirect.h"
 #include "hlsl/shared_instance_data.h"
 #include "offsetAllocator.hpp"
 
@@ -207,6 +208,7 @@ class MemeRenderer123 {
   struct Stats {
     uint32_t total_instance_meshlets{};
     uint32_t total_instance_vertices{};
+    uint32_t total_instances{};
     FinalDrawResults draw_results{};
   };
   Stats stats_;
@@ -251,7 +253,7 @@ class MemeRenderer123 {
 
   rhi::TextureHandleHolder default_white_tex_;
   std::vector<uint32_t> indirect_cmd_buf_ids_;
-  bool indirect_rendering_enabled_{true};
+  glm::mat4 get_vp_matrix(const RenderArgs& args);
 };
 
 }  // namespace gfx

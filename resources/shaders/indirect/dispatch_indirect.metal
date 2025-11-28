@@ -27,7 +27,7 @@ struct TLAB_Layout {
 };
 
 
-kernel void comp_main(const device uint8_t* pc [[buffer(0)]],
+kernel void comp_main(const device uint4* pc [[buffer(0)]],
                       constant Args2& args2 [[buffer(1)]],
                       device Args& args [[buffer(2)]],
                       device uint8_t* out_args [[buffer(3)]],
@@ -40,8 +40,9 @@ kernel void comp_main(const device uint8_t* pc [[buffer(0)]],
     if (gid >= draw_cnt) {
             return;
     }
-    device uint8_t* out_ptr = out_args + gid * sizeof(TLAB_Layout);
-    for (uint i = 0; i < PC_SIZE; i++) {
+    device uint4* out_ptr = reinterpret_cast<device uint4*>(out_args + gid * sizeof(TLAB_Layout));
+    static_assert(PC_SIZE / sizeof(uint4) == 10);
+    for (uint i = 0; i < PC_SIZE / sizeof(packed_uint4); i++) {
         out_ptr[i] = pc[i];
     }
     const device IndexedIndirectDrawCmd& cmd = in_cmds[gid];

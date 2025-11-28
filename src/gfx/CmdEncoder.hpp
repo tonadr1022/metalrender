@@ -103,8 +103,6 @@ class CmdEncoder {
                                    glm::uvec3 src_size, glm::uvec3 dst_origin) = 0;
   virtual void copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice, size_t src_level,
                                rhi::BufferHandle dst_buf, size_t dst_offset) = 0;
-  // virtual void bind_index_buf(rhi::BufferHandle index_buf, size_t offset) = 0;
-  // virtual void bind_index_buf(rhi::BufferHandle index_buf) { bind_index_buf(index_buf, 0); }
 
   [[nodiscard]] virtual uint32_t prepare_indexed_indirect_draws(
       rhi::BufferHandle indirect_buf, size_t offset, size_t draw_cnt, rhi::BufferHandle index_buf,
@@ -113,7 +111,7 @@ class CmdEncoder {
   virtual void barrier(PipelineStage src_stage, AccessFlags src_access, PipelineStage dst_stage,
                        AccessFlags dst_access) = 0;
   virtual void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
-                                     size_t draw_cnt) = 0;
+                                     size_t draw_cnt, size_t offset_i) = 0;
   virtual void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf,
                                                uint32_t indirect_buf_id, size_t draw_cnt) = 0;
   virtual void draw_mesh_threadgroups(glm::uvec3 thread_groups,

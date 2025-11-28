@@ -19,7 +19,6 @@
 #include "hlsl/material.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
-#include "hlsl/shared_draw_cull.h"
 #include "hlsl/shared_indirect.h"
 #include "hlsl/shared_mesh_data.h"
 #include "imgui.h"
@@ -81,18 +80,18 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
         .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
                       .depth_format = TextureFormat::D32float},
     });
-    test_mesh_pso_ = device_->create_graphics_pipeline_h({
-        .shaders = {{{"test_mesh", ShaderType::Mesh}, {"test_mesh", ShaderType::Fragment}}},
-        .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
-                      .depth_format = TextureFormat::D32float},
-    });
-    test_task_pso_ = device_->create_graphics_pipeline_h({
-        .shaders = {{{"test_task", ShaderType::Task},
-                     {"test_task", ShaderType::Mesh},
-                     {"test_task", ShaderType::Fragment}}},
-        .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
-                      .depth_format = TextureFormat::D32float},
-    });
+    // test_mesh_pso_ = device_->create_graphics_pipeline_h({
+    //     .shaders = {{{"test_mesh", ShaderType::Mesh}, {"test_mesh", ShaderType::Fragment}}},
+    //     .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
+    //                   .depth_format = TextureFormat::D32float},
+    // });
+    // test_task_pso_ = device_->create_graphics_pipeline_h({
+    //     .shaders = {{{"test_task", ShaderType::Task},
+    //                  {"test_task", ShaderType::Mesh},
+    //                  {"test_task", ShaderType::Fragment}}},
+    //     .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
+    //                   .depth_format = TextureFormat::D32float},
+    // });
     test_draw_cull_pso_ = device_->create_compute_pipeline_h({"draw_cull"});
   }
 
@@ -103,7 +102,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
                                          .bindless = true,
                                          .name = "all materials buf"},
                          sizeof(M4Material));
-  instance_data_mgr_.init(128, device_);
+  instance_data_mgr_.init(6000, device_);
   static_draw_batch_.emplace(DrawBatchType::Static, *device_,
                              DrawBatch::CreateInfo{
                                  .initial_vertex_capacity = 1'000'00,
@@ -201,88 +200,27 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         [this](rhi::CmdEncoder* enc) { flush_pending_texture_uploads(enc); });
   }
 
-  {
-    // auto& test_buf_blit_pass = rg_.add_pass("test_buf_blit");
-    // if (!tmp_out_draw_cnt_buf_.is_valid()) {
-    //   tmp_out_draw_cnt_buf_ = device_->create_buf_h({.usage = rhi::BufferUsage_Storage,
-    //                                                  .size = sizeof(uint32_t) * 100,
-    //                                                  .bindless = true,
-    //                                                  .name = "tmp_out_draw_cnt_buf"});
-    // }
-    // if (!tmp_test_buf_.is_valid()) {
-    //   tmp_test_buf_ = device_->create_buf_h({.usage = rhi::BufferUsage_Storage,
-    //                                          .size = sizeof(uint32_t) * 2 * 100,
-    //                                          .bindless = true,
-    //                                          .name = "tmp_test_buf"});
-    // }
-    // test_buf_blit_pass.add_buf("tmp_out_draw_cnt_buf", tmp_out_draw_cnt_buf_.handle,
-    //                            RGAccess::TransferWrite);
-    // test_buf_blit_pass.add_buf("tmp_test_buf", tmp_test_buf_.handle, RGAccess::TransferWrite);
-    // test_buf_blit_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
-    //   enc->fill_buffer(tmp_out_draw_cnt_buf_.handle, 0,
-    //                    device_->get_buf(tmp_out_draw_cnt_buf_)->size(), 0);
-    //   enc->fill_buffer(tmp_test_buf_.handle, 0, device_->get_buf(tmp_test_buf_)->size(), 0);
-    // });
-  }
-  if (indirect_rendering_enabled_) {
-    auto& prepare_indirect_pass = rg_.add_pass("prepare_indirect");
-    // {
-    //   prepare_indirect_pass.add_buf("tmp_out_draw_cnt_buf_processed",
-    //   tmp_out_draw_cnt_buf_.handle,
-    //                                 RGAccess::ComputeRW, "tmp_out_draw_cnt_buf");
-    //   prepare_indirect_pass.add_buf("tmp_test_buf_processed", tmp_test_buf_.handle,
-    //                                 RGAccess::ComputeRW, "tmp_test_buf");
-    // }
-    prepare_indirect_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
-                                  RGAccess::ComputeWrite);
-    prepare_indirect_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
-      auto win_dims = window_->get_window_size();
-      float aspect = (float)win_dims.x / win_dims.y;
-      glm::mat4 vp = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 10000.f) * args.view_mat;
-      BasicIndirectPC pc{
-          .vp = vp,
-          .vert_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
-          .instance_data_buf_idx =
-              device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
-          .mat_buf_idx = materials_buf_->get_buffer()->bindless_idx(),
-      };
+  auto& prepare_indirect_pass = rg_.add_pass("prepare_indirect");
+  prepare_indirect_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
+                                RGAccess::ComputeWrite);
+  prepare_indirect_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
+    BasicIndirectPC pc{
+        .vp = get_vp_matrix(args),
+        .vert_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
+        .instance_data_buf_idx =
+            device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
+        .mat_buf_idx = materials_buf_->get_buffer()->bindless_idx(),
+    };
 
-      indirect_cmd_buf_ids_.emplace_back(enc->prepare_indexed_indirect_draws(
-          instance_data_mgr_.get_draw_cmd_buf(), 0, all_model_data_.max_objects,
-          static_draw_batch_->index_buf.get_buffer_handle(), 0, &pc, sizeof(pc)));
-
-      {
-        // enc->bind_pipeline(test_draw_cull_pso_);
-        // DrawCullPC pc{
-        //     .out_draw_cnt_buf_idx = device_->get_buf(tmp_out_draw_cnt_buf_)->bindless_idx(),
-        //     .test_buf_idx = device_->get_buf(tmp_test_buf_)->bindless_idx(),
-        //     .frame_num = static_cast<uint32_t>(frame_num_),
-        // };
-        // enc->push_constants(&pc, sizeof(pc));
-        // enc->dispatch_compute(glm::uvec3{1, 1, 1}, glm::uvec3{64, 1, 1});
-      }
-    });
-  }
-  {
-    // auto& testpass2 = rg_.add_pass("test_buf_after_prepare_indirect_pass");
-    // testpass2.add_buf("tmp_out_draw_cnt_buf_processed_2", tmp_out_draw_cnt_buf_.handle,
-    //                   RGAccess::ComputeRW, "tmp_out_draw_cnt_buf_processed");
-    // testpass2.add_buf("tmp_test_buf_processed_2", tmp_test_buf_.handle, RGAccess::ComputeRW,
-    //                   "tmp_test_buf_processed");
-    // testpass2.set_execute_fn([](rhi::CmdEncoder*) {});
-  }
+    indirect_cmd_buf_ids_.emplace_back(enc->prepare_indexed_indirect_draws(
+        instance_data_mgr_.get_draw_cmd_buf(), 0, all_model_data_.max_objects,
+        static_draw_batch_->index_buf.get_buffer_handle(), 0, &pc, sizeof(pc)));
+  });
 
   {
-    LINFO("frame");
     auto& gbuffer_pass = rg_.add_pass("gbuffer");
-    // gbuffer_pass.add_buf("tmp_out_draw_cnt_buf_processed_2", tmp_out_draw_cnt_buf_.handle,
-    //                      RGAccess::ComputeRead);
-    // gbuffer_pass.add_buf("tmp_test_buf_processed_2", tmp_test_buf_.handle,
-    // RGAccess::ComputeRead);
-    if (indirect_rendering_enabled_) {
-      gbuffer_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
-                           RGAccess::IndirectRead);
-    }
+    gbuffer_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
+                         RGAccess::IndirectRead);
     gbuffer_pass.add_tex("gbuffer_a", {.is_swapchain_tex = true}, RGAccess::ColorWrite);
     auto rg_depth_handle = gbuffer_pass.add_tex(
         "depth_tex", {.format = rhi::TextureFormat::D32float}, RGAccess::ColorWrite);
@@ -292,6 +230,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     imgui_renderer_->add_dirty_textures_to_pass(gbuffer_pass, true);
 
     gbuffer_pass.set_execute_fn([this, rg_depth_handle, &args](rhi::CmdEncoder* enc) {
+      ZoneScopedN("Execute gbuffer pass");
       auto depth_handle = rg_.get_att_img(rg_depth_handle);
       ASSERT(depth_handle.is_valid());
       enc->begin_rendering({
@@ -307,10 +246,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
 
-      // auto win_dims = window_->get_window_size();
-      // float aspect = (float)win_dims.x / win_dims.y;
-      // glm::mat4 vp = glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) *
-      // args.view_mat; TestTaskPC pc{
+      // TestTaskPC pc{
       //     .vp = vp,
       //     .task_cmd_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
       //     .task_cmd_idx = 0,
@@ -336,30 +272,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
       enc->bind_pipeline(test2_pso_);
 
-      if (indirect_rendering_enabled_) {
-        enc->draw_indexed_indirect(instance_data_mgr_.get_draw_cmd_buf(), indirect_cmd_buf_ids_[0],
-                                   all_model_data_.max_objects);
-      } else {
-        // auto win_dims = window_->get_window_size();
-        // float aspect = (float)win_dims.x / win_dims.y;
-        // glm::mat4 mv =
-        //     glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 1000.f) * args.view_mat;
-        // BasicIndirectPC pc{
-        //     .vp = mv,
-        //     .vert_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
-        //     .instance_data_buf_idx =
-        //     get_bindless_idx(instance_data_mgr_.get_instance_data_buf()), .mat_buf_idx =
-        //     get_bindless_idx(materials_buf_->get_buffer_handle()),
-        // };
-        // enc->push_constants(&pc, sizeof(pc));
-        // for (size_t i = 0; i < std::min(all_model_data_.max_objects, cmds_.size()); i++) {
-        //   auto& cmd = cmds_[i];
-        //   enc->draw_indexed_primitives(rhi::PrimitiveTopology::TriangleList,
-        //                                static_draw_batch_->index_buf.get_buffer_handle(),
-        //                                cmd.first_index, cmd.index_count, 1,
-        //                                cmd.vertex_offset / sizeof(DefaultVertex), i);
-        // }
-      }
+      ASSERT(indirect_cmd_buf_ids_.size());
+      enc->draw_indexed_indirect(instance_data_mgr_.get_draw_cmd_buf(), indirect_cmd_buf_ids_[0],
+                                 all_model_data_.max_objects, 0);
+
       if (args.draw_imgui) {
         imgui_renderer_->render(enc, window_->get_window_size(), curr_frame_idx_);
       }
@@ -631,6 +547,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
     });
   }
 
+  stats_.total_instances += instance_datas.size();
   device_->copy_to_buffer(instance_datas.data(), instance_datas.size() * sizeof(InstanceData),
                           instance_data_mgr_.get_instance_data_buf(),
                           instance_data_gpu_alloc.offset * sizeof(InstanceData));
@@ -804,7 +721,9 @@ void MemeRenderer123::on_imgui() {
     ImGui::TreePop();
   }
   if (ImGui::TreeNodeEx("Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
-    ImGui::Text("Total possible vertices drawn: %d", stats_.total_instance_vertices);
+    ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
+                stats_.total_instance_vertices, stats_.total_instances);
+
     ImGui::TreePop();
   }
 
@@ -812,6 +731,12 @@ void MemeRenderer123::on_imgui() {
     device_->on_imgui();
     ImGui::TreePop();
   }
+}
+
+glm::mat4 MemeRenderer123::get_vp_matrix(const RenderArgs& args) {
+  auto win_dims = window_->get_window_size();
+  float aspect = (float)win_dims.x / win_dims.y;
+  return glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 10000.f) * args.view_mat;
 }
 
 }  // namespace gfx

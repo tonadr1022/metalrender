@@ -4,6 +4,7 @@
 #include <Metal/MTLGPUAddress.hpp>
 
 #include "gfx/CmdEncoder.hpp"
+#include "gfx/metal/MetalCmdEncoderICBMgr.hpp"
 
 class MetalDevice;
 
@@ -27,7 +28,6 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   Metal3CmdEncoder(Metal3CmdEncoder&&) = delete;
   Metal3CmdEncoder& operator=(const Metal3CmdEncoder&) = delete;
   Metal3CmdEncoder& operator=(Metal3CmdEncoder&&) = delete;
-  ~Metal3CmdEncoder() override;
 
   Metal3CmdEncoder(MetalDevice* device, MTL::CommandBuffer* cmd_buf);
 
@@ -63,7 +63,7 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
 
   void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
-                             size_t draw_cnt) override;
+                             size_t draw_cnt, size_t offset_i) override;
   void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
                                        size_t draw_cnt) override;
   void draw_mesh_threadgroups(glm::uvec3 thread_groups, glm::uvec3 threads_per_task_thread_group,
@@ -80,7 +80,6 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
                    uint32_t value) override;
 
  private:
-  void init_icb_arg_encoder_and_buf_and_set_icb(MTL::IndirectCommandBuffer* icb);
   void flush_compute_barriers();
   void flush_render_barriers();
 
@@ -102,15 +101,12 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   MTL::Stages compute_enc_dst_stages_{};
   MTL::Stages render_enc_dst_stages_{};
 
-  MTL::Fence* test_fence_{};
   MTL::ComputeCommandEncoder* compute_enc_{};
   MTL::BlitCommandEncoder* blit_enc_{};
-
   MTL::RenderCommandEncoder* render_enc_{};
-  MetalDevice* device_{};
 
-  rhi::BufferHandleHolder main_icb_container_buf_;
-  MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
+  MetalDevice* device_{};
+  MetalCmdEncoderICBMgr cmd_icb_mgr_;
 
   uint8_t pc_data_[168]{};
 };

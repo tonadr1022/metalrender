@@ -82,7 +82,7 @@ void App::run() {
   int scene = 1;
   if (scene == 0) {
     glm::ivec3 iter{};
-    int n = 1;
+    int n = 0;
     glm::ivec3 dims{n, 1, n};
     float dist = 4.0;
     for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
@@ -94,9 +94,9 @@ void App::run() {
     // load_model(config_.initial_model_path);
   } else if (scene == 1) {
     rando::seed(10000000);
-    size_t count = 6000;
+    size_t count = 3000;
     float scale = 10;
-    float radius = 800;
+    float radius = 400;
 
     for (size_t i = 0; i < count; i++) {
       auto rand_f = [radius]() { return rando::get_float(-radius, radius); };
@@ -140,7 +140,7 @@ void App::run() {
     // }
 
     if (imgui_enabled_) {
-      on_imgui();
+      on_imgui(dt);
     }
 
     ImGui::Render();
@@ -225,8 +225,9 @@ void App::load_config() {
   }
 }
 
-void App::on_imgui() {
+void App::on_imgui(float dt) {
   ImGui::Begin("Renderer");
+  ImGui::Text("Frame time %f (ms)", dt * 1000);
   renderer_.on_imgui();
   if (ImGui::TreeNodeEx("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Position: %f %f %f", camera_.pos.x, camera_.pos.y, camera_.pos.z);

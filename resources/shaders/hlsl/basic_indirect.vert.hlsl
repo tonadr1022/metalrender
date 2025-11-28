@@ -14,7 +14,8 @@ struct DrawID {
 
 ConstantBuffer<DrawID> gDrawID : register(b1);
 
-[RootSignature(ROOT_SIGNATURE)] VOut main(uint vert_id : SV_VertexID) {
+[RootSignature(ROOT_SIGNATURE)] VOut main(uint vert_id : SV_VertexID,
+                                          uint instance_id : SV_InstanceID) {
   StructuredBuffer<InstanceData> instance_data_buf = ResourceDescriptorHeap[instance_data_buf_idx];
   InstanceData instance_data = instance_data_buf[gDrawID.did];
 
@@ -26,20 +27,5 @@ ConstantBuffer<DrawID> gDrawID : register(b1);
                instance_data.translation;
   o.pos = mul(vp, float4(pos, 1.0));
   o.material_id = instance_data.mat_id;
-
-  /*
-  VOut o;
-  if (vert_id % 3 == 0) {
-    o.pos = float4(-0.5, -0.5, 0.5, 1.0);
-  }
-  if (vert_id % 3 == 1) {
-    o.pos = float4(0.5, -0.5, 0.5, 1.0);
-  }
-  if (vert_id % 3 == 2) {
-    o.pos = float4(0.0, 0.5, 0.5, 1.0);
-  }
-  o.uv = float2(0, 0);
-  o.material_id = 0;
-  */
   return o;
 }

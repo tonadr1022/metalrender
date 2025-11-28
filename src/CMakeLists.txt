@@ -46,6 +46,7 @@ endif()
 if(BUILD_METAL)
     target_sources(${target_name} PRIVATE
         gfx/metal/MetalCpp.cpp
+        gfx/metal/MetalCmdEncoderICBMgr.cpp
         gfx/metal/MetalDevice.cpp
         gfx/metal/MetalBuffer.cpp
         gfx/metal/MetalUtil.cpp

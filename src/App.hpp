@@ -21,7 +21,7 @@ struct App {
  private:
   void on_hide_mouse_change();
   void load_config();
-  void on_imgui();
+  void on_imgui(float dt);
   void load_model(const std::filesystem::path &path, const glm::mat4 &transform);
 
   struct Config {

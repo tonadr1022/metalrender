@@ -49,6 +49,8 @@ struct MetalDeviceInitInfo {
   bool prefer_mtl4{};
 };
 
+using ICBs = std::vector<MTL::IndirectCommandBuffer*>;
+
 class MetalDevice : public rhi::Device {
  public:
   using rhi::Device::get_buf;
@@ -178,6 +180,7 @@ class MetalDevice : public rhi::Device {
       size = align_up(size, 8);
       ALWAYS_ASSERT(size + offset_ <= capacity_);
       auto* buf = device_->get_mtl_buf(buffers[frame_idx_]);
+      ASSERT(buf);
       size_t offset = offset_;
       offset_ += size;
       return {buf, offset};
@@ -232,16 +235,16 @@ class MetalDevice : public rhi::Device {
 
     struct ICB_Data {
       uint64_t curr_id{};
-      std::vector<MTL::IndirectCommandBuffer*> icbs;
+      std::vector<ICBs> icbs;
     };
 
     struct ICB_Alloc {
       uint32_t id;
-      MTL::IndirectCommandBuffer* icb;
+      ICBs icbs;
     };
 
     ICB_Alloc alloc(rhi::BufferHandle indirect_buf_handle, uint32_t draw_cnt);
-    MTL::IndirectCommandBuffer* get(rhi::BufferHandle indirect_buf, uint32_t id);
+    const ICBs& get(rhi::BufferHandle indirect_buf, uint32_t id);
     void reset_for_frame();
     void remove(rhi::BufferHandle indirect_buf);
 

@@ -211,7 +211,9 @@ rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   if (desc.name) {
     mtl_buf->setLabel(mtl::util::string(desc.name));
   }
-  mtl_buf->retain();
+  if (mtl4_enabled_) {
+    mtl_buf->retain();
+  }
 
   uint32_t idx = rhi::k_invalid_bindless_idx;
   if (desc.bindless) {
@@ -266,7 +268,9 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   texture_desc->setUsage(usage);
   auto* tex = device_->newTexture(texture_desc);
   ALWAYS_ASSERT(tex);
-  tex->retain();
+  if (mtl4_enabled_) {
+    tex->retain();
+  }
   if (desc.name) {
     tex->setLabel(mtl::util::string(desc.name));
   }
@@ -279,6 +283,7 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
     IRDescriptorTableSetTexture(&resource_table[idx], tex, 0.0f, 0);
   }
   main_res_set_->addAllocation(tex);
+  main_res_set_->commit();
 
   return texture_pool_.alloc(desc, idx, tex);
 }
@@ -295,6 +300,9 @@ void MetalDevice::destroy(rhi::BufferHandle handle) {
     main_res_set_->removeAllocation(buf->buffer());
     req_alloc_sizes_.total_buffer_space_allocated -= buf->desc().size;
     buf->buffer()->release();
+    if (mtl4_enabled_) {
+      buf->buffer()->release();
+    }
   }
 
   if (buf->desc().usage & rhi::BufferUsage_Indirect) {
@@ -358,6 +366,7 @@ void set_shader_stage_functions(const rhi::ShaderCreateInfo& shader_info, T& des
   if constexpr (std::is_same_v<T, MTL4::RenderPipelineDescriptor*> ||
                 std::is_same_v<T, MTL4::MeshRenderPipelineDescriptor*>) {
     MTL4::LibraryFunctionDescriptor* func_desc = MTL4::LibraryFunctionDescriptor::alloc()->init();
+    ASSERT(func_desc);
     func_desc->setLibrary(lib);
     func_desc->setName(mtl::util::string(entry_point_name));
     switch (shader_info.type) {
@@ -646,7 +655,6 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
     mtl3_resources_->main_cmd_buf = mtl3_resources_->main_cmd_q->commandBuffer();
     mtl3_resources_->main_cmd_buf->useResidencySet(main_res_set_);
   }
-  LINFO(" frame begin {}", frame_num_);
   return true;
 }
 
@@ -771,36 +779,44 @@ MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle in
   uint32_t indirect_buf_id = it->second.curr_id;
   it->second.curr_id++;
 
-  MTL::IndirectCommandBuffer* icb{};
+  std::vector<MTL::IndirectCommandBuffer*> icbs{};
   if (indirect_buf_id < it->second.icbs.size()) {
-    icb = it->second.icbs[indirect_buf_id];
+    icbs = it->second.icbs[indirect_buf_id];
   } else {
-    MTL::IndirectCommandBufferDescriptor* desc =
-        MTL::IndirectCommandBufferDescriptor::alloc()->init();
-    // TODO: try not to do this at least for mesh shaders
-    desc->setInheritBuffers(false);
-    desc->setInheritPipelineState(true);
-    desc->setCommandTypes(cmd_types_);
-    if (cmd_types_ & MTL::IndirectCommandTypeDrawIndexed) {
-      desc->setMaxVertexBufferBindCount(3);
-      desc->setMaxFragmentBufferBindCount(3);
-    } else if (cmd_types_ & MTL::IndirectCommandTypeDrawMeshThreadgroups) {
-      desc->setMaxObjectBufferBindCount(3);
-      desc->setMaxMeshBufferBindCount(3);
-      desc->setMaxFragmentBufferBindCount(3);
+    for (size_t curr_draw_cnt_offset = 0, rem_draws = draw_cnt; curr_draw_cnt_offset < draw_cnt;
+         curr_draw_cnt_offset += 1000, rem_draws -= 1000) {
+      MTL::IndirectCommandBufferDescriptor* desc =
+          MTL::IndirectCommandBufferDescriptor::alloc()->init();
+      // TODO: try not to do this at least for mesh shaders
+      desc->setInheritBuffers(false);
+      desc->setInheritPipelineState(true);
+      desc->setCommandTypes(cmd_types_);
+      if (cmd_types_ & MTL::IndirectCommandTypeDrawIndexed) {
+        desc->setMaxVertexBufferBindCount(5);
+        desc->setMaxFragmentBufferBindCount(5);
+      } else if (cmd_types_ & MTL::IndirectCommandTypeDrawMeshThreadgroups) {
+        desc->setMaxObjectBufferBindCount(3);
+        desc->setMaxMeshBufferBindCount(3);
+        desc->setMaxFragmentBufferBindCount(3);
+      }
+      auto* icb = device_->get_device()->newIndirectCommandBuffer(
+          desc, std::min<uint32_t>(1000, rem_draws), MTL::ResourceStorageModeShared);
+      if (device_->mtl4_enabled_) {
+        icb->retain();
+      }
+      device_->get_main_residency_set()->addAllocation(icb);
+      device_->get_main_residency_set()->commit();
+
+      icbs.emplace_back(icb);
+      desc->release();
     }
-    icb = device_->get_device()->newIndirectCommandBuffer(desc, draw_cnt,
-                                                          MTL::ResourceStorageModePrivate);
-    icb->retain();
-    desc->release();
-    device_->get_main_residency_set()->addAllocation(icb);
-    it->second.icbs.emplace_back(icb);
+    it->second.icbs.emplace_back(icbs);
   }
 
-  return {.id = indirect_buf_id, .icb = icb};
+  return {.id = indirect_buf_id, .icbs = icbs};
 }
 
-MTL::IndirectCommandBuffer* MetalDevice::ICB_Mgr::get(rhi::BufferHandle indirect_buf, uint32_t id) {
+const ICBs& MetalDevice::ICB_Mgr::get(rhi::BufferHandle indirect_buf, uint32_t id) {
   auto it = indirect_buffer_handle_to_icb_.find(indirect_buf.to64());
   ASSERT(it != indirect_buffer_handle_to_icb_.end());
   ASSERT(id < it->second.icbs.size());
@@ -831,7 +847,6 @@ void MetalDevice::on_imgui() {
   ImGui::Text("Active Textures: %zu\nActive Buffers: %zu\nGPU Buffer Space Requested: %zu",
               texture_pool_.size(), buffer_pool_.size(),
               req_alloc_sizes_.total_buffer_space_allocated);
-  LINFO("{}", req_alloc_sizes_.total_buffer_space_allocated);
 }
 
 std::filesystem::path MetalDevice::get_metallib_path_from_shader_info(

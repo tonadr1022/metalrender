@@ -1,5 +1,7 @@
 #include "ModelLoader.hpp"
 
+#include <tracy/Tracy.hpp>
+
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
 #include "gfx/GFXTypes.hpp"
@@ -22,6 +24,7 @@
 namespace {
 
 int32_t add_node_to_hierarchy(std::vector<Hierarchy> &hierarchies, int32_t parent, int32_t level) {
+  ZoneScoped;
   const auto node_i = static_cast<int32_t>(hierarchies.size());
   hierarchies.push_back(Hierarchy{.parent = parent, .level = level});
 
@@ -53,6 +56,7 @@ int32_t add_node_to_hierarchy(std::vector<Hierarchy> &hierarchies, int32_t paren
 int32_t add_node_to_model(ModelInstance &model, int32_t parent, int32_t level,
                           const glm::vec3 &translation, const glm::quat &rotation, float scale,
                           uint32_t mesh_id) {
+  ZoneScoped;
   const int32_t node = add_node_to_hierarchy(model.nodes, parent, level);
   assert(std::cmp_equal(node, model.global_transforms.size()));
   assert(std::cmp_equal(node, model.local_transforms.size()));
@@ -69,6 +73,7 @@ int32_t add_node_to_model(ModelInstance &model, int32_t parent, int32_t level,
 // Ref: https://github.com/zeux/meshoptimizer
 MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
                                     std::span<rhi::DefaultIndexT> indices, uint32_t base_vertex) {
+  ZoneScoped;
   const size_t max_meshlets = meshopt_buildMeshletsBound(indices.size(), k_max_vertices_per_meshlet,
                                                          k_max_triangles_per_meshlet);
   // cone_weight set to a value between 0 and 1 to balance cone culling efficiency with other forms
@@ -124,6 +129,7 @@ namespace model {
 
 bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transform,
                 ModelInstance &out_model, ModelLoadResult &out_load_result) {
+  ZoneScoped;
   out_load_result = {};
   out_model = {};
   const cgltf_options gltf_load_opts{};
@@ -154,7 +160,6 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
       int w{}, h{}, comp{};
       const std::filesystem::path full_img_path = directory_path / img.uri;
       uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
-      LINFO("{}", comp);
       const uint32_t mip_levels = math::get_mip_levels(w, h);
       const rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
                                   .storage_mode = rhi::StorageMode::Default,
@@ -177,44 +182,47 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
     return gltf_img_i;
   };
 
-  auto &materials = out_load_result.materials;
-  materials.reserve(gltf->materials_count);
-  for (size_t material_i = 0; material_i < gltf->materials_count; material_i++) {
-    const cgltf_material *gltf_mat = &gltf->materials[material_i];
-    if (!gltf_mat) {
-      ALWAYS_ASSERT(0);
+  {
+    ZoneScopedN("Load materials and images");
+    auto &materials = out_load_result.materials;
+    materials.reserve(gltf->materials_count);
+    for (size_t material_i = 0; material_i < gltf->materials_count; material_i++) {
+      const cgltf_material *gltf_mat = &gltf->materials[material_i];
+      if (!gltf_mat) {
+        ALWAYS_ASSERT(0);
+      }
+      Material material{};
+      material.albedo_factors.r = gltf_mat->pbr_metallic_roughness.base_color_factor[0];
+      material.albedo_factors.g = gltf_mat->pbr_metallic_roughness.base_color_factor[1];
+      material.albedo_factors.b = gltf_mat->pbr_metallic_roughness.base_color_factor[2];
+      material.albedo_factors.a = gltf_mat->pbr_metallic_roughness.base_color_factor[3];
+      material.albedo_factors.a = 1.0;
+
+      auto set_and_load_material_img = [&gltf, &load_img, &texture_uploads](
+                                           const cgltf_texture_view *tex_view,
+                                           uint32_t &result_tex_id, rhi::TextureFormat format) {
+        if (!tex_view || !tex_view->texture || !tex_view->texture->image) {
+          return;
+        }
+        const size_t gltf_image_i = tex_view->texture->image - gltf->images;
+        if (texture_uploads[gltf_image_i].data) {
+          result_tex_id = gltf_image_i;
+        } else {
+          result_tex_id = load_img(gltf_image_i, format);
+        }
+      };
+
+      set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.base_color_texture,
+                                material.albedo_tex, rhi::TextureFormat::R8G8B8A8Srgb);
+      // set_and_load_material_img(&gltf_mat->normal_texture, material.normal_tex);
+      // if (gltf_mat->has_pbr_metallic_roughness) {
+      //   uint32_t tx{};
+      //   set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.metallic_roughness_texture,
+      //   tx);
+      // }
+
+      materials.push_back(material);
     }
-    Material material{};
-    material.albedo_factors.r = gltf_mat->pbr_metallic_roughness.base_color_factor[0];
-    material.albedo_factors.g = gltf_mat->pbr_metallic_roughness.base_color_factor[1];
-    material.albedo_factors.b = gltf_mat->pbr_metallic_roughness.base_color_factor[2];
-    material.albedo_factors.a = gltf_mat->pbr_metallic_roughness.base_color_factor[3];
-    material.albedo_factors.a = 1.0;
-
-    auto set_and_load_material_img = [&gltf, &load_img, &texture_uploads](
-                                         const cgltf_texture_view *tex_view,
-                                         uint32_t &result_tex_id, rhi::TextureFormat format) {
-      if (!tex_view || !tex_view->texture || !tex_view->texture->image) {
-        return;
-      }
-      const size_t gltf_image_i = tex_view->texture->image - gltf->images;
-      if (texture_uploads[gltf_image_i].data) {
-        result_tex_id = gltf_image_i;
-      } else {
-        result_tex_id = load_img(gltf_image_i, format);
-      }
-    };
-
-    set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.base_color_texture,
-                              material.albedo_tex, rhi::TextureFormat::R8G8B8A8Srgb);
-    // set_and_load_material_img(&gltf_mat->normal_texture, material.normal_tex);
-    // if (gltf_mat->has_pbr_metallic_roughness) {
-    //   uint32_t tx{};
-    //   set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.metallic_roughness_texture,
-    //   tx);
-    // }
-
-    materials.push_back(material);
   }
 
   std::vector<DefaultVertex> &all_vertices = out_load_result.vertices;
@@ -251,6 +259,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
   meshlet_datas.reserve(model_vertex_count / k_max_vertices_per_meshlet);
 
   {  // process mesh/primitive
+    ZoneScopedN("Process meshes");
     uint32_t overall_mesh_i = 0;
     for (uint32_t mesh_i = 0; mesh_i < gltf->meshes_count; mesh_i++) {
       const auto &mesh = gltf->meshes[mesh_i];
@@ -334,6 +343,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
     }
   }
   {
+    ZoneScopedN("Process nodes");
     auto &model = out_model;
     model.global_transforms.reserve(gltf->nodes_count);
     model.local_transforms.reserve(gltf->nodes_count);
@@ -413,6 +423,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
   }
 
   {  // process meshlet for entire instance
+    ZoneScopedN("Process Meshlets");
     auto &meshlet_process_result = out_load_result.meshlet_process_result;
     auto &meshlet_datas = out_load_result.meshlet_process_result.meshlet_datas;
     for (auto &meshlet_data : meshlet_datas) {
