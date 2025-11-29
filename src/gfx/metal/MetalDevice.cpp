@@ -195,6 +195,7 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
       compile_mtl_compute_pipeline(shader_lib_dir_ / "dispatch_mesh.metallib");
 
   shared_event_ = device_->newSharedEvent();
+  test_event_ = get_device()->newEvent();
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
@@ -205,7 +206,7 @@ void MetalDevice::shutdown() { device_->release(); }
 
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   auto options = mtl::util::convert(desc.storage_mode);
-  // options |= MTL::ResourceHazardTrackingModeUntracked;
+  options |= MTL::ResourceHazardTrackingModeUntracked;
   auto* mtl_buf = device_->newBuffer(desc.size, options);
   ALWAYS_ASSERT(mtl_buf);
   if (desc.name) {
@@ -601,17 +602,19 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
   }
 
   // MTL3 path
-  if (curr_cmd_list_idx_ < mtl3_resources_->cmd_lists_.size()) {
-    auto* ret = (Metal3CmdEncoder*)mtl3_resources_->cmd_lists_[curr_cmd_list_idx_].get();
-    ret->cmd_buf_ = mtl3_resources_->main_cmd_buf;
-    curr_cmd_list_idx_++;
-    return ret;
+  if (curr_cmd_list_idx_ >= mtl3_resources_->cmd_lists_.size()) {
+    mtl3_resources_->cmd_lists_.emplace_back(std::make_unique<Metal3CmdEncoder>(this, nullptr));
   }
-
-  mtl3_resources_->cmd_lists_.emplace_back(
-      std::make_unique<Metal3CmdEncoder>(this, mtl3_resources_->main_cmd_buf));
+  ASSERT(curr_cmd_list_idx_ < mtl3_resources_->cmd_lists_.size());
+  auto* ret = (Metal3CmdEncoder*)mtl3_resources_->cmd_lists_[curr_cmd_list_idx_].get();
+  ret->cmd_buf_ = mtl3_resources_->main_cmd_q->commandBuffer();
+  ASSERT(ret->cmd_buf_);
+  ret->cmd_buf_->useResidencySet(main_res_set_);
+  ret->wait();
+  // ret->cmd_buf_ = mtl3_resources_->main_cmd_buf;
   curr_cmd_list_idx_++;
-  return mtl3_resources_->cmd_lists_.back().get();
+
+  return ret;
 }
 
 bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
@@ -653,8 +656,11 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   if (mtl4_enabled_) {
     mtl4_resources_->main_cmd_buf->beginCommandBuffer(mtl4_resources_->cmd_allocators[frame_idx()]);
   } else {
-    mtl3_resources_->main_cmd_buf = mtl3_resources_->main_cmd_q->commandBuffer();
-    mtl3_resources_->main_cmd_buf->useResidencySet(main_res_set_);
+    // mtl3_resources_->main_cmd_buf = mtl3_resources_->main_cmd_q->commandBuffer();
+    curr_event_val_ = 0;
+    for (auto& l : mtl3_resources_->cmd_lists_) {
+      l->reset_event();
+    }
   }
   return true;
 }
@@ -672,29 +678,13 @@ void MetalDevice::submit_frame() {
     curr_drawable_->present();
     mtl4_resources_->main_cmd_q->signalEvent(shared_event_, frame_num_);
   } else {
-    mtl3_resources_->main_cmd_buf->presentDrawable(curr_drawable_);
-    mtl3_resources_->main_cmd_buf->encodeSignalEvent(shared_event_, frame_num_);
-    std::function<void(MTL::CommandBuffer*)> f = [](MTL::CommandBuffer* cmd) {
-      if (cmd->error()) {
-        if (cmd->error()->debugDescription()) {
-          LINFO("{}", cmd->error()->debugDescription()->cString(NS::UTF8StringEncoding));
-        }
-        if (cmd->error()->localizedDescription()) {
-          LINFO("{}", cmd->error()->localizedDescription()->cString(NS::UTF8StringEncoding));
-        }
-        if (cmd->error()->localizedFailureReason()) {
-          LINFO("{}", cmd->error()->localizedFailureReason()->cString(NS::UTF8StringEncoding));
-        }
-        if (cmd->error()->domain()) {
-          LINFO("{}", cmd->error()->domain()->cString(NS::UTF8StringEncoding));
-        }
-        LINFO("err cmd buf");
-        ALWAYS_ASSERT(0);
-      }
-    };
-    mtl3_resources_->main_cmd_buf->addCompletedHandler(f);
-
-    mtl3_resources_->main_cmd_buf->commit();
+    for (auto& l : mtl3_resources_->cmd_lists_) {
+      l->cmd_buf_ = nullptr;
+    }
+    auto* end_cb = mtl3_resources_->main_cmd_q->commandBuffer();
+    end_cb->presentDrawable(curr_drawable_);
+    end_cb->encodeSignalEvent(shared_event_, frame_num_);
+    end_cb->commit();
   }
 
   frame_num_++;

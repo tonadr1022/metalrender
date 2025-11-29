@@ -1,4 +1,5 @@
 // clang-format off
+#define COMPUTE_ROOT_SIG
 #include "root_sig.h"
 #include "../shader_constants.h"
 #include "../shader_core.h"
@@ -78,6 +79,7 @@ main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload pay
   SetMeshOutputCounts(meshlet.vertex_count, meshlet.triangle_count);
 
   StructuredBuffer<uint> meshlet_vertex_buf = ResourceDescriptorHeap[meshlet_vertex_buf_idx];
+
   for (uint i = gtid; i < meshlet.vertex_count;) {
     uint vertex_idx =
         meshlet_vertex_buf[meshlet.vertex_offset + i + task_cmd.meshlet_vertices_offset];
@@ -86,18 +88,12 @@ main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload pay
     i += K_MESH_TG_SIZE;
   }
 
-  if (gtid < meshlet.vertex_count) {
-  }
-
   for (uint i = gtid; i < meshlet.triangle_count;) {
     ByteAddressBuffer meshlet_tris = ResourceDescriptorHeap[meshlet_tri_buf_idx];
     // The byte value must be a multiple of four so that it is DWORD aligned. If any other value is
     // provided, behavior is undefined.
     tris[i] = LoadThreeBytes(meshlet_tris,
                              task_cmd.meshlet_triangles_offset + meshlet.triangle_offset + i * 3);
-
     i += K_MESH_TG_SIZE;
-  }
-  if (gtid < meshlet.triangle_count) {
   }
 }

@@ -426,10 +426,12 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
     ZoneScopedN("Process Meshlets");
     auto &meshlet_process_result = out_load_result.meshlet_process_result;
     auto &meshlet_datas = out_load_result.meshlet_process_result.meshlet_datas;
+    size_t i = 0;
     for (auto &meshlet_data : meshlet_datas) {
       meshlet_data.meshlet_triangles_offset = meshlet_process_result.tot_meshlet_tri_count;
       meshlet_data.meshlet_vertices_offset = meshlet_process_result.tot_meshlet_verts_count;
       meshlet_data.meshlet_base = meshlet_process_result.tot_meshlet_count;
+      out_load_result.meshes[i++].meshlet_count = meshlet_data.meshlets.size();
       meshlet_process_result.tot_meshlet_count += meshlet_data.meshlets.size();
       meshlet_process_result.tot_meshlet_verts_count += meshlet_data.meshlet_vertices.size();
       meshlet_process_result.tot_meshlet_tri_count += meshlet_data.meshlet_triangles.size();

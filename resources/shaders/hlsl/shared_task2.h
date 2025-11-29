@@ -1,4 +1,3 @@
-
 #ifndef SHARED_TEST_TASK_H
 #define SHARED_TEST_TASK_H
 

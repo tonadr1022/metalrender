@@ -8,6 +8,12 @@
 #include "../shader_constants.h"
 // clang-format on
 
+struct DispatchIndirectCmd {
+  uint tg_x;
+  uint tg_y;
+  uint tg_z;
+};
+
 [RootSignature(ROOT_SIGNATURE)][NumThreads(64, 1, 1)] void main(uint dtid : SV_DispatchThreadID) {
   if (dtid >= max_draws) {
     return;
@@ -20,9 +26,11 @@
   RWStructuredBuffer<TaskCmd> task_cmd_buf = ResourceDescriptorHeap[task_cmd_buf_idx];
   uint task_groups = (mesh_data.meshlet_count + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
 
-  RWStructuredBuffer<uint> task_cmd_cnt_buf = ResourceDescriptorHeap[draw_cnt_buf_idx];
+  RWStructuredBuffer<DispatchIndirectCmd> task_cmd_cnt_buf =
+      ResourceDescriptorHeap[draw_cnt_buf_idx];
+
   uint task_group_base_i;
-  InterlockedAdd(task_cmd_cnt_buf[0], task_groups, task_group_base_i);
+  InterlockedAdd(task_cmd_cnt_buf[0].tg_x, task_groups, task_group_base_i);
 
   uint task_cmd_buf_len;
   uint stride;

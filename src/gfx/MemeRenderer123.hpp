@@ -222,6 +222,7 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder test_mesh_pso_;
   rhi::PipelineHandleHolder test_task_pso_;
   rhi::PipelineHandleHolder draw_cull_pso_;
+  rhi::PipelineHandleHolder test_clear_buf_pso_;
   std::optional<BackedGPUAllocator> materials_buf_;
 
   rhi::BufferHandleHolder tmp_out_draw_cnt_buf_;
@@ -264,6 +265,7 @@ class MemeRenderer123 {
   // };
   // std::vector<TaskCmd> cmds_;
   std::vector<MeshData> mesh_datas_;
+  size_t k_{};
 };
 
 }  // namespace gfx

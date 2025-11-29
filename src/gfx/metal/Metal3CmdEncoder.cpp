@@ -74,10 +74,21 @@ void Metal3CmdEncoder::begin_rendering(
   }
 
   end_encoders_of_types((EncoderType)(EncoderType_Blit | EncoderType_Compute));
+  wait();
   if (!render_enc_) {
     ASSERT(cmd_buf_);
     render_enc_ = cmd_buf_->renderCommandEncoder(desc);
   }
+  flush_barriers();
+  if (fence_signaled_) {
+    // LINFO("waitign fence");
+    // render_enc_->waitForFence(test_fence_, MTL::RenderStageMesh | MTL::RenderStageObject |
+    //                                            MTL::RenderStageVertex |
+    //                                            MTL::RenderStageFragment);
+    fence_signaled_ = false;
+  }
+
+  render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
   render_enc_->setObjectBuffer(device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
                                kIRDescriptorHeapBindPoint);
   render_enc_->setObjectBuffer(device_->get_mtl_buf(device_->sampler_descriptor_table_), 0,
@@ -102,18 +113,25 @@ void Metal3CmdEncoder::begin_rendering(
 }
 
 void Metal3CmdEncoder::end_encoding() {
-  if (compute_enc_) {
-    compute_enc_->endEncoding();
-    compute_enc_ = nullptr;
-  }
-  if (blit_enc_) {
-    blit_enc_->endEncoding();
-    blit_enc_ = nullptr;
-  }
-  if (render_enc_) {
-    render_enc_->endEncoding();
-    render_enc_ = nullptr;
-  }
+  end_encoders_of_types((EncoderType)(EncoderType_Compute | EncoderType_Blit | EncoderType_Render));
+  signal();
+  cmd_buf_->commit();
+  // if (compute_enc_) {
+  //   compute_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
+  //   compute_enc_->memoryBarrier(MTL::BarrierScopeBuffers);
+  //   compute_enc_->endEncoding();
+  //   compute_enc_ = nullptr;
+  // }
+  // if (blit_enc_) {
+  //   blit_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
+  //   blit_enc_->endEncoding();
+  //   blit_enc_ = nullptr;
+  // }
+  // if (render_enc_) {
+  //   render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
+  //   render_enc_->endEncoding();
+  //   render_enc_ = nullptr;
+  // }
 }
 
 void Metal3CmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
@@ -357,6 +375,21 @@ void Metal3CmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
   }
 }
 
+void Metal3CmdEncoder::barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage,
+                               rhi::AccessFlags, rhi::PipelineStage dst_stage, rhi::AccessFlags) {
+  pending_buffers_to_barrier_.push_back(buf);
+  auto src_mtl_stage = convert_stage(src_stage);
+  auto dst_mtl_stage = convert_stage(dst_stage);
+  if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
+    compute_enc_flush_stages_ |= src_mtl_stage;
+    compute_enc_dst_stages_ |= dst_mtl_stage;
+  }
+  if (dst_mtl_stage & (MTL::StageVertex | MTL::StageFragment | MTL::StageObject | MTL::StageMesh)) {
+    render_enc_flush_stages_ |= src_mtl_stage;
+    render_enc_dst_stages_ |= dst_mtl_stage;
+  }
+}
+
 void Metal3CmdEncoder::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
                                              uint32_t indirect_buf_id, size_t draw_cnt,
                                              size_t offset_i) {
@@ -371,6 +404,28 @@ void Metal3CmdEncoder::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
   }
 }
 
+void Metal3CmdEncoder::draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf,
+                                                       size_t indirect_buf_offset,
+                                                       glm::uvec3 threads_per_task_thread_group,
+                                                       glm::uvec3 threads_per_mesh_thread_group) {
+  auto* buf = device_->get_mtl_buf(indirect_buf);
+  ASSERT(buf);
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
+  auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
+  memcpy(tlab->pc_data, pc_data_, k_pc_size);
+  tlab->cbuffer2.draw_id = 0;  // TODO: don't use this root signature
+  tlab->cbuffer2.vertex_id_base = 0;
+  render_enc_->setObjectBuffer(pc_buf, pc_buf_offset, kIRArgumentBufferBindPoint);
+  render_enc_->setMeshBuffer(pc_buf, pc_buf_offset, kIRArgumentBufferBindPoint);
+  render_enc_->setFragmentBuffer(pc_buf, pc_buf_offset, kIRArgumentBufferBindPoint);
+  render_enc_->drawMeshThreadgroups(
+      buf, indirect_buf_offset,
+      MTL::Size::Make(threads_per_task_thread_group.x, threads_per_task_thread_group.y,
+                      threads_per_task_thread_group.z),
+      MTL::Size::Make(threads_per_mesh_thread_group.x, threads_per_mesh_thread_group.y,
+                      threads_per_mesh_thread_group.z));
+}
+
 void Metal3CmdEncoder::draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indirect_buf*/,
                                                        uint32_t /*indirect_buf_id*/,
                                                        size_t /*draw_cnt*/) {
@@ -383,41 +438,86 @@ void Metal3CmdEncoder::draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indir
 }
 
 Metal3CmdEncoder::Metal3CmdEncoder(MetalDevice* device, MTL::CommandBuffer* cmd_buf)
-    : cmd_buf_(cmd_buf), device_(device), cmd_icb_mgr_(device_) {}
+    : cmd_buf_(cmd_buf), device_(device), cmd_icb_mgr_(device_) {
+  // test_fence_ = device_->get_device()->newFence();
+}
 
 void Metal3CmdEncoder::end_encoders_of_types(EncoderType types) {
-  if (types & EncoderType_Blit) {
-    if (blit_enc_) {
-      blit_enc_->endEncoding();
-      blit_enc_ = nullptr;
-    }
+  // if (types & EncoderType_Blit) {
+  //   if (blit_enc_) {
+  //     blit_enc_->updateFence(test_fence_);
+  //     LINFO("ending blit");
+  //     fence_signaled_ = true;
+  //     blit_enc_->endEncoding();
+  //     blit_enc_ = nullptr;
+  //   }
+  // }
+  // if (types & EncoderType_Compute) {
+  //   if (compute_enc_) {
+  //     compute_enc_->updateFence(test_fence_);
+  //     LINFO("ending compute");
+  //     fence_signaled_ = true;
+  //     compute_enc_->endEncoding();
+  //     compute_enc_ = nullptr;
+  //   }
+  // }
+  // if (types & EncoderType_Render) {
+  //   if (render_enc_) {
+  //     render_enc_->updateFence(test_fence_, MTL::RenderStageMesh | MTL::RenderStageObject |
+  //                                               MTL::RenderStageVertex |
+  //                                               MTL::RenderStageFragment);
+  //     fence_signaled_ = true;
+  //     LINFO("ending render");
+  //     render_enc_->endEncoding();
+  //     render_enc_ = nullptr;
+  //   }
+  // }
+  if (blit_enc_) {
+    // blit_enc_->updateFence(test_fence_);
+    fence_signaled_ = true;
+    blit_enc_->endEncoding();
+    blit_enc_ = nullptr;
   }
-  if (types & EncoderType_Compute) {
-    if (compute_enc_) {
-      compute_enc_->endEncoding();
-      compute_enc_ = nullptr;
-    }
+  if (compute_enc_) {
+    // compute_enc_->updateFence(test_fence_);
+    fence_signaled_ = true;
+    compute_enc_->endEncoding();
+    compute_enc_ = nullptr;
   }
-  if (types & EncoderType_Render) {
-    if (render_enc_) {
-      render_enc_->endEncoding();
-      render_enc_ = nullptr;
-    }
+  if (render_enc_) {
+    // render_enc_->updateFence(test_fence_, MTL::RenderStageMesh | MTL::RenderStageObject |
+    //                                           MTL::RenderStageVertex | MTL::RenderStageFragment);
+    fence_signaled_ = true;
+    render_enc_->endEncoding();
+    render_enc_ = nullptr;
   }
 }
 
 void Metal3CmdEncoder::start_compute_encoder() {
   end_encoders_of_types((EncoderType)(EncoderType_Blit | EncoderType_Render));
+  wait();
   if (!compute_enc_) {
     // TODO: re-evaluate dispatch type
     compute_enc_ = cmd_buf_->computeCommandEncoder(MTL::DispatchTypeSerial);
+
+    flush_barriers();
+    // if (fence_signaled_) {
+    //   compute_enc_->waitForFence(test_fence_);
+    //   fence_signaled_ = false;
+    // }
   }
 }
 
 void Metal3CmdEncoder::start_blit_encoder() {
   end_encoders_of_types((EncoderType)(EncoderType_Compute | EncoderType_Render));
+  wait();
   if (!blit_enc_) {
     blit_enc_ = cmd_buf_->blitCommandEncoder();
+    flush_barriers();
+    // if (fence_signaled_) {
+    //   blit_enc_->waitForFence(test_fence_);
+    //   fence_signaled_ = false;
+    // }
   }
 }
 
@@ -442,7 +542,7 @@ void Metal3CmdEncoder::draw_mesh_threadgroups(glm::uvec3 thread_groups,
 
 void Metal3CmdEncoder::dispatch_compute(glm::uvec3 thread_groups,
                                         glm::uvec3 threads_per_threadgroup) {
-  start_compute_encoder();
+  // start_compute_encoder();
   // TODO: only do this if needed!
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(160);
   auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
@@ -470,6 +570,7 @@ void Metal3CmdEncoder::flush_compute_barriers() {
   if (compute_enc_ && compute_enc_flush_stages_) {
     compute_enc_->barrierAfterQueueStages(compute_enc_flush_stages_, compute_enc_dst_stages_);
   }
+  flush_barriers();
 }
 
 void Metal3CmdEncoder::flush_render_barriers() {
@@ -478,4 +579,36 @@ void Metal3CmdEncoder::flush_render_barriers() {
     render_enc_flush_stages_ = 0;
     render_enc_dst_stages_ = 0;
   }
+  flush_barriers();
+}
+
+void Metal3CmdEncoder::flush_barriers() {
+  // std::vector<const MTL::Resource*> bufs;
+  // bufs.reserve(pending_buffers_to_barrier_.size());
+  // for (auto& h : pending_buffers_to_barrier_) {
+  //   if (device_->get_buf(h)->desc().name) {
+  //     LINFO("buffer barrier {}", device_->get_buf(h)->desc().name);
+  //   } else {
+  //     LINFO("buffer barrier");
+  //   }
+  //   bufs.push_back(device_->get_mtl_buf(h));
+  // }
+  // if (compute_enc_) {
+  //   compute_enc_->useResources(bufs.data(), bufs.size(),
+  //                              MTL::ResourceUsageRead | MTL::ResourceUsageWrite);
+  // }
+  pending_buffers_to_barrier_.clear();
+}
+
+void Metal3CmdEncoder::wait() {
+  ASSERT(cmd_buf_);
+  ASSERT(device_->test_event_);
+  if (device_->curr_event_val_ > 0) {
+    cmd_buf_->encodeWait(device_->test_event_, device_->curr_event_val_);
+  }
+}
+
+void Metal3CmdEncoder::signal() {
+  device_->curr_event_val_++;
+  cmd_buf_->encodeSignalEvent(device_->test_event_, device_->curr_event_val_);
 }

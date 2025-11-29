@@ -66,6 +66,8 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
                                           size_t push_constant_size) override;
   void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
+  void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
+               rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override {}
 
   void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
                              size_t draw_cnt, size_t offset_i) override;
@@ -79,6 +81,13 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   }
   void draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indirect_buf*/,
                                        uint32_t /*indirect_buf_id*/, size_t /*draw_cnt*/) override {
+    exit(1);
+  }
+
+  void draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indirect_buf*/,
+                                       size_t /*indirect_buf_offset*/,
+                                       glm::uvec3 /*threads_per_task_thread_group*/,
+                                       glm::uvec3 /*threads_per_mesh_thread_group*/) override {
     exit(1);
   }
 

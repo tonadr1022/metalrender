@@ -79,7 +79,7 @@ float get_float(float min, float max) {
 
 void App::run() {
   ZoneScoped;
-  int scene = 1;
+  int scene = 3;
   if (scene == 0) {
     glm::ivec3 iter{};
     int n = 1;
@@ -91,7 +91,6 @@ void App::run() {
         load_model(config_.paths[0], glm::translate(glm::mat4{1}, pos));
       }
     }
-    load_model(config_.paths[1], glm::mat4{1});
   } else if (scene == 1) {
     rando::seed(10000000);
     size_t count = 1000;
@@ -115,6 +114,8 @@ void App::run() {
       load_model(config_.paths[0],
                  glm::translate(glm::mat4{1}, p) * glm::scale(glm::mat4{1}, glm::vec3{scales[i]}));
     }
+  } else if (scene == 3) {
+    load_model(config_.paths[1], glm::mat4{1});
   }
 
   // load_model(config_.paths[0], glm::translate(glm::mat4{1}, glm::vec3{0, 0, 0}));

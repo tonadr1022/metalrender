@@ -227,7 +227,13 @@ void RenderGraph::execute() {
   for (auto pass_i : pass_stack_) {
     rhi::CmdEncoder* enc = device_->begin_command_list();
     for (auto& barrier : pass_barrier_infos_[pass_i]) {
-      enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
+      if (barrier.resource.type == RGResourceType::Buffer) {
+        auto buf = get_buf_usage(barrier.resource)->handle;
+        enc->barrier(buf, barrier.src_stage, barrier.src_access, barrier.dst_stage,
+                     barrier.dst_access);
+      } else {
+        enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
+      }
     }
 
     auto& pass = passes_[pass_i];

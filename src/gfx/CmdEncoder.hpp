@@ -110,6 +110,9 @@ class CmdEncoder {
 
   virtual void barrier(PipelineStage src_stage, AccessFlags src_access, PipelineStage dst_stage,
                        AccessFlags dst_access) = 0;
+  virtual void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage,
+                       rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
+                       rhi::AccessFlags dst_access) = 0;
   virtual void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
                                      size_t draw_cnt, size_t offset_i) = 0;
   virtual void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf,
@@ -117,6 +120,10 @@ class CmdEncoder {
   virtual void draw_mesh_threadgroups(glm::uvec3 thread_groups,
                                       glm::uvec3 threads_per_task_thread_group,
                                       glm::uvec3 threads_per_mesh_thread_group) = 0;
+  virtual void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf,
+                                               size_t indirect_buf_offset,
+                                               glm::uvec3 threads_per_task_thread_group,
+                                               glm::uvec3 threads_per_mesh_thread_group) = 0;
   virtual void prepare_mesh_threadgroups_indirect(rhi::BufferHandle mesh_cmd_indirect_buf,
                                                   size_t mesh_cmd_indirect_buf_offset,
                                                   glm::uvec3 threads_per_task_thread_group,

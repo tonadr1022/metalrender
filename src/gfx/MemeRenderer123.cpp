@@ -17,6 +17,7 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/Swapchain.hpp"
 #include "gfx/Texture.hpp"
+#include "gfx/metal/Metal3CmdEncoder.hpp"
 #include "hlsl/material.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
@@ -97,6 +98,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
                       .depth_format = TextureFormat::D32float},
     });
     draw_cull_pso_ = device_->create_compute_pipeline_h({"draw_cull"});
+    test_clear_buf_pso_ = device_->create_compute_pipeline_h({"test_clear_cnt_buf"});
   }
 
   materials_buf_.emplace(*device_,
@@ -209,14 +211,20 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     clear_bufs_pass.add_buf("out_draw_count_buf1", static_draw_batch_->out_draw_count_buf.handle,
                             RGAccess::ComputeWrite);
     clear_bufs_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
-      enc->fill_buffer(static_draw_batch_->out_draw_count_buf.handle, 0, sizeof(uint32_t), 0);
+      enc->bind_pipeline(test_clear_buf_pso_);
+      uint32_t pc = device_->get_buf(static_draw_batch_->out_draw_count_buf.handle)->bindless_idx();
+      enc->push_constants(&pc, sizeof(pc));
+      enc->dispatch_compute(glm::uvec3{1, 1, 1}, glm::uvec3{64, 1, 1});
+      // enc->fill_buffer(static_draw_batch_->out_draw_count_buf.handle, 0, sizeof(uint32_t), 0);
+      // enc->fill_buffer(static_draw_batch_->out_draw_count_buf.handle, sizeof(uint32_t),
+      //                  sizeof(uint32_t) * 2, 1);
     });
 
     auto& prep_meshlets_pass = rg_.add_pass("prepare_meshlet_dispatch");
     prep_meshlets_pass.add_buf("out_draw_count_buf2", static_draw_batch_->out_draw_count_buf.handle,
                                RGAccess::ComputeRW, "out_draw_count_buf1");
     prep_meshlets_pass.add_buf("task_cmd_buf", static_draw_batch_->task_cmd_buf.get_buffer_handle(),
-                               RGAccess::ComputeRW);
+                               RGAccess::ComputeWrite);
     prep_meshlets_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
       enc->bind_pipeline(draw_cull_pso_);
 
@@ -230,7 +238,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           .max_draws = all_model_data_.max_objects,
       };
       enc->push_constants(&pc, sizeof(pc));
-
       enc->dispatch_compute(glm::uvec3{align_divide_up(all_model_data_.max_objects, 64ull), 1, 1},
                             glm::uvec3{64, 1, 1});
     });
@@ -314,9 +321,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         // TODO: LMAOOOOOOOOOOOO
         // auto num_groups =
         //     *((uint32_t*)device_->get_buf(static_draw_batch_->out_draw_count_buf)->contents());
-        // LINFO("num groups {}", num_groups);
-        int n = 1000;
-        enc->draw_mesh_threadgroups({n * 3, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+        // LINFO("num groups {} {}", num_groups, k_);
+        enc->draw_mesh_threadgroups_indirect(static_draw_batch_->out_draw_count_buf.handle, 0,
+                                             {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+        // enc->draw_mesh_threadgroups({k_, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
       } else {
         enc->bind_pipeline(test2_pso_);
         ASSERT(indirect_cmd_buf_ids_.size());
@@ -332,7 +340,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   {
     auto& pass = rg_.add_pass("shade");
     pass.add_tex("gbuffer_a", {.is_swapchain_tex = true}, RGAccess::ComputeRead);
-    pass.set_execute_fn([](rhi::CmdEncoder*) {});
+    pass.set_execute_fn([this](rhi::CmdEncoder* enc) { enc->bind_pipeline(draw_cull_pso_); });
   }
 }
 
@@ -594,6 +602,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
             model_resources->static_draw_batch_alloc.vertex_alloc.offset * sizeof(DefaultVertex)),
         .first_instance = static_cast<uint32_t>(i + instance_data_gpu_alloc.offset),
     });
+    k_ += align_divide_up(mesh.meshlet_count, K_TASK_TG_SIZE);
 
     // cmds_.emplace_back(TaskCmd{
     //     .task_cmd_idx = static_cast<uint32_t>(
@@ -701,7 +710,7 @@ DrawBatch::DrawBatch(DrawBatchType type, rhi::Device& device, const CreateInfo& 
       out_draw_count_buf(device.create_buf_h({
           .storage_mode = rhi::StorageMode::Default,
           .usage = rhi::BufferUsage_Storage,
-          .size = sizeof(uint32_t),
+          .size = sizeof(uint32_t) * 3,
           .bindless = true,
           .name = "out_draw_count_buf",
       })),

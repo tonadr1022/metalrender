@@ -10,6 +10,7 @@ class MetalDevice;
 
 namespace MTL {
 
+class Event;
 class Fence;
 class BlitCommandEncoder;
 class ComputeCommandEncoder;
@@ -62,6 +63,9 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
 
+  void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
+               rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
+
   void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
                              size_t draw_cnt, size_t offset_i) override;
   void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
@@ -78,10 +82,16 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   void dispatch_compute(glm::uvec3 thread_groups, glm::uvec3 threads_per_threadgroup) override;
   void fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes, uint32_t size,
                    uint32_t value) override;
+  void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf, size_t indirect_buf_offset,
+                                       glm::uvec3 threads_per_task_thread_group,
+                                       glm::uvec3 threads_per_mesh_thread_group) override;
 
  private:
   void flush_compute_barriers();
   void flush_render_barriers();
+  // MTL::Event* test_event_{};
+  // MTL::Fence* test_fence_{};
+  bool fence_signaled_{false};
 
   enum EncoderType {
     EncoderType_Render = 1,
@@ -94,8 +104,14 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
 
  public:
   MTL::CommandBuffer* cmd_buf_{};
+  // size_t curr_val_{};
+  void wait();
+  void signal();
+  void reset_event() {}
 
  private:
+  std::vector<rhi::BufferHandle> pending_buffers_to_barrier_;
+  void flush_barriers();
   MTL::Stages compute_enc_flush_stages_{};
   MTL::Stages render_enc_flush_stages_{};
   MTL::Stages compute_enc_dst_stages_{};

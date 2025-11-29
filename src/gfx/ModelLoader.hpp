@@ -46,6 +46,7 @@ struct Mesh {
   uint32_t vertex_count;
   uint32_t index_count;
   uint32_t material_id;
+  uint32_t meshlet_count;
   // bounding sphere
   glm::vec3 center;
   float radius;
