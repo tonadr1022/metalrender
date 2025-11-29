@@ -20,9 +20,11 @@
 #include "hlsl/material.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
+#include "hlsl/shared_draw_cull.h"
 #include "hlsl/shared_indirect.h"
 #include "hlsl/shared_mesh_data.h"
-#include "hlsl/shared_test_task.h"
+#include "hlsl/shared_task2.h"
+#include "hlsl/shared_task_cmd.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "shader_constants.h"
@@ -88,13 +90,13 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
                       .depth_format = TextureFormat::D32float},
     });
     test_task_pso_ = device_->create_graphics_pipeline_h({
-        .shaders = {{{"test_task", ShaderType::Task},
-                     {"test_task", ShaderType::Mesh},
+        .shaders = {{{"task2", ShaderType::Task},
+                     {"task2", ShaderType::Mesh},
                      {"test_task", ShaderType::Fragment}}},
         .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
                       .depth_format = TextureFormat::D32float},
     });
-    test_draw_cull_pso_ = device_->create_compute_pipeline_h({"draw_cull"});
+    draw_cull_pso_ = device_->create_compute_pipeline_h({"draw_cull"});
   }
 
   materials_buf_.emplace(*device_,
@@ -104,7 +106,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
                                          .bindless = true,
                                          .name = "all materials buf"},
                          sizeof(M4Material));
-  instance_data_mgr_.init(6000, device_);
+  instance_data_mgr_.init(12000, device_);
   static_draw_batch_.emplace(DrawBatchType::Static, *device_,
                              DrawBatch::CreateInfo{
                                  .initial_vertex_capacity = 10'000'000,
@@ -202,27 +204,66 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         [this](rhi::CmdEncoder* enc) { flush_pending_texture_uploads(enc); });
   }
 
-  auto& prepare_indirect_pass = rg_.add_pass("prepare_indirect");
-  prepare_indirect_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
-                                RGAccess::ComputeWrite);
-  prepare_indirect_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
-    BasicIndirectPC pc{
-        .vp = get_vp_matrix(args),
-        .vert_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
-        .instance_data_buf_idx =
-            device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
-        .mat_buf_idx = materials_buf_->get_buffer()->bindless_idx(),
-    };
+  if (k_use_mesh_shader) {
+    auto& clear_bufs_pass = rg_.add_pass("clear_bufs");
+    clear_bufs_pass.add_buf("out_draw_count_buf1", static_draw_batch_->out_draw_count_buf.handle,
+                            RGAccess::ComputeWrite);
+    clear_bufs_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
+      enc->fill_buffer(static_draw_batch_->out_draw_count_buf.handle, 0, sizeof(uint32_t), 0);
+    });
 
-    indirect_cmd_buf_ids_.emplace_back(enc->prepare_indexed_indirect_draws(
-        instance_data_mgr_.get_draw_cmd_buf(), 0, all_model_data_.max_objects,
-        static_draw_batch_->index_buf.get_buffer_handle(), 0, &pc, sizeof(pc)));
-  });
+    auto& prep_meshlets_pass = rg_.add_pass("prepare_meshlet_dispatch");
+    prep_meshlets_pass.add_buf("out_draw_count_buf2", static_draw_batch_->out_draw_count_buf.handle,
+                               RGAccess::ComputeRW, "out_draw_count_buf1");
+    prep_meshlets_pass.add_buf("task_cmd_buf", static_draw_batch_->task_cmd_buf.get_buffer_handle(),
+                               RGAccess::ComputeRW);
+    prep_meshlets_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
+      enc->bind_pipeline(draw_cull_pso_);
+
+      DrawCullPC pc{
+          .task_cmd_buf_idx = static_draw_batch_->task_cmd_buf.get_buffer()->bindless_idx(),
+          .draw_cnt_buf_idx =
+              device_->get_buf(static_draw_batch_->out_draw_count_buf)->bindless_idx(),
+          .instance_data_buf_idx =
+              device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
+          .mesh_data_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
+          .max_draws = all_model_data_.max_objects,
+      };
+      enc->push_constants(&pc, sizeof(pc));
+
+      enc->dispatch_compute(glm::uvec3{align_divide_up(all_model_data_.max_objects, 64ull), 1, 1},
+                            glm::uvec3{64, 1, 1});
+    });
+  } else {
+    auto& prepare_indirect_pass = rg_.add_pass("prepare_indirect");
+    prepare_indirect_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
+                                  RGAccess::ComputeWrite);
+    prepare_indirect_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
+      BasicIndirectPC pc{
+          .vp = get_vp_matrix(args),
+          .vert_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
+          .instance_data_buf_idx =
+              device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
+          .mat_buf_idx = materials_buf_->get_buffer()->bindless_idx(),
+      };
+
+      indirect_cmd_buf_ids_.emplace_back(enc->prepare_indexed_indirect_draws(
+          instance_data_mgr_.get_draw_cmd_buf(), 0, all_model_data_.max_objects,
+          static_draw_batch_->index_buf.get_buffer_handle(), 0, &pc, sizeof(pc)));
+    });
+  }
 
   {
     auto& gbuffer_pass = rg_.add_pass("gbuffer");
-    gbuffer_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
-                         RGAccess::IndirectRead);
+    if (k_use_mesh_shader) {
+      gbuffer_pass.add_buf("out_draw_count_buf2", static_draw_batch_->out_draw_count_buf.handle,
+                           RGAccess::ComputeRead);
+      gbuffer_pass.add_buf("task_cmd_buf", static_draw_batch_->task_cmd_buf.get_buffer_handle(),
+                           RGAccess::ComputeRead);
+    } else {
+      gbuffer_pass.add_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf(),
+                           RGAccess::IndirectRead);
+    }
     gbuffer_pass.add_tex("gbuffer_a", {.is_swapchain_tex = true}, RGAccess::ColorWrite);
     auto rg_depth_handle = gbuffer_pass.add_tex(
         "depth_tex", {.format = rhi::TextureFormat::D32float}, RGAccess::ColorWrite);
@@ -250,11 +291,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
       if (k_use_mesh_shader) {
         enc->bind_pipeline(test_task_pso_);
-
-        TestTaskPC pc{
+        Task2PC pc{
             .vp = get_vp_matrix(args),
-            .task_cmd_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
-            .task_cmd_idx = 0,
+            .mesh_data_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
             .meshlet_buf_idx = static_draw_batch_->meshlet_buf.get_buffer()->bindless_idx(),
             .meshlet_tri_buf_idx =
                 static_draw_batch_->meshlet_triangles_buf.get_buffer()->bindless_idx(),
@@ -264,17 +303,20 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
             .instance_data_buf_idx =
                 device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
             .mat_buf_idx = materials_buf_->get_buffer()->bindless_idx(),
+            .tt_cmd_buf_idx = device_->get_buf(static_draw_batch_->task_cmd_buf.get_buffer_handle())
+                                  ->bindless_idx(),
+            .draw_cnt_buf_idx =
+                device_->get_buf(static_draw_batch_->out_draw_count_buf)->bindless_idx(),
+            .max_draws = all_model_data_.max_objects,
+            .max_meshlets = all_model_data_.max_meshlets,
         };
-
-        for (const auto& cmd : cmds_) {
-          pc.task_cmd_idx = cmd.task_cmd_idx;
-          pc.instance_data_idx = cmd.instance_data_idx;
-          size_t num_meshlets = mesh_datas_[cmd.task_cmd_idx].meshlet_count;
-          enc->push_constants(&pc, sizeof(pc));
-          auto f = (num_meshlets + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
-          enc->draw_mesh_threadgroups({f, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
-        }
-
+        enc->push_constants(&pc, sizeof(pc));
+        // TODO: LMAOOOOOOOOOOOO
+        // auto num_groups =
+        //     *((uint32_t*)device_->get_buf(static_draw_batch_->out_draw_count_buf)->contents());
+        // LINFO("num groups {}", num_groups);
+        int n = 1000;
+        enc->draw_mesh_threadgroups({n * 3, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
       } else {
         enc->bind_pipeline(test2_pso_);
         ASSERT(indirect_cmd_buf_ids_.size());
@@ -513,6 +555,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   std::vector<IndexedIndirectDrawCmd> cmds;
   cmds.reserve(instance_datas.size());
   ASSERT(instance_datas.size() == instance_id_to_node.size());
+  all_model_data_.max_meshlets += model_resources->totals.meshlets;
 
   const OffsetAllocator::Allocation instance_data_gpu_alloc =
       instance_data_mgr_.allocate(model_instance_datas.size());
@@ -552,12 +595,11 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
         .first_instance = static_cast<uint32_t>(i + instance_data_gpu_alloc.offset),
     });
 
-    cmds_.emplace_back(TaskCmd{
-        .task_cmd_idx = static_cast<uint32_t>(
-            model_resources->static_draw_batch_alloc.mesh_alloc.offset + mesh_id),
-        .instance_data_idx = cmds.back().first_instance,
-
-    });
+    // cmds_.emplace_back(TaskCmd{
+    //     .task_cmd_idx = static_cast<uint32_t>(
+    //         model_resources->static_draw_batch_alloc.mesh_alloc.offset + mesh_id),
+    //     .instance_data_idx = cmds.back().first_instance,
+    // });
   }
 
   stats_.total_instances += instance_datas.size();
@@ -648,6 +690,21 @@ DrawBatch::DrawBatch(DrawBatchType type, rhi::Device& device, const CreateInfo& 
                                .name = "meshlet_vertices_buf",
                            },
                            sizeof(uint32_t)),
+      task_cmd_buf(device,
+                   {
+                       .storage_mode = rhi::StorageMode::CPUAndGPU,
+                       .size = cinfo.initial_meshlet_capacity * sizeof(TaskCmd),
+                       .bindless = true,
+                       .name = "task_cmd_buf",
+                   },
+                   sizeof(TaskCmd)),
+      out_draw_count_buf(device.create_buf_h({
+          .storage_mode = rhi::StorageMode::Default,
+          .usage = rhi::BufferUsage_Storage,
+          .size = sizeof(uint32_t),
+          .bindless = true,
+          .name = "out_draw_count_buf",
+      })),
       type(type) {}
 
 DrawBatch::Stats DrawBatch::get_stats() const {

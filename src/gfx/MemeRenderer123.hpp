@@ -111,6 +111,8 @@ struct DrawBatch {
   BackedGPUAllocator mesh_buf;
   BackedGPUAllocator meshlet_triangles_buf;
   BackedGPUAllocator meshlet_vertices_buf;
+  BackedGPUAllocator task_cmd_buf;
+  rhi::BufferHandleHolder out_draw_count_buf;
   const DrawBatchType type;
 };
 
@@ -196,6 +198,7 @@ class MemeRenderer123 {
                                    const MeshletProcessResult& meshlets, std::span<Mesh> meshes);
   struct AllModelData {
     uint32_t max_objects;
+    uint32_t max_meshlets;
   };
 
   AllModelData all_model_data_{};
@@ -218,7 +221,7 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder test2_pso_;
   rhi::PipelineHandleHolder test_mesh_pso_;
   rhi::PipelineHandleHolder test_task_pso_;
-  rhi::PipelineHandleHolder test_draw_cull_pso_;
+  rhi::PipelineHandleHolder draw_cull_pso_;
   std::optional<BackedGPUAllocator> materials_buf_;
 
   rhi::BufferHandleHolder tmp_out_draw_cnt_buf_;
@@ -254,12 +257,12 @@ class MemeRenderer123 {
   rhi::TextureHandleHolder default_white_tex_;
   std::vector<uint32_t> indirect_cmd_buf_ids_;
   glm::mat4 get_vp_matrix(const RenderArgs& args);
-  struct TaskCmd {
-    uint32_t task_cmd_idx;
-    uint32_t instance_data_idx;
-    uint32_t num_meshlets;
-  };
-  std::vector<TaskCmd> cmds_;
+  // struct TaskCmd {
+  //   uint32_t task_cmd_idx;
+  //   uint32_t instance_data_idx;
+  //   uint32_t num_meshlets;
+  // };
+  // std::vector<TaskCmd> cmds_;
   std::vector<MeshData> mesh_datas_;
 };
 

@@ -1,11 +1,11 @@
 // clang-format off
 #include "root_sig.h"
 #include "material.h"
-#include "shared_test_task.h"
+#include "shared_task2.h"
 // clang-format on
 
 [RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target0 {
-  // return input.color;
+  //  return input.color;
   StructuredBuffer<M4Material> material_buf = ResourceDescriptorHeap[mat_buf_idx];
   M4Material material = material_buf[input.material_id];
   SamplerState samp = SamplerDescriptorHeap[LINEAR_SAMPLER_IDX];

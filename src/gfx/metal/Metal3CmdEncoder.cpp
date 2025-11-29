@@ -118,12 +118,12 @@ void Metal3CmdEncoder::end_encoding() {
 
 void Metal3CmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
   auto* pipeline = reinterpret_cast<MetalPipeline*>(device_->get_pipeline(handle));
-  ASSERT(pipeline);
+  ALWAYS_ASSERT(pipeline);
   if (pipeline->render_pso) {
     ASSERT(render_enc_);
     render_enc_->setRenderPipelineState(pipeline->render_pso);
   } else if (pipeline->compute_pso) {
-    ASSERT(compute_enc_);
+    start_compute_encoder();
     compute_enc_->setComputePipelineState(pipeline->compute_pso);
   } else {
     LERROR("invalid pipeline for MetalCmdEncoder::bind_pipeline");
@@ -154,7 +154,7 @@ void Metal3CmdEncoder::draw_primitives(rhi::PrimitiveTopology topology, size_t v
 }
 
 void Metal3CmdEncoder::push_constants(void* data, size_t size) {
-  ASSERT(size <= k_tlab_size);
+  ASSERT(size <= k_pc_size);
   memcpy(pc_data_, data, size);
 }
 

@@ -540,6 +540,7 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
 
 rhi::PipelineHandle MetalDevice::create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo) {
   auto path = (shader_lib_dir_ / cinfo.path).concat(".comp.metallib");
+  ASSERT(std::filesystem::exists(path));
   MTL::ComputePipelineState* pso = compile_mtl_compute_pipeline(path, "main");
   ASSERT(pso);
   return pipeline_pool_.alloc(MetalPipeline{nullptr, pso});
