@@ -120,6 +120,7 @@ class CmdEncoder {
   virtual void draw_mesh_threadgroups(glm::uvec3 thread_groups,
                                       glm::uvec3 threads_per_task_thread_group,
                                       glm::uvec3 threads_per_mesh_thread_group) = 0;
+  // This only supports length 1 right now.
   virtual void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf,
                                                size_t indirect_buf_offset,
                                                glm::uvec3 threads_per_task_thread_group,

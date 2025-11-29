@@ -318,13 +318,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
             .max_meshlets = all_model_data_.max_meshlets,
         };
         enc->push_constants(&pc, sizeof(pc));
-        // TODO: LMAOOOOOOOOOOOO
-        // auto num_groups =
-        //     *((uint32_t*)device_->get_buf(static_draw_batch_->out_draw_count_buf)->contents());
-        // LINFO("num groups {} {}", num_groups, k_);
         enc->draw_mesh_threadgroups_indirect(static_draw_batch_->out_draw_count_buf.handle, 0,
                                              {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
-        // enc->draw_mesh_threadgroups({k_, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
       } else {
         enc->bind_pipeline(test2_pso_);
         ASSERT(indirect_cmd_buf_ids_.size());
