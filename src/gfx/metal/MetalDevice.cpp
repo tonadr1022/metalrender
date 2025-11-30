@@ -675,7 +675,6 @@ void MetalDevice::submit_frame() {
     end_cb->presentDrawable(curr_drawable_);
     end_cb->encodeSignalEvent(shared_event_, frame_num_);
     end_cb->commit();
-    end_cb->waitUntilCompleted();
   }
 
   frame_num_++;

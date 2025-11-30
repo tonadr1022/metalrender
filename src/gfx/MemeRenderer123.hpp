@@ -111,8 +111,8 @@ struct DrawBatch {
   BackedGPUAllocator mesh_buf;
   BackedGPUAllocator meshlet_triangles_buf;
   BackedGPUAllocator meshlet_vertices_buf;
-  BackedGPUAllocator task_cmd_buf;
-  rhi::BufferHandleHolder out_draw_count_buf;
+  std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> task_cmd_bufs_;
+  std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> out_draw_count_bufs_;
   const DrawBatchType type;
 };
 
