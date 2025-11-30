@@ -36,7 +36,7 @@ void main(uint gtid : SV_GroupThreadID, uint dtid : SV_DispatchThreadID, uint gi
     if (visible) {
         uint thread_i;
         InterlockedAdd(s_count, 1, thread_i);
-        s_Payload.meshlet_indices[thread_i] = (gid & 0xFFFFFFu) | (gtid << 24);
+        s_Payload.meshlet_indices[thread_i] = (task_group_id & 0xFFFFFFu) | (gtid << 24);
     }
 
     GroupMemoryBarrierWithGroupSync();

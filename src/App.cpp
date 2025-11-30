@@ -94,7 +94,7 @@ void App::run() {
     load_model(config_.paths[1], glm::mat4{1});
   } else if (scene == 1) {
     rando::seed(10000000);
-    size_t count = 500;
+    size_t count = 4096;
     float scale = 10;
     float radius = 400;
 

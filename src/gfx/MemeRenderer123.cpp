@@ -17,7 +17,6 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/Swapchain.hpp"
 #include "gfx/Texture.hpp"
-#include "gfx/metal/Metal3CmdEncoder.hpp"
 #include "hlsl/material.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
@@ -335,7 +334,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   {
     auto& pass = rg_.add_pass("shade");
     pass.add_tex("gbuffer_a", {.is_swapchain_tex = true}, RGAccess::ComputeRead);
-    pass.set_execute_fn([this](rhi::CmdEncoder* enc) { enc->bind_pipeline(draw_cull_pso_); });
+    pass.set_execute_fn([](rhi::CmdEncoder*) {});
   }
 }
 
