@@ -74,19 +74,11 @@ void Metal3CmdEncoder::begin_rendering(
   }
 
   end_encoders_of_types((EncoderType)(EncoderType_Blit | EncoderType_Compute));
-  wait();
   if (!render_enc_) {
     ASSERT(cmd_buf_);
     render_enc_ = cmd_buf_->renderCommandEncoder(desc);
   }
   flush_barriers();
-  if (fence_signaled_) {
-    // LINFO("waitign fence");
-    // render_enc_->waitForFence(test_fence_, MTL::RenderStageMesh | MTL::RenderStageObject |
-    //                                            MTL::RenderStageVertex |
-    //                                            MTL::RenderStageFragment);
-    fence_signaled_ = false;
-  }
 
   render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
   render_enc_->setObjectBuffer(device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
@@ -114,8 +106,7 @@ void Metal3CmdEncoder::begin_rendering(
 
 void Metal3CmdEncoder::end_encoding() {
   end_encoders_of_types((EncoderType)(EncoderType_Compute | EncoderType_Blit | EncoderType_Render));
-  signal();
-  cmd_buf_->commit();
+  // cmd_buf_->commit();
   // if (compute_enc_) {
   //   compute_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
   //   compute_enc_->memoryBarrier(MTL::BarrierScopeBuffers);
@@ -438,11 +429,9 @@ void Metal3CmdEncoder::draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indir
 }
 
 Metal3CmdEncoder::Metal3CmdEncoder(MetalDevice* device, MTL::CommandBuffer* cmd_buf)
-    : cmd_buf_(cmd_buf), device_(device), cmd_icb_mgr_(device_) {
-  // test_fence_ = device_->get_device()->newFence();
-}
+    : cmd_buf_(cmd_buf), device_(device), cmd_icb_mgr_(device_) {}
 
-void Metal3CmdEncoder::end_encoders_of_types(EncoderType types) {
+void Metal3CmdEncoder::end_encoders_of_types(EncoderType) {
   // if (types & EncoderType_Blit) {
   //   if (blit_enc_) {
   //     blit_enc_->updateFence(test_fence_);
@@ -473,21 +462,14 @@ void Metal3CmdEncoder::end_encoders_of_types(EncoderType types) {
   //   }
   // }
   if (blit_enc_) {
-    // blit_enc_->updateFence(test_fence_);
-    fence_signaled_ = true;
     blit_enc_->endEncoding();
     blit_enc_ = nullptr;
   }
   if (compute_enc_) {
-    // compute_enc_->updateFence(test_fence_);
-    fence_signaled_ = true;
     compute_enc_->endEncoding();
     compute_enc_ = nullptr;
   }
   if (render_enc_) {
-    // render_enc_->updateFence(test_fence_, MTL::RenderStageMesh | MTL::RenderStageObject |
-    //                                           MTL::RenderStageVertex | MTL::RenderStageFragment);
-    fence_signaled_ = true;
     render_enc_->endEncoding();
     render_enc_ = nullptr;
   }
@@ -495,29 +477,19 @@ void Metal3CmdEncoder::end_encoders_of_types(EncoderType types) {
 
 void Metal3CmdEncoder::start_compute_encoder() {
   end_encoders_of_types((EncoderType)(EncoderType_Blit | EncoderType_Render));
-  wait();
   if (!compute_enc_) {
     // TODO: re-evaluate dispatch type
     compute_enc_ = cmd_buf_->computeCommandEncoder(MTL::DispatchTypeSerial);
 
     flush_barriers();
-    // if (fence_signaled_) {
-    //   compute_enc_->waitForFence(test_fence_);
-    //   fence_signaled_ = false;
-    // }
   }
 }
 
 void Metal3CmdEncoder::start_blit_encoder() {
   end_encoders_of_types((EncoderType)(EncoderType_Compute | EncoderType_Render));
-  wait();
   if (!blit_enc_) {
     blit_enc_ = cmd_buf_->blitCommandEncoder();
     flush_barriers();
-    // if (fence_signaled_) {
-    //   blit_enc_->waitForFence(test_fence_);
-    //   fence_signaled_ = false;
-    // }
   }
 }
 
@@ -598,17 +570,4 @@ void Metal3CmdEncoder::flush_barriers() {
   //                              MTL::ResourceUsageRead | MTL::ResourceUsageWrite);
   // }
   pending_buffers_to_barrier_.clear();
-}
-
-void Metal3CmdEncoder::wait() {
-  ASSERT(cmd_buf_);
-  ASSERT(device_->test_event_);
-  if (device_->curr_event_val_ > 0) {
-    cmd_buf_->encodeWait(device_->test_event_, device_->curr_event_val_);
-  }
-}
-
-void Metal3CmdEncoder::signal() {
-  device_->curr_event_val_++;
-  cmd_buf_->encodeSignalEvent(device_->test_event_, device_->curr_event_val_);
 }

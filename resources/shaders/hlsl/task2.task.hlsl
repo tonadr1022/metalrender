@@ -19,11 +19,13 @@ void main(uint gtid : SV_GroupThreadID, uint dtid : SV_DispatchThreadID, uint gi
     bool visible = false;
     
     StructuredBuffer<TaskCmd> tts =  ResourceDescriptorHeap[tt_cmd_buf_idx];
-    StructuredBuffer<uint3> abc = ResourceDescriptorHeap[draw_cnt_buf_idx];
+    StructuredBuffer<uint3> task_dispatch_buf = ResourceDescriptorHeap[draw_cnt_buf_idx];
 
-    TaskCmd tt = tts[task_group_id];
-    if (gtid < tt.task_count) {
-      visible = true;
+    if (task_group_id < task_dispatch_buf[0].x) {
+      TaskCmd tt = tts[task_group_id];
+      if (gtid < tt.task_count) {
+        visible = true;
+      }
     }
 
     if (gtid == 0) {

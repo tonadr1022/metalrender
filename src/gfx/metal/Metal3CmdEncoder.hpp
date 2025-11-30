@@ -89,9 +89,6 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
  private:
   void flush_compute_barriers();
   void flush_render_barriers();
-  // MTL::Event* test_event_{};
-  // MTL::Fence* test_fence_{};
-  bool fence_signaled_{false};
 
   enum EncoderType {
     EncoderType_Render = 1,
@@ -104,10 +101,6 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
 
  public:
   MTL::CommandBuffer* cmd_buf_{};
-  // size_t curr_val_{};
-  void wait();
-  void signal();
-  void reset_event() {}
 
  private:
   std::vector<rhi::BufferHandle> pending_buffers_to_barrier_;

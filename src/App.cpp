@@ -82,7 +82,7 @@ void App::run() {
   int scene = 1;
   if (scene == 0) {
     glm::ivec3 iter{};
-    int n = 1;
+    int n = 4;
     glm::ivec3 dims{n, 1, n};
     float dist = 40.0;
     for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
@@ -96,7 +96,7 @@ void App::run() {
     rando::seed(10000000);
     size_t count = 500;
     float scale = 10;
-    float radius = 100;
+    float radius = 400;
 
     for (size_t i = 0; i < count; i++) {
       auto rand_f = [radius]() { return rando::get_float(-radius, radius); };

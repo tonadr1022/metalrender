@@ -206,7 +206,7 @@ void MetalDevice::shutdown() { device_->release(); }
 
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   auto options = mtl::util::convert(desc.storage_mode);
-  options |= MTL::ResourceHazardTrackingModeUntracked;
+  // options |= MTL::ResourceHazardTrackingModeUntracked;
   auto* mtl_buf = device_->newBuffer(desc.size, options);
   ALWAYS_ASSERT(mtl_buf);
   if (desc.name) {
@@ -607,11 +607,7 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
   }
   ASSERT(curr_cmd_list_idx_ < mtl3_resources_->cmd_lists_.size());
   auto* ret = (Metal3CmdEncoder*)mtl3_resources_->cmd_lists_[curr_cmd_list_idx_].get();
-  ret->cmd_buf_ = mtl3_resources_->main_cmd_q->commandBuffer();
-  ASSERT(ret->cmd_buf_);
-  ret->cmd_buf_->useResidencySet(main_res_set_);
-  ret->wait();
-  // ret->cmd_buf_ = mtl3_resources_->main_cmd_buf;
+  ret->cmd_buf_ = mtl3_resources_->main_cmd_buf;
   curr_cmd_list_idx_++;
 
   return ret;
@@ -656,11 +652,8 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   if (mtl4_enabled_) {
     mtl4_resources_->main_cmd_buf->beginCommandBuffer(mtl4_resources_->cmd_allocators[frame_idx()]);
   } else {
-    // mtl3_resources_->main_cmd_buf = mtl3_resources_->main_cmd_q->commandBuffer();
-    curr_event_val_ = 0;
-    for (auto& l : mtl3_resources_->cmd_lists_) {
-      l->reset_event();
-    }
+    mtl3_resources_->main_cmd_buf = mtl3_resources_->main_cmd_q->commandBuffer();
+    mtl3_resources_->main_cmd_buf->useResidencySet(main_res_set_);
   }
   return true;
 }
@@ -678,10 +671,7 @@ void MetalDevice::submit_frame() {
     curr_drawable_->present();
     mtl4_resources_->main_cmd_q->signalEvent(shared_event_, frame_num_);
   } else {
-    for (auto& l : mtl3_resources_->cmd_lists_) {
-      l->cmd_buf_ = nullptr;
-    }
-    auto* end_cb = mtl3_resources_->main_cmd_q->commandBuffer();
+    auto* end_cb = mtl3_resources_->main_cmd_buf;
     end_cb->presentDrawable(curr_drawable_);
     end_cb->encodeSignalEvent(shared_event_, frame_num_);
     end_cb->commit();

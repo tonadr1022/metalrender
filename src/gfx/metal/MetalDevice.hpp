@@ -139,7 +139,7 @@ class MetalDevice : public rhi::Device {
   std::optional<MTL4_Resources> mtl4_resources_;
 
   struct MTL3_Resources {
-    // MTL::CommandBuffer* main_cmd_buf{};
+    MTL::CommandBuffer* main_cmd_buf{};
     MTL::CommandQueue* main_cmd_q{};
     std::vector<std::unique_ptr<Metal3CmdEncoder>> cmd_lists_;
   };
