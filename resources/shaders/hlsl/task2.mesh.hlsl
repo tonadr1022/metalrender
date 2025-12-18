@@ -32,9 +32,7 @@ VOut get_vertex_attributes(in InstanceData instance_data, uint vertex_idx, uint 
   VOut v;
   v.pos = mul(vp, float4(pos, 1.0));
   v.uv = vert.uv;
-  // v.color = float4(float((vertex_idx % 3) == 0), float((vertex_idx % 3) == 1),
-  //                   float((vertex_idx % 3) == 2), 1.0);
-  v.color = float4(hue2rgb((instance_data_idx) * 1.71f), 1.0);
+  v.color = float4(hue2rgb((instance_data_idx + meshlet_idx) * 1.71f), 1.0);
   v.material_id = instance_data.mat_id;
   return v;
 }

@@ -94,9 +94,9 @@ void App::run() {
     load_model(config_.paths[1], glm::mat4{1});
   } else if (scene == 1) {
     rando::seed(10000000);
-    size_t count = 4096;
+    size_t count = 300'000;
     float scale = 10;
-    float radius = 400;
+    float radius = 8000;
 
     for (size_t i = 0; i < count; i++) {
       auto rand_f = [radius]() { return rando::get_float(-radius, radius); };
@@ -104,7 +104,7 @@ void App::run() {
       glm::vec3 randomAxis = glm::linearRand(glm::vec3(-1.0f), glm::vec3(1.0f));
       float randomAngle = glm::linearRand(0.0f, glm::two_pi<float>());
       auto rot = glm::angleAxis(randomAngle, glm::normalize(randomAxis));
-      load_model(config_.paths[0], glm::translate(glm::mat4{1}, pos) * glm::mat4_cast(rot) *
+      load_model(config_.paths[2], glm::translate(glm::mat4{1}, pos) * glm::mat4_cast(rot) *
                                        glm::scale(glm::mat4{1}, glm::vec3{scale}));
     }
   } else if (scene == 2) {

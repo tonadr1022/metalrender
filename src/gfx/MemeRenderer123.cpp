@@ -107,12 +107,12 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
                                          .bindless = true,
                                          .name = "all materials buf"},
                          sizeof(M4Material));
-  instance_data_mgr_.init(12000, device_);
+  instance_data_mgr_.init(100'000, device_);
   static_draw_batch_.emplace(DrawBatchType::Static, *device_,
                              DrawBatch::CreateInfo{
                                  .initial_vertex_capacity = 10'000'000,
                                  .initial_index_capacity = 1'000'000,
-                                 .initial_meshlet_capacity = 100'000,
+                                 .initial_meshlet_capacity = 1'000'000,
                                  .initial_mesh_capacity = 20'000,
                                  .initial_meshlet_triangle_capacity = 1'000'000,
                                  .initial_meshlet_vertex_capacity = 1'000'000,
@@ -822,7 +822,7 @@ void MemeRenderer123::on_imgui() {
 glm::mat4 MemeRenderer123::get_vp_matrix(const RenderArgs& args) {
   auto win_dims = window_->get_window_size();
   float aspect = (float)win_dims.x / win_dims.y;
-  return glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 10000.f) * args.view_mat;
+  return glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 30000.f) * args.view_mat;
 }
 
 }  // namespace gfx
