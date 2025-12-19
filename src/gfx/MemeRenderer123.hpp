@@ -9,6 +9,7 @@
 #include "gfx/Config.hpp"
 #include "gfx/Device.hpp"
 #include "gfx/GFXTypes.hpp"
+#include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/ModelInstance.hpp"
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
@@ -258,14 +259,12 @@ class MemeRenderer123 {
   rhi::TextureHandleHolder default_white_tex_;
   std::vector<uint32_t> indirect_cmd_buf_ids_;
   glm::mat4 get_vp_matrix(const RenderArgs& args);
-  // struct TaskCmd {
-  //   uint32_t task_cmd_idx;
-  //   uint32_t instance_data_idx;
-  //   uint32_t num_meshlets;
-  // };
-  // std::vector<TaskCmd> cmds_;
   std::vector<MeshData> mesh_datas_;
-  size_t k_{};
+
+  // TODO: rename or sum?
+  std::optional<GPUFrameAllocator2> uniforms_allocator_;
+
+  bool culling_paused_{};
 };
 
 }  // namespace gfx

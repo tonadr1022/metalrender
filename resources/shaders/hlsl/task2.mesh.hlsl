@@ -9,6 +9,7 @@
 #include "shared_task2.h"
 #include "shared_task_cmd.h"
 #include "shared_mesh_data.h"
+#include "shared_globals.h"
 // clang-format on
 
 // https://www.ronja-tutorials.com/post/041-hsv-colorspace/
@@ -29,6 +30,9 @@ VOut get_vertex_attributes(in InstanceData instance_data, uint vertex_idx, uint 
 
   float3 pos = rotate_quat(instance_data.scale * vert.pos.xyz, instance_data.rotation) +
                instance_data.translation;
+  ByteAddressBuffer global_data_buf = ResourceDescriptorHeap[globals_buf.idx];
+  GlobalData globals = global_data_buf.Load<GlobalData>(globals_buf.offset_bytes);
+  float4x4 vp = globals.vp;
   VOut v;
   v.pos = mul(vp, float4(pos, 1.0));
   v.uv = vert.uv;

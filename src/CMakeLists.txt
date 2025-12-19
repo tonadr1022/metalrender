@@ -13,6 +13,7 @@ add_executable(${target_name}
     gfx/ResourceManager.cpp
     gfx/ImGuiRenderer.cpp
     gfx/GPUFrameAllocator.cpp
+    gfx/GPUFrameAllocator2.cpp
     gfx/Device.cpp
     gfx/RenderGraph.cpp
     platform/apple/AppleWindow.mm # TODO: move this please

@@ -21,6 +21,7 @@
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
 #include "hlsl/shared_draw_cull.h"
+#include "hlsl/shared_globals.h"
 #include "hlsl/shared_indirect.h"
 #include "hlsl/shared_mesh_data.h"
 #include "hlsl/shared_task2.h"
@@ -42,7 +43,6 @@ namespace gfx {
 void MemeRenderer123::init(const CreateInfo& cinfo) {
   device_ = cinfo.device;
   window_ = cinfo.window;
-  resource_dir_ = cinfo.resource_dir;
 
   {
     // TODO: streamline
@@ -124,11 +124,14 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
 
   rg_.init(device_);
   init_imgui();
+
+  uniforms_allocator_.emplace(1024 * 1024, device_);
 }
 
 void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   ZoneScoped;
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
+  uniforms_allocator_->reset(curr_frame_idx_);
 
   if (!device_->begin_frame(window_->get_window_size())) {
     return;
@@ -303,11 +306,28 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
+      IdxOffset globals_buf;
+      {
+        GlobalData global_data{
+            .vp = get_vp_matrix(args),
+        };
+        auto [buf, offset, write_ptr] =
+            uniforms_allocator_->alloc(sizeof(GlobalData), &global_data);
+        globals_buf.idx = device_->get_buf(buf)->bindless_idx();
+        globals_buf.offset_bytes = offset;
+      }
+      // IdxOffset cull_data_buf;
+      // {
+      //   // set cull data buf
+      //   CullData cd {
+      //
+      //   };
+      // }
 
       if (k_use_mesh_shader) {
         enc->bind_pipeline(test_task_pso_);
         Task2PC pc{
-            .vp = get_vp_matrix(args),
+            .globals_buf = globals_buf,
             .mesh_data_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
             .meshlet_buf_idx = static_draw_batch_->meshlet_buf.get_buffer()->bindless_idx(),
             .meshlet_tri_buf_idx =
@@ -325,6 +345,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                     ->bindless_idx(),
             .max_draws = all_model_data_.max_objects,
             .max_meshlets = all_model_data_.max_meshlets,
+            .cull_data_buf_idx = 0,
         };
         enc->push_constants(&pc, sizeof(pc));
         enc->draw_mesh_threadgroups_indirect(
@@ -607,13 +628,6 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
             model_resources->static_draw_batch_alloc.vertex_alloc.offset * sizeof(DefaultVertex)),
         .first_instance = static_cast<uint32_t>(i + instance_data_gpu_alloc.offset),
     });
-    k_ += align_divide_up(mesh.meshlet_count, K_TASK_TG_SIZE);
-
-    // cmds_.emplace_back(TaskCmd{
-    //     .task_cmd_idx = static_cast<uint32_t>(
-    //         model_resources->static_draw_batch_alloc.mesh_alloc.offset + mesh_id),
-    //     .instance_data_idx = cmds.back().first_instance,
-    // });
   }
 
   stats_.total_instances += instance_datas.size();

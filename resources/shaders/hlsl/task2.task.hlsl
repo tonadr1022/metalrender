@@ -25,6 +25,8 @@ void main(uint gtid : SV_GroupThreadID, uint dtid : SV_DispatchThreadID, uint gi
       TaskCmd tt = tts[task_group_id];
       if (gtid < tt.task_count) {
         visible = true;
+ //       visible = visible && 
+
       }
     }
 

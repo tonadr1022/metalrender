@@ -3,8 +3,13 @@
 
 #include "../shader_core.h"
 
+struct IdxOffset {
+  uint idx;
+  uint offset_bytes;
+};
+
 cbuffer Task2PC HLSL_PC_REG {
-  float4x4 vp;
+  IdxOffset globals_buf;
   uint mesh_data_buf_idx;
   uint meshlet_buf_idx;
   uint meshlet_tri_buf_idx;
@@ -16,6 +21,7 @@ cbuffer Task2PC HLSL_PC_REG {
   uint draw_cnt_buf_idx;
   uint max_draws;
   uint max_meshlets;
+  uint cull_data_buf_idx;
 };
 
 #ifdef __HLSL__
