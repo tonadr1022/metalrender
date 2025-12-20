@@ -167,6 +167,11 @@ class InstanceDataMgr {
   rhi::Device* device_{};
 };
 
+struct IdxOffset {
+  uint idx;
+  uint offset_bytes;
+};
+
 class MemeRenderer123 {
  public:
   struct CreateInfo {
@@ -194,6 +199,7 @@ class MemeRenderer123 {
     return device_->get_buf(buf)->bindless_idx();
   }
   void add_render_graph_passes(const RenderArgs& args);
+  void set_cull_data_and_globals(const RenderArgs& args);
   DrawBatch::Alloc upload_geometry(DrawBatchType type, const std::vector<DefaultVertex>& vertices,
                                    const std::vector<rhi::DefaultIndexT>& indices,
                                    const MeshletProcessResult& meshlets, std::span<Mesh> meshes);
@@ -258,15 +264,19 @@ class MemeRenderer123 {
 
   rhi::TextureHandleHolder default_white_tex_;
   std::vector<uint32_t> indirect_cmd_buf_ids_;
-  glm::mat4 get_proj_matrix();
+  glm::mat4 get_proj_matrix(float fov = k_default_fov_deg);
   std::vector<MeshData> mesh_datas_;
 
   // TODO: rename or sum?
   std::optional<GPUFrameAllocator2> uniforms_allocator_;
   static constexpr float k_z_near = 0.01f;
   static constexpr float k_z_far = 30000.f;
+  static constexpr float k_default_fov_deg = 70.0f;
 
   bool culling_paused_{};
+  bool meshlet_frustum_culling_enabled_{true};
+  IdxOffset frame_globals_buf_info_;
+  IdxOffset frame_cull_data_buf_info_;
 };
 
 }  // namespace gfx

@@ -141,6 +141,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
 
   indirect_cmd_buf_ids_.clear();
 
+  set_cull_data_and_globals(args);
   add_render_graph_passes(args);
   static int i = 0;
   rg_.bake(window_->get_window_size(), i++ == 2);
@@ -211,46 +212,54 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   }
 
   if (k_use_mesh_shader) {
-    auto& clear_bufs_pass = rg_.add_pass("clear_bufs");
-    clear_bufs_pass.add_buf("out_draw_count_buf1",
-                            static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle,
-                            RGAccess::ComputeWrite);
-    clear_bufs_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
-      enc->bind_pipeline(test_clear_buf_pso_);
-      uint32_t pc =
-          device_->get_buf(static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle)
-              ->bindless_idx();
-      enc->push_constants(&pc, sizeof(pc));
-      enc->dispatch_compute(glm::uvec3{1, 1, 1}, glm::uvec3{64, 1, 1});
-      // enc->fill_buffer(static_draw_batch_->out_draw_count_buf.handle, 0, sizeof(uint32_t), 0);
-      // enc->fill_buffer(static_draw_batch_->out_draw_count_buf.handle, sizeof(uint32_t),
-      //                  sizeof(uint32_t) * 2, 1);
-    });
+    if (!culling_paused_) {
+      auto& clear_bufs_pass = rg_.add_pass("clear_bufs");
+      clear_bufs_pass.add_buf("out_draw_count_buf1",
+                              static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle,
+                              RGAccess::ComputeWrite);
+      clear_bufs_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
+        enc->bind_pipeline(test_clear_buf_pso_);
+        uint32_t pc =
+            device_->get_buf(static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle)
+                ->bindless_idx();
+        enc->push_constants(&pc, sizeof(pc));
+        enc->dispatch_compute(glm::uvec3{1, 1, 1}, glm::uvec3{64, 1, 1});
+        // enc->fill_buffer(static_draw_batch_->out_draw_count_buf.handle, 0, sizeof(uint32_t), 0);
+        // enc->fill_buffer(static_draw_batch_->out_draw_count_buf.handle, sizeof(uint32_t),
+        //                  sizeof(uint32_t) * 2, 1);
+      });
+    }
 
-    auto& prep_meshlets_pass = rg_.add_pass("prepare_meshlet_dispatch");
+    auto& prep_meshlets_pass = rg_.add_pass("meshlet_draw_cull");
     prep_meshlets_pass.add_buf("out_draw_count_buf2",
                                static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle,
-                               RGAccess::ComputeRW, "out_draw_count_buf1");
+                               RGAccess::ComputeRW, culling_paused_ ? "" : "out_draw_count_buf1");
     prep_meshlets_pass.add_buf("task_cmd_buf",
                                static_draw_batch_->task_cmd_bufs_[curr_frame_idx_].handle,
                                RGAccess::ComputeWrite);
     prep_meshlets_pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
       enc->bind_pipeline(draw_cull_pso_);
-
-      DrawCullPC pc{
-          .task_cmd_buf_idx =
-              device_->get_buf(static_draw_batch_->task_cmd_bufs_[curr_frame_idx_])->bindless_idx(),
-          .draw_cnt_buf_idx =
-              device_->get_buf(static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_])
-                  ->bindless_idx(),
-          .instance_data_buf_idx =
-              device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
-          .mesh_data_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
-          .max_draws = all_model_data_.max_objects,
-      };
-      enc->push_constants(&pc, sizeof(pc));
-      enc->dispatch_compute(glm::uvec3{align_divide_up(all_model_data_.max_objects, 64ull), 1, 1},
-                            glm::uvec3{64, 1, 1});
+      if (!culling_paused_) {
+        DrawCullPC pc{
+            .globals_buf_idx = frame_globals_buf_info_.idx,
+            .globals_buf_offset_bytes = frame_globals_buf_info_.offset_bytes,
+            .cull_data_idx = frame_cull_data_buf_info_.idx,
+            .cull_data_offset_bytes = frame_cull_data_buf_info_.offset_bytes,
+            .task_cmd_buf_idx =
+                device_->get_buf(static_draw_batch_->task_cmd_bufs_[curr_frame_idx_])
+                    ->bindless_idx(),
+            .draw_cnt_buf_idx =
+                device_->get_buf(static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_])
+                    ->bindless_idx(),
+            .instance_data_buf_idx =
+                device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
+            .mesh_data_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
+            .max_draws = all_model_data_.max_objects,
+        };
+        enc->push_constants(&pc, sizeof(pc));
+        enc->dispatch_compute(glm::uvec3{align_divide_up(all_model_data_.max_objects, 64ull), 1, 1},
+                              glm::uvec3{64, 1, 1});
+      }
     });
   } else {
     auto& prepare_indirect_pass = rg_.add_pass("prepare_indirect");
@@ -308,53 +317,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
-      glm::mat4 proj_mat = get_proj_matrix();
-      IdxOffset globals_buf;
-      GlobalData global_data{
-          .vp = proj_mat * args.view_mat,
-          .view = args.view_mat,
-          .proj = proj_mat,
-          .camera_pos = glm::vec4{args.camera_pos, 0},
-      };
-      {
-        auto [buf, offset, write_ptr] =
-            uniforms_allocator_->alloc(sizeof(GlobalData), &global_data);
-        globals_buf.idx = device_->get_buf(buf)->bindless_idx();
-        globals_buf.offset_bytes = offset;
-      }
-      IdxOffset cull_data_buf;
-      {
-        // set cull data buf
-        CullData cull_data{};
-        const glm::mat4 projection_transpose = glm::transpose(proj_mat);
-        const auto normalize_plane = [](const glm::vec4& p) {
-          const auto n = glm::vec3(p);
-          const float inv_len = 1.0f / glm::length(n);
-          return glm::vec4(n * inv_len, p.w * inv_len);
-        };
-        const glm::vec4 frustum_x =
-            normalize_plane(projection_transpose[0] + projection_transpose[3]);  // x + w < 0
-        const glm::vec4 frustum_y =
-            normalize_plane(projection_transpose[1] + projection_transpose[3]);  // y + w < 0
-        cull_data.frustum[0] = frustum_x.x;
-        cull_data.frustum[1] = frustum_x.z;
-        cull_data.frustum[2] = frustum_y.y;
-        cull_data.frustum[3] = frustum_y.z;
-        cull_data.z_near = k_z_near;
-        cull_data.z_far = k_z_far;
-
-        auto [buf, offset, write_ptr] = uniforms_allocator_->alloc(sizeof(CullData), &cull_data);
-        cull_data_buf.idx = device_->get_buf(buf)->bindless_idx();
-        cull_data_buf.offset_bytes = offset;
-      }
 
       if (k_use_mesh_shader) {
         enc->bind_pipeline(test_task_pso_);
         Task2PC pc{
-            .globals_buf_idx = globals_buf.idx,
-            .globals_buf_offset_bytes = globals_buf.offset_bytes,
-            .cull_data_idx = cull_data_buf.idx,
-            .cull_data_offset_bytes = cull_data_buf.offset_bytes,
+            .globals_buf_idx = frame_globals_buf_info_.idx,
+            .globals_buf_offset_bytes = frame_globals_buf_info_.offset_bytes,
+            .cull_data_idx = frame_cull_data_buf_info_.idx,
+            .cull_data_offset_bytes = frame_cull_data_buf_info_.offset_bytes,
             .mesh_data_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
             .meshlet_buf_idx = static_draw_batch_->meshlet_buf.get_buffer()->bindless_idx(),
             .meshlet_tri_buf_idx =
@@ -372,7 +342,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                     ->bindless_idx(),
             .max_draws = all_model_data_.max_objects,
             .max_meshlets = all_model_data_.max_meshlets,
+            .flags = 0,
         };
+        if (meshlet_frustum_culling_enabled_) {
+          pc.flags |= MESHLET_FRUSTUM_CULL_ENABLED_BIT;
+        }
         enc->push_constants(&pc, sizeof(pc));
         enc->draw_mesh_threadgroups_indirect(
             static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle, 0,
@@ -859,12 +833,56 @@ void MemeRenderer123::on_imgui() {
     device_->on_imgui();
     ImGui::TreePop();
   }
+  if (ImGui::TreeNodeEx("Culling")) {
+    ImGui::Checkbox("Culling paused", &culling_paused_);
+    ImGui::Checkbox("Meshlet frustum culling enabled", &meshlet_frustum_culling_enabled_);
+    ImGui::TreePop();
+  }
 }
 
-glm::mat4 MemeRenderer123::get_proj_matrix() {
+glm::mat4 MemeRenderer123::get_proj_matrix(float fov) {
   auto win_dims = window_->get_window_size();
   float aspect = (float)win_dims.x / win_dims.y;
-  return glm::perspectiveZO(glm::radians(70.f), aspect, k_z_near, k_z_far);
+  return glm::perspectiveZO(glm::radians(fov), aspect, k_z_near, k_z_far);
+}
+
+void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
+  glm::mat4 proj_mat = get_proj_matrix();
+  GlobalData global_data{
+      .vp = proj_mat * args.view_mat,
+      .view = args.view_mat,
+      .proj = proj_mat,
+      .camera_pos = glm::vec4{args.camera_pos, 0},
+  };
+  {
+    auto [buf, offset, write_ptr] = uniforms_allocator_->alloc(sizeof(GlobalData), &global_data);
+    frame_globals_buf_info_.idx = device_->get_buf(buf)->bindless_idx();
+    frame_globals_buf_info_.offset_bytes = offset;
+  }
+  {
+    // set cull data buf
+    CullData cull_data{};
+    const glm::mat4 projection_transpose = glm::transpose(proj_mat);
+    const auto normalize_plane = [](const glm::vec4& p) {
+      const auto n = glm::vec3(p);
+      const float inv_len = 1.0f / glm::length(n);
+      return glm::vec4(n * inv_len, p.w * inv_len);
+    };
+    const glm::vec4 frustum_x =
+        normalize_plane(projection_transpose[0] + projection_transpose[3]);  // x + w < 0
+    const glm::vec4 frustum_y =
+        normalize_plane(projection_transpose[1] + projection_transpose[3]);  // y + w < 0
+    cull_data.frustum[0] = frustum_x.x;
+    cull_data.frustum[1] = frustum_x.z;
+    cull_data.frustum[2] = frustum_y.y;
+    cull_data.frustum[3] = frustum_y.z;
+    cull_data.z_near = k_z_near;
+    cull_data.z_far = k_z_far;
+
+    auto [buf, offset, write_ptr] = uniforms_allocator_->alloc(sizeof(CullData), &cull_data);
+    frame_cull_data_buf_info_.idx = device_->get_buf(buf)->bindless_idx();
+    frame_cull_data_buf_info_.offset_bytes = offset;
+  }
 }
 
 }  // namespace gfx
