@@ -5,6 +5,9 @@
 
 struct GlobalData {
   float4x4 vp;
+  float4x4 view;
+  float4x4 proj;
+  float4 camera_pos;
 };
 
 #endif

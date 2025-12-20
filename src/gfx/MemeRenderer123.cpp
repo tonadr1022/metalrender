@@ -20,6 +20,7 @@
 #include "hlsl/material.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
+#include "hlsl/shared_cull_data.h"
 #include "hlsl/shared_draw_cull.h"
 #include "hlsl/shared_globals.h"
 #include "hlsl/shared_indirect.h"
@@ -43,6 +44,7 @@ namespace gfx {
 void MemeRenderer123::init(const CreateInfo& cinfo) {
   device_ = cinfo.device;
   window_ = cinfo.window;
+  resource_dir_ = cinfo.resource_dir;
 
   {
     // TODO: streamline
@@ -256,7 +258,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                                   RGAccess::ComputeWrite);
     prepare_indirect_pass.set_execute_fn([this, &args](rhi::CmdEncoder* enc) {
       BasicIndirectPC pc{
-          .vp = get_vp_matrix(args),
+          .vp = get_proj_matrix() * args.view_mat,
           .vert_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
           .instance_data_buf_idx =
               device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
@@ -306,28 +308,53 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
+      glm::mat4 proj_mat = get_proj_matrix();
       IdxOffset globals_buf;
+      GlobalData global_data{
+          .vp = proj_mat * args.view_mat,
+          .view = args.view_mat,
+          .proj = proj_mat,
+          .camera_pos = glm::vec4{args.camera_pos, 0},
+      };
       {
-        GlobalData global_data{
-            .vp = get_vp_matrix(args),
-        };
         auto [buf, offset, write_ptr] =
             uniforms_allocator_->alloc(sizeof(GlobalData), &global_data);
         globals_buf.idx = device_->get_buf(buf)->bindless_idx();
         globals_buf.offset_bytes = offset;
       }
-      // IdxOffset cull_data_buf;
-      // {
-      //   // set cull data buf
-      //   CullData cd {
-      //
-      //   };
-      // }
+      IdxOffset cull_data_buf;
+      {
+        // set cull data buf
+        CullData cull_data{};
+        const glm::mat4 projection_transpose = glm::transpose(proj_mat);
+        const auto normalize_plane = [](const glm::vec4& p) {
+          const auto n = glm::vec3(p);
+          const float inv_len = 1.0f / glm::length(n);
+          return glm::vec4(n * inv_len, p.w * inv_len);
+        };
+        const glm::vec4 frustum_x =
+            normalize_plane(projection_transpose[0] + projection_transpose[3]);  // x + w < 0
+        const glm::vec4 frustum_y =
+            normalize_plane(projection_transpose[1] + projection_transpose[3]);  // y + w < 0
+        cull_data.frustum[0] = frustum_x.x;
+        cull_data.frustum[1] = frustum_x.z;
+        cull_data.frustum[2] = frustum_y.y;
+        cull_data.frustum[3] = frustum_y.z;
+        cull_data.z_near = k_z_near;
+        cull_data.z_far = k_z_far;
+
+        auto [buf, offset, write_ptr] = uniforms_allocator_->alloc(sizeof(CullData), &cull_data);
+        cull_data_buf.idx = device_->get_buf(buf)->bindless_idx();
+        cull_data_buf.offset_bytes = offset;
+      }
 
       if (k_use_mesh_shader) {
         enc->bind_pipeline(test_task_pso_);
         Task2PC pc{
-            .globals_buf = globals_buf,
+            .globals_buf_idx = globals_buf.idx,
+            .globals_buf_offset_bytes = globals_buf.offset_bytes,
+            .cull_data_idx = cull_data_buf.idx,
+            .cull_data_offset_bytes = cull_data_buf.offset_bytes,
             .mesh_data_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
             .meshlet_buf_idx = static_draw_batch_->meshlet_buf.get_buffer()->bindless_idx(),
             .meshlet_tri_buf_idx =
@@ -345,7 +372,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                     ->bindless_idx(),
             .max_draws = all_model_data_.max_objects,
             .max_meshlets = all_model_data_.max_meshlets,
-            .cull_data_buf_idx = 0,
         };
         enc->push_constants(&pc, sizeof(pc));
         enc->draw_mesh_threadgroups_indirect(
@@ -797,6 +823,8 @@ void MemeRenderer123::init_imgui() {
 
   ImGuiIO& io = ImGui::GetIO();
   auto path = (resource_dir_ / "fonts" / "Comic_Sans_MS.ttf");
+  LINFO("resource dir {}", path.string());
+  ALWAYS_ASSERT(std::filesystem::exists(path));
   io.Fonts->AddFontFromFileTTF(path.c_str(), 16.0f, nullptr, io.Fonts->GetGlyphRangesDefault());
 
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -833,10 +861,10 @@ void MemeRenderer123::on_imgui() {
   }
 }
 
-glm::mat4 MemeRenderer123::get_vp_matrix(const RenderArgs& args) {
+glm::mat4 MemeRenderer123::get_proj_matrix() {
   auto win_dims = window_->get_window_size();
   float aspect = (float)win_dims.x / win_dims.y;
-  return glm::perspectiveZO(glm::radians(70.f), aspect, 0.01f, 30000.f) * args.view_mat;
+  return glm::perspectiveZO(glm::radians(70.f), aspect, k_z_near, k_z_far);
 }
 
 }  // namespace gfx

@@ -18,7 +18,7 @@ GPUFrameAllocator2::GPUFrameAllocator2(size_t size, rhi::Device* device) {
 }
 
 GPUFrameAllocator2::Alloc GPUFrameAllocator2::alloc(size_t size) {
-  size = align_up(size, 8);
+  size = align_up(size, 16);
   ALWAYS_ASSERT(size + offset_ <= capacity_);
   size_t offset = offset_;
   offset_ += size;

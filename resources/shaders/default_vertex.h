@@ -23,8 +23,7 @@ struct Meshlet {
   uint32_t triangle_count;
 
   // bounding sphere
-  packed_float3 center;
-  float radius;
+  float4 center_radius;
 
   // stored in 8-bit SNORM format
   packed_char4 cone_axis_cutoff;

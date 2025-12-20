@@ -118,4 +118,5 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   MetalCmdEncoderICBMgr cmd_icb_mgr_;
 
   uint8_t pc_data_[168]{};
+  size_t pc_data_size_{};
 };

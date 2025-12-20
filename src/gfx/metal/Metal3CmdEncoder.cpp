@@ -163,8 +163,9 @@ void Metal3CmdEncoder::draw_primitives(rhi::PrimitiveTopology topology, size_t v
 }
 
 void Metal3CmdEncoder::push_constants(void* data, size_t size) {
-  ASSERT(size <= k_pc_size);
+  ALWAYS_ASSERT(size <= k_pc_size);
   memcpy(pc_data_, data, size);
+  pc_data_size_ = size;
 }
 
 void Metal3CmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
@@ -401,11 +402,9 @@ void Metal3CmdEncoder::draw_mesh_threadgroups_indirect(rhi::BufferHandle indirec
                                                        glm::uvec3 threads_per_mesh_thread_group) {
   auto* buf = device_->get_mtl_buf(indirect_buf);
   ASSERT(buf);
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
-  auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
-  memcpy(tlab->pc_data, pc_data_, k_pc_size);
-  tlab->cbuffer2.draw_id = 0;  // TODO: don't use this root signature
-  tlab->cbuffer2.vertex_id_base = 0;
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_pc_size);
+  auto* tlab = reinterpret_cast<uint8_t*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
+  memcpy(tlab, pc_data_, pc_data_size_);
   render_enc_->setObjectBuffer(pc_buf, pc_buf_offset, kIRArgumentBufferBindPoint);
   render_enc_->setMeshBuffer(pc_buf, pc_buf_offset, kIRArgumentBufferBindPoint);
   render_enc_->setFragmentBuffer(pc_buf, pc_buf_offset, kIRArgumentBufferBindPoint);

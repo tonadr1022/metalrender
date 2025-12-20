@@ -258,11 +258,13 @@ class MemeRenderer123 {
 
   rhi::TextureHandleHolder default_white_tex_;
   std::vector<uint32_t> indirect_cmd_buf_ids_;
-  glm::mat4 get_vp_matrix(const RenderArgs& args);
+  glm::mat4 get_proj_matrix();
   std::vector<MeshData> mesh_datas_;
 
   // TODO: rename or sum?
   std::optional<GPUFrameAllocator2> uniforms_allocator_;
+  static constexpr float k_z_near = 0.01f;
+  static constexpr float k_z_far = 30000.f;
 
   bool culling_paused_{};
 };

@@ -9,7 +9,10 @@ struct IdxOffset {
 };
 
 cbuffer Task2PC HLSL_PC_REG {
-  IdxOffset globals_buf;
+  uint globals_buf_idx;
+  uint globals_buf_offset_bytes;
+  uint cull_data_idx;
+  uint cull_data_offset_bytes;
   uint mesh_data_buf_idx;
   uint meshlet_buf_idx;
   uint meshlet_tri_buf_idx;
@@ -21,7 +24,7 @@ cbuffer Task2PC HLSL_PC_REG {
   uint draw_cnt_buf_idx;
   uint max_draws;
   uint max_meshlets;
-  uint cull_data_buf_idx;
+  uint _pad;
 };
 
 #ifdef __HLSL__

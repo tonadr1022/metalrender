@@ -3,6 +3,10 @@
 
 #include "../shader_core.h"
 
-struct CullData {};
+struct CullData {
+  float4 frustum;
+  float z_near;
+  float z_far;
+};
 
 #endif
