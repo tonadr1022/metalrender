@@ -4,6 +4,7 @@
 #include "../shader_core.h"
 
 #define MESHLET_FRUSTUM_CULL_ENABLED_BIT (1 << 0)
+#define MESHLET_CONE_CULL_ENABLED_BIT (1 << 1)
 
 cbuffer Task2PC HLSL_PC_REG {
   uint globals_buf_idx;

@@ -27,6 +27,7 @@ struct Meshlet {
 
   // stored in 8-bit SNORM format
   packed_char4 cone_axis_cutoff;
+  // float4 cone_axis_cutoff;
 };
 
 #endif

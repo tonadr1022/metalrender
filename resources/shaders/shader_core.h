@@ -32,7 +32,7 @@
 #define packed_float2 glm::vec2
 #define packed_float3 glm::vec3
 #define packed_char3 glm::i8vec3
-#define packed_char4 glm::i8vec4
+#define packed_char4 uint32_t
 #define packed_char char
 #define packed_float4 glm::vec4
 #define float2 glm::vec2

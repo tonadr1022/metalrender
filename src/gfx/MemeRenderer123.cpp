@@ -347,6 +347,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         if (meshlet_frustum_culling_enabled_) {
           pc.flags |= MESHLET_FRUSTUM_CULL_ENABLED_BIT;
         }
+        if (meshlet_cone_culling_enabled_) {
+          pc.flags |= MESHLET_CONE_CULL_ENABLED_BIT;
+        }
         enc->push_constants(&pc, sizeof(pc));
         enc->draw_mesh_threadgroups_indirect(
             static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle, 0,
@@ -836,6 +839,7 @@ void MemeRenderer123::on_imgui() {
   if (ImGui::TreeNodeEx("Culling")) {
     ImGui::Checkbox("Culling paused", &culling_paused_);
     ImGui::Checkbox("Meshlet frustum culling enabled", &meshlet_frustum_culling_enabled_);
+    ImGui::Checkbox("Meshlet cone culling enabled", &meshlet_cone_culling_enabled_);
     ImGui::TreePop();
   }
 }

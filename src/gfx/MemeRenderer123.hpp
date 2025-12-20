@@ -275,6 +275,7 @@ class MemeRenderer123 {
 
   bool culling_paused_{};
   bool meshlet_frustum_culling_enabled_{true};
+  bool meshlet_cone_culling_enabled_{true};
   IdxOffset frame_globals_buf_info_;
   IdxOffset frame_cull_data_buf_info_;
 };

@@ -11,61 +11,81 @@
 #include "shared_globals.h"
 #include "shared_cull_data.h"
 #include "../default_vertex.h"
-// clang-format off
+// clang-format on
 
 groupshared Payload s_Payload;
-groupshared uint s_count; 
+groupshared uint s_count;
 
-[RootSignature(ROOT_SIGNATURE)]
-[NumThreads(K_TASK_TG_SIZE, 1, 1)]
-void main(uint gtid : SV_GroupThreadID, uint dtid : SV_DispatchThreadID, uint gid : SV_GroupID) {
-    uint task_group_id = gid;
+[RootSignature(ROOT_SIGNATURE)][NumThreads(K_TASK_TG_SIZE, 1, 1)] void main(
+    uint gtid : SV_GroupThreadID, uint dtid : SV_DispatchThreadID, uint gid : SV_GroupID) {
+  uint task_group_id = gid;
 
-    bool visible = false;
-    
-    StructuredBuffer<TaskCmd> tts =  ResourceDescriptorHeap[tt_cmd_buf_idx];
-    StructuredBuffer<uint3> task_dispatch_buf = ResourceDescriptorHeap[draw_cnt_buf_idx];
+  bool visible = false;
 
-    if (task_group_id < task_dispatch_buf[0].x) {
-      TaskCmd tt = tts[task_group_id];
-      if (gtid < tt.task_count) {
-        visible = true;
+  StructuredBuffer<TaskCmd> tts = ResourceDescriptorHeap[tt_cmd_buf_idx];
+  StructuredBuffer<uint3> task_dispatch_buf = ResourceDescriptorHeap[draw_cnt_buf_idx];
 
-        ByteAddressBuffer global_data_buf = ResourceDescriptorHeap[globals_buf_idx];
-        GlobalData globals = global_data_buf.Load<GlobalData>(globals_buf_offset_bytes);
-        StructuredBuffer<Meshlet> meshlet_buf = ResourceDescriptorHeap[meshlet_buf_idx];
-        Meshlet meshlet = meshlet_buf[tt.task_offset + gtid];
-        StructuredBuffer<InstanceData> instance_data_buf = ResourceDescriptorHeap[instance_data_buf_idx];
-        InstanceData instance_data = instance_data_buf[tt.instance_id];
-        ByteAddressBuffer cull_data_buf = ResourceDescriptorHeap[cull_data_idx];
-        CullData cull_data = cull_data_buf.Load<CullData>(sizeof(GlobalData));
-        float3 world_center = rotate_quat(instance_data.scale * meshlet.center_radius.xyz, instance_data.rotation)
-                              + instance_data.translation;
-        float radius = meshlet.center_radius.w * instance_data.scale;
-        float4 center = mul(globals.view, float4(world_center, 1.0));
-        // Ref: https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
-        // frustum cull, plane symmetry 
-        bool meshlet_frustum_culling_disabled = (flags & MESHLET_FRUSTUM_CULL_ENABLED_BIT) == 0;
-        visible = visible && (meshlet_frustum_culling_disabled || ((-center.z + radius) > cull_data.z_near && (-center.z - radius) < cull_data.z_far));
-        visible = visible && (meshlet_frustum_culling_disabled || (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius);
-        visible = visible && (meshlet_frustum_culling_disabled || (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius);
+  if (task_group_id < task_dispatch_buf[0].x) {
+    TaskCmd tt = tts[task_group_id];
+    if (gtid < tt.task_count) {
+      visible = true;
+
+      ByteAddressBuffer global_data_buf = ResourceDescriptorHeap[globals_buf_idx];
+      GlobalData globals = global_data_buf.Load<GlobalData>(globals_buf_offset_bytes);
+      StructuredBuffer<Meshlet> meshlet_buf = ResourceDescriptorHeap[meshlet_buf_idx];
+      Meshlet meshlet = meshlet_buf[tt.task_offset + gtid];
+      StructuredBuffer<InstanceData> instance_data_buf =
+          ResourceDescriptorHeap[instance_data_buf_idx];
+      InstanceData instance_data = instance_data_buf[tt.instance_id];
+      ByteAddressBuffer cull_data_buf = ResourceDescriptorHeap[cull_data_idx];
+      CullData cull_data = cull_data_buf.Load<CullData>(sizeof(GlobalData));
+      float3 world_center =
+          rotate_quat(instance_data.scale * meshlet.center_radius.xyz, instance_data.rotation) +
+          instance_data.translation;
+      float radius = meshlet.center_radius.w * instance_data.scale;
+      float3 center = mul(globals.view, float4(world_center, 1.0)).xyz;
+      // Ref:
+      // https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
+      // frustum cull, plane symmetry
+      if ((flags & MESHLET_FRUSTUM_CULL_ENABLED_BIT) != 0) {
+        visible = visible && ((-center.z + radius) > cull_data.z_near &&
+                              (-center.z - radius) < cull_data.z_far);
+        visible = visible && (center.z * cull_data.frustum[3] -
+                              abs(center.y) * cull_data.frustum[2]) > -radius;
+        visible = visible && (center.z * cull_data.frustum[1] -
+                              abs(center.x) * cull_data.frustum[0]) > -radius;
+      }
+
+      // normal cone culling
+      if ((flags & MESHLET_CONE_CULL_ENABLED_BIT) != 0) {
+        // 8-bit SNORM quantized
+        float3 cone_axis = float3(int(meshlet.cone_axis_cutoff << 24) >> 24,
+                                  int(meshlet.cone_axis_cutoff << 16) >> 24,
+                                  int(meshlet.cone_axis_cutoff << 8) >> 24) /
+                           127.0;
+        float cone_cutoff = float(int(meshlet.cone_axis_cutoff) >> 24) / 127.0;
+        cone_axis = rotate_quat(cone_axis, instance_data.rotation);
+        cone_axis =
+            mul(float3x3(globals.view[0].xyz, globals.view[1].xyz, globals.view[2].xyz), cone_axis);
+        visible = visible && !cone_cull(center, radius, cone_axis, cone_cutoff, float3(0, 0, 0));
       }
     }
+  }
 
-    if (gtid == 0) {
-      s_count = 0;
-    }
-    GroupMemoryBarrierWithGroupSync();
+  if (gtid == 0) {
+    s_count = 0;
+  }
+  GroupMemoryBarrierWithGroupSync();
 
-    if (visible) {
-        uint thread_i;
-        InterlockedAdd(s_count, 1, thread_i);
-        s_Payload.meshlet_indices[thread_i] = (task_group_id & 0xFFFFFFu) | (gtid << 24);
-    }
+  if (visible) {
+    uint thread_i;
+    InterlockedAdd(s_count, 1, thread_i);
+    s_Payload.meshlet_indices[thread_i] = (task_group_id & 0xFFFFFFu) | (gtid << 24);
+  }
 
-    GroupMemoryBarrierWithGroupSync();
+  GroupMemoryBarrierWithGroupSync();
 
-    uint visible_count = s_count;
+  uint visible_count = s_count;
 
-    DispatchMesh(visible_count, 1, 1, s_Payload);
+  DispatchMesh(visible_count, 1, 1, s_Payload);
 }

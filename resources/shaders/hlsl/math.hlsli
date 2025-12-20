@@ -1,9 +1,12 @@
 #ifndef MATH_HLSL
 #define MATH_HLSL
 
-float3 rotate_quat(float3 v, float4 q) {
-    return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v);
+float3 rotate_quat(float3 v, float4 q) { return v + 2.0 * cross(q.xyz, cross(q.xyz, v) + q.w * v); }
+
+bool cone_cull(float3 center, float radius, float3 cone_axis, float cone_cutoff,
+               float3 camera_position) {
+  return dot(center - camera_position, cone_axis) >=
+         cone_cutoff * length(center - camera_position) + radius;
 }
 
 #endif
-

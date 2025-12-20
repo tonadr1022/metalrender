@@ -110,8 +110,10 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
     meshlet.vertex_count = m.vertex_count;
     meshlet.triangle_count = m.triangle_count;
     meshlet.center_radius = {bounds.center[0], bounds.center[1], bounds.center[2], bounds.radius};
-    meshlet.cone_axis_cutoff = glm::i8vec4{bounds.cone_axis_s8[0], bounds.cone_axis_s8[1],
-                                           bounds.cone_axis_s8[2], bounds.cone_cutoff_s8};
+    meshlet.cone_axis_cutoff = (uint32_t(uint8_t(bounds.cone_axis_s8[0]))) |
+                               (uint32_t(uint8_t(bounds.cone_axis_s8[1])) << 8) |
+                               (uint32_t(uint8_t(bounds.cone_axis_s8[2])) << 16) |
+                               (uint32_t(uint8_t(bounds.cone_cutoff_s8)) << 24);
   }
 
   for (auto &v : meshlet_vertices) {
