@@ -852,3 +852,32 @@ std::filesystem::path MetalDevice::get_metallib_path_from_shader_info(
   }
   return (shader_lib_dir_ / shader_info.path).concat(".").concat(type_str).concat(".metallib");
 }
+
+int MetalDevice::create_subresource(rhi::TextureHandle handle, uint32_t base_mip_level,
+                                    uint32_t level_count, uint32_t base_array_layer,
+                                    uint32_t layer_count) {
+  auto* tex = reinterpret_cast<MetalTexture*>(get_tex(handle));
+  ALWAYS_ASSERT(tex);
+  auto* mtl_tex = tex->texture();
+  if (!mtl_tex) {
+    return -1;
+  }
+  auto* view = mtl_tex->newTextureView(mtl::util::convert(tex->desc().format),
+                                       get_texture_type(tex->desc().dims, tex->desc().array_length),
+                                       NS::Range::Make(base_mip_level, level_count),
+                                       NS::Range::Make(base_array_layer, layer_count));
+  auto subresource_id = static_cast<int>(tex->tex_views.size());
+  auto bindless_idx = resource_desc_heap_allocator_.alloc_idx();
+  tex->tex_views.emplace_back(view, bindless_idx);
+  auto* resource_table =
+      (IRDescriptorTableEntry*)(get_mtl_buf(resource_descriptor_table_))->contents();
+  IRDescriptorTableSetTexture(&resource_table[bindless_idx], mtl_tex, 0.0f, 0);
+  return subresource_id;
+}
+
+uint32_t MetalDevice::get_tex_view_bindless_idx(rhi::TextureHandle handle, int subresource_id) {
+  auto* tex = reinterpret_cast<MetalTexture*>(get_tex(handle));
+  ALWAYS_ASSERT(tex);
+  ALWAYS_ASSERT((subresource_id >= 0 && (size_t)subresource_id < tex->tex_views.size()));
+  return tex->tex_views[subresource_id].bindless_idx;
+}

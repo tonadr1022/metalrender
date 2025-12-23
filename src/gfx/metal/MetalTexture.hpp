@@ -13,6 +13,12 @@ class MetalTexture : public rhi::Texture {
   [[nodiscard]] MTL::Texture* texture() const { return tex_; }
   [[nodiscard]] bool is_drawable_tex() const { return is_drawable_tex_; }
 
+  struct TexView {
+    MTL::Texture* tex;
+    uint32_t bindless_idx;
+  };
+  std::vector<TexView> tex_views;
+
  private:
   MTL::Texture* tex_{};
   bool is_drawable_tex_{};

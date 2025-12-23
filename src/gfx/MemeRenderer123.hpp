@@ -230,10 +230,13 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder test_task_pso_;
   rhi::PipelineHandleHolder draw_cull_pso_;
   rhi::PipelineHandleHolder test_clear_buf_pso_;
+  rhi::PipelineHandleHolder depth_reduce_pso_;
   std::optional<BackedGPUAllocator> materials_buf_;
 
   rhi::BufferHandleHolder tmp_out_draw_cnt_buf_;
   rhi::BufferHandleHolder tmp_test_buf_;
+  rhi::TextureHandleHolder depth_pyramid_tex_;
+  std::vector<int> depth_pyramid_tex_views_;
 
   size_t frame_num_{};
   size_t curr_frame_idx_{};

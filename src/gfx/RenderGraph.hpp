@@ -107,12 +107,11 @@ class RGPass {
   RGPass() = default;
   RGPass(std::string name, RenderGraph* rg, uint32_t pass_i);
 
-  RGResourceHandle add_tex(const std::string& name, AttachmentInfo att_info, RGAccess access);
+  RGResourceHandle add_tex(const std::string& name, AttachmentInfo att_info, RGAccess access,
+                           const std::string& input_name = "");
   RGResourceHandle add_tex(rhi::TextureHandle tex_handle, RGAccess access);
   RGResourceHandle add_buf(std::string name, rhi::BufferHandle buf_handle, RGAccess access,
                            const std::string& input_name = "");
-
-  RGResourceHandle use_buf(BufferInfo, RGAccess) { return {}; }
 
   [[nodiscard]] const std::vector<ResourceAndUsage>& get_resource_usages() const {
     return resource_usages_;

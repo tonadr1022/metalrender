@@ -6,6 +6,7 @@
 #include "Window.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
+#include "core/MathUtil.hpp"
 #include "core/Util.hpp"
 #include "default_vertex.h"
 #include "gfx/Buffer.hpp"
@@ -17,6 +18,7 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/Swapchain.hpp"
 #include "gfx/Texture.hpp"
+#include "hlsl/depth_reduce/shared_depth_reduce.h"
 #include "hlsl/material.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
@@ -100,6 +102,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
     });
     draw_cull_pso_ = device_->create_compute_pipeline_h({"draw_cull"});
     test_clear_buf_pso_ = device_->create_compute_pipeline_h({"test_clear_cnt_buf"});
+    depth_reduce_pso_ = device_->create_compute_pipeline_h({"depth_reduce"});
   }
 
   materials_buf_.emplace(*device_,
@@ -366,6 +369,31 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       }
     });
   }
+  // {
+  //   auto* dp_tex = device_->get_tex(depth_pyramid_tex_);
+  //   auto base_dim = glm::uvec2{dp_tex->desc().dims};
+  //   uint32_t mip_levels = math::get_mip_levels(base_dim.x, base_dim.y);
+  //   for (uint32_t mip = 0; mip < mip_levels; mip++) {
+  //     auto& pass = rg_.add_pass("depth_reduce_" + std::to_string(mip));
+  //     if (mip == 0) {
+  //       pass.add_tex("depth_tex_post_gbuffer1", );
+  //     }
+  //     pass.set_execute_fn([this](rhi::CmdEncoder* enc) {
+  //       auto curr_dims = glm::uvec2{base_dim.x >> mip, base_dim.y >> mip};
+  //       DepthReducePC pc{.in_tex_idx = device_->get_tex_view_bindless_idx(
+  //                            depth_pyramid_tex_.handle, depth_pyramid_tex_views_[mip]),
+  //                        .out_tex_idx = device_->get_tex_view_bindless_idx(
+  //                            depth_pyramid_tex_.handle, depth_pyramid_tex_views_[mip + 1]),
+  //                        .in_tex_mip_level = mip,
+  //                        .in_tex_dims = curr_dims};
+  //       enc->push_constants(&pc, sizeof(pc));
+  //       constexpr size_t k_tg_size = 8;
+  //       enc->dispatch_compute(glm::uvec3{align_divide_up(curr_dims.x, k_tg_size),
+  //                                        align_divide_up(curr_dims.y, k_tg_size), 1},
+  //                             glm::uvec3{k_tg_size, k_tg_size, 1});
+  //     });
+  //   }
+  // }
   {
     auto& pass = rg_.add_pass("shade");
     pass.add_tex("gbuffer_a", {.is_swapchain_tex = true}, RGAccess::ComputeRead);

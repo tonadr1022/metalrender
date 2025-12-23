@@ -483,8 +483,8 @@ void RenderGraph::init(rhi::Device* device) {
   passes_.reserve(200);
 }
 
-RGResourceHandle RGPass::add_tex(const std::string& name, AttachmentInfo att_info,
-                                 RGAccess access) {
+RGResourceHandle RGPass::add_tex(const std::string& name, AttachmentInfo att_info, RGAccess access,
+                                 const std::string& input_name) {
   assert_rg_access_valid(access);
   RGResourceHandle handle = rg_->add_tex_usage(name, att_info, access, *this);
   ResourceAndUsage resource_usage{.handle = handle};
@@ -493,7 +493,11 @@ RGResourceHandle RGPass::add_tex(const std::string& name, AttachmentInfo att_inf
     resource_read_indices_.push_back(resource_usages_.size());
   }
   resource_usages_.push_back(resource_usage);
-  resource_read_names_.emplace_back();
+  if (input_name.size()) {
+    resource_read_names_.emplace_back(input_name);
+  } else if (access & AnyRead) {
+    resource_read_names_.emplace_back(name);
+  }
 
   return handle;
 }

@@ -70,6 +70,9 @@ class MetalDevice : public rhi::Device {
   rhi::Buffer* get_buf(rhi::BufferHandle handle) override { return buffer_pool_.get(handle); }
 
   rhi::TextureHandle create_tex(const rhi::TextureDesc& desc) override;
+  int create_subresource(rhi::TextureHandle handle, uint32_t base_mip_level, uint32_t level_count,
+                         uint32_t base_array_layer, uint32_t layer_count) override;
+  uint32_t get_tex_view_bindless_idx(rhi::TextureHandle handle, int subresource_id) override;
   rhi::Texture* get_tex(rhi::TextureHandle handle) override { return texture_pool_.get(handle); }
   rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) override;
 
