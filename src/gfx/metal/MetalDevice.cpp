@@ -869,19 +869,16 @@ int MetalDevice::create_subresource(rhi::TextureHandle handle, uint32_t base_mip
   auto* tex = reinterpret_cast<MetalTexture*>(get_tex(handle));
   ALWAYS_ASSERT(tex);
   auto* mtl_tex = tex->texture();
-  if (!mtl_tex) {
-    return -1;
-  }
   auto* view = mtl_tex->newTextureView(mtl::util::convert(tex->desc().format),
                                        get_texture_type(tex->desc().dims, tex->desc().array_length),
                                        NS::Range::Make(base_mip_level, level_count),
                                        NS::Range::Make(base_array_layer, layer_count));
-  auto subresource_id = static_cast<int>(tex->tex_views.size());
   auto bindless_idx = resource_desc_heap_allocator_.alloc_idx();
+  auto subresource_id = static_cast<int>(tex->tex_views.size());
   tex->tex_views.emplace_back(view, bindless_idx);
   auto* resource_table =
       (IRDescriptorTableEntry*)(get_mtl_buf(resource_descriptor_table_))->contents();
-  IRDescriptorTableSetTexture(&resource_table[bindless_idx], mtl_tex, 0.0f, 0);
+  IRDescriptorTableSetTexture(&resource_table[bindless_idx], view, 0.0f, 0);
   return subresource_id;
 }
 

@@ -12,12 +12,8 @@
 #define INVALID_DEPTH 1.0
 #endif
 
-float read_tex(in Texture2D<float> tex, int3 texel) {
-  if (texel.x < 0 || texel.y < 0 || texel.x >= int(out_tex_dim_x) ||
-      texel.y >= int(out_tex_dim_y)) {
-    return INVALID_DEPTH;
-  }
-  return tex.Load(texel).r;
+float read_tex(in Texture2D<float> tex, float2 loc, SamplerState sampler) {
+  return tex.SampleLevel(sampler, loc, 0);
 }
 
 [RootSignature(ROOT_SIGNATURE)][NumThreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
@@ -26,13 +22,13 @@ float read_tex(in Texture2D<float> tex, int3 texel) {
   }
   Texture2D<float> in_tex = ResourceDescriptorHeap[in_tex_idx];
   RWTexture2D<float> out_tex = ResourceDescriptorHeap[out_tex_idx];
+  SamplerState sampler = SamplerDescriptorHeap[NEAREST_SAMPLER_IDX];
 
-  uint2 in_base = dtid * 2;
+  float2 in_dims = float2(in_tex_dim_x, in_tex_dim_y);
+  float depth_val = in_tex.SampleLevel(sampler, in_dims / in_dims, 0);
+  depth_val = in_tex.SampleLevel(sampler, (in_dims + float2(0.5, 0.0)) / in_dims, 0);
+  depth_val = in_tex.SampleLevel(sampler, (in_dims + float2(0.0, 0.5)) / in_dims, 0);
+  depth_val = in_tex.SampleLevel(sampler, (in_dims + float2(0.5, 0.5)) / in_dims, 0);
 
-  float depth_val = read_tex(in_tex, int3(in_base.x, in_base.y, 0));
-  depth_val = COMP_FUNC(depth_val, read_tex(in_tex, int3(in_base.x + 1, in_base.y, 0)));
-  depth_val = COMP_FUNC(depth_val, read_tex(in_tex, int3(in_base.x, in_base.y + 1, 0)));
-  depth_val = COMP_FUNC(depth_val, read_tex(in_tex, int3(in_base.x + 1, in_base.y + 1, 0)));
-
-  out_tex[dtid] = depth_val * 0.1;
+  out_tex[dtid] = depth_val;
 }

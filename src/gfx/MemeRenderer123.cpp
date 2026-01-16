@@ -1,6 +1,7 @@
 #include "MemeRenderer123.hpp"
 
 #include <algorithm>
+#include <glm/ext/vector_integer.hpp>
 #include <tracy/Tracy.hpp>
 
 #include "Window.hpp"
@@ -39,6 +40,14 @@ namespace {
 using rhi::RenderingAttachmentInfo;
 using rhi::ShaderType;
 using rhi::TextureFormat;
+
+uint32_t prev_pow2(uint32_t val) {
+  uint32_t v = 1;
+  while (v * 2 < val) {
+    v *= 2;
+  }
+  return v;
+}
 
 }  // namespace
 
@@ -138,12 +147,13 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   uniforms_allocator_.emplace(1024 * 1024, device_);
 
   {  // depth pyramid tex creation
-    auto size = window_->get_window_size();
+    auto main_size = window_->get_window_size();
+    auto size = glm::uvec3{prev_pow2(main_size.x), prev_pow2(main_size.y), 1};
     uint32_t mip_levels = math::get_mip_levels(size.x, size.y);
     depth_pyramid_tex_ = device_->create_tex_h(rhi::TextureDesc{
         .format = rhi::TextureFormat::R32float,
         .usage = (rhi::TextureUsage)(rhi::TextureUsageStorage | rhi::TextureUsageShaderWrite),
-        .dims = glm::uvec3{size.x, size.y, 1},
+        .dims = size,
         .mip_levels = mip_levels,
         .bindless = true,
         .name = "depth_pyramid_tex"});
@@ -392,13 +402,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     });
   }
   auto* dp_tex = device_->get_tex(depth_pyramid_tex_);
-  auto base_dim = glm::uvec2{dp_tex->desc().dims};
-  uint32_t mip_levels = math::get_mip_levels(base_dim.x, base_dim.y);
+  auto dp_dims = glm::uvec2{dp_tex->desc().dims};
+  uint32_t mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
   std::string final_depth_pyramid_name;
   std::string read_name;
   uint32_t final_mip = mip_levels - 1;
-  // TODO: lol
-  final_mip = 1;
   for (uint32_t mip = 0; mip < final_mip; mip++) {
     auto& pass = rg_.add_pass("depth_reduce_" + std::to_string(mip));
     RGResourceHandle depth_handle{};
@@ -415,23 +423,28 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
     read_name = write_name;
     pass.add_tex(write_name, depth_pyramid_tex_.handle, RGAccess::ComputeWrite);
-    pass.set_execute_fn([this, base_dim, mip, depth_handle](rhi::CmdEncoder* enc) {
+    pass.set_execute_fn([this, mip, depth_handle, dp_dims](rhi::CmdEncoder* enc) {
       enc->bind_pipeline(depth_reduce_pso_);
-      auto out_dims = base_dim >> (mip + 1);
+      glm::uvec2 in_dims = (mip == 0) ? device_->get_tex(rg_.get_att_img(depth_handle))->desc().dims
+                                      : glm::uvec2{std::max(1u, dp_dims.x >> (mip - 1)),
+                                                   std::max(1u, dp_dims.y >> (mip - 1))};
       auto read_idx = mip == 0 ? device_->get_tex(rg_.get_att_img(depth_handle))->bindless_idx()
                                : device_->get_tex_view_bindless_idx(
                                      depth_pyramid_tex_.handle, depth_pyramid_tex_views_[mip - 1]);
       DepthReducePC pc{
-          .out_tex_dim_x = out_dims.x,
-          .out_tex_dim_y = out_dims.y,
+          .in_tex_dim_x = in_dims.x,
+          .in_tex_dim_y = in_dims.y,
+          .out_tex_dim_x = dp_dims.x >> mip,
+          .out_tex_dim_y = dp_dims.y >> mip,
           .in_tex_idx = read_idx,
           .out_tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
                                                             depth_pyramid_tex_views_[mip]),
+          .curr_mip = mip,
       };
       enc->push_constants(&pc, sizeof(pc));
       constexpr size_t k_tg_size = 8;
-      enc->dispatch_compute(glm::uvec3{align_divide_up(out_dims.x, k_tg_size),
-                                       align_divide_up(out_dims.y, k_tg_size), 1},
+      enc->dispatch_compute(glm::uvec3{align_divide_up(pc.out_tex_dim_x, k_tg_size),
+                                       align_divide_up(pc.out_tex_dim_y, k_tg_size), 1},
                             glm::uvec3{k_tg_size, k_tg_size, 1});
     });
   }
@@ -453,14 +466,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->bind_pipeline(tex_only_pso_);
 
       uint32_t tex_idx{};
-      if (view_mip_ == 0) {
+      if (false) {
         tex_idx = gbuffer_a_tex->bindless_idx();
       } else {
-        // tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
-        //                                              depth_pyramid_tex_views_[view_mip_ - 1]);
-        tex_idx = device_->get_tex(depth_pyramid_tex_.handle)->bindless_idx();
+        tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
+                                                     depth_pyramid_tex_views_[view_mip_]);
+        // tex_idx = device_->get_tex(depth_pyramid_tex_.handle)->bindless_idx();
       }
-      TexOnlyPC pc{.tex_idx = tex_idx, .mip_level = (uint32_t)0};
+      TexOnlyPC pc{.tex_idx = tex_idx, .mip_level = (uint32_t)view_mip_};
       enc->push_constants(&pc, sizeof(pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
 

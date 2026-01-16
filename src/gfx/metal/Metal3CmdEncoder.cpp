@@ -1,6 +1,7 @@
 #include "Metal3CmdEncoder.hpp"
 
 // clang-format off
+#include <Metal/MTLCommandBuffer.hpp>
 #include <Metal/Metal.hpp>
 #include <tracy/Tracy.hpp>
 #include "gfx/metal/Config.hpp"
@@ -486,7 +487,7 @@ void Metal3CmdEncoder::start_compute_encoder() {
   end_encoders_of_types((EncoderType)(EncoderType_Blit | EncoderType_Render));
   if (!compute_enc_) {
     // TODO: re-evaluate dispatch type
-    compute_enc_ = cmd_buf_->computeCommandEncoder(MTL::DispatchTypeSerial);
+    compute_enc_ = cmd_buf_->computeCommandEncoder(MTL::DispatchTypeConcurrent);
 
     flush_barriers();
   }
