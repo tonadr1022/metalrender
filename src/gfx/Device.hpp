@@ -58,6 +58,7 @@ class Device {
   virtual Texture* get_tex(TextureHandle handle) = 0;
   Texture* get_tex(const TextureHandleHolder& handle) { return get_tex(handle.handle); }
   Buffer* get_buf(const BufferHandleHolder& handle) { return get_buf(handle.handle); }
+  virtual void get_all_buffers(std::vector<rhi::Buffer*>& out_buffers) = 0;
   virtual Buffer* get_buf(BufferHandle handle) = 0;
   rhi::Pipeline* get_pipeline(const rhi::PipelineHandleHolder& handle) {
     return get_pipeline(handle.handle);

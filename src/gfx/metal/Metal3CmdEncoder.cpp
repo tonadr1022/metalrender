@@ -159,6 +159,14 @@ void Metal3CmdEncoder::set_scissor(glm::uvec2 min, glm::uvec2 extent) {
 void Metal3CmdEncoder::draw_primitives(rhi::PrimitiveTopology topology, size_t vertex_start,
                                        size_t count, size_t instance_count) {
   // TODO: this might not be based.
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
+  auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
+  memcpy(tlab->pc_data, pc_data_, k_pc_size);
+  tlab->cbuffer2.draw_id = 0;  // TODO: don't use this root signature
+  tlab->cbuffer2.vertex_id_base = 0;
+  render_enc_->setVertexBuffer(pc_buf, pc_buf_offset, kIRArgumentBufferBindPoint);
+  render_enc_->setFragmentBuffer(pc_buf, pc_buf_offset, kIRArgumentBufferBindPoint);
+
   render_enc_->drawPrimitives(mtl::util::convert(topology), vertex_start, count, instance_count);
 }
 

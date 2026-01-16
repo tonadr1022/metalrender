@@ -23,8 +23,7 @@ ImGuiRenderer::ImGuiRenderer(rhi::Device* device) : device_(device) {
           {"imgui", rhi::ShaderType::Fragment},
       }},
       // TODO: parameterize texture formats
-      .rendering = {.color_formats{rhi::TextureFormat::B8G8R8A8Unorm},
-                    .depth_format = rhi::TextureFormat::D32float},
+      .rendering = {.color_formats{rhi::TextureFormat::B8G8R8A8Unorm}},
       .blend = {.attachments = {{
                     .enable = true,
                     .src_color_factor = rhi::BlendFactor::SrcAlpha,

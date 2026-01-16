@@ -13,23 +13,26 @@
 #endif
 
 float read_tex(in Texture2D<float> tex, int3 texel) {
-  if (texel.x < 0 || texel.y < 0 || texel.x >= int(in_tex_dims.x) ||
-      texel.x >= int(in_tex_dims.y)) {
+  if (texel.x < 0 || texel.y < 0 || texel.x >= int(out_tex_dim_x) ||
+      texel.y >= int(out_tex_dim_y)) {
     return INVALID_DEPTH;
   }
   return tex.Load(texel).r;
 }
 
 [RootSignature(ROOT_SIGNATURE)][NumThreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
-  if (dtid.x >= in_tex_dims.x || dtid.y >= in_tex_dims.y) {
+  if (dtid.x >= out_tex_dim_x || dtid.y >= out_tex_dim_y) {
     return;
   }
   Texture2D<float> in_tex = ResourceDescriptorHeap[in_tex_idx];
-  float min_val = read_tex(in_tex, int3(dtid.x, dtid.y, in_tex_mip_level));
-  min_val = COMP_FUNC(min_val, read_tex(in_tex, int3(dtid.x, dtid.y + 1, in_tex_mip_level)));
-  min_val = COMP_FUNC(min_val, read_tex(in_tex, int3(dtid.x + 1, dtid.y, in_tex_mip_level)));
-  min_val = COMP_FUNC(min_val, read_tex(in_tex, int3(dtid.x + 1, dtid.y + 1, in_tex_mip_level)));
-
   RWTexture2D<float> out_tex = ResourceDescriptorHeap[out_tex_idx];
-  out_tex[dtid] = min_val;
+
+  uint2 in_base = dtid * 2;
+
+  float depth_val = read_tex(in_tex, int3(in_base.x, in_base.y, 0));
+  depth_val = COMP_FUNC(depth_val, read_tex(in_tex, int3(in_base.x + 1, in_base.y, 0)));
+  depth_val = COMP_FUNC(depth_val, read_tex(in_tex, int3(in_base.x, in_base.y + 1, 0)));
+  depth_val = COMP_FUNC(depth_val, read_tex(in_tex, int3(in_base.x + 1, in_base.y + 1, 0)));
+
+  out_tex[dtid] = depth_val * 0.1;
 }

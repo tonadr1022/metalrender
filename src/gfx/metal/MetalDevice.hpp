@@ -109,6 +109,8 @@ class MetalDevice : public rhi::Device {
   void copy_to_buffer(const void* src, size_t src_size, rhi::BufferHandle buf,
                       size_t dst_offset) override;
 
+  void get_all_buffers(std::vector<rhi::Buffer*>& out_buffers) override;
+
   void set_name(rhi::BufferHandle handle, const char* name) override;
 
   struct MetalPSOs {
@@ -217,6 +219,7 @@ class MetalDevice : public rhi::Device {
   std::optional<GPUFrameAllocator> test_allocator_;
   rhi::BufferHandleHolder resource_descriptor_table_;
   rhi::BufferHandleHolder sampler_descriptor_table_;
+  void write_bindless_resource_descriptor(uint32_t bindless_idx, MTL::Texture* tex);
 
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
     return reinterpret_cast<MetalBuffer*>(get_buf(handle.handle))->buffer();

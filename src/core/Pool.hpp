@@ -220,6 +220,10 @@ struct BlockPool {
   }
 
   [[nodiscard]] size_t num_blocks() const { return all_entries_.size(); }
+  std::vector<Entry>& get_block_entries(uint32_t block) {
+    ASSERT(block < all_entries_.size());
+    return all_entries_[block];
+  }
 
  private:
   mutable std::shared_mutex mtx_;

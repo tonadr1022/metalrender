@@ -1,7 +1,7 @@
 # Another Renderer
 
 I've been working on this renderer to enlighten myself on the wonders
-of the Metal API while I don't have access to a desktop.
+of the Metal API while I don't have access to a desktop. As of Jan 2026, I might be quitting this for now, since HLSL shader debugging in Xcode is quite lacking.
 
 ## The deal
 

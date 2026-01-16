@@ -8,7 +8,10 @@ class Texture {
  public:
   Texture() = default;
   [[nodiscard]] const TextureDesc& desc() const { return desc_; }
-  [[nodiscard]] uint32_t bindless_idx() const { return bindless_idx_; }
+  [[nodiscard]] uint32_t bindless_idx() const {
+    ASSERT(bindless_idx_ != k_invalid_bindless_idx);
+    return bindless_idx_;
+  }
 
  protected:
   explicit Texture(const TextureDesc& desc, uint32_t gpu_slot = k_invalid_bindless_idx)

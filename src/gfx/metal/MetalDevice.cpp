@@ -206,7 +206,7 @@ void MetalDevice::shutdown() { device_->release(); }
 
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   auto options = mtl::util::convert(desc.storage_mode);
-  // options |= MTL::ResourceHazardTrackingModeUntracked;
+  options |= MTL::ResourceHazardTrackingModeUntracked;
   auto* mtl_buf = device_->newBuffer(desc.size, options);
   ALWAYS_ASSERT(mtl_buf);
   if (desc.name) {
@@ -260,6 +260,7 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   texture_desc->setStorageMode(mtl::util::convert_storage_mode(desc.storage_mode));
   texture_desc->setMipmapLevelCount(desc.mip_levels);
   texture_desc->setArrayLength(desc.array_length);
+  texture_desc->setHazardTrackingMode(MTL::HazardTrackingModeUntracked);
   // TODO: parameterize this?
   texture_desc->setAllowGPUOptimizedContents(true);
   auto usage = mtl::util::convert(desc.usage);
@@ -279,9 +280,7 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   uint32_t idx = rhi::k_invalid_bindless_idx;
   if (desc.bindless) {
     idx = resource_desc_heap_allocator_.alloc_idx();
-    auto* resource_table =
-        (IRDescriptorTableEntry*)(get_mtl_buf(resource_descriptor_table_))->contents();
-    IRDescriptorTableSetTexture(&resource_table[idx], tex, 0.0f, 0);
+    write_bindless_resource_descriptor(idx, tex);
   }
   main_res_set_->addAllocation(tex);
   main_res_set_->commit();
@@ -306,6 +305,11 @@ void MetalDevice::destroy(rhi::BufferHandle handle) {
     }
   }
 
+  if (buf->desc().bindless) {
+    ASSERT(buf->bindless_idx() != rhi::k_invalid_bindless_idx);
+    resource_desc_heap_allocator_.free_idx(buf->bindless_idx());
+  }
+
   if (buf->desc().usage & rhi::BufferUsage_Indirect) {
     // TODO: improve this cringe
     icb_mgr_draw_indexed_.remove(handle);
@@ -322,6 +326,10 @@ void MetalDevice::destroy(rhi::TextureHandle handle) {
     return;
   }
   ASSERT(tex->texture());
+  if (tex->desc().bindless) {
+    ASSERT(tex->bindless_idx() != rhi::k_invalid_bindless_idx);
+    resource_desc_heap_allocator_.free_idx(tex->bindless_idx());
+  }
   if (tex->texture() && !tex->is_drawable_tex()) {
     main_res_set_->removeAllocation(tex->texture());
     tex->texture()->release();
@@ -508,7 +516,9 @@ rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
 
     auto create_pso = [this, &set_shader_stage_functions_for_desc, &set_color_blend_atts, &cinfo](
                           auto desc, NS::Error** err) {
-      desc->setDepthAttachmentPixelFormat(mtl::util::convert(cinfo.rendering.depth_format));
+      if (cinfo.rendering.depth_format != rhi::TextureFormat::Undefined) {
+        desc->setDepthAttachmentPixelFormat(mtl::util::convert(cinfo.rendering.depth_format));
+      }
       set_shader_stage_functions_for_desc(desc);
       set_color_blend_atts(desc);
       for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
@@ -644,10 +654,10 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
 
   rhi::TextureDesc swap_img_desc{};
-  swapchain_.get_textures()[frame_idx()] =
-      rhi::TextureHandleHolder{texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx,
-                                                   curr_drawable_->texture(), true),
-                               this};
+
+  auto* tex = curr_drawable_->texture();
+  swapchain_.get_textures()[frame_idx()] = rhi::TextureHandleHolder{
+      texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
 
   if (mtl4_enabled_) {
     mtl4_resources_->main_cmd_buf->beginCommandBuffer(mtl4_resources_->cmd_allocators[frame_idx()]);
@@ -880,4 +890,20 @@ uint32_t MetalDevice::get_tex_view_bindless_idx(rhi::TextureHandle handle, int s
   ALWAYS_ASSERT(tex);
   ALWAYS_ASSERT((subresource_id >= 0 && (size_t)subresource_id < tex->tex_views.size()));
   return tex->tex_views[subresource_id].bindless_idx;
+}
+
+void MetalDevice::write_bindless_resource_descriptor(uint32_t bindless_idx, MTL::Texture* tex) {
+  auto* resource_table =
+      (IRDescriptorTableEntry*)(get_mtl_buf(resource_descriptor_table_))->contents();
+  IRDescriptorTableSetTexture(&resource_table[bindless_idx], tex, 0.0f, 0);
+}
+
+void MetalDevice::get_all_buffers(std::vector<rhi::Buffer*>& out_buffers) {
+  for (size_t block = 0; block < buffer_pool_.num_blocks(); block++) {
+    for (auto& e : buffer_pool_.get_block_entries(block)) {
+      if (e.live_) {
+        out_buffers.emplace_back(&e.object);
+      }
+    }
+  }
 }

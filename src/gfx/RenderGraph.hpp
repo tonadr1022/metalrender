@@ -110,6 +110,7 @@ class RGPass {
   RGResourceHandle add_tex(const std::string& name, AttachmentInfo att_info, RGAccess access,
                            const std::string& input_name = "");
   RGResourceHandle add_tex(rhi::TextureHandle tex_handle, RGAccess access);
+  RGResourceHandle add_tex(const std::string& name, rhi::TextureHandle tex_handle, RGAccess access);
   RGResourceHandle add_buf(std::string name, rhi::BufferHandle buf_handle, RGAccess access,
                            const std::string& input_name = "");
 
@@ -169,6 +170,8 @@ class RenderGraph {
     // PLEAAAAAAAAAASEEEEEEEEEEEEEEEE
   };
 
+  RGResourceHandle add_tex_usage(const std::string& name, rhi::TextureHandle handle,
+                                 const AttachmentInfo& att_info, RGAccess access, RGPass& pass);
   RGResourceHandle add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                  RGAccess access, RGPass& pass);
   RGResourceHandle add_buf_usage(std::string name, rhi::BufferHandle buf_handle, RGAccess access,
