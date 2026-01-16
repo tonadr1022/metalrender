@@ -9,6 +9,5 @@ struct VOut {
 [RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target {
   Texture2D tex = ResourceDescriptorHeap[tex_idx];
   SamplerState samp = SamplerDescriptorHeap[NEAREST_SAMPLER_IDX];
-  float4 c = tex.SampleLevel(samp, input.uv, 0);
-  return float4(c.rgb * 10, c.a);
+  return color_mult * tex.SampleLevel(samp, input.uv, 0);
 }

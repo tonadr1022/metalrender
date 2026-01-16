@@ -6,5 +6,8 @@
 cbuffer TexOnlyPC HLSL_PC_REG {
   uint tex_idx;
   uint mip_level;
+  uint _pad1;
+  uint _pad2;
+  float4 color_mult;
 };
 #endif

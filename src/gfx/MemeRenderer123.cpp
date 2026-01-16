@@ -4,6 +4,7 @@
 #include <glm/ext/vector_integer.hpp>
 #include <tracy/Tracy.hpp>
 
+#include "GLFW/glfw3.h"
 #include "Window.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
@@ -478,15 +479,19 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->bind_pipeline(tex_only_pso_);
 
       uint32_t tex_idx{};
-      if (false) {
-        // if (view_mip_ == 0) {
+      float mult = 1.f;
+      if (debug_render_mode_ == DebugRenderMode::None) {
         tex_idx = gbuffer_a_tex->bindless_idx();
-      } else {
+      } else if (debug_render_mode_ == DebugRenderMode::DepthReduceMips) {
         tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
                                                      depth_pyramid_tex_views_[view_mip_]);
-        // tex_idx = device_->get_tex(depth_pyramid_tex_.handle)->bindless_idx();
+        mult = 100.f;
       }
-      TexOnlyPC pc{.tex_idx = tex_idx, .mip_level = (uint32_t)view_mip_};
+      TexOnlyPC pc{
+          .tex_idx = tex_idx,
+          .mip_level = static_cast<uint32_t>(view_mip_),
+          .color_mult = glm::vec4{mult, mult, mult, 1},
+      };
       enc->push_constants(&pc, sizeof(pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
 
@@ -957,7 +962,9 @@ void MemeRenderer123::on_imgui() {
     ImGui::TreePop();
   }
 
-  ImGui::SliderInt("mip view", &view_mip_, 0, 4);
+  auto dp_dims = device_->get_tex(depth_pyramid_tex_)->desc().dims;
+  auto mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
+  ImGui::SliderInt("mip view", &view_mip_, 0, mip_levels - 1);
 
   if (ImGui::TreeNodeEx("Device", ImGuiTreeNodeFlags_DefaultOpen)) {
     device_->on_imgui();
@@ -985,7 +992,6 @@ void MemeRenderer123::on_imgui() {
 glm::mat4 MemeRenderer123::get_proj_matrix(float fov) {
   auto win_dims = window_->get_window_size();
   return infinite_perspective_proj(glm::radians(fov), (float)win_dims.x / win_dims.y, k_z_near);
-  //  return glm::perspectiveZO(glm::radians(fov), aspect, k_z_near, k_z_far);
 }
 
 void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
@@ -1024,6 +1030,24 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
     auto [buf, offset, write_ptr] = uniforms_allocator_->alloc(sizeof(CullData), &cull_data);
     frame_cull_data_buf_info_.idx = device_->get_buf(buf)->bindless_idx();
     frame_cull_data_buf_info_.offset_bytes = offset;
+  }
+}
+
+void MemeRenderer123::on_key_event(int key, int action, int mods) {
+  if (action == GLFW_PRESS) {
+    if (key == GLFW_KEY_G && mods & GLFW_MOD_CONTROL) {
+      if (mods & GLFW_MOD_SHIFT) {
+        if (debug_render_mode_ == DebugRenderMode::None) {
+          debug_render_mode_ = (DebugRenderMode)((int)DebugRenderMode::Count - 1);
+        } else {
+          debug_render_mode_ =
+              (DebugRenderMode)(((int)debug_render_mode_ - 1) % (int)DebugRenderMode::Count);
+        }
+      } else {
+        debug_render_mode_ =
+            (DebugRenderMode)(((int)debug_render_mode_ + 1) % (int)DebugRenderMode::Count);
+      }
+    }
   }
 }
 

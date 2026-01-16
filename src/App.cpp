@@ -206,6 +206,7 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
       window_->set_fullscreen(!window_->get_fullscreen());
     }
   }
+  renderer_.on_key_event(key, action, mods);
 }
 
 void App::on_hide_mouse_change() {

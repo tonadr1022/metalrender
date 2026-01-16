@@ -182,6 +182,7 @@ class MemeRenderer123 {
   void init(const CreateInfo& cinfo);
   void render(const RenderArgs& args);
   void on_imgui();
+  void on_key_event(int key, int action, int mods);
   bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
                   ModelInstance& model, ModelGPUHandle& out_handle);
   [[nodiscard]] ModelInstanceGPUHandle add_model_instance(const ModelInstance& model,
@@ -285,6 +286,13 @@ class MemeRenderer123 {
   IdxOffset frame_globals_buf_info_;
   IdxOffset frame_cull_data_buf_info_;
   bool reverse_z_{true};
+
+  enum class DebugRenderMode {
+    None,
+    DepthReduceMips,
+    Count,
+  };
+  DebugRenderMode debug_render_mode_{DebugRenderMode::None};
 };
 
 }  // namespace gfx
