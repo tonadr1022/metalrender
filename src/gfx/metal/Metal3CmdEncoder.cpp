@@ -550,7 +550,6 @@ void Metal3CmdEncoder::flush_compute_barriers() {
   if (compute_enc_ && compute_enc_flush_stages_) {
     compute_enc_->barrierAfterQueueStages(compute_enc_flush_stages_, compute_enc_dst_stages_);
   }
-  flush_barriers();
 }
 
 void Metal3CmdEncoder::flush_render_barriers() {
@@ -559,23 +558,10 @@ void Metal3CmdEncoder::flush_render_barriers() {
     render_enc_flush_stages_ = 0;
     render_enc_dst_stages_ = 0;
   }
-  flush_barriers();
 }
 
 void Metal3CmdEncoder::flush_barriers() {
-  // std::vector<const MTL::Resource*> bufs;
-  // bufs.reserve(pending_buffers_to_barrier_.size());
-  // for (auto& h : pending_buffers_to_barrier_) {
-  //   if (device_->get_buf(h)->desc().name) {
-  //     LINFO("buffer barrier {}", device_->get_buf(h)->desc().name);
-  //   } else {
-  //     LINFO("buffer barrier");
-  //   }
-  //   bufs.push_back(device_->get_mtl_buf(h));
-  // }
-  // if (compute_enc_) {
-  //   compute_enc_->useResources(bufs.data(), bufs.size(),
-  //                              MTL::ResourceUsageRead | MTL::ResourceUsageWrite);
-  // }
+  flush_compute_barriers();
+  flush_render_barriers();
   pending_buffers_to_barrier_.clear();
 }

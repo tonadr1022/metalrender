@@ -10,7 +10,6 @@ cbuffer DepthReducePC HLSL_PC_REG {
   uint out_tex_dim_y;
   uint in_tex_idx;
   uint out_tex_idx;
-  uint curr_mip;
 };
 
 #endif
