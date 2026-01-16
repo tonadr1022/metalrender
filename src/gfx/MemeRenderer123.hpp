@@ -284,6 +284,7 @@ class MemeRenderer123 {
   bool meshlet_cone_culling_enabled_{true};
   IdxOffset frame_globals_buf_info_;
   IdxOffset frame_cull_data_buf_info_;
+  bool reverse_z_{true};
 };
 
 }  // namespace gfx

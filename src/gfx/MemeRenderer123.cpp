@@ -41,6 +41,17 @@ using rhi::RenderingAttachmentInfo;
 using rhi::ShaderType;
 using rhi::TextureFormat;
 
+glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
+  // clang-format off
+  float f = 1.0f / tanf(fov_y / 2.0f);
+  return {
+    f / aspect, 0.0f, 0.0f, 0.0f,
+    0.0f, f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, -1.0f,
+    0.0f, 0.0f, z_near, 0.0f};
+  // clang-format on
+}
+
 uint32_t prev_pow2(uint32_t val) {
   uint32_t v = 1;
   while (v * 2 < val) {
@@ -348,11 +359,13 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           RenderingAttachmentInfo::color_att(
               gbuffer_a_tex, rhi::LoadOp::Clear,
               {.color = {17.f / 255.f, 25.f / 255.f, 25.f / 255.f, 0.0}}),
-          RenderingAttachmentInfo::depth_stencil_att(depth_handle, rhi::LoadOp::Clear,
-                                                     {.depth_stencil = {.depth = 1}}),
+          RenderingAttachmentInfo::depth_stencil_att(
+              depth_handle, rhi::LoadOp::Clear,
+              {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
       });
 
-      enc->set_depth_stencil_state(rhi::CompareOp::LessOrEqual, true);
+      enc->set_depth_stencil_state(reverse_z_ ? rhi::CompareOp::Greater : rhi::CompareOp::Less,
+                                   true);
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
@@ -439,7 +452,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           .in_tex_idx = read_idx,
           .out_tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
                                                             depth_pyramid_tex_views_[mip]),
-          .curr_mip = mip,
       };
       enc->push_constants(&pc, sizeof(pc));
       constexpr size_t k_tg_size = 8;
@@ -467,6 +479,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
       uint32_t tex_idx{};
       if (false) {
+        // if (view_mip_ == 0) {
         tex_idx = gbuffer_a_tex->bindless_idx();
       } else {
         tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
@@ -971,8 +984,8 @@ void MemeRenderer123::on_imgui() {
 
 glm::mat4 MemeRenderer123::get_proj_matrix(float fov) {
   auto win_dims = window_->get_window_size();
-  float aspect = (float)win_dims.x / win_dims.y;
-  return glm::perspectiveZO(glm::radians(fov), aspect, k_z_near, k_z_far);
+  return infinite_perspective_proj(glm::radians(fov), (float)win_dims.x / win_dims.y, k_z_near);
+  //  return glm::perspectiveZO(glm::radians(fov), aspect, k_z_near, k_z_far);
 }
 
 void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
