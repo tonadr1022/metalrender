@@ -46,6 +46,8 @@ MTL::Stages convert_stage(rhi::PipelineStage stage) {
 
 }  // namespace
 
+void MetalCmdEncoder::end_rendering() { end_render_encoder(); }
+
 void MetalCmdEncoder::begin_rendering(
     std::initializer_list<rhi::RenderingAttachmentInfo> attachments) {  // new command encoder
   MTL4::RenderPassDescriptor* desc = MTL4::RenderPassDescriptor::alloc()->init();

@@ -4,6 +4,7 @@
 #include <Metal/MTLCommandBuffer.hpp>
 #include <Metal/Metal.hpp>
 #include <tracy/Tracy.hpp>
+#include "core/EAssert.hpp"
 #include "gfx/metal/Config.hpp"
 #include "hlsl/shared_indirect.h"
 #define IR_RUNTIME_METALCPP
@@ -43,6 +44,11 @@ MTL::Stages convert_stage(rhi::PipelineStage stage) {
 }
 
 }  // namespace
+
+void Metal3CmdEncoder::end_rendering() {
+  ASSERT(render_enc_);
+  end_encoders_of_types(EncoderType_Render);
+}
 
 void Metal3CmdEncoder::begin_rendering(
     std::initializer_list<rhi::RenderingAttachmentInfo> attachments) {
@@ -440,35 +446,6 @@ Metal3CmdEncoder::Metal3CmdEncoder(MetalDevice* device, MTL::CommandBuffer* cmd_
     : cmd_buf_(cmd_buf), device_(device), cmd_icb_mgr_(device_) {}
 
 void Metal3CmdEncoder::end_encoders_of_types(EncoderType) {
-  // if (types & EncoderType_Blit) {
-  //   if (blit_enc_) {
-  //     blit_enc_->updateFence(test_fence_);
-  //     LINFO("ending blit");
-  //     fence_signaled_ = true;
-  //     blit_enc_->endEncoding();
-  //     blit_enc_ = nullptr;
-  //   }
-  // }
-  // if (types & EncoderType_Compute) {
-  //   if (compute_enc_) {
-  //     compute_enc_->updateFence(test_fence_);
-  //     LINFO("ending compute");
-  //     fence_signaled_ = true;
-  //     compute_enc_->endEncoding();
-  //     compute_enc_ = nullptr;
-  //   }
-  // }
-  // if (types & EncoderType_Render) {
-  //   if (render_enc_) {
-  //     render_enc_->updateFence(test_fence_, MTL::RenderStageMesh | MTL::RenderStageObject |
-  //                                               MTL::RenderStageVertex |
-  //                                               MTL::RenderStageFragment);
-  //     fence_signaled_ = true;
-  //     LINFO("ending render");
-  //     render_enc_->endEncoding();
-  //     render_enc_ = nullptr;
-  //   }
-  // }
   if (blit_enc_) {
     blit_enc_->endEncoding();
     blit_enc_ = nullptr;

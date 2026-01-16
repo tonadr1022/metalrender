@@ -33,6 +33,7 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   Metal3CmdEncoder(MetalDevice* device, MTL::CommandBuffer* cmd_buf);
 
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
+  void end_rendering() override;
   void end_encoding() override;
   void bind_pipeline(rhi::PipelineHandle handle) override;
   void set_viewport(glm::uvec2 min, glm::uvec2 extent) override;

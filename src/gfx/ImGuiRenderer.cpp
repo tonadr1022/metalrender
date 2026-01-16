@@ -260,11 +260,13 @@ void ImGuiRenderer::add_dirty_textures_to_pass(gfx::RGPass& pass, bool read_acce
   if (!draw_data->Textures) {
     return;
   }
-  auto access = read_access ? RGAccess::FragmentSample
-                            : (RGAccess)(RGAccess::ComputeWrite | RGAccess::TransferWrite);
   for (const auto* t : *draw_data->Textures) {
     if (t->Status == ImTextureStatus_WantUpdates || t->Status == ImTextureStatus_WantCreate) {
-      pass.add_tex(rhi::TextureHandle{t->GetTexID()}, access);
+      if (read_access) {
+        pass.sample_external_tex(rhi::TextureHandle{t->GetTexID()});
+      } else {
+        pass.write_external_tex(rhi::TextureHandle{t->GetTexID()});
+      }
     }
   }
 }

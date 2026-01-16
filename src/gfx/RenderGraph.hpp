@@ -84,8 +84,9 @@ enum RGAccess : uint16_t {
   FragmentStorageRead = 1ULL << 12,
   ComputeSample = 1ULL << 13,
   FragmentSample = 1ULL << 14,
+  ShaderRead = 1ULL << 15,
   AnyRead = ColorRead | DepthStencilRead | VertexRead | IndexRead | IndirectRead | ComputeRead |
-            TransferRead | FragmentSample | FragmentStorageRead | ComputeSample,
+            TransferRead | FragmentSample | FragmentStorageRead | ComputeSample | ShaderRead,
   AnyWrite = ColorWrite | DepthStencilWrite | ComputeWrite | TransferWrite,
 };
 
@@ -102,17 +103,26 @@ struct ResourceAndUsage {
   rhi::PipelineStage stage;
 };
 
+enum class RGPassType { None, Compute, Graphics, Transfer };
+
 class RGPass {
  public:
   RGPass() = default;
-  RGPass(std::string name, RenderGraph* rg, uint32_t pass_i);
+  RGPass(std::string name, RenderGraph* rg, uint32_t pass_i, RGPassType type);
 
-  RGResourceHandle add_tex(const std::string& name, AttachmentInfo att_info, RGAccess access,
-                           const std::string& input_name = "");
-  RGResourceHandle add_tex(rhi::TextureHandle tex_handle, RGAccess access);
-  RGResourceHandle add_tex(const std::string& name, rhi::TextureHandle tex_handle, RGAccess access);
-  RGResourceHandle add_buf(std::string name, rhi::BufferHandle buf_handle, RGAccess access,
-                           const std::string& input_name = "");
+  RGResourceHandle sample_tex(const std::string& name);
+  RGResourceHandle sample_external_tex(rhi::TextureHandle tex_handle);
+  RGResourceHandle write_external_tex(rhi::TextureHandle tex_handle);
+  RGResourceHandle write_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
+  RGResourceHandle read_tex(const std::string& name);
+  RGResourceHandle write_tex(const std::string& name);
+  RGResourceHandle add_color_output(const std::string& name, const AttachmentInfo& att_info);
+  RGResourceHandle add_depth_output(const std::string& name, const AttachmentInfo& att_info);
+  void read_buf(const std::string& name);
+  void read_indirect_buf(const std::string& name);
+  RGResourceHandle write_buf(const std::string& name, rhi::BufferHandle buf_handle);
+  RGResourceHandle read_write_buf(const std::string& name, rhi::BufferHandle buf_handle,
+                                  const std::string& input_name);
 
   [[nodiscard]] const std::vector<ResourceAndUsage>& get_resource_usages() const {
     return resource_usages_;
@@ -133,11 +143,13 @@ class RGPass {
   }
 
   [[nodiscard]] uint32_t get_idx() const { return pass_i_; }
-  void set_execute_fn(auto&& f) { execute_fn_ = f; }
+  void set_ex(auto&& f) { execute_fn_ = f; }
   [[nodiscard]] const std::string& get_name() const { return name_; }
   [[nodiscard]] const ExecuteFn& get_execute_fn() const { return execute_fn_; }
+  [[nodiscard]] RGPassType type() const { return type_; }
 
  private:
+  RGResourceHandle read_tex(const std::string& name, RGAccess access);
   std::vector<ResourceAndUsage> resource_usages_;
   std::vector<std::string> resource_read_names_;  // same as resource_usages_.size();
   std::vector<uint32_t> resource_read_indices_;
@@ -145,6 +157,7 @@ class RGPass {
   RenderGraph* rg_;
   uint32_t pass_i_{};
   const std::string name_;
+  RGPassType type_{};
 };
 
 class RenderGraph {
@@ -157,7 +170,13 @@ class RenderGraph {
 
   void execute();
 
-  RGPass& add_pass(const std::string& name);
+  RGPass& add_compute_pass(const std::string& name) { return add_pass(name, RGPassType::Compute); }
+  RGPass& add_transfer_pass(const std::string& name) {
+    return add_pass(name, RGPassType::Transfer);
+  }
+  RGPass& add_graphics_pass(const std::string& name) {
+    return add_pass(name, RGPassType::Graphics);
+  }
 
   struct ResourcePassUsages {
     // TODO: NOOOOOOOOOOOOOOOOOOOOOOO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -174,13 +193,18 @@ class RenderGraph {
                                  const AttachmentInfo& att_info, RGAccess access, RGPass& pass);
   RGResourceHandle add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                  RGAccess access, RGPass& pass);
+  RGResourceHandle add_tex_usage(const std::string& name, RGAccess access, RGPass& pass);
   RGResourceHandle add_buf_usage(std::string name, rhi::BufferHandle buf_handle, RGAccess access,
                                  RGPass& pass, const std::string& input_name);
+  RGResourceHandle add_buf_read_usage(const std::string& name, RGAccess access, RGPass& pass);
   RGResourceHandle add_tex_usage(rhi::TextureHandle handle, RGAccess access, RGPass& pass);
+  RGResourceHandle add_external_tex_write_usage(const std::string& name, rhi::TextureHandle handle,
+                                                RGAccess access, RGPass& pass);
 
   rhi::TextureHandle get_att_img(RGResourceHandle tex_handle);
 
  private:
+  RGPass& add_pass(const std::string& name, RGPassType type);
   struct TextureUsage {
     AttachmentInfo att_info;
     rhi::TextureHandle handle;

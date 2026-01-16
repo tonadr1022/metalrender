@@ -11,6 +11,18 @@ namespace gfx {
 
 namespace {
 
+const char* to_string(RGPassType type) {
+  switch (type) {
+    case RGPassType::Compute:
+      return "Compute";
+    case RGPassType::Graphics:
+      return "Graphics";
+    case RGPassType::Transfer:
+      return "Transfer";
+    case RGPassType::None:
+      return "None";
+  }
+}
 std::string rhi_pipeline_stage_to_string(rhi::PipelineStage stage) {
   std::string result;
   if (stage & rhi::PipelineStage_TopOfPipe) {
@@ -155,6 +167,10 @@ void convert_rg_access(RGAccess access, rhi::AccessFlags& out_access,
     out_access = flag_or(out_access, rhi::AccessFlags_ColorAttachmentWrite);
     out_stages = flag_or(out_stages, rhi::PipelineStage_ColorAttachmentOutput);
   }
+  if (access & ShaderRead) {
+    out_access = flag_or(out_access, rhi::AccessFlags_ShaderRead);
+    out_stages = flag_or(out_stages, rhi::PipelineStage_AllGraphics);
+  }
   if (access & ColorRead) {
     out_access = flag_or(out_access, rhi::AccessFlags_ColorAttachmentRead);
     out_stages = flag_or(out_stages, rhi::PipelineStage_ColorAttachmentOutput);
@@ -211,14 +227,20 @@ void convert_rg_access(RGAccess access, rhi::AccessFlags& out_access,
   }
 }
 
+ResourceAndUsage create_resource_usage(RGResourceHandle handle, RGAccess access) {
+  ResourceAndUsage resource_usage{.handle = handle};
+  convert_rg_access(access, resource_usage.access, resource_usage.stage);
+  return resource_usage;
+}
+
 }  // namespace
 
-RGPass::RGPass(std::string name, RenderGraph* rg, uint32_t pass_i)
-    : rg_(rg), pass_i_(pass_i), name_(std::move(name)) {}
+RGPass::RGPass(std::string name, RenderGraph* rg, uint32_t pass_i, RGPassType type)
+    : rg_(rg), pass_i_(pass_i), name_(std::move(name)), type_(type) {}
 
-RGPass& RenderGraph::add_pass(const std::string& name) {
+RGPass& RenderGraph::add_pass(const std::string& name, RGPassType type) {
   auto idx = static_cast<uint32_t>(passes_.size());
-  passes_.emplace_back(name, this, idx);
+  passes_.emplace_back(name, this, idx, type);
   return passes_.back();
 }
 
@@ -309,21 +331,6 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   // find sink nodes, ie nodes that don't write to anything
   sink_passes_.clear();
   ALWAYS_ASSERT(passes_.size() > 0);
-  // for (size_t pass_i = 0; pass_i < passes_.size(); pass_i++) {
-  //   auto& pass = passes_[pass_i];
-  //   if (!pass.has_resource_writes()) {
-  //     if (pass.get_resource_usages().empty()) {
-  //       LCRITICAL("Pass does not read or write to a resource: {}", pass.get_name());
-  //       exit(1);
-  //     }
-  //     sink_passes_.emplace_back(pass_i);
-  //   }
-  //   if (!pass.get_execute_fn()) {
-  //     LCRITICAL("No execute fn set for pass {}", pass.get_name());
-  //     exit(1);
-  //   }
-  // }
-
   // find resource that don't get read (swapchain img)
   // find pass that writes to that resource
   for (size_t pass_i = 0; pass_i < passes_.size(); pass_i++) {
@@ -463,6 +470,9 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   if (pass_barrier_infos_.size() < passes_.size()) {
     pass_barrier_infos_.resize(passes_.size());
   }
+  if (verbose) {
+    LINFO("//////////////// Barriers ////////////////");
+  }
   for (auto pass_i : pass_stack_) {
     ASSERT(pass_i < passes_.size());
     const auto& pass = passes_[pass_i];
@@ -488,18 +498,25 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       });
     }
 
+#define CLR_CYAN "\033[36m"
+#define CLR_PURPLE "\033[35m"
+#define CLR_GREEN "\033[32m"
+#define CLR_RESET "\033[0m"
+
     if (verbose) {
-      LINFO("BARRIERS FOR PASS: {}", pass.get_name());
-      if (barriers.empty()) {
-        LINFO("\tNONE");
-      }
+      LINFO(CLR_GREEN "{} Pass" CLR_RESET ": {}", to_string(pass.type()), pass.get_name());
       for (auto& barrier : barriers) {
-        LINFO("RESOURCE: {}", get_resource_name(barrier.resource));
-        LINFO("\tSRC_ACCESS: {}", rhi_access_to_string(barrier.src_access));
-        LINFO("\tDST_ACCESS: {}", rhi_access_to_string(barrier.dst_access));
-        LINFO("\tSRC_STAGE: {}", rhi_pipeline_stage_to_string(barrier.src_stage));
-        LINFO("\tDST_STAGE: {}", rhi_pipeline_stage_to_string(barrier.dst_stage));
+        LINFO(CLR_PURPLE "RESOURCE: {}" CLR_RESET "", get_resource_name(barrier.resource));
+        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "SRC_ACCESS:"),
+              rhi_access_to_string(barrier.src_access));
+        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "DST_ACCESS:"),
+              rhi_access_to_string(barrier.dst_access));
+        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "SRC_STAGE:"),
+              rhi_pipeline_stage_to_string(barrier.src_stage));
+        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "DST_STAGE:"),
+              rhi_pipeline_stage_to_string(barrier.dst_stage));
       }
+      LINFO("");
     }
   }
 
@@ -511,77 +528,6 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
 void RenderGraph::init(rhi::Device* device) {
   device_ = device;
   passes_.reserve(200);
-}
-
-RGResourceHandle RGPass::add_tex(const std::string& name, AttachmentInfo att_info, RGAccess access,
-                                 const std::string& input_name) {
-  assert_rg_access_valid(access);
-  RGResourceHandle handle = rg_->add_tex_usage(name, att_info, access, *this);
-  ResourceAndUsage resource_usage{.handle = handle};
-  convert_rg_access(access, resource_usage.access, resource_usage.stage);
-  if (access & AnyRead) {
-    resource_read_indices_.push_back(resource_usages_.size());
-  }
-  resource_usages_.push_back(resource_usage);
-  if (input_name.size()) {
-    resource_read_names_.emplace_back(input_name);
-  } else {
-    resource_read_names_.emplace_back();
-  }
-
-  return handle;
-}
-
-RGResourceHandle RGPass::add_tex(const std::string& name, rhi::TextureHandle tex_handle,
-                                 RGAccess access) {
-  assert_rg_access_valid(access);
-  RGResourceHandle resource_handle = rg_->add_tex_usage(name, tex_handle, {}, access, *this);
-  ResourceAndUsage resource_usage{.handle = resource_handle};
-  convert_rg_access(access, resource_usage.access, resource_usage.stage);
-
-  if (access & AnyRead) {
-    resource_read_indices_.push_back(resource_usages_.size());
-  }
-  resource_usages_.push_back(resource_usage);
-  resource_read_names_.emplace_back();
-
-  return resource_handle;
-}
-
-RGResourceHandle RGPass::add_tex(rhi::TextureHandle tex_handle, RGAccess access) {
-  assert_rg_access_valid(access);
-  RGResourceHandle resource_handle = rg_->add_tex_usage(tex_handle, access, *this);
-  ResourceAndUsage resource_usage{.handle = resource_handle};
-  convert_rg_access(access, resource_usage.access, resource_usage.stage);
-
-  if (access & AnyRead) {
-    resource_read_indices_.push_back(resource_usages_.size());
-  }
-  resource_usages_.push_back(resource_usage);
-  resource_read_names_.emplace_back();
-
-  return resource_handle;
-}
-
-RGResourceHandle RGPass::add_buf(std::string name, rhi::BufferHandle buf_handle, RGAccess access,
-                                 const std::string& input_name) {
-  assert_rg_access_valid(access);
-  RGResourceHandle resource_handle =
-      rg_->add_buf_usage(name, buf_handle, access, *this, input_name);
-  ResourceAndUsage resource_usage{.handle = resource_handle};
-  convert_rg_access(access, resource_usage.access, resource_usage.stage);
-
-  if (access & AnyRead) {
-    resource_read_indices_.push_back(resource_usages_.size());
-  }
-  if (input_name.size()) {
-    resource_read_names_.emplace_back(input_name);
-  } else if (access & AnyRead) {
-    resource_read_names_.emplace_back(std::move(name));
-  }
-  resource_usages_.push_back(resource_usage);
-
-  return resource_handle;
 }
 
 RGResourceHandle RenderGraph::add_tex_usage(rhi::TextureHandle tex_handle, RGAccess access,
@@ -824,4 +770,201 @@ rhi::TextureHandle RenderGraph::get_att_img(RGResourceHandle tex_handle) {
   return it->second;
 }
 
+RGResourceHandle RGPass::sample_tex(const std::string& name) {
+  return read_tex(
+      name, type_ == RGPassType::Compute ? RGAccess::ComputeSample : RGAccess::FragmentSample);
+}
+
+RGResourceHandle RGPass::read_tex(const std::string& name) {
+  return read_tex(
+      name, type_ == RGPassType::Compute ? RGAccess::ComputeRead : RGAccess::FragmentStorageRead);
+}
+
+RGResourceHandle RGPass::write_tex(const std::string& name) {
+  if (type_ != RGPassType::Compute && type_ != RGPassType::Transfer) {
+    ALWAYS_ASSERT(0 && "Need compute pass to write texture");
+  }
+  RGAccess access{type_ == RGPassType::Compute ? RGAccess::ComputeWrite : RGAccess::TransferWrite};
+  RGResourceHandle handle = rg_->add_tex_usage(name, access, *this);
+  ResourceAndUsage resource_usage{.handle = handle};
+  convert_rg_access(access, resource_usage.access, resource_usage.stage);
+  resource_usages_.push_back(resource_usage);
+  resource_read_names_.emplace_back();
+  return handle;
+}
+
+RGResourceHandle RGPass::read_tex(const std::string& name, RGAccess access) {
+  RGResourceHandle handle = rg_->add_tex_usage(name, access, *this);
+  ResourceAndUsage resource_usage{.handle = handle};
+  convert_rg_access(access, resource_usage.access, resource_usage.stage);
+  if (access & AnyRead) {
+    resource_read_indices_.push_back(resource_usages_.size());
+  }
+  resource_usages_.push_back(resource_usage);
+  resource_read_names_.emplace_back();
+
+  return handle;
+}
+
+RGResourceHandle RGPass::add_color_output(const std::string& name, const AttachmentInfo& att_info) {
+  RGAccess access{RGAccess::ColorWrite};
+  assert_rg_access_valid(access);
+  RGResourceHandle handle = rg_->add_tex_usage(name, att_info, access, *this);
+  resource_usages_.push_back(create_resource_usage(handle, access));
+  resource_read_names_.emplace_back();
+  return handle;
+}
+
+RGResourceHandle RGPass::add_depth_output(const std::string& name, const AttachmentInfo& att_info) {
+  RGAccess access{RGAccess::DepthStencilWrite};
+  assert_rg_access_valid(access);
+  RGResourceHandle handle = rg_->add_tex_usage(name, att_info, access, *this);
+  resource_usages_.push_back(create_resource_usage(handle, access));
+  resource_read_names_.emplace_back();
+  return handle;
+}
+
+RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, RGAccess access,
+                                            RGPass& pass) {
+  rhi::AccessFlags access_bits{};
+  rhi::PipelineStage stage_bits{};
+  convert_rg_access(access, access_bits, stage_bits);
+  auto resource_handle_it = resource_name_to_handle_.find(name);
+  ALWAYS_ASSERT(resource_handle_it != resource_name_to_handle_.end());
+  auto handle = resource_handle_it->second;
+
+  if (access & AnyRead) {
+    add_resource_to_pass_reads(handle, pass);
+  }
+  if (access & AnyWrite) {
+    add_resource_to_pass_writes(handle, pass);
+  }
+  return handle;
+}
+
+RGResourceHandle RGPass::read_write_buf(const std::string& name, rhi::BufferHandle buf_handle,
+                                        const std::string& input_name) {
+  ALWAYS_ASSERT(type_ == RGPassType::Compute);
+  RGAccess access{RGAccess::ComputeRW};
+  RGResourceHandle resource_handle =
+      rg_->add_buf_usage(name, buf_handle, access, *this, input_name);
+  resource_read_indices_.push_back(resource_usages_.size());
+  resource_read_names_.emplace_back(input_name);
+  resource_usages_.push_back(create_resource_usage(resource_handle, access));
+  return resource_handle;
+}
+
+RGResourceHandle RGPass::write_buf(const std::string& name, rhi::BufferHandle buf_handle) {
+  ALWAYS_ASSERT(type_ == RGPassType::Compute);
+  RGAccess access{RGAccess::ComputeWrite};
+  RGResourceHandle resource_handle = rg_->add_buf_usage(name, buf_handle, access, *this, "");
+  resource_read_names_.emplace_back();
+  resource_usages_.push_back(create_resource_usage(resource_handle, access));
+  return resource_handle;
+}
+
+void RGPass::read_buf(const std::string& name) {
+  RGAccess access{type_ == RGPassType::Compute ? RGAccess::ComputeRead : RGAccess::ShaderRead};
+  RGResourceHandle resource_handle = rg_->add_buf_read_usage(name, access, *this);
+  resource_read_indices_.push_back(resource_usages_.size());
+  resource_read_names_.emplace_back(name);
+  resource_usages_.push_back(create_resource_usage(resource_handle, access));
+}
+
+void RGPass::read_indirect_buf(const std::string& name) {
+  ALWAYS_ASSERT(type_ == RGPassType::Graphics);
+  RGAccess access{RGAccess::IndirectRead};
+  RGResourceHandle resource_handle = rg_->add_buf_read_usage(name, access, *this);
+  resource_read_indices_.push_back(resource_usages_.size());
+  resource_read_names_.emplace_back(name);
+  resource_usages_.push_back(create_resource_usage(resource_handle, access));
+}
+
+RGResourceHandle RenderGraph::add_buf_read_usage(const std::string& name, RGAccess access,
+                                                 RGPass& pass) {
+  ALWAYS_ASSERT(access & AnyRead);
+  auto resource_handle_it = resource_name_to_handle_.find(name);
+  ALWAYS_ASSERT(resource_handle_it != resource_name_to_handle_.end());
+  auto handle = resource_handle_it->second;
+  add_resource_to_pass_reads(handle, pass);
+  return handle;
+}
+
+RGResourceHandle RGPass::sample_external_tex(rhi::TextureHandle tex_handle) {
+  ALWAYS_ASSERT(type_ == RGPassType::Graphics);
+  RGAccess access{RGAccess::FragmentSample};
+  RGResourceHandle resource_handle = rg_->add_tex_usage(tex_handle, access, *this);
+  resource_read_indices_.push_back(resource_usages_.size());
+  resource_usages_.push_back(create_resource_usage(resource_handle, access));
+  resource_read_names_.emplace_back();
+
+  return resource_handle;
+}
+
+RGResourceHandle RGPass::write_external_tex(rhi::TextureHandle tex_handle) {
+  if (type_ != RGPassType::Compute && type_ != RGPassType::Transfer) {
+    ALWAYS_ASSERT(0 && "Need compute pass to write texture");
+  }
+  RGAccess access{type_ == RGPassType::Compute ? RGAccess::ComputeWrite : RGAccess::TransferWrite};
+  // TODO: use other func
+  RGResourceHandle handle = rg_->add_tex_usage(tex_handle, access, *this);
+  ResourceAndUsage resource_usage{.handle = handle};
+  convert_rg_access(access, resource_usage.access, resource_usage.stage);
+  resource_usages_.push_back(resource_usage);
+  resource_read_names_.emplace_back();
+  return handle;
+}
+
+RGResourceHandle RenderGraph::add_external_tex_write_usage(const std::string& name,
+                                                           rhi::TextureHandle tex_handle,
+                                                           RGAccess access, RGPass& pass) {
+  rhi::AccessFlags access_bits{};
+  rhi::PipelineStage stage_bits{};
+  convert_rg_access(access, access_bits, stage_bits);
+
+  auto resource_handle_it = resource_name_to_handle_.find(name);
+  ALWAYS_ASSERT(resource_handle_it == resource_name_to_handle_.end());
+  // if (resource_handle_it != resource_name_to_handle_.end()) {
+  //   auto handle = resource_handle_it->second;
+  //   if (access & AnyRead) {
+  //     add_resource_to_pass_reads(handle, pass);
+  //   }
+  //   if (access & AnyWrite) {
+  //     add_resource_to_pass_writes(handle, pass);
+  //   }
+  //
+  //   return handle;
+  // }
+
+  RGResourceHandle resource_handle{.idx = static_cast<uint32_t>(tex_usages_.size()),
+                                   .type = RGResourceType::Texture};
+  TextureUsage tex_use{.att_info = {}, .handle = tex_handle};
+  emplace_back_tex_usage(tex_use);
+  tex_handle_to_handle_.emplace(tex_handle.to64(), resource_handle);
+
+  resource_handle_to_name_.emplace(resource_handle.to64(), name);
+  resource_name_to_handle_.emplace(name, resource_handle.to64());
+
+  if (access & AnyRead) {
+    add_resource_to_pass_reads(resource_handle, pass);
+  }
+  if (access & AnyWrite) {
+    add_resource_to_pass_writes(resource_handle, pass);
+  }
+  return resource_handle;
+}
+
+RGResourceHandle RGPass::write_external_tex(const std::string& name,
+                                            rhi::TextureHandle tex_handle) {
+  if (type_ != RGPassType::Compute && type_ != RGPassType::Transfer) {
+    ALWAYS_ASSERT(0 && "Need compute pass to write texture");
+  }
+  RGAccess access{type_ == RGPassType::Compute ? RGAccess::ComputeWrite : RGAccess::TransferWrite};
+  RGResourceHandle handle = rg_->add_external_tex_write_usage(name, tex_handle, access, *this);
+  ResourceAndUsage resource_usage{.handle = handle};
+  convert_rg_access(access, resource_usage.access, resource_usage.stage);
+  resource_usages_.push_back(resource_usage);
+  resource_read_names_.emplace_back();
+  return handle;
+}
 }  // namespace gfx
