@@ -749,13 +749,7 @@ void RenderGraph::find_deps_recursive(uint32_t pass_i, uint32_t stack_size) {
     }
     // RW access
     if (is_access_write(resource.access)) {
-      const auto& rw_read_name = pass.get_resource_read_names(resource);
-      auto writer_pass_it = resource_read_name_to_writer_pass_.find(rw_read_name);
-      ALWAYS_ASSERT(writer_pass_it != resource_read_name_to_writer_pass_.end());
-      uint32_t write_pass_i = writer_pass_it->second;
-      intermed_pass_stack_.emplace_back(write_pass_i);
-      pass_dependencies_[pass_i].insert(write_pass_i);
-      find_deps_recursive(write_pass_i, stack_size);
+      ALWAYS_ASSERT(0 && "don't");
     } else {
       // here: the read needs a name so the write with the matching name can be found
       // only one pass can write to this instance of a read.
@@ -802,12 +796,12 @@ RGResourceHandle RGPass::sample_tex(const std::string& name) {
       name, type_ == RGPassType::Compute ? RGAccess::ComputeSample : RGAccess::FragmentSample);
 }
 
-RGResourceHandle RGPass::read_tex(const std::string& name) {
+RGResourceHandle RGPass::r_tex(const std::string& name) {
   return read_tex(
       name, type_ == RGPassType::Compute ? RGAccess::ComputeRead : RGAccess::FragmentStorageRead);
 }
 
-RGResourceHandle RGPass::write_tex(const std::string& name) {
+RGResourceHandle RGPass::w_tex(const std::string& name) {
   if (type_ != RGPassType::Compute && type_ != RGPassType::Transfer) {
     ALWAYS_ASSERT(0 && "Need compute pass to write texture");
   }
@@ -824,30 +818,23 @@ RGResourceHandle RGPass::read_tex(const std::string& name, RGAccess access) {
   RGResourceHandle handle = rg_->add_tex_usage(name, access, *this);
   ResourceAndUsage resource_usage{.handle = handle};
   convert_rg_access(access, resource_usage.access, resource_usage.stage);
-  // if (access & AnyRead) {
-  //   resource_read_indices_.push_back(resource_usages_.size());
-  // }
   resource_usages_.push_back(resource_usage);
-  rw_resource_read_names_.emplace_back();
-
   return handle;
 }
 
-RGResourceHandle RGPass::add_color_output(const std::string& name, const AttachmentInfo& att_info) {
+RGResourceHandle RGPass::w_color_output(const std::string& name, const AttachmentInfo& att_info) {
   RGAccess access{RGAccess::ColorWrite};
   assert_rg_access_valid(access);
   RGResourceHandle handle = rg_->add_tex_usage(name, att_info, access, *this);
   resource_usages_.push_back(create_resource_usage(handle, access));
-  rw_resource_read_names_.emplace_back();
   return handle;
 }
 
-RGResourceHandle RGPass::add_depth_output(const std::string& name, const AttachmentInfo& att_info) {
+RGResourceHandle RGPass::w_depth_output(const std::string& name, const AttachmentInfo& att_info) {
   RGAccess access{RGAccess::DepthStencilWrite};
   assert_rg_access_valid(access);
   RGResourceHandle handle = rg_->add_tex_usage(name, att_info, access, *this);
   resource_usages_.push_back(create_resource_usage(handle, access));
-  rw_resource_read_names_.emplace_back();
   return handle;
 }
 
@@ -859,7 +846,6 @@ RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, RGAccess ac
   auto resource_handle_it = resource_name_to_handle_.find(name);
   ALWAYS_ASSERT(resource_handle_it != resource_name_to_handle_.end());
   auto handle = resource_handle_it->second;
-
   if (access & AnyRead) {
     add_resource_to_pass_reads(handle, pass);
   }
@@ -867,33 +853,6 @@ RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, RGAccess ac
     add_resource_to_pass_writes(handle, pass);
   }
   return handle;
-}
-
-RGResourceHandle RGPass::read_write_buf(const std::string& name, rhi::BufferHandle buf_handle,
-                                        const std::string& input_name) {
-  ALWAYS_ASSERT(type_ == RGPassType::Compute);
-  RGAccess access{RGAccess::ComputeRW};
-  RGResourceHandle resource_handle =
-      rg_->add_buf_usage(name, buf_handle, access, *this, input_name);
-  resource_usages_.push_back(create_resource_usage(resource_handle, access));
-  resource_usages_.back().pass_rw_read_idx = rw_resource_read_names_.size();
-  rw_resource_read_names_.emplace_back(input_name);
-  return resource_handle;
-}
-
-RGResourceHandle RGPass::write_buf(const std::string& name, rhi::BufferHandle buf_handle) {
-  ALWAYS_ASSERT(type_ == RGPassType::Compute);
-  RGAccess access{RGAccess::ComputeWrite};
-  RGResourceHandle resource_handle = rg_->add_buf_usage(name, buf_handle, access, *this, "");
-  resource_usages_.push_back(create_resource_usage(resource_handle, access));
-  return resource_handle;
-}
-
-void RGPass::read_indirect_buf(const std::string& name) {
-  ALWAYS_ASSERT(type_ == RGPassType::Graphics);
-  RGAccess access{RGAccess::IndirectRead};
-  RGResourceHandle resource_handle = rg_->add_buf_read_usage(name, access, *this);
-  resource_usages_.push_back(create_resource_usage(resource_handle, access));
 }
 
 RGResourceHandle RenderGraph::add_buf_read_usage(const std::string& name, RGAccess access,
@@ -919,7 +878,7 @@ void RGPass::sample_external_tex(std::string name) {
       std::move(name), stage, rhi::AccessFlags_ShaderSampledRead, RGResourceType::ExternalTexture});
 }
 
-void RGPass::read_external_tex(std::string name) {
+void RGPass::r_external_tex(std::string name) {
   rhi::PipelineStage stage{};
   if (type_ == RGPassType::Compute) {
     stage = rhi::PipelineStage_ComputeShader;
@@ -962,7 +921,7 @@ void RenderGraph::add_external_write_usage(const std::string& name, rhi::BufferH
   ASSERT(success);
 }
 
-void RGPass::write_external_tex(const std::string& name, rhi::TextureHandle tex_handle) {
+void RGPass::w_external_tex(const std::string& name, rhi::TextureHandle tex_handle) {
   ALWAYS_ASSERT((type_ == RGPassType::Compute ||
                  type_ == RGPassType::Transfer &&
                      "Need compute or transfer pass to write external texture."));
@@ -979,7 +938,7 @@ void RGPass::write_external_tex(const std::string& name, rhi::TextureHandle tex_
   external_writes_.emplace_back(name, stage, access, RGResourceType::ExternalTexture);
 }
 
-void RGPass::write_external(const std::string& name, rhi::BufferHandle buf) {
+void RGPass::w_external(const std::string& name, rhi::BufferHandle buf) {
   ALWAYS_ASSERT(
       (type_ == RGPassType::Compute ||
        type_ == RGPassType::Transfer && "Need compute or transfer pass to write external buffer."));
@@ -996,7 +955,7 @@ void RGPass::write_external(const std::string& name, rhi::BufferHandle buf) {
   external_writes_.emplace_back(name, stage, access, RGResourceType::ExternalBuffer);
 }
 
-void RGPass::read_external_buf(std::string name) {
+void RGPass::r_external_buf(std::string name) {
   rhi::PipelineStage stage{};
   if (type_ == RGPassType::Compute) {
     stage = rhi::PipelineStage_ComputeShader;
@@ -1005,10 +964,10 @@ void RGPass::read_external_buf(std::string name) {
   } else {
     ASSERT(0);
   }
-  read_external_buf(std::move(name), stage);
+  r_external_buf(std::move(name), stage);
 }
 
-void RGPass::read_external_buf(std::string name, rhi::PipelineStage stage) {
+void RGPass::r_external_buf(std::string name, rhi::PipelineStage stage) {
   external_reads_.emplace_back(std::move(name), stage, rhi::AccessFlags_ShaderRead,
                                RGResourceType::ExternalBuffer);
 }

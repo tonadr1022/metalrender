@@ -114,19 +114,15 @@ class RGPass {
 
   RGResourceHandle sample_tex(const std::string& name);
   void sample_external_tex(std::string name);
-  void read_external_tex(std::string name);
-  void write_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
-  void write_external(const std::string& name, rhi::BufferHandle buf);
-  RGResourceHandle read_tex(const std::string& name);
-  RGResourceHandle write_tex(const std::string& name);
-  RGResourceHandle add_color_output(const std::string& name, const AttachmentInfo& att_info);
-  RGResourceHandle add_depth_output(const std::string& name, const AttachmentInfo& att_info);
-  void read_external_buf(std::string name, rhi::PipelineStage stage);
-  void read_external_buf(std::string name);
-  void read_indirect_buf(const std::string& name);
-  RGResourceHandle write_buf(const std::string& name, rhi::BufferHandle buf_handle);
-  RGResourceHandle read_write_buf(const std::string& name, rhi::BufferHandle buf_handle,
-                                  const std::string& input_name);
+  void r_external_tex(std::string name);
+  void w_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
+  void w_external(const std::string& name, rhi::BufferHandle buf);
+  RGResourceHandle r_tex(const std::string& name);
+  RGResourceHandle w_tex(const std::string& name);
+  RGResourceHandle w_color_output(const std::string& name, const AttachmentInfo& att_info);
+  RGResourceHandle w_depth_output(const std::string& name, const AttachmentInfo& att_info);
+  void r_external_buf(std::string name, rhi::PipelineStage stage);
+  void r_external_buf(std::string name);
   void rw_external_buf(std::string name, const std::string& input_name);
 
   struct NameAndAccess {
@@ -155,10 +151,6 @@ class RGPass {
   const std::string& get_resource_read_names(const NameAndAccess& resource) {
     ASSERT(resource.rw_read_name_i != UINT32_MAX);
     return rw_resource_read_names_[resource.rw_read_name_i];
-  }
-  const std::string& get_resource_read_names(const ResourceAndUsage& resource) {
-    ASSERT(resource.pass_rw_read_idx != UINT32_MAX);
-    return rw_resource_read_names_[resource.pass_rw_read_idx];
   }
 
   [[nodiscard]] bool has_resource_writes() const {

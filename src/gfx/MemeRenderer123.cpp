@@ -253,7 +253,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   if (!pending_texture_uploads_.empty() || imgui_has_dirty_textures) {
     auto& tex_flush_pass = rg_.add_transfer_pass("flush_textures");
     for (const auto& t : pending_texture_uploads_) {
-      tex_flush_pass.write_external_tex(t.name, t.tex);
+      tex_flush_pass.w_external_tex(t.name, t.tex);
     }
     imgui_renderer_->add_dirty_textures_to_pass(tex_flush_pass, false);
 
@@ -263,8 +263,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   if (k_use_mesh_shader) {
     if (!culling_paused_) {
       auto& clear_bufs_pass = rg_.add_compute_pass("clear_bufs");
-      clear_bufs_pass.write_external(
-          "out_draw_count_buf1", static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle);
+      clear_bufs_pass.w_external("out_draw_count_buf1",
+                                 static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle);
       clear_bufs_pass.set_ex([this](rhi::CmdEncoder* enc) {
         enc->bind_pipeline(test_clear_buf_pso_);
         uint32_t pc =
@@ -280,11 +280,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     if (!culling_paused_) {
       prep_meshlets_pass.rw_external_buf(output_buf_name, "out_draw_count_buf1");
     } else {
-      prep_meshlets_pass.write_external(
+      prep_meshlets_pass.w_external(
           output_buf_name, static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle);
     }
-    prep_meshlets_pass.write_external("task_cmd_buf",
-                                      static_draw_batch_->task_cmd_bufs_[curr_frame_idx_].handle);
+    prep_meshlets_pass.w_external("task_cmd_buf",
+                                  static_draw_batch_->task_cmd_bufs_[curr_frame_idx_].handle);
     prep_meshlets_pass.set_ex([this](rhi::CmdEncoder* enc) {
       enc->bind_pipeline(draw_cull_pso_);
       if (!culling_paused_) {
@@ -311,7 +311,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     });
   } else {
     auto& prepare_indirect_pass = rg_.add_compute_pass("prepare_indirect");
-    prepare_indirect_pass.write_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf());
+    prepare_indirect_pass.w_external("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf());
     prepare_indirect_pass.set_ex([this, &args](rhi::CmdEncoder* enc) {
       BasicIndirectPC pc{
           .vp = get_proj_matrix() * args.view_mat,
@@ -330,15 +330,15 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   {
     auto& gbuffer_pass = rg_.add_graphics_pass("gbuffer");
     if (k_use_mesh_shader) {
-      gbuffer_pass.read_external_buf("out_draw_count_buf2");
-      gbuffer_pass.read_external_buf("task_cmd_buf");
+      gbuffer_pass.r_external_buf("out_draw_count_buf2");
+      gbuffer_pass.r_external_buf("task_cmd_buf");
     } else {
-      gbuffer_pass.read_indirect_buf("indirect_buffer");
+      gbuffer_pass.r_external_buf("indirect_buffer", rhi::PipelineStage_DrawIndirect);
     }
     auto rg_gbuffer_a_handle =
-        gbuffer_pass.add_color_output("gbuffer_a", {.format = rhi::TextureFormat::B8G8R8A8Unorm});
+        gbuffer_pass.w_color_output("gbuffer_a", {.format = rhi::TextureFormat::B8G8R8A8Unorm});
     auto rg_depth_handle =
-        gbuffer_pass.add_depth_output("depth_tex", {.format = rhi::TextureFormat::D32float});
+        gbuffer_pass.w_depth_output("depth_tex", {.format = rhi::TextureFormat::D32float});
 
     for (const auto& t : pending_texture_uploads_) {
       gbuffer_pass.sample_external_tex(t.name);
@@ -417,13 +417,13 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   std::string read_name;
   uint32_t final_mip = mip_levels - 1;
   for (uint32_t mip = 0; mip < final_mip; mip++) {
-    auto& pass = rg_.add_compute_pass("depth_reduce_" + std::to_string(mip));
+    auto& p = rg_.add_compute_pass("depth_reduce_" + std::to_string(mip));
     RGResourceHandle depth_handle{};
     if (mip == 0) {
-      depth_handle = pass.read_tex("depth_tex");
-      pass.read_tex("gbuffer_a");
+      depth_handle = p.r_tex("depth_tex");
+      p.r_tex("gbuffer_a");
     } else {
-      pass.read_external_tex(read_name);
+      p.r_external_tex(read_name);
     }
     auto write_name = "depth_pyramid_tex_reduce_" + std::to_string(mip);
     if (mip == final_mip - 1) {
@@ -431,8 +431,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     }
 
     read_name = write_name;
-    pass.write_external_tex(write_name, depth_pyramid_tex_.handle);
-    pass.set_ex([this, mip, depth_handle, dp_dims](rhi::CmdEncoder* enc) {
+    p.w_external_tex(write_name, depth_pyramid_tex_.handle);
+    p.set_ex([this, mip, depth_handle, dp_dims](rhi::CmdEncoder* enc) {
       enc->bind_pipeline(depth_reduce_pso_);
       glm::uvec2 in_dims = (mip == 0) ? device_->get_tex(rg_.get_att_img(depth_handle))->desc().dims
                                       : glm::uvec2{std::max(1u, dp_dims.x >> (mip - 1)),
@@ -458,11 +458,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   }
 
   {
-    auto& pass = rg_.add_graphics_pass("shade");
-    auto gbuffer_a_rg_handle = pass.sample_tex("gbuffer_a");
-    pass.sample_external_tex(final_depth_pyramid_name);
-    pass.add_color_output("output_result_tex", {.is_swapchain_tex = true});
-    pass.set_ex([this, gbuffer_a_rg_handle, &args](rhi::CmdEncoder* enc) {
+    auto& p = rg_.add_graphics_pass("shade");
+    auto gbuffer_a_rg_handle = p.sample_tex("gbuffer_a");
+    p.sample_external_tex(final_depth_pyramid_name);
+    p.w_color_output("output_result_tex", {.is_swapchain_tex = true});
+    p.set_ex([this, gbuffer_a_rg_handle, &args](rhi::CmdEncoder* enc) {
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
       auto dims = gbuffer_a_tex->desc().dims;
       enc->begin_rendering({RenderingAttachmentInfo::color_att(

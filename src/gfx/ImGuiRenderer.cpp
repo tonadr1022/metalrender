@@ -265,7 +265,7 @@ void ImGuiRenderer::add_dirty_textures_to_pass(gfx::RGPass& pass, bool read_acce
       if (read_access) {
         pass.sample_external_tex(std::to_string(t->GetTexID()));
       } else {
-        pass.write_external_tex(std::to_string(t->GetTexID()), rhi::TextureHandle{t->GetTexID()});
+        pass.w_external_tex(std::to_string(t->GetTexID()), rhi::TextureHandle{t->GetTexID()});
       }
     }
   }
