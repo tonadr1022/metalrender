@@ -263,9 +263,9 @@ void ImGuiRenderer::add_dirty_textures_to_pass(gfx::RGPass& pass, bool read_acce
   for (const auto* t : *draw_data->Textures) {
     if (t->Status == ImTextureStatus_WantUpdates || t->Status == ImTextureStatus_WantCreate) {
       if (read_access) {
-        pass.sample_external_tex(rhi::TextureHandle{t->GetTexID()});
+        pass.sample_external_tex(std::to_string(t->GetTexID()));
       } else {
-        pass.write_external_tex(rhi::TextureHandle{t->GetTexID()});
+        pass.write_external_tex(std::to_string(t->GetTexID()), rhi::TextureHandle{t->GetTexID()});
       }
     }
   }

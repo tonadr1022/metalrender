@@ -262,10 +262,13 @@ class MemeRenderer123 {
     std::unique_ptr<void, UntypedDeleterFuncPtr> data;
     rhi::TextureHandle tex;
     uint32_t bytes_per_row;
+    std::string name;
   };
   std::optional<ImGuiRenderer> imgui_renderer_;
 
   std::vector<GPUTexUpload> pending_texture_uploads_;
+  size_t tex_upload_i_{};
+  std::string get_next_tex_upload_name();
 
   std::vector<rhi::SamplerHandleHolder> samplers_;
 

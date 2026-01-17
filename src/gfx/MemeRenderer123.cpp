@@ -82,10 +82,12 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
     ALWAYS_ASSERT(device_->get_tex(default_white_tex_)->bindless_idx() == 0);
     auto* data = reinterpret_cast<uint64_t*>(malloc(sizeof(uint64_t)));
     *data = 0xFFFFFFFF;
+    // TODO: add a function for this for the love of god!
     pending_texture_uploads_.push_back(
         GPUTexUpload{.data = std::unique_ptr<void, UntypedDeleterFuncPtr>(data, &free),
                      .tex = default_white_tex_.handle,
-                     .bytes_per_row = 4});
+                     .bytes_per_row = 4,
+                     .name = get_next_tex_upload_name()});
   }
   {
     samplers_.emplace_back(device_->create_sampler_h(rhi::SamplerDesc{
@@ -192,7 +194,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   set_cull_data_and_globals(args);
   add_render_graph_passes(args);
   static int i = 0;
-  rg_.bake(window_->get_window_size(), i++ == 2);
+  rg_.bake(window_->get_window_size(), i++ == 0);
   rg_.execute();
 
   device_->submit_frame();
@@ -251,7 +253,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   if (!pending_texture_uploads_.empty() || imgui_has_dirty_textures) {
     auto& tex_flush_pass = rg_.add_transfer_pass("flush_textures");
     for (const auto& t : pending_texture_uploads_) {
-      tex_flush_pass.write_external_tex(t.tex);
+      tex_flush_pass.write_external_tex(t.name, t.tex);
     }
     imgui_renderer_->add_dirty_textures_to_pass(tex_flush_pass, false);
 
@@ -341,7 +343,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         gbuffer_pass.add_depth_output("depth_tex", {.format = rhi::TextureFormat::D32float});
 
     for (const auto& t : pending_texture_uploads_) {
-      gbuffer_pass.sample_external_tex(t.tex);
+      gbuffer_pass.sample_external_tex(t.name);
     }
     imgui_renderer_->add_dirty_textures_to_pass(gbuffer_pass, true);
 
@@ -423,7 +425,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       depth_handle = pass.read_tex("depth_tex");
       pass.read_tex("gbuffer_a");
     } else {
-      pass.read_tex(read_name);
+      pass.read_external_tex(read_name);
     }
     auto write_name = "depth_pyramid_tex_reduce_" + std::to_string(mip);
     if (mip == final_mip - 1) {
@@ -460,7 +462,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   {
     auto& pass = rg_.add_graphics_pass("shade");
     auto gbuffer_a_rg_handle = pass.sample_tex("gbuffer_a");
-    pass.sample_tex(final_depth_pyramid_name);
+    pass.sample_external_tex(final_depth_pyramid_name);
     pass.add_color_output("output_result_tex", {.is_swapchain_tex = true});
     pass.set_ex([this, gbuffer_a_rg_handle, &args](rhi::CmdEncoder* enc) {
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
@@ -548,7 +550,8 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
       img_upload_bindless_indices[i] = device_->get_tex(tex)->bindless_idx();
       pending_texture_uploads_.push_back(GPUTexUpload{.data = std::move(upload.data),
                                                       .tex = tex.handle,
-                                                      .bytes_per_row = upload.bytes_per_row});
+                                                      .bytes_per_row = upload.bytes_per_row,
+                                                      .name = get_next_tex_upload_name()});
       out_tex_handles.emplace_back(std::move(tex));
     }
     i++;
@@ -1045,4 +1048,7 @@ void MemeRenderer123::on_key_event(int key, int action, int mods) {
   }
 }
 
+std::string MemeRenderer123::get_next_tex_upload_name() {
+  return "ext_tex_" + std::to_string(tex_upload_i_++);
+}
 }  // namespace gfx
