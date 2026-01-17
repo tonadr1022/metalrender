@@ -189,8 +189,6 @@ class RenderGraph {
     // PLEAAAAAAAAAASEEEEEEEEEEEEEEEE
   };
 
-  RGResourceHandle add_tex_usage(const std::string& name, rhi::TextureHandle handle,
-                                 const AttachmentInfo& att_info, RGAccess access, RGPass& pass);
   RGResourceHandle add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                  RGAccess access, RGPass& pass);
   RGResourceHandle add_tex_usage(const std::string& name, RGAccess access, RGPass& pass);

@@ -560,44 +560,6 @@ RGResourceHandle RenderGraph::add_tex_usage(rhi::TextureHandle tex_handle, RGAcc
   return resource_handle;
 }
 
-RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, rhi::TextureHandle tex_handle,
-                                            const AttachmentInfo& att_info, RGAccess access,
-                                            RGPass& pass) {
-  rhi::AccessFlags access_bits{};
-  rhi::PipelineStage stage_bits{};
-  convert_rg_access(access, access_bits, stage_bits);
-
-  auto resource_handle_it = resource_name_to_handle_.find(name);
-  if (resource_handle_it != resource_name_to_handle_.end()) {
-    auto handle = resource_handle_it->second;
-    if (access & AnyRead) {
-      add_resource_to_pass_reads(handle, pass);
-    }
-    if (access & AnyWrite) {
-      add_resource_to_pass_writes(handle, pass);
-    }
-
-    return handle;
-  }
-
-  RGResourceHandle resource_handle{.idx = static_cast<uint32_t>(tex_usages_.size()),
-                                   .type = RGResourceType::Texture};
-  TextureUsage tex_use{.att_info = att_info, .handle = tex_handle};
-  emplace_back_tex_usage(tex_use);
-  tex_handle_to_handle_.emplace(tex_handle.to64(), resource_handle);
-
-  resource_handle_to_name_.emplace(resource_handle.to64(), name);
-  resource_name_to_handle_.emplace(name, resource_handle.to64());
-
-  if (access & AnyRead) {
-    add_resource_to_pass_reads(resource_handle, pass);
-  }
-  if (access & AnyWrite) {
-    add_resource_to_pass_writes(resource_handle, pass);
-  }
-  return resource_handle;
-}
-
 RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                             RGAccess access, RGPass& pass) {
   rhi::AccessFlags access_bits{};
@@ -924,18 +886,6 @@ RGResourceHandle RenderGraph::add_external_tex_write_usage(const std::string& na
 
   auto resource_handle_it = resource_name_to_handle_.find(name);
   ALWAYS_ASSERT(resource_handle_it == resource_name_to_handle_.end());
-  // if (resource_handle_it != resource_name_to_handle_.end()) {
-  //   auto handle = resource_handle_it->second;
-  //   if (access & AnyRead) {
-  //     add_resource_to_pass_reads(handle, pass);
-  //   }
-  //   if (access & AnyWrite) {
-  //     add_resource_to_pass_writes(handle, pass);
-  //   }
-  //
-  //   return handle;
-  // }
-
   RGResourceHandle resource_handle{.idx = static_cast<uint32_t>(tex_usages_.size()),
                                    .type = RGResourceType::Texture};
   TextureUsage tex_use{.att_info = {}, .handle = tex_handle};
