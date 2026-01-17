@@ -263,8 +263,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   if (k_use_mesh_shader) {
     if (!culling_paused_) {
       auto& clear_bufs_pass = rg_.add_compute_pass("clear_bufs");
-      clear_bufs_pass.write_buf("out_draw_count_buf1",
-                                static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle);
+      clear_bufs_pass.write_external(
+          "out_draw_count_buf1", static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle);
       clear_bufs_pass.set_ex([this](rhi::CmdEncoder* enc) {
         enc->bind_pipeline(test_clear_buf_pso_);
         uint32_t pc =
@@ -278,15 +278,13 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     auto& prep_meshlets_pass = rg_.add_compute_pass("meshlet_draw_cull");
     const char* output_buf_name = "out_draw_count_buf2";
     if (!culling_paused_) {
-      prep_meshlets_pass.read_write_buf(
-          output_buf_name, static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle,
-          "out_draw_count_buf1");
+      prep_meshlets_pass.rw_external_buf(output_buf_name, "out_draw_count_buf1");
     } else {
-      prep_meshlets_pass.write_buf(
+      prep_meshlets_pass.write_external(
           output_buf_name, static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle);
     }
-    prep_meshlets_pass.write_buf("task_cmd_buf",
-                                 static_draw_batch_->task_cmd_bufs_[curr_frame_idx_].handle);
+    prep_meshlets_pass.write_external("task_cmd_buf",
+                                      static_draw_batch_->task_cmd_bufs_[curr_frame_idx_].handle);
     prep_meshlets_pass.set_ex([this](rhi::CmdEncoder* enc) {
       enc->bind_pipeline(draw_cull_pso_);
       if (!culling_paused_) {
@@ -332,8 +330,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   {
     auto& gbuffer_pass = rg_.add_graphics_pass("gbuffer");
     if (k_use_mesh_shader) {
-      gbuffer_pass.read_buf("out_draw_count_buf2");
-      gbuffer_pass.read_buf("task_cmd_buf");
+      gbuffer_pass.read_external_buf("out_draw_count_buf2");
+      gbuffer_pass.read_external_buf("task_cmd_buf");
     } else {
       gbuffer_pass.read_indirect_buf("indirect_buffer");
     }
