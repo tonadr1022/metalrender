@@ -11,6 +11,7 @@ add_executable(${target_name}
     gfx/Pipeline.cpp
     gfx/ModelInstance.cpp
     gfx/ResourceManager.cpp
+    gfx/ShaderManager.cpp
     gfx/ImGuiRenderer.cpp
     gfx/GPUFrameAllocator.cpp
     gfx/GPUFrameAllocator2.cpp

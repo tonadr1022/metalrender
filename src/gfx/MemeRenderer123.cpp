@@ -183,7 +183,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_.bake(window_->get_window_size(), i++ == 2);
+  rg_.bake(window_->get_window_size(), i++ == -1);
   rg_.execute();
 
   device_->submit_frame();
@@ -340,9 +340,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       ASSERT(depth_handle.is_valid());
       auto gbuffer_a_tex = rg_.get_att_img(rg_gbuffer_a_handle);
       enc->begin_rendering({
-          RenderingAttachmentInfo::color_att(
-              gbuffer_a_tex, rhi::LoadOp::Clear,
-              {.color = {17.f / 255.f, 25.f / 255.f, 25.f / 255.f, 0.0}}),
+          RenderingAttachmentInfo::color_att(gbuffer_a_tex, rhi::LoadOp::Clear,
+                                             {.color = {0.2f, 25.f / 255.f, 25.f / 255.f, 0.05}}),
           RenderingAttachmentInfo::depth_stencil_att(
               depth_handle, rhi::LoadOp::Clear,
               {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),

@@ -8,6 +8,7 @@
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/Device.hpp"
+#include "gfx/ShaderManager.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -46,6 +47,8 @@ App::App() {
       .app_name = "lol",
       .transparent_window = true,
   });
+  gfx::ShaderManager mgr_;
+  mgr_.init(resource_dir_ / "shaders");
 
   on_hide_mouse_change();
 
@@ -79,7 +82,7 @@ float get_float(float min, float max) {
 
 void App::run() {
   ZoneScoped;
-  int scene = 3;
+  int scene = 0;
   if (scene == 0) {
     glm::ivec3 iter{};
     int n = 4;
@@ -91,7 +94,7 @@ void App::run() {
         load_model(config_.paths[0], glm::translate(glm::mat4{1}, pos));
       }
     }
-    load_model(config_.paths[1], glm::mat4{1});
+    // load_model(config_.paths[1], glm::mat4{1});
   } else if (scene == 1) {
     rando::seed(10000000);
     size_t count = 300'000;

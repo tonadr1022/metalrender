@@ -14,8 +14,11 @@ args = parser.parse_args()
 VERBOSE = args.verbose
 
 OUT_SHADER_DIR = Path("resources/shader_out/metal")
+DEP_FILE_DIR = Path("resources/shader_out/deps")
 if not OUT_SHADER_DIR.exists():
     os.makedirs(OUT_SHADER_DIR, exist_ok=True)
+if not DEP_FILE_DIR.exists():
+    os.makedirs(DEP_FILE_DIR, exist_ok=True)
 
 SRC_DIR = Path("resources/shaders/hlsl")
 
@@ -75,6 +78,7 @@ def get_args_forcompile_hlsl_to_dxil_or_spirv(
     out_filepath = (OUT_SHADER_DIR / path.stem).with_suffix(
         path.suffixes[0] + extension
     )
+    dep_file_path = str((DEP_FILE_DIR / path.stem).with_suffix(path.suffixes[0] + ".d"))
     args = [
         "dxc",
         str(path),
@@ -87,6 +91,9 @@ def get_args_forcompile_hlsl_to_dxil_or_spirv(
         "-Zi",
         "-Qembed_debug",
         "-Qsource_in_debug_module",
+        "-MD",
+        "-MF",
+        dep_file_path,
     ]
     if is_spirv:
         args.append("-spirv")

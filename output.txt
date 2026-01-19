@@ -1,0 +1,169 @@
+"/Users/tony/personal/metalrender/resources/shaders/types.h" 2025-09-20 22:17:35
+"/Users/tony/personal/metalrender/resources/shaders/shader_constants.h" 2025-11-29 18:16:14
+"/Users/tony/personal/metalrender/resources/shaders/shader_core.h" 2026-01-19 09:32:30
+"/Users/tony/personal/metalrender/resources/shaders/shader_global_uniforms.h" 2025-10-26 09:58:38
+"/Users/tony/personal/metalrender/resources/shaders/indirect/dispatch_mesh.metal" 2025-11-24 22:02:00
+"/Users/tony/personal/metalrender/resources/shaders/indirect/dispatch_indirect.metal" 2025-11-28 08:47:10
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_task_cmd.h" 2025-11-28 17:27:46
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_test_clear_buf.h" 2025-11-29 15:57:44
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_instance_data.h" 2025-11-28 14:17:29
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/task2.mesh.hlsl" 2025-12-19 20:10:40
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_basic_tri.h" 2025-11-21 21:03:30
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/imgui.vert.hlsl" 2025-11-23 07:28:18
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/depth_reduce/depth_reduce.comp.hlsl" 2026-01-19 09:48:28
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/depth_reduce/shared_depth_reduce.h" 2026-01-19 09:32:30
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_shade.h" 2026-01-19 09:32:30
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/fullscreen_quad.vert.hlsl" 2026-01-19 09:32:30
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/test_mesh.frag.hlsl" 2025-11-23 07:49:41
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/test_task.frag.hlsl" 2025-12-20 15:50:30
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/material.h" 2025-11-22 20:09:58
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/task2.task.hlsl" 2025-12-20 17:06:00
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_globals.h" 2025-12-19 09:12:41
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/basic_indirect.frag.hlsl" 2025-11-28 08:47:10
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/test_task.task.hlsl" 2025-11-28 19:04:06
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_draw_cull.h" 2025-12-20 15:57:01
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/test_mesh.mesh.hlsl" 2025-11-23 08:55:29
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_indirect.h" 2025-11-23 17:00:17
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/math.hlsli" 2025-12-20 16:58:14
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_test_task.h" 2025-11-28 19:04:06
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/basic_indirect.vert.hlsl" 2025-11-29 09:43:12
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_test_mesh.h" 2025-11-23 07:46:31
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_cull_data.h" 2025-12-19 09:12:57
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_imgui.h" 2025-11-22 22:38:27
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_mesh_data.h" 2025-11-28 17:22:10
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_task2.h" 2025-12-20 16:07:25
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/test_clear_cnt_buf.comp.hlsl" 2026-01-19 09:32:30
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_tex_only.h" 2026-01-19 09:32:30
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/tex_only.frag.hlsl" 2026-01-19 09:32:30
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/imgui.frag.hlsl" 2025-11-23 07:28:14
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/test_task.mesh.hlsl" 2025-11-28 17:18:37
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/draw_cull.comp.hlsl" 2025-12-20 15:45:50
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shade.comp.hlsl" 2026-01-19 09:32:30
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/shared_basic_indirect.h" 2025-11-22 22:36:58
+"/Users/tony/personal/metalrender/resources/shaders/hlsl/root_sig.h" 2025-11-29 09:43:28
+"/Users/tony/personal/metalrender/resources/shaders/default_vertex.h" 2025-12-20 16:56:53
+resource dir /Users/tony/personal/metalrender/resources/fonts/Comic_Sans_MS.ttf
+//////////// Baking Render Graph ////////////
+Sink passes:
+	clear_bufs
+	meshlet_draw_cull
+	shade
+
+
+
+//////////////// Pass Order ////////////////
+[PASS]: clear_bufs
+out_draw_count_buf1                               	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: meshlet_draw_cull
+out_draw_count_buf2                               	ShaderRead | ShaderWrite                          	PipelineStage_ComputeShader                       
+task_cmd_buf                                      	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: gbuffer
+gbuffer_a                                         	ColorAttachmentWrite                              	PipelineStage_ColorAttachmentOutput               
+depth_tex                                         	ColorAttachmentWrite                              	PipelineStage_EarlyFragmentTests | PipelineStage_LateFragmentTests
+out_draw_count_buf2                               	ShaderRead                                        	PipelineStage_AllGraphics                         
+task_cmd_buf                                      	ShaderRead                                        	PipelineStage_AllGraphics                         
+[PASS]: depth_reduce_0
+depth_tex                                         	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+gbuffer_a                                         	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+depth_pyramid_tex_reduce_0                        	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: depth_reduce_1
+depth_pyramid_tex_reduce_0                        	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+depth_pyramid_tex_reduce_1                        	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: depth_reduce_2
+depth_pyramid_tex_reduce_1                        	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+depth_pyramid_tex_reduce_2                        	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: depth_reduce_3
+depth_pyramid_tex_reduce_2                        	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+depth_pyramid_tex_reduce_3                        	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: depth_reduce_4
+depth_pyramid_tex_reduce_3                        	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+depth_pyramid_tex_reduce_4                        	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: depth_reduce_5
+depth_pyramid_tex_reduce_4                        	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+depth_pyramid_tex_reduce_5                        	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: depth_reduce_6
+depth_pyramid_tex_reduce_5                        	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+depth_pyramid_tex_reduce_6                        	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: depth_reduce_7
+depth_pyramid_tex_reduce_6                        	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+depth_pyramid_tex_reduce_7                        	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: depth_reduce_8
+depth_pyramid_tex_reduce_7                        	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+depth_pyramid_tex_reduce_8                        	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: depth_reduce_9
+depth_pyramid_tex_reduce_8                        	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+depth_pyramid_tex_reduce_9                        	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: depth_reduce_10
+depth_pyramid_tex_reduce_9                        	ShaderStorageRead                                 	PipelineStage_ComputeShader                       
+depth_pyramid_tex_reduce_10                       	ShaderWrite                                       	PipelineStage_ComputeShader                       
+[PASS]: shade
+gbuffer_a                                         	ShaderSampledRead                                 	PipelineStage_FragmentShader                      
+depth_pyramid_tex_reduce_10                       	ShaderSampledRead                                 	PipelineStage_FragmentShader                      
+output_result_tex                                 	ColorAttachmentWrite                              	PipelineStage_ColorAttachmentOutput               
+
+//////////////// Barriers ////////////////
+[32mCompute Pass[0m: clear_bufs
+
+[32mCompute Pass[0m: meshlet_draw_cull
+[35mRESOURCE: out_draw_count_buf2[0m
+	[36mSRC_ACCESS:   [0m ShaderWrite
+	[36mDST_ACCESS:   [0m ShaderRead | ShaderWrite
+	[36mSRC_STAGE:    [0m PipelineStage_ComputeShader
+	[36mDST_STAGE:    [0m PipelineStage_ComputeShader
+
+[32mGraphics Pass[0m: gbuffer
+[35mRESOURCE: out_draw_count_buf2[0m
+	[36mSRC_ACCESS:   [0m ShaderWrite
+	[36mDST_ACCESS:   [0m ShaderRead
+	[36mSRC_STAGE:    [0m PipelineStage_ComputeShader
+	[36mDST_STAGE:    [0m PipelineStage_AllGraphics
+[35mRESOURCE: task_cmd_buf[0m
+	[36mSRC_ACCESS:   [0m ShaderWrite
+	[36mDST_ACCESS:   [0m ShaderRead
+	[36mSRC_STAGE:    [0m PipelineStage_ComputeShader
+	[36mDST_STAGE:    [0m PipelineStage_AllGraphics
+
+[32mCompute Pass[0m: depth_reduce_0
+[35mRESOURCE: depth_tex[0m
+	[36mSRC_ACCESS:   [0m ColorAttachmentWrite
+	[36mDST_ACCESS:   [0m ShaderStorageRead
+	[36mSRC_STAGE:    [0m PipelineStage_EarlyFragmentTests | PipelineStage_LateFragmentTests
+	[36mDST_STAGE:    [0m PipelineStage_ComputeShader
+[35mRESOURCE: gbuffer_a[0m
+	[36mSRC_ACCESS:   [0m ColorAttachmentWrite
+	[36mDST_ACCESS:   [0m ShaderStorageRead
+	[36mSRC_STAGE:    [0m PipelineStage_ColorAttachmentOutput
+	[36mDST_STAGE:    [0m PipelineStage_ComputeShader
+
+[32mCompute Pass[0m: depth_reduce_1
+[35mRESOURCE: depth_pyramid_tex_reduce_0[0m
+	[36mSRC_ACCESS:   [0m ShaderWrite
+	[36mDST_ACCESS:   [0m ShaderStorageRead
+	[36mSRC_STAGE:    [0m PipelineStage_ComputeShader
+	[36mDST_STAGE:    [0m PipelineStage_ComputeShader
+
+[32mCompute Pass[0m: depth_reduce_2
+[35mRESOURCE: depth_pyramid_tex_reduce_1[0m
+	[36mSRC_ACCESS:   [0m ShaderWrite
+	[36mDST_ACCESS:   [0m ShaderStorageRead
+	[36mSRC_STAGE:    [0m PipelineStage_ComputeShader
+	[36mDST_STAGE:    [0m PipelineStage_ComputeShader
+
+[32mCompute Pass[0m: depth_reduce_3
+[35mRESOURCE: depth_pyramid_tex_reduce_2[0m
+	[36mSRC_ACCESS:   [0m ShaderWrite
+	[36mDST_ACCESS:   [0m ShaderStorageRead
+	[36mSRC_STAGE:    [0m PipelineStage_ComputeShader
+	[36mDST_STAGE:    [0m PipelineStage_ComputeShader
+
+[32mCompute Pass[0m: depth_reduce_4
+[35mRESOURCE: depth_pyramid_tex_reduce_3[0m
+	[36mSRC_ACCESS:   [0m ShaderWrite
+	[36mDST_ACCESS:   [0m ShaderStorageRead
+	[36mSRC_STAGE:    [0m PipelineStage_ComputeShader
+	[36mDST_STAGE:    [0m PipelineStage_ComputeShader
+
+[32mCompute Pass[0m: depth_reduce_5
+[35mRESOURCE: depth_pyramid_tex_reduce_4[0m
+	[36mSRC_ACCESS:   [0m ShaderWrite
+	[36mDST_ACCESS:   [0
