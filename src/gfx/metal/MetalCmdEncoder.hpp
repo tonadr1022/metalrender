@@ -67,8 +67,8 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
                                           size_t push_constant_size) override;
   void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
-  void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
-               rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override {}
+  void barrier(rhi::BufferHandle, rhi::PipelineStage, rhi::AccessFlags, rhi::PipelineStage,
+               rhi::AccessFlags) override {}
 
   void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
                              size_t draw_cnt, size_t offset_i) override;
