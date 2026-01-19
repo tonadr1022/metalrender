@@ -194,7 +194,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   set_cull_data_and_globals(args);
   add_render_graph_passes(args);
   static int i = 0;
-  rg_.bake(window_->get_window_size(), i++ == 0);
+  rg_.bake(window_->get_window_size(), i++ == 2);
   rg_.execute();
 
   device_->submit_frame();
@@ -461,7 +461,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     auto& p = rg_.add_graphics_pass("shade");
     auto gbuffer_a_rg_handle = p.sample_tex("gbuffer_a");
     p.sample_external_tex(final_depth_pyramid_name);
-    p.w_color_output("output_result_tex", {.is_swapchain_tex = true});
+    p.w_external_tex_color_output("output_result_tex",
+                                  device_->get_swapchain().get_texture(curr_frame_idx_));
     p.set_ex([this, gbuffer_a_rg_handle, &args](rhi::CmdEncoder* enc) {
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
       auto dims = gbuffer_a_tex->desc().dims;

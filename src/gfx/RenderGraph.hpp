@@ -99,6 +99,7 @@ struct BufferInfo {
 };
 
 struct ResourceAndUsage {
+  std::string name;
   RGResourceHandle handle;
   rhi::AccessFlags access;
   rhi::PipelineStage stage;
@@ -116,6 +117,7 @@ class RGPass {
   void sample_external_tex(std::string name);
   void r_external_tex(std::string name);
   void w_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
+  void w_external_tex_color_output(const std::string& name, rhi::TextureHandle tex_handle);
   void w_external(const std::string& name, rhi::BufferHandle buf);
   RGResourceHandle r_tex(const std::string& name);
   RGResourceHandle w_tex(const std::string& name);
@@ -127,7 +129,6 @@ class RGPass {
 
   struct NameAndAccess {
     std::string name;
-    // RGAccess access;
     rhi::PipelineStage stage;
     rhi::AccessFlags acc;
     RGResourceType type;
@@ -140,13 +141,22 @@ class RGPass {
   [[nodiscard]] const std::vector<NameAndAccess>& get_external_writes() const {
     return external_writes_;
   }
+  [[nodiscard]] const std::vector<NameAndAccess>& get_internal_reads() const {
+    return internal_reads_;
+  }
+  [[nodiscard]] const std::vector<NameAndAccess>& get_internal_writes() const {
+    return internal_writes_;
+  }
 
   std::vector<NameAndAccess> external_reads_;
   std::vector<NameAndAccess> external_writes_;
 
-  [[nodiscard]] const std::vector<ResourceAndUsage>& get_resource_usages() const {
-    return resource_usages_;
-  }
+  std::vector<NameAndAccess> internal_reads_;
+  std::vector<NameAndAccess> internal_writes_;
+
+  // [[nodiscard]] const std::vector<ResourceAndUsage>& get_resource_usages() const {
+  // return resource_usages_;
+  // }
 
   const std::string& get_resource_read_names(const NameAndAccess& resource) {
     ASSERT(resource.rw_read_name_i != UINT32_MAX);
@@ -204,19 +214,18 @@ class RenderGraph {
     // PLEAAAAAAAAAASEEEEEEEEEEEEEEEE STOPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
     // PLEAAAAAAAAAASEEEEEEEEEEEEEEEE
   };
+  // TODO: NO
+  std::unordered_set<std::string> external_read_names;
 
   RGResourceHandle add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                  RGAccess access, RGPass& pass);
-  RGResourceHandle add_tex_usage(const std::string& name, RGAccess access, RGPass& pass);
-  RGResourceHandle add_buf_usage(std::string name, rhi::BufferHandle buf_handle, RGAccess access,
-                                 RGPass& pass, const std::string& input_name);
-  RGResourceHandle add_buf_read_usage(const std::string& name, RGAccess access, RGPass& pass);
   void add_external_write_usage(const std::string& name, rhi::TextureHandle handle, RGPass& pass);
   void add_external_write_usage(const std::string& name, rhi::BufferHandle handle, RGPass& pass);
   void add_external_rw_buffer_usage(const std::string& name, const std::string& input_name,
                                     RGPass& pass);
 
   rhi::TextureHandle get_att_img(RGResourceHandle tex_handle);
+  RGResourceHandle get_resource(const std::string& name, RGResourceType type);
 
   std::vector<rhi::TextureHandle> external_textures_;
   std::vector<rhi::BufferHandle> external_buffers_;
@@ -248,15 +257,6 @@ class RenderGraph {
 
   std::vector<uint32_t>& get_resource_read_pass_usages(RGResourceHandle handle) {
     return resource_pass_usages_[(int)handle.type][handle.idx].read_pass_indices;
-  }
-  void add_resource_to_pass_writes(RGResourceHandle handle, RGPass& pass) {
-    resource_pass_usages_[(int)handle.type][handle.idx].write_pass_indices.emplace_back(
-        pass.get_idx());
-  }
-
-  void add_resource_to_pass_reads(RGResourceHandle handle, RGPass& pass) {
-    resource_pass_usages_[(int)handle.type][handle.idx].read_pass_indices.emplace_back(
-        pass.get_idx());
   }
 
   template <typename... Args>
