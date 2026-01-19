@@ -8,7 +8,6 @@
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/Device.hpp"
-#include "gfx/ShaderManager.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -33,6 +32,7 @@ std::filesystem::path get_resource_dir() {
 App::App() {
   ZoneScoped;
   resource_dir_ = get_resource_dir();
+  std::filesystem::current_path(resource_dir_.parent_path());
   shader_dir_ = resource_dir_ / "shaders";
   load_config();
   device_ = rhi::create_device(rhi::GfxAPI::Metal);
@@ -47,8 +47,6 @@ App::App() {
       .app_name = "lol",
       .transparent_window = true,
   });
-  gfx::ShaderManager mgr_;
-  mgr_.init(resource_dir_ / "shaders");
 
   on_hide_mouse_change();
 
@@ -162,6 +160,7 @@ void App::run() {
   //   voxel_world_->shutdown();
   // }
 
+  renderer_.shutdown();
   ResourceManager::shutdown();
   window_->shutdown();
   device_->shutdown();

@@ -11,7 +11,7 @@ enum class ShaderType : uint8_t { None, Vertex, Fragment, Task, Mesh, Compute };
 const char* to_string(ShaderType type);
 
 struct ShaderCreateInfo {
-  std::filesystem::path path;
+  std::string path;
   ShaderType type;
   std::vector<std::string> defines;
   std::string entry_point{"main"};

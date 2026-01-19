@@ -4,10 +4,13 @@
 #include "gfx/Device.hpp"
 
 namespace gfx {
+
 class RGPass;
+class ShaderManager;
+
 class ImGuiRenderer {
  public:
-  explicit ImGuiRenderer(rhi::Device* device);
+  explicit ImGuiRenderer(ShaderManager& shader_mgr, rhi::Device* device);
   void render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t frame_in_flight);
   void flush_pending_texture_uploads(rhi::CmdEncoder* enc);
   rhi::PipelineHandleHolder pso_;

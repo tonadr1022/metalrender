@@ -10,7 +10,7 @@ template <typename T>
 struct tuple_hash;
 
 template <class T>
-inline void hash_combine(std::size_t& seed, const T& v) {
+inline void hash_combine(auto& seed, const T& v) {
   static_assert(std::is_default_constructible_v<std::hash<T>>, "Type must be hashable");
   seed ^= std::hash<T>()(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
 }

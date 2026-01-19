@@ -9,6 +9,7 @@
 #include "gfx/CmdEncoder.hpp"
 #include "gfx/Pipeline.hpp"
 #include "gfx/RendererTypes.hpp"
+#include "gfx/ShaderManager.hpp"
 #include "gfx/Texture.hpp"
 #include "glm/ext/matrix_clip_space.hpp"
 #include "hlsl/shared_imgui.h"
@@ -16,8 +17,8 @@
 
 namespace gfx {
 
-ImGuiRenderer::ImGuiRenderer(rhi::Device* device) : device_(device) {
-  pso_ = device_->create_graphics_pipeline_h(rhi::GraphicsPipelineCreateInfo{
+ImGuiRenderer::ImGuiRenderer(ShaderManager& shader_mgr, rhi::Device* device) : device_(device) {
+  pso_ = shader_mgr.create_graphics_pipeline(rhi::GraphicsPipelineCreateInfo{
       .shaders = {{
           {"imgui", rhi::ShaderType::Vertex},
           {"imgui", rhi::ShaderType::Fragment},

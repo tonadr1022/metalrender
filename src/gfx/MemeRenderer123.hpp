@@ -14,6 +14,7 @@
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
+#include "gfx/ShaderManager.hpp"
 #include "hlsl/shared_instance_data.h"
 #include "hlsl/shared_mesh_data.h"
 #include "offsetAllocator.hpp"
@@ -239,6 +240,7 @@ class MemeRenderer123 {
 
   rhi::Device* device_{};
   Window* window_{};
+  gfx::ShaderManager mgr_;
   rhi::PipelineHandleHolder test2_pso_;
   rhi::PipelineHandleHolder test_mesh_pso_;
   rhi::PipelineHandleHolder test_task_pso_;

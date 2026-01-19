@@ -69,6 +69,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   device_ = cinfo.device;
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
+  mgr_.init(device_, resource_dir_ / "shaders", resource_dir_ / "shader_out");
 
   {
     // TODO: streamline
@@ -106,31 +107,31 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   }
 
   {
-    test2_pso_ = device_->create_graphics_pipeline_h({
+    test2_pso_ = mgr_.create_graphics_pipeline({
         .shaders = {{{"basic_indirect", ShaderType::Vertex},
                      {"basic_indirect", ShaderType::Fragment}}},
         .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
                       .depth_format = TextureFormat::D32float},
     });
-    test_mesh_pso_ = device_->create_graphics_pipeline_h({
+    test_mesh_pso_ = mgr_.create_graphics_pipeline({
         .shaders = {{{"test_mesh", ShaderType::Mesh}, {"test_mesh", ShaderType::Fragment}}},
         .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
                       .depth_format = TextureFormat::D32float},
     });
-    test_task_pso_ = device_->create_graphics_pipeline_h({
+    test_task_pso_ = mgr_.create_graphics_pipeline({
         .shaders = {{{"task2", ShaderType::Task},
                      {"task2", ShaderType::Mesh},
                      {"test_task", ShaderType::Fragment}}},
         .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
                       .depth_format = TextureFormat::D32float},
     });
-    tex_only_pso_ = device_->create_graphics_pipeline_h(
+    tex_only_pso_ = mgr_.create_graphics_pipeline(
         {.shaders = {{{"fullscreen_quad", ShaderType::Vertex}, {"tex_only", ShaderType::Fragment}}},
          .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm}}});
-    draw_cull_pso_ = device_->create_compute_pipeline_h({"draw_cull"});
-    test_clear_buf_pso_ = device_->create_compute_pipeline_h({"test_clear_cnt_buf"});
-    depth_reduce_pso_ = device_->create_compute_pipeline_h({"depth_reduce"});
-    shade_pso_ = device_->create_compute_pipeline_h({"shade"});
+    draw_cull_pso_ = mgr_.create_compute_pipeline({"draw_cull"});
+    test_clear_buf_pso_ = mgr_.create_compute_pipeline({"test_clear_cnt_buf"});
+    depth_reduce_pso_ = mgr_.create_compute_pipeline({"depth_reduce/depth_reduce"});
+    shade_pso_ = mgr_.create_compute_pipeline({"shade"});
   }
 
   materials_buf_.emplace(*device_,
@@ -153,7 +154,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   meshlet_vis_buf_.emplace(*device_, rhi::BufferDesc{.size = 100'0000}, sizeof(uint32_t));
 
   scratch_buffer_pool_.emplace(device_);
-  imgui_renderer_.emplace(device_);
+  imgui_renderer_.emplace(mgr_, device_);
 
   rg_.init(device_);
   init_imgui();
@@ -914,7 +915,6 @@ void MemeRenderer123::init_imgui() {
 
   ImGuiIO& io = ImGui::GetIO();
   auto path = (resource_dir_ / "fonts" / "Comic_Sans_MS.ttf");
-  LINFO("resource dir {}", path.string());
   ALWAYS_ASSERT(std::filesystem::exists(path));
   io.Fonts->AddFontFromFileTTF(path.c_str(), 16.0f, nullptr, io.Fonts->GetGlyphRangesDefault());
 
@@ -1069,7 +1069,7 @@ void MemeRenderer123::recreate_depth_pyramid_tex() {
 
 void MemeRenderer123::recreate_external_textures() { recreate_depth_pyramid_tex(); }
 
-void MemeRenderer123::shutdown() {}
+void MemeRenderer123::shutdown() { mgr_.shutdown(); }
 
 TexAndViewHolder::~TexAndViewHolder() {
   for (auto v : views) {

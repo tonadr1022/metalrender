@@ -73,12 +73,13 @@ def shader_model_from_hlsl_path(path: Path):
 
 def get_args_forcompile_hlsl_to_dxil_or_spirv(
     path: Path, shader_model: str, is_spirv=False
-) -> List[str]:
+) -> List[List[str]]:
     extension = ".dxil" if not is_spirv else ".spirv"
-    out_filepath = (OUT_SHADER_DIR / path.stem).with_suffix(
-        path.suffixes[0] + extension
-    )
-    dep_file_path = str((DEP_FILE_DIR / path.stem).with_suffix(path.suffixes[0] + ".d"))
+    relative = Path(*path.parts[path.parts.index("hlsl") + 1 :])
+    out_filepath = (OUT_SHADER_DIR / relative).with_suffix(extension)
+    dep_file_path = (DEP_FILE_DIR / relative).with_suffix(".d")
+    out_filepath.parent.mkdir(parents=True, exist_ok=True)
+    dep_file_path.parent.mkdir(parents=True, exist_ok=True)
     args = [
         "dxc",
         str(path),
@@ -91,14 +92,21 @@ def get_args_forcompile_hlsl_to_dxil_or_spirv(
         "-Zi",
         "-Qembed_debug",
         "-Qsource_in_debug_module",
-        "-MD",
+    ]
+    dep_args = [
+        "dxc",
+        str(path),
+        "-T",
+        shader_model,
+        "-E",
+        "main",
         "-MF",
-        dep_file_path,
+        str(dep_file_path),
     ]
     if is_spirv:
         args.append("-spirv")
         args.append(("-fspv-target-env=vulkan1.3"))
-    return args
+    return [dep_args, args]
 
 
 def get_argscompile_dxil_to_metallib(path: Path, output_reflection=False):
@@ -121,14 +129,11 @@ def main():
     cmds = []
     for file in files:
         shader_model = shader_model_from_hlsl_path(file)
-        cmds.append(
-            [get_args_forcompile_hlsl_to_dxil_or_spirv(file, shader_model, False)]
-        )
+        for args in get_args_forcompile_hlsl_to_dxil_or_spirv(
+            file, shader_model, False
+        ):
+            cmds.append([args])
         cmds[-1].append(get_argscompile_dxil_to_metallib(Path(cmds[-1][0][3]), True))
-        # TODO: spirv OR metal, not both, not hardcoded metal, not hardcoded spirv
-        # cmds.append(
-        #     [get_args_forcompile_hlsl_to_dxil_or_spirv(file, shader_model, True)]
-        # )
     run_cmds(cmds)
 
 
