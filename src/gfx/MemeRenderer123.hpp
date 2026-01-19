@@ -172,6 +172,18 @@ struct IdxOffset {
   uint offset_bytes;
 };
 
+struct TexAndViewHolder : public rhi::TextureHandleHolder {
+  TexAndViewHolder() = default;
+  explicit TexAndViewHolder(rhi::TextureHandleHolder&& handle)
+      : rhi::TextureHandleHolder(std::move(handle)) {}
+  TexAndViewHolder(const TexAndViewHolder&) = delete;
+  TexAndViewHolder(TexAndViewHolder&&) = default;
+  TexAndViewHolder& operator=(const TexAndViewHolder&) = delete;
+  TexAndViewHolder& operator=(TexAndViewHolder&&) = default;
+  ~TexAndViewHolder();
+  std::vector<int> views;
+};
+
 class MemeRenderer123 {
  public:
   struct CreateInfo {
@@ -180,6 +192,7 @@ class MemeRenderer123 {
     std::filesystem::path resource_dir;
   };
   void init(const CreateInfo& cinfo);
+  void shutdown();
   void render(const RenderArgs& args);
   void on_imgui();
   void on_key_event(int key, int action, int mods);
@@ -238,8 +251,10 @@ class MemeRenderer123 {
 
   rhi::BufferHandleHolder tmp_out_draw_cnt_buf_;
   rhi::BufferHandleHolder tmp_test_buf_;
-  rhi::TextureHandleHolder depth_pyramid_tex_;
-  std::vector<int> depth_pyramid_tex_views_;
+  TexAndViewHolder depth_pyramid_tex_;
+  // std::vector<int> depth_pyramid_tex_views_;
+  void recreate_depth_pyramid_tex();
+  void recreate_external_textures();
   int view_mip_{};
 
   size_t frame_num_{};

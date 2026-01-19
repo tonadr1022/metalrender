@@ -233,12 +233,6 @@ class RenderGraph {
  private:
   RGPass& add_pass(const std::string& name, RGPassType type);
 
-  struct TextureUsage {
-    AttachmentInfo att_info;
-    rhi::TextureHandle handle;
-    std::vector<RGResourceHandle> handles_using;
-  };
-
   struct BufferUsage {
     rhi::BufferHandle handle;
     std::vector<std::string> name_stack;
@@ -246,33 +240,13 @@ class RenderGraph {
 
   void reset();
 
-  TextureUsage* get_tex_usage(RGResourceHandle handle);
-  BufferUsage* get_buf_usage(RGResourceHandle handle);
+  AttachmentInfo* get_tex_att_info(RGResourceHandle handle);
 
   void find_deps_recursive(uint32_t pass_i, uint32_t stack_size);
 
-  std::vector<uint32_t>& get_resource_write_pass_usages(RGResourceHandle handle) {
-    return resource_pass_usages_[(int)handle.type][handle.idx].write_pass_indices;
-  }
-
-  std::vector<uint32_t>& get_resource_read_pass_usages(RGResourceHandle handle) {
-    return resource_pass_usages_[(int)handle.type][handle.idx].read_pass_indices;
-  }
-
-  template <typename... Args>
-  void emplace_back_tex_usage(Args&&... args) {
-    tex_usages_.emplace_back(std::forward<Args>(args)...);
-    resource_pass_usages_[(int)RGResourceType::Texture].emplace_back();
-  }
-
-  template <typename... Args>
-  void emplace_back_buf_usage(Args&&... args) {
-    buf_usages_.emplace_back(std::forward<Args>(args)...);
-    resource_pass_usages_[(int)RGResourceType::Buffer].emplace_back();
-  }
-
-  std::vector<TextureUsage> tex_usages_;
-  std::vector<BufferUsage> buf_usages_;
+  glm::uvec2 prev_frame_fb_size_{};
+  std::vector<AttachmentInfo> tex_att_infos_;
+  std::vector<rhi::TextureHandle> tex_att_handles_;
   std::vector<ResourcePassUsages> resource_pass_usages_[2];
   std::string get_resource_name(RGResourceHandle handle) {
     ASSERT(handle.type != RGResourceType::ExternalTexture);
@@ -301,9 +275,6 @@ class RenderGraph {
     AttachmentInfo att_info;
     rhi::TextureHandleHolder tex_handle;
   };
-
-  std::vector<AttInfoAndTex> actual_atts_;
-  std::unordered_map<uint64_t, rhi::TextureHandle> rg_resource_handle_to_actual_att_;
 
   std::vector<uint32_t> sink_passes_;
   std::vector<uint32_t> pass_stack_;

@@ -158,26 +158,9 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   rg_.init(device_);
   init_imgui();
 
-  uniforms_allocator_.emplace(1024 * 1024, device_);
+  recreate_external_textures();
 
-  {  // depth pyramid tex creation
-    auto main_size = window_->get_window_size();
-    auto size = glm::uvec3{prev_pow2(main_size.x), prev_pow2(main_size.y), 1};
-    uint32_t mip_levels = math::get_mip_levels(size.x, size.y);
-    depth_pyramid_tex_ = device_->create_tex_h(rhi::TextureDesc{
-        .format = rhi::TextureFormat::R32float,
-        .usage = (rhi::TextureUsage)(rhi::TextureUsageStorage | rhi::TextureUsageShaderWrite),
-        .dims = size,
-        .mip_levels = mip_levels,
-        .bindless = true,
-        .name = "depth_pyramid_tex"});
-    ASSERT(depth_pyramid_tex_views_.empty());
-    depth_pyramid_tex_views_.reserve(mip_levels);
-    for (size_t i = 0; i < mip_levels; i++) {
-      depth_pyramid_tex_views_.emplace_back(
-          device_->create_subresource(depth_pyramid_tex_.handle, i, 1, 0, 1));
-    }
-  }
+  uniforms_allocator_.emplace(1024 * 1024, device_);
 }
 
 void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
@@ -192,6 +175,12 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   indirect_cmd_buf_ids_.clear();
 
   set_cull_data_and_globals(args);
+  static glm::uvec2 prev_fb_size{};
+  auto curr_fb_size = window_->get_window_size();
+  if (prev_fb_size != curr_fb_size) {
+    recreate_external_textures();
+    prev_fb_size = curr_fb_size;
+  }
   add_render_graph_passes(args);
   static int i = 0;
   rg_.bake(window_->get_window_size(), i++ == 2);
@@ -439,7 +428,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                                                    std::max(1u, dp_dims.y >> (mip - 1))};
       auto read_idx = mip == 0 ? device_->get_tex(rg_.get_att_img(depth_handle))->bindless_idx()
                                : device_->get_tex_view_bindless_idx(
-                                     depth_pyramid_tex_.handle, depth_pyramid_tex_views_[mip - 1]);
+                                     depth_pyramid_tex_.handle, depth_pyramid_tex_.views[mip - 1]);
       DepthReducePC pc{
           .in_tex_dim_x = in_dims.x,
           .in_tex_dim_y = in_dims.y,
@@ -447,7 +436,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           .out_tex_dim_y = dp_dims.y >> mip,
           .in_tex_idx = read_idx,
           .out_tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
-                                                            depth_pyramid_tex_views_[mip]),
+                                                            depth_pyramid_tex_.views[mip]),
       };
       enc->push_constants(&pc, sizeof(pc));
       constexpr size_t k_tg_size = 8;
@@ -479,7 +468,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         tex_idx = gbuffer_a_tex->bindless_idx();
       } else if (debug_render_mode_ == DebugRenderMode::DepthReduceMips) {
         tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
-                                                     depth_pyramid_tex_views_[view_mip_]);
+                                                     depth_pyramid_tex_.views[view_mip_]);
         mult = 100.f;
       }
       TexOnlyPC pc{
@@ -1050,4 +1039,44 @@ void MemeRenderer123::on_key_event(int key, int action, int mods) {
 std::string MemeRenderer123::get_next_tex_upload_name() {
   return "ext_tex_" + std::to_string(tex_upload_i_++);
 }
+
+void MemeRenderer123::recreate_depth_pyramid_tex() {
+  auto main_size = window_->get_window_size();
+  auto size = glm::uvec3{prev_pow2(main_size.x), prev_pow2(main_size.y), 1};
+  uint32_t mip_levels = math::get_mip_levels(size.x, size.y);
+  if (depth_pyramid_tex_.is_valid()) {
+    auto* existing = device_->get_tex(depth_pyramid_tex_);
+    if (existing->desc().dims == size) {
+      return;
+    }
+  }
+  for (auto& v : depth_pyramid_tex_.views) {
+    device_->destroy_subresource(depth_pyramid_tex_.handle, v);
+  }
+  depth_pyramid_tex_.views.clear();
+  depth_pyramid_tex_ = TexAndViewHolder{device_->create_tex_h(rhi::TextureDesc{
+      .format = rhi::TextureFormat::R32float,
+      .usage = (rhi::TextureUsage)(rhi::TextureUsageStorage | rhi::TextureUsageShaderWrite),
+      .dims = size,
+      .mip_levels = mip_levels,
+      .bindless = true,
+      .name = "depth_pyramid_tex"})};
+  depth_pyramid_tex_.views.reserve(mip_levels);
+  for (size_t i = 0; i < mip_levels; i++) {
+    depth_pyramid_tex_.views.emplace_back(
+        device_->create_subresource(depth_pyramid_tex_.handle, i, 1, 0, 1));
+  }
+}
+
+void MemeRenderer123::recreate_external_textures() { recreate_depth_pyramid_tex(); }
+
+void MemeRenderer123::shutdown() {}
+
+TexAndViewHolder::~TexAndViewHolder() {
+  for (auto v : views) {
+    context->destroy_subresource(handle, v);
+  }
+  views.clear();
+}
+
 }  // namespace gfx

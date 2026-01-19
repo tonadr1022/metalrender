@@ -54,6 +54,7 @@ class Device {
   virtual int create_subresource(rhi::TextureHandle handle, uint32_t base_mip_level,
                                  uint32_t level_count, uint32_t base_array_layer,
                                  uint32_t layer_count) = 0;
+  virtual void destroy_subresource(rhi::TextureHandle handle, int subresource_id) = 0;
   virtual uint32_t get_tex_view_bindless_idx(rhi::TextureHandle handle, int subresource_id) = 0;
   virtual Texture* get_tex(TextureHandle handle) = 0;
   Texture* get_tex(const TextureHandleHolder& handle) { return get_tex(handle.handle); }

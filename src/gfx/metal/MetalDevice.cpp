@@ -330,6 +330,10 @@ void MetalDevice::destroy(rhi::TextureHandle handle) {
     ASSERT(tex->bindless_idx() != rhi::k_invalid_bindless_idx);
     resource_desc_heap_allocator_.free_idx(tex->bindless_idx());
   }
+  for (auto& view : tex->tex_views) {
+    ASSERT(view.tex == nullptr);
+  }
+
   if (tex->texture() && !tex->is_drawable_tex()) {
     main_res_set_->removeAllocation(tex->texture());
     tex->texture()->release();
@@ -880,6 +884,14 @@ int MetalDevice::create_subresource(rhi::TextureHandle handle, uint32_t base_mip
       (IRDescriptorTableEntry*)(get_mtl_buf(resource_descriptor_table_))->contents();
   IRDescriptorTableSetTexture(&resource_table[bindless_idx], view, 0.0f, 0);
   return subresource_id;
+}
+
+void MetalDevice::destroy_subresource(rhi::TextureHandle handle, int subresource_id) {
+  auto* tex = reinterpret_cast<MetalTexture*>(get_tex(handle));
+  ASSERT((subresource_id >= 0 && subresource_id < (int)tex->tex_views.size()));
+  auto& tv = tex->tex_views[subresource_id];
+  tv.tex->release();
+  tex->tex_views[subresource_id] = {};
 }
 
 uint32_t MetalDevice::get_tex_view_bindless_idx(rhi::TextureHandle handle, int subresource_id) {

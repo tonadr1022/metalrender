@@ -7,6 +7,7 @@
 #include "core/Logger.hpp"
 #include "gfx/CmdEncoder.hpp"
 #include "gfx/Device.hpp"
+#include "gfx/Texture.hpp"
 
 namespace gfx {
 
@@ -231,9 +232,10 @@ void RenderGraph::execute() {
   for (auto pass_i : pass_stack_) {
     rhi::CmdEncoder* enc = device_->begin_command_list();
     for (auto& barrier : pass_barrier_infos_[pass_i]) {
+      // TODO: barrier for external buffers
+      ASSERT(barrier.resource.type != RGResourceType::Buffer);
       if (barrier.resource.type == RGResourceType::Buffer) {
-        auto buf = get_buf_usage(barrier.resource)->handle;
-        enc->barrier(buf, barrier.src_stage, barrier.src_access, barrier.dst_stage,
+        enc->barrier({}, barrier.src_stage, barrier.src_access, barrier.dst_stage,
                      barrier.dst_access);
       } else {
         enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
@@ -252,8 +254,11 @@ void RenderGraph::execute() {
     external_texture_count_ = 0;
   }
 
-  tex_usages_.clear();
-  buf_usages_.clear();
+  for (size_t i = 0; i < tex_att_infos_.size(); i++) {
+    free_atts_[tex_att_infos_[i]].emplace_back(tex_att_handles_[i]);
+  }
+  tex_att_infos_.clear();
+
   resource_name_to_handle_.clear();
   resource_handle_to_name_.clear();
   tex_handle_to_handle_.clear();
@@ -264,8 +269,6 @@ void RenderGraph::execute() {
   resource_use_name_to_writer_pass_idx_.clear();
   external_buffers_.clear();
   external_textures_.clear();
-
-  rg_resource_handle_to_actual_att_.clear();
 }
 
 void RenderGraph::reset() {}
@@ -281,37 +284,21 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     intermed_pass_stack_.clear();
     pass_stack_.clear();
 
-    free_atts_.clear();
-    {
-      static std::vector<size_t> del_indices;
-      size_t i = 0;
-      for (const auto& a : actual_atts_) {
-        ASSERT(!a.att_info.is_swapchain_tex);
-        if (a.att_info.size_class == SizeClass::Swapchain && a.att_info.dims != fb_size) {
-          del_indices.emplace_back(i);
-        } else {
-          free_atts_[a.att_info].emplace_back(a.tex_handle.handle);
+    static std::vector<AttachmentInfo> stale_atts;
+    stale_atts.clear();
+
+    for (auto& [att_info, handles] : free_atts_) {
+      ASSERT(!handles.empty());
+      auto* tex = device_->get_tex(handles[0]);
+      if (att_info.size_class == SizeClass::Swapchain && glm::uvec2{tex->desc().dims} != fb_size) {
+        for (const auto& handle : handles) {
+          device_->destroy(handle);
         }
-        i++;
+        stale_atts.emplace_back(att_info);
       }
-
-      for (unsigned int i : std::ranges::reverse_view(del_indices)) {
-        actual_atts_[i] = std::move(actual_atts_.back());
-        actual_atts_.pop_back();
-      }
-      del_indices.clear();
     }
-
-    // clear old swapchain images if swapchain resized
-    std::vector<rhi::TextureHandle> stale_img_handles;
-    for (const auto& a : actual_atts_) {
-      if (a.att_info.size_class != SizeClass::Swapchain) {
-        continue;
-      }
-      ASSERT(!a.att_info.is_swapchain_tex);
-      if (a.att_info.dims != fb_size) {
-        stale_img_handles.emplace_back(a.tex_handle.handle);
-      }
+    for (auto& stale_att : stale_atts) {
+      free_atts_.erase(stale_att);
     }
   }
 
@@ -400,14 +387,19 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   }
 
   // create attachment images
-  for (const auto& usage : tex_usages_) {
-    if (usage.handle.is_valid() || usage.att_info.is_swapchain_tex) {
+  tex_att_handles_.clear();
+  for (const auto& att_info : tex_att_infos_) {
+    if (att_info.is_swapchain_tex) {
+      ASSERT(0);
       continue;
     }
-    auto att_info = usage.att_info;
-    if (att_info.size_class == SizeClass::Swapchain) {
-      att_info.dims = fb_size;
-    }
+    auto get_att_dims = [&att_info, &fb_size]() {
+      if (att_info.size_class == SizeClass::Swapchain) {
+        return fb_size;
+      }
+      return att_info.dims;
+    };
+
     rhi::TextureHandle actual_att_handle{};
     auto free_att_it = free_atts_.find(att_info);
     if (free_att_it != free_atts_.end()) {
@@ -419,11 +411,8 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     }
 
     if (!actual_att_handle.is_valid()) {
-      glm::uvec2 dims = att_info.dims;
-      if (att_info.size_class == SizeClass::Swapchain) {
-        dims = fb_size;
-      }
-      auto att_tx_handle = device_->create_tex_h(rhi::TextureDesc{
+      auto dims = get_att_dims();
+      auto att_tx_handle = device_->create_tex(rhi::TextureDesc{
           .format = att_info.format,
           .usage = is_depth_format(att_info.format) ? rhi::TextureUsageColorAttachment
                                                     : rhi::TextureUsageDepthStencilAttachment,
@@ -432,14 +421,12 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
           .array_length = att_info.array_layers,
           .bindless = true,
           .name = "render_graph_tex_att"});
-      actual_att_handle = att_tx_handle.handle;
-      actual_atts_.emplace_back(att_info, std::move(att_tx_handle));
+      actual_att_handle = att_tx_handle;
     }
 
-    for (const auto& handle : usage.handles_using) {
-      rg_resource_handle_to_actual_att_.emplace(handle.to64(), actual_att_handle);
-    }
+    tex_att_handles_.emplace_back(actual_att_handle);
   }
+  ASSERT(tex_att_handles_.size() == tex_att_infos_.size());
 
   struct ResourceState {
     rhi::AccessFlags access;
@@ -448,8 +435,8 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
 
   static std::vector<ResourceState> states[4];
   for (auto& state : states) state.clear();
-  states[(int)RGResourceType::Texture].resize(tex_usages_.size());
-  states[(int)RGResourceType::Buffer].resize(buf_usages_.size());
+  states[(int)RGResourceType::Texture].resize(tex_att_infos_.size());
+  states[(int)RGResourceType::Buffer].resize(0);
   states[(int)RGResourceType::ExternalTexture].resize(external_textures_.size());
   states[(int)RGResourceType::ExternalBuffer].resize(external_buffers_.size());
 
@@ -550,26 +537,17 @@ RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, const Attac
   ALWAYS_ASSERT(resource_handle_it == resource_name_to_handle_.end());
   RGResourceHandle handle{};
   ASSERT((att_info.is_swapchain_tex || att_info.format != rhi::TextureFormat::Undefined));
-  handle = {.idx = static_cast<uint32_t>(tex_usages_.size()), .type = RGResourceType::Texture};
-  TextureUsage tex_use{.att_info = att_info};
-  emplace_back_tex_usage(tex_use);
-  tex_usages_.back().handles_using.emplace_back(handle);
-  ALWAYS_ASSERT(tex_usages_[handle.idx].handles_using.size() <= 1);
+  handle = {.idx = static_cast<uint32_t>(tex_att_infos_.size()), .type = RGResourceType::Texture};
+  tex_att_infos_.emplace_back(att_info);
   resource_use_name_to_writer_pass_idx_.emplace(name, pass.get_idx());
   resource_name_to_handle_.emplace(name, handle);
   return handle;
 }
 
-RenderGraph::TextureUsage* RenderGraph::get_tex_usage(RGResourceHandle handle) {
+AttachmentInfo* RenderGraph::get_tex_att_info(RGResourceHandle handle) {
   ALWAYS_ASSERT(handle.type == RGResourceType::Texture);
-  ALWAYS_ASSERT(handle.idx < tex_usages_.size());
-  return &tex_usages_[handle.idx];
-}
-
-RenderGraph::BufferUsage* RenderGraph::get_buf_usage(RGResourceHandle handle) {
-  ALWAYS_ASSERT(handle.type == RGResourceType::Buffer);
-  ALWAYS_ASSERT(handle.idx < buf_usages_.size());
-  return &buf_usages_[handle.idx];
+  ALWAYS_ASSERT(handle.idx < tex_att_infos_.size());
+  return &tex_att_infos_[handle.idx];
 }
 
 void RenderGraph::find_deps_recursive(uint32_t pass_i, uint32_t stack_size) {
@@ -621,10 +599,8 @@ const char* to_string(RGResourceType type) {
 }
 
 rhi::TextureHandle RenderGraph::get_att_img(RGResourceHandle tex_handle) {
-  auto it = rg_resource_handle_to_actual_att_.find(tex_handle.to64());
-  ALWAYS_ASSERT(it != rg_resource_handle_to_actual_att_.end());
-  ASSERT(it->second.is_valid());
-  return it->second;
+  ASSERT(tex_handle.idx < tex_att_handles_.size());
+  return tex_att_handles_[tex_handle.idx];
 }
 
 RGResourceHandle RGPass::sample_tex(const std::string& name) {
