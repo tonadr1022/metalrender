@@ -1,3 +1,6 @@
+win_dims 643 595
+win_pos 995 223
+paths 7
 Models/Suzanne/glTF/Suzanne.gltf
 Models/Sponza/glTF/Sponza.gltf
 Models/Cube/glTF/Cube.gltf

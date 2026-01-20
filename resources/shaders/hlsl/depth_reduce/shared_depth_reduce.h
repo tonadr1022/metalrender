@@ -1,7 +1,7 @@
 #ifndef SHARED_DEPTH_REDUCE_H
 #define SHARED_DEPTH_REDUCE_H
 
-#include "../../shader_core.h"
+#include "../shader_core.h"
 
 cbuffer DepthReducePC HLSL_PC_REG {
   uint in_tex_dim_x;

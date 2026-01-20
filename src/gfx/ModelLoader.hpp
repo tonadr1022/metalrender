@@ -7,7 +7,7 @@
 #include "GFXTypes.hpp"
 #include "ModelInstance.hpp"
 #include "RendererTypes.hpp"
-#include "default_vertex.h"
+#include "hlsl/default_vertex.h"
 
 namespace MTL {
 class Texture;

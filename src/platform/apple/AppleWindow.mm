@@ -10,8 +10,10 @@
 
 void AppleWindow::init(KeyCallbackFn key_callback_fn,
                        CursorPosCallbackFn cursor_pos_callback_fn,
-                       bool transparent_window) {
-  Window::init(key_callback_fn, cursor_pos_callback_fn, transparent_window);
+                       bool transparent_window, int win_dims_x,
+                       int win_dims_y) {
+  Window::init(key_callback_fn, cursor_pos_callback_fn, transparent_window,
+               win_dims_x, win_dims_y);
 }
 
 void AppleWindow::set_fullscreen([[maybe_unused]] bool fullscreen) {

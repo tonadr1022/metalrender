@@ -16,7 +16,7 @@
 #include "gfx/metal/MetalCmdEncoder.hpp"
 #include "gfx/metal/MetalSampler.hpp"
 #include "gfx/metal/MetalSwapchain.hpp"
-#include "shader_constants.h"
+#include "hlsl/shader_constants.h"
 
 class Window;
 namespace CA {

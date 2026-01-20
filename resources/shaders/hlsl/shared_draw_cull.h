@@ -1,7 +1,7 @@
 #ifndef SHARED_DRAW_CULL_H
 #define SHARED_DRAW_CULL_H
 
-#include "../shader_core.h"
+#include "shader_core.h"
 
 cbuffer DrawCullPC HLSL_PC_REG {
   uint globals_buf_idx;

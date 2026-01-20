@@ -1,9 +1,9 @@
 // clang-format off
 #define COMPUTE_ROOT_SIG
 #include "root_sig.h"
-#include "../shader_constants.h"
-#include "../shader_core.h"
-#include "../default_vertex.h"
+#include "shader_constants.h"
+#include "shader_core.h"
+#include "default_vertex.h"
 #include "math.hlsli"
 #include "shared_instance_data.h"
 #include "shared_task2.h"

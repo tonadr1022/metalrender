@@ -5,18 +5,17 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
 #include <span>
 #include <vector>
 
 #include "Device.hpp"
+#include "core/EAssert.hpp"
 #include "core/Hash.hpp"
 #include "core/Logger.hpp"
 #include "gfx/Pipeline.hpp"
 
 namespace fs = std::filesystem;
 
-using HashT = uint64_t;
 namespace gfx {
 
 namespace {
@@ -74,7 +73,7 @@ std::string path_after_word(const std::filesystem::path& p, const char* word) {
   auto it = std::ranges::find(p, word);
   if (it == p.end()) return {};
 
-  ++it;  // move past "hlsl"
+  ++it;
 
   std::filesystem::path result;
   for (; it != p.end(); ++it) {
@@ -84,7 +83,9 @@ std::string path_after_word(const std::filesystem::path& p, const char* word) {
   return result.generic_string();
 }
 
-HashT get_hash_for_shader_file(const fs::path& path, const std::vector<fs::path>& dep_paths) {
+ShaderManager::HashT get_hash_for_shader_file(const fs::path& path,
+                                              const std::vector<fs::path>& dep_paths) {
+  using HashT = ShaderManager::HashT;
   auto result = static_cast<HashT>(fs::last_write_time(path).time_since_epoch().count());
   for (const auto& dep_path : dep_paths) {
     util::hash::hash_combine(
@@ -133,7 +134,7 @@ FileAndDepPaths get_dep_filepaths(const fs::path& dep_filepath) {
 
 struct FileAndHash {
   fs::path file;
-  HashT hash;
+  ShaderManager::HashT hash;
 };
 
 std::vector<FileAndHash> get_filehashes_from_file(const fs::path& hashfilepath) {
@@ -189,37 +190,129 @@ void write_file_hashes(const fs::path& out_path, std::span<FileAndHash> file_has
 
 }  // namespace
 
-void ShaderManager::init(rhi::Device* device, const std::filesystem::path&,
-                         const std::filesystem::path& shader_out_dir) {
+void ShaderManager::init(rhi::Device* device) {
   device_ = device;
-  shader_out_dir_ = shader_out_dir;
+  shader_out_dir_ = fs::path("resources/shader_out");
   depfile_dir_ = shader_out_dir_ / "deps";
+
   fs::create_directories(depfile_dir_);
   if (!fs::exists(depfile_dir_)) {
     LINFO("{} doesn't exist", depfile_dir_.string());
   }
+
   hashes_filepath_ = shader_out_dir_ / "deps.txt";
-  std::unordered_map<fs::path, HashT> path_to_existing_hash;
+
   if (fs::exists(hashes_filepath_)) {
     auto existing_shader_hashes = get_filehashes_from_file(hashes_filepath_);
-    path_to_existing_hash.reserve(existing_shader_hashes.size());
+    path_to_existing_hash_.reserve(existing_shader_hashes.size());
     for (const auto& hash : existing_shader_hashes) {
-      path_to_existing_hash.emplace(hash.file, hash.hash);
+      path_to_existing_hash_.emplace(hash.file, hash.hash);
     }
   }
 
   auto new_shader_hashes = get_new_filehashes(depfile_dir_);
   std::vector<fs::path> dirty_shaders;
   for (const auto& hash : new_shader_hashes) {
-    if (!path_to_existing_hash.contains(hash.file) ||
-        path_to_existing_hash.at(hash.file) != hash.hash) {
+    if (!path_to_existing_hash_.contains(hash.file) ||
+        path_to_existing_hash_.at(hash.file) != hash.hash) {
       compile_shader(hash.file);
     }
     clean_shaders_.insert(hash.file);
   }
+
+  for (const auto& entry : fs::recursive_directory_iterator(hlsl_src_dir)) {
+    if (!entry.is_regular_file()) continue;
+    last_write_times_.emplace(entry.path(), entry.last_write_time().time_since_epoch().count());
+    if (entry.path().extension() != ".hlsl") {
+      continue;
+    }
+    auto depfile_filepath =
+        (depfile_dir_ / path_after_word(entry.path(), "hlsl")).replace_extension(".d");
+    auto deps = get_dep_filepaths(depfile_filepath);
+    ASSERT(deps.file.extension() == ".hlsl");
+    for (const auto& d : deps.deps) {
+      filepath_to_src_hlsl_includers_[d].emplace_back(deps.file);
+    }
+  }
+
+  file_watcher_thread_ = std::jthread{[this]() {
+    std::vector<std::filesystem::path> dirty_paths;
+    dirty_paths.reserve(20);
+    while (true) {
+      std::unique_lock lk(file_watch_mtx_);
+
+      // wake up early only if shutdown
+      file_watch_cv_.wait_for(lk, std::chrono::milliseconds(100), [this] { return !running_; });
+
+      if (!running_) return;
+
+      lk.unlock();
+
+      {
+        std::lock_guard lk(compile_shaders_mtx_);
+        dirty_paths.clear();
+        for (const auto& entry : fs::recursive_directory_iterator(hlsl_src_dir)) {
+          if (!entry.is_regular_file()) {
+            continue;
+          }
+          auto last_write_time = entry.last_write_time().time_since_epoch().count();
+          const auto& path = entry.path();
+          auto it = last_write_times_.find(path);
+          if (it == last_write_times_.end() || it->second < last_write_time) {
+            dirty_paths.emplace_back(path);
+            LINFO("DIRTY PATH {} {}", path.string(), last_write_time);
+            last_write_times_[path] = last_write_time;
+          }
+        }
+
+        // map of src file to dependencies
+        for (const auto& dirty_path : dirty_paths) {
+          auto it = filepath_to_src_hlsl_includers_.find(dirty_path);
+          if (it != filepath_to_src_hlsl_includers_.end()) {
+            for (const auto& includer_path : it->second) {
+              // TODO: recompile the pipelines that use it
+              compile_shader(includer_path);
+              clean_shaders_.insert(includer_path);
+            }
+          }
+        }
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+  }};
+}
+
+void ShaderManager::recompile_shaders() {
+  std::lock_guard l(compile_shaders_mtx_);
+  recompile_shaders_no_lock();
+}
+
+void ShaderManager::recompile_shaders_no_lock() {
+  for (const auto& entry : fs::recursive_directory_iterator(hlsl_src_dir)) {
+    if (!entry.is_regular_file() || entry.path().extension() != ".hlsl") {
+      continue;
+    }
+    auto depfile_filepath =
+        (depfile_dir_ / path_after_word(entry.path(), "hlsl")).replace_extension(".d");
+    auto deps = get_dep_filepaths(depfile_filepath);
+    auto hash = get_hash_for_shader_file(deps.file, deps.deps);
+    if (!path_to_existing_hash_.contains(entry.path()) ||
+        path_to_existing_hash_.at(entry.path()) != hash) {
+      compile_shader(entry.path());
+    }
+  }
 }
 
 void ShaderManager::shutdown() {
+  {
+    std::lock_guard l(file_watch_mtx_);
+    running_ = false;
+  }
+  file_watch_cv_.notify_one();
+
+  ASSERT(file_watcher_thread_.joinable());
+  file_watcher_thread_.join();
+
   auto new_hashes = get_new_filehashes(depfile_dir_);
   if (clean_shaders_.size()) {
     // LINFO("{} dirty shaders still, this shouldn't happen!", dirty_shaders_.size());
@@ -281,7 +374,7 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path) {
   auto relative = path_after_word(path, "hlsl");
   auto out_filepath =
       (fs::path("resources/shader_out/metal") / relative).replace_extension(".dxil");
-  auto dep_filepath = (fs::path("resources/shader_out/deps") / relative).replace_extension(".dxil");
+  auto dep_filepath = (fs::path("resources/shader_out/deps") / relative).replace_extension(".d");
   fs::create_directories(out_filepath.parent_path());
   fs::create_directories(dep_filepath.parent_path());
   std::string cmd1 =
@@ -296,6 +389,17 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path) {
   std::string metallib_compile_args =
       std::format("metal-shaderconverter {} -o {}", out_filepath.string(), metallib_path.string());
   std::system(metallib_compile_args.c_str());
+
+  // update hash
+  auto deps = get_dep_filepaths(dep_filepath);
+  auto hash = get_hash_for_shader_file(deps.file, deps.deps);
+  if (path_to_existing_hash_.contains(path)) {
+    LINFO("Updating hash {} {}", path.string(), hash);
+  } else {
+    LINFO("Adding hash {} {}", path.string(), hash);
+  }
+  path_to_existing_hash_[path] = hash;
+
   return true;
 }
 

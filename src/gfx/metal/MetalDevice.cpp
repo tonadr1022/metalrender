@@ -10,7 +10,6 @@
 #include "Window.hpp"
 #include "gfx/metal/Metal3CmdEncoder.hpp"
 #include "imgui.h"
-#include "shader_constants.h"
 
 #define IR_RUNTIME_METALCPP
 #define IR_PRIVATE_IMPLEMENTATION

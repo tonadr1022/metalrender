@@ -5,7 +5,7 @@
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
 #include "gfx/GFXTypes.hpp"
-#include "shader_constants.h"
+#include "hlsl/shader_constants.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image/stb_image.h>

@@ -1,7 +1,7 @@
 #ifndef SHARED_SHADE_H
 #define SHARED_SHADE_H
 
-#include "../shader_core.h"
+#include "shader_core.h"
 
 cbuffer ShadePC HLSL_PC_REG {
   uint gbuffer_a_tex_idx;

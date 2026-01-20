@@ -1,8 +1,8 @@
 // clang-format off
 #define COMPUTE_ROOT_SIG
 #include "root_sig.h"
-#include "../shader_constants.h"
-#include "../shader_core.h"
+#include "shader_constants.h"
+#include "shader_core.h"
 #include "shared_task2.h"
 #include "shared_mesh_data.h"
 #include "math.hlsli"
@@ -10,7 +10,7 @@
 #include "shared_instance_data.h"
 #include "shared_globals.h"
 #include "shared_cull_data.h"
-#include "../default_vertex.h"
+#include "default_vertex.h"
 // clang-format on
 
 groupshared Payload s_Payload;

@@ -1,7 +1,7 @@
 #ifndef SHARED_INSTANCE_DATA_H
 #define SHARED_INSTANCE_DATA_H
 
-#include "../shader_core.h"
+#include "shader_core.h"
 
 struct InstanceData {
   packed_float3 translation;

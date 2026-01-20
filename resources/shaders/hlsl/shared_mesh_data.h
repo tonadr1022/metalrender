@@ -1,7 +1,7 @@
 #ifndef SHARED_MESH_DATA_H
 #define SHARED_MESH_DATA_H
 
-#include "../shader_core.h"
+#include "shader_core.h"
 
 struct MeshData {
   uint32_t meshlet_base;

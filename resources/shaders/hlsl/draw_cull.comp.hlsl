@@ -5,7 +5,7 @@
 #include "shared_mesh_data.h"
 #include "shared_instance_data.h"
 #include "shared_task_cmd.h"
-#include "../shader_constants.h"
+#include "shader_constants.h"
 #include "math.hlsli"
 #include "shared_cull_data.h"
 #include "shared_globals.h"

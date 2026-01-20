@@ -1,7 +1,7 @@
 #ifndef SHARED_TEST_TASK_H
 #define SHARED_TEST_TASK_H
 
-#include "../shader_core.h"
+#include "shader_core.h"
 
 cbuffer TestTaskPC HLSL_PC_REG {
   float4x4 vp;

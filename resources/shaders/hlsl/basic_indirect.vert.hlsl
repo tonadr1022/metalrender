@@ -1,7 +1,7 @@
 // clang-format off
 #include "root_sig.h"
 #include "material.h"
-#include "../default_vertex.h"
+#include "default_vertex.h"
 #include "shared_basic_indirect.h"
 #include "shared_indirect.h"
 #include "math.hlsli"

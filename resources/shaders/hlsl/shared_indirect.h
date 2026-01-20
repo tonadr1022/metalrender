@@ -1,7 +1,7 @@
 #ifndef SHARED_INDIRECT_H
 #define SHARED_INDIRECT_H
 
-#include "../shader_core.h"
+#include "shader_core.h"
 #include "shared_instance_data.h"
 
 struct IndexedIndirectDrawCmd {

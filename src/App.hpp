@@ -21,11 +21,14 @@ struct App {
  private:
   void on_hide_mouse_change();
   void load_config();
+  void write_config();
   void on_imgui(float dt);
   void load_model(const std::filesystem::path &path, const glm::mat4 &transform);
 
   struct Config {
     std::vector<std::filesystem::path> paths;
+    glm::ivec2 win_dims{};
+    glm::ivec2 win_pos{};
   };
   Config config_;
   std::filesystem::path resource_dir_;

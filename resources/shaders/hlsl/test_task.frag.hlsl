@@ -5,7 +5,6 @@
 // clang-format on
 
 [RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target0 {
-  // return input.color;
   StructuredBuffer<M4Material> material_buf = ResourceDescriptorHeap[mat_buf_idx];
   M4Material material = material_buf[input.material_id];
   SamplerState samp = SamplerDescriptorHeap[LINEAR_SAMPLER_IDX];

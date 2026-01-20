@@ -6,7 +6,7 @@ class AppleWindow final : public Window {
  public:
   ~AppleWindow() override = default;
   void init(KeyCallbackFn key_callback_fn, CursorPosCallbackFn cursor_pos_callback_fn,
-            bool transparent_window) override;
+            bool transparent_window, int win_dims_x, int win_dims_y) override;
 
   void set_fullscreen([[maybe_unused]] bool fullscreen) override;
 

@@ -10,7 +10,6 @@
 #include "core/Logger.hpp"
 #include "core/MathUtil.hpp"
 #include "core/Util.hpp"
-#include "default_vertex.h"
 #include "gfx/Buffer.hpp"
 #include "gfx/CmdEncoder.hpp"
 #include "gfx/Config.hpp"
@@ -20,8 +19,10 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/Swapchain.hpp"
 #include "gfx/Texture.hpp"
+#include "hlsl/default_vertex.h"
 #include "hlsl/depth_reduce/shared_depth_reduce.h"
 #include "hlsl/material.h"
+#include "hlsl/shader_constants.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
 #include "hlsl/shared_cull_data.h"
@@ -34,7 +35,6 @@
 #include "hlsl/shared_tex_only.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
-#include "shader_constants.h"
 
 namespace {
 
@@ -69,7 +69,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   device_ = cinfo.device;
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
-  mgr_.init(device_, resource_dir_ / "shaders", resource_dir_ / "shader_out");
+  mgr_.init(device_);
 
   {
     // TODO: streamline
@@ -1018,7 +1018,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
   }
 }
 
-void MemeRenderer123::on_key_event(int key, int action, int mods) {
+bool MemeRenderer123::on_key_event(int key, int action, int mods) {
   if (action == GLFW_PRESS) {
     if (key == GLFW_KEY_G && mods & GLFW_MOD_CONTROL) {
       if (mods & GLFW_MOD_SHIFT) {
@@ -1032,8 +1032,16 @@ void MemeRenderer123::on_key_event(int key, int action, int mods) {
         debug_render_mode_ =
             (DebugRenderMode)(((int)debug_render_mode_ + 1) % (int)DebugRenderMode::Count);
       }
+      return true;
+    }
+
+    if (key == GLFW_KEY_R && mods & GLFW_MOD_CONTROL) {
+      LINFO("Recompiling shaders.");
+      mgr_.recompile_shaders();
+      return true;
     }
   }
+  return false;
 }
 
 std::string MemeRenderer123::get_next_tex_upload_name() {

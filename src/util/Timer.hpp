@@ -24,6 +24,7 @@ class Timer {
 
   void Print() { LINFO("ElapsedMS: {}", ElapsedMS()); }
   void PrintMicro() { LINFO("ElapsedMicro: {}", ElapsedMicro()); }
+
   void Reset(std::string_view msg) {
     Print(msg);
     Reset();
@@ -39,4 +40,9 @@ class Timer {
 class PrintTimerMicro : public Timer {
  public:
   ~PrintTimerMicro() { PrintMicro(); }
+};
+
+class PrintTimerMilli : public Timer {
+ public:
+  ~PrintTimerMilli() { Print(); }
 };

@@ -1,4 +1,4 @@
-#include "../shader_core.h"
+#include "shader_core.h"
 
 cbuffer BasicTriPC HLSL_PC_REG {
   float4x4 mvp;

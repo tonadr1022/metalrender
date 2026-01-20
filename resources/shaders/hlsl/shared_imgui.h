@@ -1,7 +1,7 @@
 #ifndef SHARED_IMGUI_H
 #define SHARED_IMGUI_H
 
-#include "../shader_core.h"
+#include "shader_core.h"
 
 cbuffer ImGuiPC HLSL_PC_REG {
   float4x4 proj;

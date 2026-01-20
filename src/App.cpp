@@ -40,7 +40,8 @@ App::App() {
   bool transparent_window = true;
   window_->init([this](int key, int action, int mods) { on_key_event(key, action, mods); },
                 [this](double x_pos, double y_pos) { on_curse_pos_event(x_pos, y_pos); },
-                transparent_window);
+                transparent_window, config_.win_dims.x, config_.win_dims.y);
+  window_->set_window_position(config_.win_pos);
   device_->init({
       .window = window_.get(),
       .shader_lib_dir = resource_dir_ / "shader_out",
@@ -160,6 +161,7 @@ void App::run() {
   //   voxel_world_->shutdown();
   // }
 
+  write_config();
   renderer_.shutdown();
   ResourceManager::shutdown();
   window_->shutdown();
@@ -224,9 +226,39 @@ void App::load_config() {
     return;
   }
 
-  std::string path;
-  while (f >> path) {
-    config_.paths.emplace_back(path);
+  std::string token;
+  while (f >> token) {
+    if (token == "win_dims") {
+      f >> token;
+      config_.win_dims.x = std::stoull(token);
+      f >> token;
+      config_.win_dims.y = std::stoull(token);
+    } else if (token == "win_pos") {
+      f >> token;
+      config_.win_pos.x = std::stoull(token);
+      f >> token;
+      config_.win_pos.y = std::stoull(token);
+    } else if (token == "paths") {
+      f >> token;
+      int path_count = std::stoull(token);
+      for (int i = 0; i < path_count; i++) {
+        f >> token;
+        config_.paths.emplace_back(token);
+      }
+    }
+  }
+}
+
+void App::write_config() {
+  const std::filesystem::path config_file{resource_dir_ / "config.txt"};
+  std::ofstream f(config_file);
+  auto win_dims = window_->get_window_not_framebuffer_size();
+  f << "win_dims " << win_dims.x << ' ' << win_dims.y << '\n';
+  auto win_pos = window_->get_window_position();
+  f << "win_pos " << win_pos.x << ' ' << win_pos.y << '\n';
+  f << "paths " << config_.paths.size() << '\n';
+  for (const auto& path : config_.paths) {
+    f << path.generic_string() << '\n';
   }
 }
 
