@@ -31,6 +31,7 @@ class ShaderManager {
   bool compile_shader(const std::filesystem::path& path);
   void recompile_shaders();
   void recompile_shaders_no_lock();
+  void replace_dirty_pipelines();
 
  private:
   std::filesystem::path get_shader_path(const std::string& relative_path, rhi::ShaderType type);
@@ -38,8 +39,15 @@ class ShaderManager {
   std::unordered_set<std::filesystem::path> clean_shaders_;
   std::unordered_map<std::filesystem::path, HashT> path_to_existing_hash_;
   std::unordered_map<std::filesystem::path, uint64_t> last_write_times_;
+  std::unordered_map<std::filesystem::path, std::unordered_set<uint64_t>> path_to_pipelines_using_;
   std::unordered_map<std::filesystem::path, std::vector<std::filesystem::path>>
       filepath_to_src_hlsl_includers_;
+  std::mutex pipeline_recompile_mtx_;
+  std::vector<rhi::PipelineHandle> pipeline_recompile_requests_;
+
+  std::unordered_map<uint64_t, rhi::GraphicsPipelineCreateInfo> graphics_pipeline_cinfos_;
+  std::unordered_map<uint64_t, rhi::ShaderCreateInfo> compute_pipeline_cinfos_;
+
   std::unordered_map<std::filesystem::path, std::vector<std::filesystem::path>>
       src_hlsl_to_dependencies_;
   std::filesystem::path shader_out_dir_;

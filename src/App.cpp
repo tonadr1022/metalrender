@@ -47,6 +47,7 @@ App::App() {
       .shader_lib_dir = resource_dir_ / "shader_out",
       .app_name = "lol",
       .transparent_window = true,
+      .hot_reload_enabled = true,
   });
 
   on_hide_mouse_change();

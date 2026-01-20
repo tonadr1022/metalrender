@@ -2,10 +2,12 @@
 
 #include <QuartzCore/QuartzCore.h>
 
+#include <Foundation/NSData.hpp>
 #include <Foundation/NSObject.hpp>
 #include <Metal/MTLRenderPipeline.hpp>
 #include <Metal/Metal.hpp>
 #include <QuartzCore/CAMetalLayer.hpp>
+#include <fstream>
 
 #include "Window.hpp"
 #include "gfx/metal/Metal3CmdEncoder.hpp"
@@ -143,6 +145,7 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
   mtl4_enabled_ = metal_init_info.prefer_mtl4;
   shader_lib_dir_ = init_info.shader_lib_dir;
   shader_lib_dir_ /= "metal";
+  hot_reload_enabled_ = init_info.hot_reload_enabled;
 
   auto* win = dynamic_cast<Window*>(init_info.window);
   if (!win) {
@@ -442,121 +445,18 @@ void set_shader_stage_functions(const rhi::ShaderCreateInfo& shader_info, T& des
 
 rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
     const rhi::GraphicsPipelineCreateInfo& cinfo) {
-  using ShaderType = rhi::ShaderType;
-
-  bool is_vertex_pipeline{};
-  for (const auto& shader_info : cinfo.shaders) {
-    if (shader_info.type == ShaderType::Vertex) {
-      is_vertex_pipeline = true;
-      break;
-    }
+  auto* render_pso = create_graphics_pipeline_internal(cinfo);
+  if (!render_pso) {
+    return {};
   }
-
-  auto set_color_blend_atts = [&cinfo](auto& desc) {
-    int color_format_cnt = 0;
-    for (auto format : cinfo.rendering.color_formats) {
-      if (format != rhi::TextureFormat::Undefined) {
-        color_format_cnt++;
-      } else {
-        break;
-      }
-    }
-    for (int i = 0; i < color_format_cnt; i++) {
-      rhi::TextureFormat format = cinfo.rendering.color_formats[i];
-      desc->colorAttachments()->object(i)->setPixelFormat(mtl::util::convert(format));
-    }
-    if (cinfo.blend.attachments.size() > 0) {
-      ALWAYS_ASSERT(cinfo.blend.attachments.size() == (size_t)color_format_cnt);
-    }
-
-    for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
-      const auto& info_att = cinfo.blend.attachments[i];
-      auto* att = desc->colorAttachments()->object(i);
-      att->setSourceRGBBlendFactor(convert(info_att.src_color_factor));
-      att->setDestinationRGBBlendFactor(convert(info_att.dst_color_factor));
-      att->setRgbBlendOperation(convert(info_att.color_blend_op));
-      att->setSourceAlphaBlendFactor(convert(info_att.src_alpha_factor));
-      att->setDestinationAlphaBlendFactor(convert(info_att.dst_alpha_factor));
-      att->setAlphaBlendOperation(convert(info_att.alpha_blend_op));
-    }
-  };
-
-  MTL::RenderPipelineState* result{};
-  NS::Error* err{};
-
-  if (mtl4_enabled_) {
-    MTL4::RenderPipelineDescriptor* desc = MTL4::RenderPipelineDescriptor::alloc()->init();
-    for (const auto& shader_info : cinfo.shaders) {
-      if (shader_info.type == ShaderType::None) {
-        break;
-      }
-      set_shader_stage_functions(
-          shader_info, desc, "main",
-          create_or_get_lib(get_metallib_path_from_shader_info(shader_info)));
-    }
-
-    set_color_blend_atts(desc);
-
-    for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
-      desc->colorAttachments()->object(i)->setBlendingState(
-          cinfo.blend.attachments[i].enable ? MTL4::BlendStateEnabled : MTL4::BlendStateDisabled);
-    }
-    desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);
-
-    result = mtl4_resources_->shader_compiler->newRenderPipelineState(desc, nullptr, &err);
-
-  } else {
-    auto set_shader_stage_functions_for_desc = [this, &cinfo](auto desc) {
-      for (const auto& shader_info : cinfo.shaders) {
-        if (shader_info.type == ShaderType::None) {
-          break;
-        }
-        set_shader_stage_functions(
-            shader_info, desc, "main",
-            create_or_get_lib(get_metallib_path_from_shader_info(shader_info)));
-      }
-    };
-
-    auto create_pso = [this, &set_shader_stage_functions_for_desc, &set_color_blend_atts, &cinfo](
-                          auto desc, NS::Error** err) {
-      if (cinfo.rendering.depth_format != rhi::TextureFormat::Undefined) {
-        desc->setDepthAttachmentPixelFormat(mtl::util::convert(cinfo.rendering.depth_format));
-      }
-      set_shader_stage_functions_for_desc(desc);
-      set_color_blend_atts(desc);
-      for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
-        desc->colorAttachments()->object(i)->setBlendingEnabled(cinfo.blend.attachments[i].enable);
-      }
-      desc->setSupportIndirectCommandBuffers(true);
-      if constexpr (std::is_same_v<decltype(desc), MTL::RenderPipelineDescriptor*>) {
-        return device_->newRenderPipelineState(desc, err);
-      } else {
-        return device_->newRenderPipelineState(desc, MTL::PipelineOptionNone, nullptr, err);
-      }
-    };
-
-    if (!is_vertex_pipeline) {
-      MTL::MeshRenderPipelineDescriptor* desc = MTL::MeshRenderPipelineDescriptor::alloc()->init();
-      desc->setDepthAttachmentPixelFormat(mtl::util::convert(cinfo.rendering.depth_format));
-      result = create_pso(desc, &err);
-    } else {
-      MTL::RenderPipelineDescriptor* desc = MTL::RenderPipelineDescriptor::alloc()->init();
-      result = create_pso(desc, &err);
-    }
-  }
-
-  if (!result) {
-    LERROR("Failed to create MTL3 render pipeline {}", mtl::util::get_err_string(err));
-  }
-
-  return pipeline_pool_.alloc(MetalPipeline{result, nullptr});
+  return pipeline_pool_.alloc(MetalPipeline{render_pso, nullptr});
 }
 
 rhi::PipelineHandle MetalDevice::create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo) {
-  auto path = (shader_lib_dir_ / cinfo.path).concat(".comp.metallib");
-  ASSERT(std::filesystem::exists(path));
-  MTL::ComputePipelineState* pso = compile_mtl_compute_pipeline(path, "main");
-  ASSERT(pso);
+  auto* pso = create_compute_pipeline_internal(cinfo);
+  if (!pso) {
+    return {};
+  }
   return pipeline_pool_.alloc(MetalPipeline{nullptr, pso});
 }
 
@@ -587,12 +487,34 @@ rhi::SamplerHandle MetalDevice::create_sampler(const rhi::SamplerDesc& desc) {
   return sampler_pool_.alloc(desc, sampler, bindless_idx);
 }
 
-MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path) {
+MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path, bool) {
   NS::Error* err{};
   auto it = path_to_lib_.find(path.string());
   if (it != path_to_lib_.end()) {
     return it->second;
   }
+  // read file to buffer to bypass caching for hot reload
+  if (hot_reload_enabled_) {
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    std::vector<char> buffer(size);
+    if (file.read(buffer.data(), size)) {
+      dispatch_data_t data = dispatch_data_create(buffer.data(), buffer.size(), nullptr,
+                                                  DISPATCH_DATA_DESTRUCTOR_DEFAULT);
+
+      auto* lib = device_->newLibrary(data, &err);
+      dispatch_release(data);
+      if (err) {
+        mtl::util::print_err(err);
+        return nullptr;
+      }
+      return lib;
+    }
+    LINFO("Failed to read file {}", path.string());
+    return nullptr;
+  }
+
   auto* lib = device_->newLibrary(mtl::util::string(path), &err);
   if (err) {
     mtl::util::print_err(err);
@@ -719,7 +641,7 @@ void MetalDevice::copy_to_buffer(const void* src, size_t src_size, rhi::BufferHa
 }
 
 MTL::ComputePipelineState* MetalDevice::compile_mtl_compute_pipeline(
-    const std::filesystem::path& path, const char* entry_point) {
+    const std::filesystem::path& path, const char* entry_point, bool) {
   if (mtl4_enabled_) {
     MTL4::ComputePipelineDescriptor* desc = MTL4::ComputePipelineDescriptor::alloc()->init();
     MTL::Library* lib = create_or_get_lib(path);
@@ -914,4 +836,160 @@ void MetalDevice::get_all_buffers(std::vector<rhi::Buffer*>& out_buffers) {
       }
     }
   }
+}
+
+bool MetalDevice::replace_pipeline(rhi::PipelineHandle handle,
+                                   const rhi::GraphicsPipelineCreateInfo& cinfo) {
+  auto* pipeline = pipeline_pool_.get(handle);
+  if (!pipeline) {
+    return false;
+  }
+  auto* new_render_pso = create_graphics_pipeline_internal(cinfo);
+  if (!new_render_pso) {
+    return false;
+  }
+  if (pipeline->render_pso) {
+    pipeline->render_pso->release();
+  }
+  pipeline->render_pso = new_render_pso;
+  return true;
+}
+
+bool MetalDevice::replace_compute_pipeline(rhi::PipelineHandle handle,
+                                           const rhi::ShaderCreateInfo& cinfo) {
+  auto* pipeline = pipeline_pool_.get(handle);
+  if (!pipeline) {
+    return false;
+  }
+  auto* new_compute_pso = create_compute_pipeline_internal(cinfo);
+  if (!new_compute_pso) {
+    return false;
+  }
+  if (pipeline->compute_pso) {
+    pipeline->compute_pso->release();
+  }
+  pipeline->compute_pso = new_compute_pso;
+  return true;
+}
+
+MTL::RenderPipelineState* MetalDevice::create_graphics_pipeline_internal(
+    const rhi::GraphicsPipelineCreateInfo& cinfo) {
+  using ShaderType = rhi::ShaderType;
+
+  bool is_vertex_pipeline{};
+  for (const auto& shader_info : cinfo.shaders) {
+    if (shader_info.type == ShaderType::Vertex) {
+      is_vertex_pipeline = true;
+      break;
+    }
+  }
+
+  auto set_color_blend_atts = [&cinfo](auto& desc) {
+    int color_format_cnt = 0;
+    for (auto format : cinfo.rendering.color_formats) {
+      if (format != rhi::TextureFormat::Undefined) {
+        color_format_cnt++;
+      } else {
+        break;
+      }
+    }
+    for (int i = 0; i < color_format_cnt; i++) {
+      rhi::TextureFormat format = cinfo.rendering.color_formats[i];
+      desc->colorAttachments()->object(i)->setPixelFormat(mtl::util::convert(format));
+    }
+    if (cinfo.blend.attachments.size() > 0) {
+      ALWAYS_ASSERT(cinfo.blend.attachments.size() == (size_t)color_format_cnt);
+    }
+
+    for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
+      const auto& info_att = cinfo.blend.attachments[i];
+      auto* att = desc->colorAttachments()->object(i);
+      att->setSourceRGBBlendFactor(convert(info_att.src_color_factor));
+      att->setDestinationRGBBlendFactor(convert(info_att.dst_color_factor));
+      att->setRgbBlendOperation(convert(info_att.color_blend_op));
+      att->setSourceAlphaBlendFactor(convert(info_att.src_alpha_factor));
+      att->setDestinationAlphaBlendFactor(convert(info_att.dst_alpha_factor));
+      att->setAlphaBlendOperation(convert(info_att.alpha_blend_op));
+    }
+  };
+
+  MTL::RenderPipelineState* result{};
+  NS::Error* err{};
+
+  if (mtl4_enabled_) {
+    MTL4::RenderPipelineDescriptor* desc = MTL4::RenderPipelineDescriptor::alloc()->init();
+    for (const auto& shader_info : cinfo.shaders) {
+      if (shader_info.type == ShaderType::None) {
+        break;
+      }
+      set_shader_stage_functions(
+          shader_info, desc, "main",
+          create_or_get_lib(get_metallib_path_from_shader_info(shader_info)));
+    }
+
+    set_color_blend_atts(desc);
+
+    for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
+      desc->colorAttachments()->object(i)->setBlendingState(
+          cinfo.blend.attachments[i].enable ? MTL4::BlendStateEnabled : MTL4::BlendStateDisabled);
+    }
+    desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);
+
+    result = mtl4_resources_->shader_compiler->newRenderPipelineState(desc, nullptr, &err);
+
+  } else {
+    auto set_shader_stage_functions_for_desc = [this, &cinfo](auto desc) {
+      for (const auto& shader_info : cinfo.shaders) {
+        if (shader_info.type == ShaderType::None) {
+          break;
+        }
+        set_shader_stage_functions(
+            shader_info, desc, "main",
+            create_or_get_lib(get_metallib_path_from_shader_info(shader_info)));
+      }
+    };
+
+    auto create_pso = [this, &set_shader_stage_functions_for_desc, &set_color_blend_atts, &cinfo](
+                          auto desc, NS::Error** err) {
+      if (cinfo.rendering.depth_format != rhi::TextureFormat::Undefined) {
+        desc->setDepthAttachmentPixelFormat(mtl::util::convert(cinfo.rendering.depth_format));
+      }
+      set_shader_stage_functions_for_desc(desc);
+      set_color_blend_atts(desc);
+      for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
+        desc->colorAttachments()->object(i)->setBlendingEnabled(cinfo.blend.attachments[i].enable);
+      }
+      desc->setSupportIndirectCommandBuffers(true);
+      if constexpr (std::is_same_v<decltype(desc), MTL::RenderPipelineDescriptor*>) {
+        return device_->newRenderPipelineState(desc, err);
+      } else {
+        return device_->newRenderPipelineState(desc, MTL::PipelineOptionNone, nullptr, err);
+      }
+    };
+
+    if (!is_vertex_pipeline) {
+      MTL::MeshRenderPipelineDescriptor* desc = MTL::MeshRenderPipelineDescriptor::alloc()->init();
+      desc->setDepthAttachmentPixelFormat(mtl::util::convert(cinfo.rendering.depth_format));
+      result = create_pso(desc, &err);
+    } else {
+      MTL::RenderPipelineDescriptor* desc = MTL::RenderPipelineDescriptor::alloc()->init();
+      result = create_pso(desc, &err);
+    }
+  }
+
+  if (!result) {
+    LERROR("Failed to create MTL3 render pipeline {}", mtl::util::get_err_string(err));
+  }
+
+  return result;
+}
+
+MTL::ComputePipelineState* MetalDevice::create_compute_pipeline_internal(
+    const rhi::ShaderCreateInfo& cinfo) {
+  auto path = (shader_lib_dir_ / cinfo.path).concat(".comp.metallib");
+  if (!std::filesystem::exists(path)) {
+    LERROR("Compute metallib not found at path: {}", path.string());
+    return nullptr;
+  }
+  return compile_mtl_compute_pipeline(path, "main");
 }

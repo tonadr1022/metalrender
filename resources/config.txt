@@ -1,5 +1,5 @@
-win_dims 643 595
-win_pos 995 223
+win_dims 885 595
+win_pos 638 261
 paths 7
 Models/Suzanne/glTF/Suzanne.gltf
 Models/Sponza/glTF/Sponza.gltf

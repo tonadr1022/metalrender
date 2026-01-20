@@ -173,6 +173,8 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
     return;
   }
 
+  mgr_.replace_dirty_pipelines();
+
   indirect_cmd_buf_ids_.clear();
 
   set_cull_data_and_globals(args);

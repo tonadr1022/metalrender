@@ -90,7 +90,16 @@ class MetalDevice : public rhi::Device {
 
   rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) override;
+
+  MTL::RenderPipelineState* create_graphics_pipeline_internal(
+      const rhi::GraphicsPipelineCreateInfo& cinfo);
+
+  bool replace_pipeline(rhi::PipelineHandle handle,
+                        const rhi::GraphicsPipelineCreateInfo& cinfo) override;
+  bool replace_compute_pipeline(rhi::PipelineHandle handle,
+                                const rhi::ShaderCreateInfo& cinfo) override;
   rhi::PipelineHandle create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo) override;
+  MTL::ComputePipelineState* create_compute_pipeline_internal(const rhi::ShaderCreateInfo& cinfo);
 
   void submit_frame() override;
   [[nodiscard]] const Info& get_info() const override { return info_; }
@@ -123,7 +132,8 @@ class MetalDevice : public rhi::Device {
 
  private:
   MTL::ComputePipelineState* compile_mtl_compute_pipeline(const std::filesystem::path& path,
-                                                          const char* entry_point = "comp_main");
+                                                          const char* entry_point = "comp_main",
+                                                          bool replace = false);
 
   std::filesystem::path get_metallib_path_from_shader_info(
       const rhi::ShaderCreateInfo& shader_info);
@@ -233,7 +243,7 @@ class MetalDevice : public rhi::Device {
     return reinterpret_cast<MetalTexture*>(get_tex(handle))->texture();
   }
 
-  MTL::Library* create_or_get_lib(const std::filesystem::path& path);
+  MTL::Library* create_or_get_lib(const std::filesystem::path& path, bool replace = false);
   std::unordered_map<std::string, MTL::Library*> path_to_lib_;
 
   MTL::ResidencySet* make_residency_set();
@@ -271,6 +281,7 @@ class MetalDevice : public rhi::Device {
     size_t total_buffer_space_allocated;
   };
   RequestedAllocationSizes req_alloc_sizes_{};
+  bool hot_reload_enabled_{true};
 };
 
 struct GLFWwindow;

@@ -32,6 +32,7 @@ class Device {
     bool validation_layers_enabled{true};
     bool transparent_window{true};
     size_t frames_in_flight{2};
+    bool hot_reload_enabled{false};
   };
   virtual ~Device() = default;
   virtual void init(const InitInfo& init_info) = 0;
@@ -69,6 +70,10 @@ class Device {
   virtual void destroy(PipelineHandle handle) = 0;
   virtual rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) = 0;
+  virtual bool replace_pipeline(rhi::PipelineHandle handle,
+                                const rhi::GraphicsPipelineCreateInfo& cinfo) = 0;
+  virtual bool replace_compute_pipeline(rhi::PipelineHandle handle,
+                                        const rhi::ShaderCreateInfo& cinfo) = 0;
   [[nodiscard]] rhi::PipelineHandleHolder create_graphics_pipeline_h(
       const rhi::GraphicsPipelineCreateInfo& cinfo) {
     return rhi::PipelineHandleHolder{create_graphics_pipeline(cinfo), this};

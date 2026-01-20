@@ -260,19 +260,30 @@ void ShaderManager::init(rhi::Device* device) {
           auto it = last_write_times_.find(path);
           if (it == last_write_times_.end() || it->second < last_write_time) {
             dirty_paths.emplace_back(path);
-            LINFO("DIRTY PATH {} {}", path.string(), last_write_time);
             last_write_times_[path] = last_write_time;
           }
         }
 
-        // map of src file to dependencies
+        auto recompile = [this](const fs::path& path) {
+          compile_shader(path);
+          clean_shaders_.insert(path);
+          // recompile the pipelines using the shader
+          auto it = path_to_pipelines_using_.find(path);
+          ASSERT(it != path_to_pipelines_using_.end());
+          for (const auto& pipeline_handle : it->second) {
+            std::lock_guard l(pipeline_recompile_mtx_);
+            pipeline_recompile_requests_.emplace_back(pipeline_handle);
+          }
+        };
+
         for (const auto& dirty_path : dirty_paths) {
           auto it = filepath_to_src_hlsl_includers_.find(dirty_path);
+          if (dirty_path.extension() == ".hlsl") {
+            recompile(dirty_path);
+          }
           if (it != filepath_to_src_hlsl_includers_.end()) {
             for (const auto& includer_path : it->second) {
-              // TODO: recompile the pipelines that use it
-              compile_shader(includer_path);
-              clean_shaders_.insert(includer_path);
+              recompile(includer_path);
             }
           }
         }
@@ -329,33 +340,43 @@ bool ShaderManager::shader_dirty(const std::filesystem::path& path) {
 
 rhi::PipelineHandleHolder ShaderManager::create_graphics_pipeline(
     const rhi::GraphicsPipelineCreateInfo& cinfo) {
+  std::array<std::filesystem::path, 10> paths;
+  size_t shader_cnt = 0;
   for (const auto& shader : cinfo.shaders) {
     if (shader.type == rhi::ShaderType::None) break;
-    std::filesystem::path shader_source_path = get_shader_path(shader.path, shader.type);
+    paths[shader_cnt] = get_shader_path(shader.path, shader.type);
+    const auto& shader_source_path = paths[shader_cnt];
     if (shader_dirty(shader_source_path)) {
-      LINFO("need to cpi {}", shader_source_path.string());
       bool success = compile_shader(shader_source_path);
       if (!success) {
         return {};
       }
       clean_shaders_.insert(shader_source_path);
     }
+    shader_cnt++;
   }
-  return device_->create_graphics_pipeline_h(cinfo);
+  auto handle = device_->create_graphics_pipeline_h(cinfo);
+  for (size_t i = 0; i < shader_cnt; i++) {
+    auto& path = paths[i];
+    path_to_pipelines_using_[path].emplace(handle.handle.to64());
+  }
+  graphics_pipeline_cinfos_.emplace(handle.handle.to64(), cinfo);
+  return handle;
 }
 
 rhi::PipelineHandleHolder ShaderManager::create_compute_pipeline(
     const rhi::ShaderCreateInfo& cinfo) {
   auto shader_source_path = get_shader_path(cinfo.path, rhi::ShaderType::Compute);
   if (shader_dirty(shader_source_path)) {
-    LINFO("need to cpi {}", shader_source_path.string());
     bool success = compile_shader(shader_source_path);
     if (!success) {
       return {};
     }
     clean_shaders_.insert(shader_source_path);
   }
-  return device_->create_compute_pipeline_h(cinfo);
+  auto handle = device_->create_compute_pipeline_h(cinfo);
+  compute_pipeline_cinfos_.emplace(handle.handle.to64(), cinfo);
+  return handle;
 }
 
 std::filesystem::path ShaderManager::get_shader_path(const std::string& relative_path,
@@ -370,7 +391,8 @@ std::filesystem::path ShaderManager::get_shader_path(const std::string& relative
 bool ShaderManager::compile_shader(const std::filesystem::path& path) {
   // TODO: handle spirv
   auto shader_model = shader_model_from_hlsl_path(path);
-  LINFO("compiling {}", path.string(), shader_model);
+  ASSERT(!path.empty());
+  LINFO("compiling {} {}", path.string(), shader_model);
   auto relative = path_after_word(path, "hlsl");
   auto out_filepath =
       (fs::path("resources/shader_out/metal") / relative).replace_extension(".dxil");
@@ -401,6 +423,27 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path) {
   path_to_existing_hash_[path] = hash;
 
   return true;
+}
+
+void ShaderManager::replace_dirty_pipelines() {
+  std::lock_guard l(pipeline_recompile_mtx_);
+  for (const auto& pipeline_handle : pipeline_recompile_requests_) {
+    auto gpso_it = graphics_pipeline_cinfos_.find(pipeline_handle.to64());
+    if (gpso_it != graphics_pipeline_cinfos_.end()) {
+      bool success =
+          device_->replace_pipeline(rhi::PipelineHandle{pipeline_handle}, gpso_it->second);
+      LINFO("replaced graphics pipeline {} {}", pipeline_handle.to64(), success);
+      continue;
+    }
+    auto cpso_it = compute_pipeline_cinfos_.find(pipeline_handle.to64());
+    if (cpso_it != compute_pipeline_cinfos_.end()) {
+      bool success =
+          device_->replace_compute_pipeline(rhi::PipelineHandle{pipeline_handle}, cpso_it->second);
+      LINFO("replaced compute pipeline {} {}", pipeline_handle.to64(), success);
+      continue;
+    }
+  }
+  pipeline_recompile_requests_.clear();
 }
 
 }  // namespace gfx
