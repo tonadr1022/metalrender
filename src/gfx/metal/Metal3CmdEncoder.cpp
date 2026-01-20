@@ -258,7 +258,8 @@ void Metal3CmdEncoder::copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_sl
 
 uint32_t Metal3CmdEncoder::prepare_indexed_indirect_draws(
     rhi::BufferHandle indirect_buf, size_t offset, size_t tot_draw_cnt, rhi::BufferHandle index_buf,
-    size_t index_buf_offset, void* push_constant_data, size_t push_constant_size) {
+    size_t index_buf_offset, void* push_constant_data, size_t push_constant_size,
+    size_t vertex_stride) {
   ALWAYS_ASSERT(tot_draw_cnt > 0);
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
   memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, push_constant_data, push_constant_size);
@@ -289,11 +290,13 @@ uint32_t Metal3CmdEncoder::prepare_indexed_indirect_draws(
 
     struct Args2 {
       uint32_t draw_cnt;
+      uint32_t stride;
     };
 
     auto [args2_buf, args2_offset] = device_->test_allocator_->alloc(sizeof(Args2));
     auto* args2 = (Args2*)((uint8_t*)args2_buf->contents() + args2_offset);
     args2->draw_cnt = draw_cnt;
+    args2->stride = vertex_stride;
     compute_enc_->setBuffer(args2_buf, args2_offset, 1);
 
     compute_enc_->setBuffer(cmd_icb_mgr_.get_icb(i), 0, 2);

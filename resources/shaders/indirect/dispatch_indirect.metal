@@ -1,8 +1,6 @@
 #include <metal_stdlib>
 using namespace metal;
 
-#include "../default_vertex.h"
-
 struct IndexedIndirectDrawCmd {
   uint32_t index_count;
   uint32_t instance_count;
@@ -17,6 +15,7 @@ struct Args {
 
 struct Args2 {
     uint draw_cnt;
+    uint stride;
 };
 
 #define PC_SIZE 160
@@ -48,7 +47,7 @@ kernel void comp_main(const device uint4* pc [[buffer(0)]],
     const device IndexedIndirectDrawCmd& cmd = in_cmds[gid];
     device TLAB_Layout* tlab_lay = reinterpret_cast<device TLAB_Layout*>(out_ptr);
     tlab_lay->draw_id = cmd.first_instance;
-    tlab_lay->vertex_id_base = cmd.vertex_offset / sizeof(DefaultVertex);
+    tlab_lay->vertex_id_base = cmd.vertex_offset / args2.stride;
 
     render_command ren_cmd(args.cmd_buf, gid);
     ren_cmd.reset();

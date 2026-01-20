@@ -313,7 +313,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
       indirect_cmd_buf_ids_.emplace_back(enc->prepare_indexed_indirect_draws(
           instance_data_mgr_.get_draw_cmd_buf(), 0, all_model_data_.max_objects,
-          static_draw_batch_->index_buf.get_buffer_handle(), 0, &pc, sizeof(pc)));
+          static_draw_batch_->index_buf.get_buffer_handle(), 0, &pc, sizeof(pc),
+          sizeof(DefaultVertex)));
     });
   }
 

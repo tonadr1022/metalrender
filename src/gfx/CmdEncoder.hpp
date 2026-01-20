@@ -106,8 +106,9 @@ class CmdEncoder {
                                rhi::BufferHandle dst_buf, size_t dst_offset) = 0;
 
   [[nodiscard]] virtual uint32_t prepare_indexed_indirect_draws(
-      rhi::BufferHandle indirect_buf, size_t offset, size_t draw_cnt, rhi::BufferHandle index_buf,
-      size_t index_buf_offset, void* push_constant_data, size_t push_constant_size) = 0;
+      rhi::BufferHandle indirect_buf, size_t offset, size_t tot_draw_cnt,
+      rhi::BufferHandle index_buf, size_t index_buf_offset, void* push_constant_data,
+      size_t push_constant_size, size_t vertex_stride) = 0;
 
   virtual void barrier(PipelineStage src_stage, AccessFlags src_access, PipelineStage dst_stage,
                        AccessFlags dst_access) = 0;

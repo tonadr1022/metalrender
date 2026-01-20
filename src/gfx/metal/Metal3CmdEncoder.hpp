@@ -58,9 +58,9 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
                        rhi::BufferHandle dst_buf, size_t dst_offset) override;
 
   uint32_t prepare_indexed_indirect_draws(rhi::BufferHandle indirect_buf, size_t offset,
-                                          size_t draw_cnt, rhi::BufferHandle index_buf,
+                                          size_t tot_draw_cnt, rhi::BufferHandle index_buf,
                                           size_t index_buf_offset, void* push_constant_data,
-                                          size_t push_constant_size) override;
+                                          size_t push_constant_size, size_t vertex_stride) override;
   void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
 
