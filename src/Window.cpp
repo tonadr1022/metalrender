@@ -2,18 +2,23 @@
 
 #include "core/Logger.hpp"
 
-void Window::init(KeyCallbackFn key_callback_fn, CursorPosCallbackFn cursor_pos_callback_fn,
-                  bool transparent_window, int win_dims_x, int win_dims_y) {
-  this->key_callback_fn_ = std::move(key_callback_fn);
-  this->cursor_pos_callback_fn_ = std::move(cursor_pos_callback_fn);
-  glfwInit();
+void Window::init(InitInfo& init_info) {
+  this->key_callback_fn_ = std::move(init_info.key_callback_fn);
+  this->cursor_pos_callback_fn_ = std::move(init_info.cursor_pos_callback_fn);
+  if (!glfwInit()) {
+    LCRITICAL("Failed to initialize glfw");
+    exit(1);
+  }
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  if (transparent_window) {
+  if (init_info.transparent_window) {
     glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
   }
+  if (init_info.floating_window) {
+    glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
+  }
 
-  int w = win_dims_x;
-  int h = win_dims_y;
+  int w = init_info.win_dims_x;
+  int h = init_info.win_dims_y;
   if (w <= 0 || h <= 0) {
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
     const GLFWvidmode* mode = glfwGetVideoMode(monitor);
@@ -28,7 +33,7 @@ void Window::init(KeyCallbackFn key_callback_fn, CursorPosCallbackFn cursor_pos_
   if (!window_) {
     LCRITICAL("Failed to create glfw window");
     glfwTerminate();
-    exit(EXIT_FAILURE);
+    exit(1);
   }
 
   glfwSetWindowUserPointer(window_, this);

@@ -15,9 +15,16 @@ class Window {
  public:
   using KeyCallbackFn = std::function<void(int key, int action, int mods)>;
   using CursorPosCallbackFn = std::function<void(double x_pos, double y_pos)>;
+  struct InitInfo {
+    KeyCallbackFn key_callback_fn;
+    CursorPosCallbackFn cursor_pos_callback_fn;
+    bool transparent_window{true};
+    int win_dims_x{1280};
+    int win_dims_y{720};
+    bool floating_window{false};
+  };
 
-  virtual void init(KeyCallbackFn key_callback_fn, CursorPosCallbackFn cursor_pos_callback_fn,
-                    bool transparent_window, int win_dims_x, int win_dims_y);
+  virtual void init(InitInfo& init_info);
   void shutdown();
   virtual ~Window() = default;
 

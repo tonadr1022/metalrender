@@ -38,9 +38,16 @@ App::App() {
   device_ = rhi::create_device(rhi::GfxAPI::Metal);
   window_ = std::make_unique<AppleWindow>();
   bool transparent_window = true;
-  window_->init([this](int key, int action, int mods) { on_key_event(key, action, mods); },
-                [this](double x_pos, double y_pos) { on_curse_pos_event(x_pos, y_pos); },
-                transparent_window, config_.win_dims.x, config_.win_dims.y);
+  Window::InitInfo win_init_info{
+      .key_callback_fn = [this](int key, int action, int mods) { on_key_event(key, action, mods); },
+      .cursor_pos_callback_fn = [this](double x_pos,
+                                       double y_pos) { on_curse_pos_event(x_pos, y_pos); },
+      .transparent_window = transparent_window,
+      .win_dims_x = config_.win_dims.x,
+      .win_dims_y = config_.win_dims.y,
+      .floating_window = true,
+  };
+  window_->init(win_init_info);
   window_->set_window_position(config_.win_pos);
   device_->init({
       .window = window_.get(),
@@ -87,7 +94,7 @@ void App::run() {
     glm::ivec3 iter{};
     int n = 4;
     glm::ivec3 dims{n, 1, n};
-    float dist = 40.0;
+    float dist = 4.0;
     for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
       for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
         glm::vec3 pos = glm::vec3{iter} * dist;
@@ -220,7 +227,11 @@ void App::on_hide_mouse_change() {
 }
 
 void App::load_config() {
-  const std::filesystem::path config_file{resource_dir_ / "config.txt"};
+  std::filesystem::path config_file{resource_dir_ / "config.txt"};
+  if (!std::filesystem::exists(config_file)) {
+    config_file = resource_dir_ / "default_config.txt";
+  }
+  ALWAYS_ASSERT(std::filesystem::exists(config_file));
   std::ifstream f(config_file);
   if (!f.is_open()) {
     LCRITICAL("Failed to load config file: {}", config_file.string());

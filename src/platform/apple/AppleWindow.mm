@@ -8,13 +8,7 @@
 #include <GLFW/glfw3native.h>
 #include <dispatch/dispatch.h>
 
-void AppleWindow::init(KeyCallbackFn key_callback_fn,
-                       CursorPosCallbackFn cursor_pos_callback_fn,
-                       bool transparent_window, int win_dims_x,
-                       int win_dims_y) {
-  Window::init(key_callback_fn, cursor_pos_callback_fn, transparent_window,
-               win_dims_x, win_dims_y);
-}
+void AppleWindow::init(InitInfo &init_info) { Window::init(init_info); }
 
 void AppleWindow::set_fullscreen([[maybe_unused]] bool fullscreen) {
   fullscreen_ = fullscreen;
