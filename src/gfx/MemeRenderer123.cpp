@@ -338,14 +338,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     }
     imgui_renderer_->add_dirty_textures_to_pass(gbuffer_pass, true);
 
-    gbuffer_pass.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle](rhi::CmdEncoder* enc) {
+    gbuffer_pass.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, &args](rhi::CmdEncoder* enc) {
       ZoneScopedN("Execute gbuffer pass");
       auto depth_handle = rg_.get_att_img(rg_depth_handle);
       ASSERT(depth_handle.is_valid());
       auto gbuffer_a_tex = rg_.get_att_img(rg_gbuffer_a_handle);
       enc->begin_rendering({
           RenderingAttachmentInfo::color_att(gbuffer_a_tex, rhi::LoadOp::Clear,
-                                             {.color = {0.2f, 25.f / 255.f, 25.f / 255.f, 0.05}}),
+                                             {.color = args.clear_color}),
           RenderingAttachmentInfo::depth_stencil_att(
               depth_handle, rhi::LoadOp::Clear,
               {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),

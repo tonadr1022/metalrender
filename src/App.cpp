@@ -67,6 +67,7 @@ App::App() {
   // voxel_world_ = std::make_unique<vox::World>();
   // voxel_world_->init(voxel_renderer_.get(), &renderer_, resource_dir_);
   camera_.pos.x = -5;
+  init_camera();
 }
 
 namespace rando {
@@ -89,7 +90,7 @@ float get_float(float min, float max) {
 
 void App::run() {
   ZoneScoped;
-  int scene = 0;
+  int scene = 3;
   if (scene == 0) {
     glm::ivec3 iter{};
     int n = 4;
@@ -157,9 +158,12 @@ void App::run() {
 
     ImGui::Render();
 
-    const gfx::RenderArgs args{.view_mat = camera_.get_view_mat(),
-                               .camera_pos = camera_.pos,
-                               .draw_imgui = imgui_enabled_};
+    const gfx::RenderArgs args{
+        .view_mat = camera_.get_view_mat(),
+        .camera_pos = camera_.pos,
+        .clear_color = config_.clear_color,
+        .draw_imgui = imgui_enabled_,
+    };
     renderer_.render(args);
 
     ImGui::EndFrame();
@@ -170,6 +174,7 @@ void App::run() {
   // }
 
   write_config();
+  write_camera();
   renderer_.shutdown();
   ResourceManager::shutdown();
   window_->shutdown();
@@ -241,15 +246,11 @@ void App::load_config() {
   std::string token;
   while (f >> token) {
     if (token == "win_dims") {
-      f >> token;
-      config_.win_dims.x = std::stoull(token);
-      f >> token;
-      config_.win_dims.y = std::stoull(token);
+      f >> config_.win_dims.x;
+      f >> config_.win_dims.y;
     } else if (token == "win_pos") {
-      f >> token;
-      config_.win_pos.x = std::stoull(token);
-      f >> token;
-      config_.win_pos.y = std::stoull(token);
+      f >> config_.win_pos.x;
+      f >> config_.win_pos.y;
     } else if (token == "paths") {
       f >> token;
       int path_count = std::stoull(token);
@@ -257,6 +258,11 @@ void App::load_config() {
         f >> token;
         config_.paths.emplace_back(token);
       }
+    } else if (token == "clear_color") {
+      f >> config_.clear_color.r;
+      f >> config_.clear_color.g;
+      f >> config_.clear_color.b;
+      f >> config_.clear_color.a;
     }
   }
 }
@@ -268,6 +274,8 @@ void App::write_config() {
   f << "win_dims " << win_dims.x << ' ' << win_dims.y << '\n';
   auto win_pos = window_->get_window_position();
   f << "win_pos " << win_pos.x << ' ' << win_pos.y << '\n';
+  f << "clear_color " << config_.clear_color.r << ' ' << config_.clear_color.g << ' '
+    << config_.clear_color.b << ' ' << config_.clear_color.a << '\n';
   f << "paths " << config_.paths.size() << '\n';
   for (const auto& path : config_.paths) {
     f << path.generic_string() << '\n';
@@ -282,12 +290,8 @@ void App::on_imgui(float dt) {
     ImGui::Text("Position: %f %f %f", camera_.pos.x, camera_.pos.y, camera_.pos.z);
     ImGui::TreePop();
   }
-
-  // if (voxel_world_) {
-  //   voxel_world_->on_imgui();
-  // }
+  ImGui::ColorEdit4("Clear Color", &config_.clear_color.r, ImGuiColorEditFlags_Float);
   ImGui::End();
-
   ImGui::ShowDemoWindow();
 }
 
@@ -295,4 +299,25 @@ void App::load_model(const std::filesystem::path& path, const glm::mat4& transfo
   auto full_path =
       path.string().contains("Models") ? resource_dir_ / "models" / "gltf" / path : path;
   models_.push_back(ResourceManager::get().load_model(full_path, transform));
+}
+
+void App::init_camera() {
+  std::ifstream f(resource_dir_ / "camera.txt");
+  if (!f.is_open()) {
+    return;
+  }
+  glm::vec3 pos;
+  f >> pos.x >> pos.y >> pos.z;
+  glm::vec2 pitch_yaw;
+  f >> pitch_yaw.x >> pitch_yaw.y;
+  camera_.pos = pos;
+  camera_.pitch = pitch_yaw.x;
+  camera_.yaw = pitch_yaw.y;
+  camera_.calc_vectors();
+}
+
+void App::write_camera() {
+  std::ofstream f(resource_dir_ / "camera.txt");
+  f << camera_.pos.x << ' ' << camera_.pos.y << ' ' << camera_.pos.z << '\n';
+  f << camera_.pitch << ' ' << camera_.yaw << '\n';
 }

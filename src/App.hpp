@@ -24,11 +24,14 @@ struct App {
   void write_config();
   void on_imgui(float dt);
   void load_model(const std::filesystem::path &path, const glm::mat4 &transform);
+  void init_camera();
+  void write_camera();
 
   struct Config {
     std::vector<std::filesystem::path> paths;
     glm::ivec2 win_dims{};
     glm::ivec2 win_pos{};
+    glm::vec4 clear_color{0.1f, 0.1f, 0.1f, 1.0f};
   };
   Config config_;
   std::filesystem::path resource_dir_;

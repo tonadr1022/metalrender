@@ -31,6 +31,7 @@ namespace gfx {
 struct RenderArgs {
   glm::mat4 view_mat;
   glm::vec3 camera_pos;
+  glm::vec4 clear_color;
   bool draw_imgui;
 };
 

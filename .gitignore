@@ -11,3 +11,4 @@ build-debug
 # ignore local models
 resources/models/gltf
 resources/config.txt
+resources/camera.txt
