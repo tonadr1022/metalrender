@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <span>
+#include <tracy/Tracy.hpp>
 #include <vector>
 
 #include "Device.hpp"
@@ -191,6 +192,7 @@ void write_file_hashes(const fs::path& out_path, std::span<FileAndHash> file_has
 }  // namespace
 
 void ShaderManager::init(rhi::Device* device) {
+  ZoneScoped;
   device_ = device;
   shader_out_dir_ = fs::path("resources/shader_out");
   depfile_dir_ = shader_out_dir_ / "deps";

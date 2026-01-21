@@ -26,6 +26,8 @@ add_executable(${target_name}
     # voxels/VoxelDB.cpp
     # voxels/VoxelWorld.cpp
     util/Stats.cpp
+
+    gfx/texture/KtxLoad.cpp
 )
 
 
@@ -83,6 +85,7 @@ target_link_libraries(${target_name} PRIVATE
     FastNoise
     bs_thread_pool
     concurrentqueue
+    ktx
 )
 
 if (BUILD_VULKAN)

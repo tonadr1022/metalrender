@@ -52,8 +52,8 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset, size_t src_bytes_per_row,
                            rhi::TextureHandle dst_tex) override;
   void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset, size_t src_bytes_per_row,
-                           rhi::TextureHandle dst_tex, glm::uvec3 src_size,
-                           glm::uvec3 dst_origin) override;
+                           rhi::TextureHandle dst_tex, glm::uvec3 src_size, glm::uvec3 dst_origin,
+                           int mip_level) override;
   void copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice, size_t src_level,
                        rhi::BufferHandle dst_buf, size_t dst_offset) override;
 

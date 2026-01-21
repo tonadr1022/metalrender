@@ -34,3 +34,6 @@
 [submodule "third_party/vk-bootstrap"]
 	path = third_party/vk-bootstrap
 	url = https://github.com/charles-lunarg/vk-bootstrap
+[submodule "third_party/ktx"]
+	path = third_party/ktx
+	url = git@github.com:KhronosGroup/KTX-Software.git

@@ -18,6 +18,11 @@ if (BUILD_VULKAN)
     add_subdirectory(vk-bootstrap)
 endif()
 
+set(KTX_FEATURE_TESTS OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_VK_UPLOAD OFF CACHE BOOL "" FORCE)
+set(KTX_FEATURE_GL_UPLOAD OFF CACHE BOOL "" FORCE)
+add_subdirectory(ktx)
+
 add_subdirectory(glfw)
 add_subdirectory(glm)
 target_compile_definitions(glm INTERFACE VK_NO_PROTOTYPES)

@@ -276,14 +276,13 @@ class MemeRenderer123 {
   std::optional<BackedGPUAllocator> meshlet_vis_buf_;
   bool meshlet_vis_buf_dirty_{};
 
-  struct GPUTexUpload {
-    std::unique_ptr<void, UntypedDeleterFuncPtr> data;
-    rhi::TextureHandle tex;
-    uint32_t bytes_per_row;
-    std::string name;
-  };
   std::optional<ImGuiRenderer> imgui_renderer_;
 
+  struct GPUTexUpload {
+    TextureUpload upload;
+    rhi::TextureHandle tex;
+    std::string name;
+  };
   std::vector<GPUTexUpload> pending_texture_uploads_;
   size_t tex_upload_i_{};
   std::string get_next_tex_upload_name();

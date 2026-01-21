@@ -232,6 +232,7 @@ void App::on_hide_mouse_change() {
 }
 
 void App::load_config() {
+  ZoneScoped;
   std::filesystem::path config_file{resource_dir_ / "config.txt"};
   if (!std::filesystem::exists(config_file)) {
     config_file = resource_dir_ / "default_config.txt";

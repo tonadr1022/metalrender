@@ -199,12 +199,14 @@ void MetalCmdEncoder::set_wind_order(rhi::WindOrder wind_order) {
 void MetalCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
                                           size_t src_bytes_per_row, rhi::TextureHandle dst_tex) {
   upload_texture_data(src_buf, src_offset, src_bytes_per_row, dst_tex,
-                      device_->get_tex(dst_tex)->desc().dims, glm::uvec3{0, 0, 0});
+                      device_->get_tex(dst_tex)->desc().dims, glm::uvec3{0, 0, 0}, 0);
 }
 
 void MetalCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
                                           size_t src_bytes_per_row, rhi::TextureHandle dst_tex,
-                                          glm::uvec3 src_size, glm::uvec3 dst_origin) {
+                                          glm::uvec3 src_size, glm::uvec3 dst_origin, int) {
+  // TODO: LOLLL
+  ALWAYS_ASSERT(0 && "TODO handle mip level");
   end_render_encoder();
   start_compute_encoder();
   auto* buf = device_->get_mtl_buf(src_buf);

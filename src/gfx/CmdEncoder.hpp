@@ -101,7 +101,7 @@ class CmdEncoder {
                                    size_t src_bytes_per_row, rhi::TextureHandle dst_tex) = 0;
   virtual void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
                                    size_t src_bytes_per_row, rhi::TextureHandle dst_tex,
-                                   glm::uvec3 src_size, glm::uvec3 dst_origin) = 0;
+                                   glm::uvec3 src_size, glm::uvec3 dst_origin, int mip_level) = 0;
   virtual void copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice, size_t src_level,
                                rhi::BufferHandle dst_buf, size_t dst_offset) = 0;
 

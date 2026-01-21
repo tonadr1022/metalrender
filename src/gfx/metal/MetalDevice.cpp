@@ -8,6 +8,7 @@
 #include <Metal/Metal.hpp>
 #include <QuartzCore/CAMetalLayer.hpp>
 #include <fstream>
+#include <tracy/Tracy.hpp>
 
 #include "Window.hpp"
 #include "gfx/metal/Metal3CmdEncoder.hpp"
@@ -141,6 +142,7 @@ MTL::SamplerMipFilter convert_mip_filter(rhi::FilterMode m) {
 }  // namespace
 
 void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& metal_init_info) {
+  ZoneScoped;
   // TODO: actually check for mtl4 support
   mtl4_enabled_ = metal_init_info.prefer_mtl4;
   shader_lib_dir_ = init_info.shader_lib_dir;

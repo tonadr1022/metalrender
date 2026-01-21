@@ -117,6 +117,10 @@ MTL::PixelFormat mtl::util::convert(rhi::TextureFormat format) {
       return MTL::PixelFormatR32Float;
     case TextureFormat::B8G8R8A8Unorm:
       return MTL::PixelFormatBGRA8Unorm;
+    case TextureFormat::ASTC4x4SrgbBlock:
+      return MTL::PixelFormatASTC_4x4_sRGB;
+    case TextureFormat::ASTC4x4UnormBlock:
+      return MTL::PixelFormatASTC_4x4_LDR;
     default:
       ASSERT(0 && "unhandled texture format");
       return MTL::PixelFormatInvalid;

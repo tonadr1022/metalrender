@@ -23,6 +23,13 @@ class Timer {
   }
 
   void Print() { LINFO("ElapsedMS: {}", ElapsedMS()); }
+  void Print(const char* msg) {
+    if (msg) {
+      LINFO("{}: {}", msg, ElapsedMS());
+    } else {
+      Print();
+    }
+  }
   void PrintMicro() { LINFO("ElapsedMicro: {}", ElapsedMicro()); }
 
   void Reset(std::string_view msg) {
@@ -44,5 +51,8 @@ class PrintTimerMicro : public Timer {
 
 class PrintTimerMilli : public Timer {
  public:
-  ~PrintTimerMilli() { Print(); }
+  explicit PrintTimerMilli(const char* msg) : msg_(msg) {}
+  PrintTimerMilli() = default;
+  ~PrintTimerMilli() { Print(msg_); }
+  const char* msg_{};
 };

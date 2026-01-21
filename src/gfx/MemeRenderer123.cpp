@@ -17,6 +17,7 @@
 #include "gfx/ModelLoader.hpp"
 #include "gfx/Pipeline.hpp"
 #include "gfx/RenderGraph.hpp"
+#include "gfx/RendererTypes.hpp"
 #include "gfx/Swapchain.hpp"
 #include "gfx/Texture.hpp"
 #include "hlsl/default_vertex.h"
@@ -35,6 +36,8 @@
 #include "hlsl/shared_tex_only.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
+#include "ktx.h"
+#include "util/Timer.hpp"
 
 namespace {
 
@@ -66,6 +69,7 @@ uint32_t prev_pow2(uint32_t val) {
 namespace gfx {
 
 void MemeRenderer123::init(const CreateInfo& cinfo) {
+  ZoneScoped;
   device_ = cinfo.device;
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
@@ -73,21 +77,27 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
 
   {
     // TODO: streamline
-    default_white_tex_ =
-        device_->create_tex_h(rhi::TextureDesc{.format = rhi::TextureFormat::R8G8B8A8Srgb,
-                                               .storage_mode = rhi::StorageMode::GPUOnly,
-                                               .dims = glm::uvec3{1, 1, 1},
-                                               .mip_levels = 1,
-                                               .array_length = 1,
-                                               .bindless = true});
+    auto desc = rhi::TextureDesc{.format = rhi::TextureFormat::R8G8B8A8Srgb,
+                                 .storage_mode = rhi::StorageMode::GPUOnly,
+                                 .dims = glm::uvec3{1, 1, 1},
+                                 .mip_levels = 1,
+                                 .array_length = 1,
+                                 .bindless = true};
+    default_white_tex_ = device_->create_tex_h(desc);
     ALWAYS_ASSERT(device_->get_tex(default_white_tex_)->bindless_idx() == 0);
     auto* data = reinterpret_cast<uint64_t*>(malloc(sizeof(uint64_t)));
     *data = 0xFFFFFFFF;
     // TODO: add a function for this for the love of god!
     pending_texture_uploads_.push_back(
-        GPUTexUpload{.data = std::unique_ptr<void, UntypedDeleterFuncPtr>(data, &free),
+        GPUTexUpload{.upload =
+                         TextureUpload{
+                             .data = std::unique_ptr<void, UntypedDeleterFuncPtr>(data, free),
+                             .desc = desc,
+                             .bytes_per_row = 4,
+                             .load_type = CPUTextureLoadType::Malloc,
+
+                         },
                      .tex = default_white_tex_.handle,
-                     .bytes_per_row = 4,
                      .name = get_next_tex_upload_name()});
   }
   {
@@ -230,6 +240,7 @@ rhi::BufferHandle ScratchBufferPool::alloc(size_t size) {
 }
 
 void ScratchBufferPool::reset(size_t frame_idx) {
+  ZoneScoped;
   frame_idx_ = frame_idx;
   auto& entries = frames_[frame_idx_].entries;
   auto& in_use_entries = frames_[frame_idx_].in_use_entries;
@@ -241,6 +252,7 @@ void ScratchBufferPool::reset(size_t frame_idx) {
 }
 
 void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
+  ZoneScoped;
   bool imgui_has_dirty_textures = imgui_renderer_->has_dirty_textures();
   if (!pending_texture_uploads_.empty() || imgui_has_dirty_textures) {
     auto& tex_flush_pass = rg_.add_transfer_pass("flush_textures");
@@ -491,30 +503,62 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 }
 
 void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
+  ZoneScoped;
   imgui_renderer_->flush_pending_texture_uploads(enc);
 
   while (pending_texture_uploads_.size()) {
     auto& upload = pending_texture_uploads_.back();
+    auto& tex_upload = upload.upload;
     auto* tex = device_->get_tex(upload.tex);
     ASSERT(tex);
-    ASSERT(upload.data);
-    size_t bytes_per_element = 4;
-    size_t src_row_bytes = tex->desc().dims.x * bytes_per_element;
-    size_t bytes_per_row = align_up(src_row_bytes, 256);
-    // TODO: staging buffer pool
-    auto upload_buf_handle = device_->create_buf({.size = bytes_per_row * tex->desc().dims.y});
-    auto* upload_buf = device_->get_buf(upload_buf_handle);
-    size_t dst_offset = 0;
-    size_t src_offset = 0;
-    for (size_t row = 0; row < tex->desc().dims.y; row++) {
-      ASSERT(dst_offset + bytes_per_row <= upload_buf->size());
-      memcpy((uint8_t*)upload_buf->contents() + dst_offset,
-             (uint8_t*)upload.data.get() + src_offset, src_row_bytes);
-      dst_offset += bytes_per_row;
-      src_offset += tex->desc().dims.x * bytes_per_element;
-    }
+    ASSERT(upload.upload.data);
+    if (tex_upload.load_type == CPUTextureLoadType::Ktx2) {
+      auto* ktx_tex = (ktxTexture2*)tex_upload.data.get();
+      auto& upload = pending_texture_uploads_.back();
+      auto* tex = device_->get_tex(upload.tex);
+      ASSERT(tex);
+      ASSERT(tex_upload.data);
 
-    enc->upload_texture_data(upload_buf_handle, 0, bytes_per_row, upload.tex);
+      // TODO: generalize this
+
+      // Upload each mip level separately
+      for (uint32_t mip_level = 0; mip_level < ktx_tex->numLevels; mip_level++) {
+        size_t offset;
+        ktx_error_code_e result =
+            ktxTexture_GetImageOffset(ktxTexture(ktx_tex), mip_level, 0, 0, &offset);
+        ASSERT(result == KTX_SUCCESS);
+        ktx_size_t image_size = ktxTexture_GetImageSize(ktxTexture(ktx_tex), mip_level);
+        uint32_t mip_width = std::max(1u, ktx_tex->baseWidth >> mip_level);
+        uint32_t mip_height = std::max(1u, ktx_tex->baseHeight >> mip_level);
+        uint32_t blocks_wide = align_divide_up(mip_width, 4u);
+        auto bytes_per_row = blocks_wide * 16;
+
+        auto upload_buf_handle = device_->create_buf({.size = image_size});
+        auto* upload_buf = device_->get_buf(upload_buf_handle);
+        memcpy(upload_buf->contents(), (uint8_t*)ktx_tex->pData + offset, image_size);
+
+        enc->upload_texture_data(upload_buf_handle, 0, bytes_per_row, upload.tex,
+                                 glm::uvec3{mip_width, mip_height, 1}, glm::uvec3{0, 0, 0},
+                                 mip_level);
+      }
+    } else {
+      size_t src_bytes_per_row = tex_upload.bytes_per_row;
+      size_t bytes_per_row = align_up(src_bytes_per_row, 256);
+      // TODO: staging buffer pool
+      auto upload_buf_handle = device_->create_buf({.size = bytes_per_row * tex->desc().dims.y});
+      auto* upload_buf = device_->get_buf(upload_buf_handle);
+      size_t dst_offset = 0;
+      size_t src_offset = 0;
+      for (size_t row = 0; row < tex->desc().dims.y; row++) {
+        ASSERT(dst_offset + bytes_per_row <= upload_buf->size());
+        memcpy((uint8_t*)upload_buf->contents() + dst_offset,
+               (uint8_t*)tex_upload.data.get() + src_offset, src_bytes_per_row);
+        dst_offset += bytes_per_row;
+        src_offset += src_bytes_per_row;
+      }
+
+      enc->upload_texture_data(upload_buf_handle, 0, bytes_per_row, upload.tex);
+    }
     pending_texture_uploads_.pop_back();
   }
 
@@ -523,6 +567,7 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
 
 bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
                                  ModelInstance& model, ModelGPUHandle& out_handle) {
+  ZoneScoped;
   ModelLoadResult result;
   if (!model::load_model(path, root_transform, model, result)) {
     return false;
@@ -539,10 +584,8 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
     if (upload.data) {
       auto tex = device_->create_tex_h(upload.desc);
       img_upload_bindless_indices[i] = device_->get_tex(tex)->bindless_idx();
-      pending_texture_uploads_.push_back(GPUTexUpload{.data = std::move(upload.data),
-                                                      .tex = tex.handle,
-                                                      .bytes_per_row = upload.bytes_per_row,
-                                                      .name = get_next_tex_upload_name()});
+      pending_texture_uploads_.push_back(GPUTexUpload{
+          .upload = std::move(upload), .tex = tex.handle, .name = get_next_tex_upload_name()});
       out_tex_handles.emplace_back(std::move(tex));
     }
     i++;
@@ -616,6 +659,7 @@ DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType
                                                   const std::vector<rhi::DefaultIndexT>& indices,
                                                   const MeshletProcessResult& meshlets,
                                                   std::span<Mesh> meshes) {
+  ZoneScoped;
   auto& draw_batch = static_draw_batch_;
   ASSERT(!vertices.empty());
   ASSERT(!meshlets.meshlet_datas.empty());
@@ -913,6 +957,7 @@ void InstanceDataMgr::allocate_buffers(size_t element_count) {
 }
 
 void MemeRenderer123::init_imgui() {
+  ZoneScoped;
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
 
@@ -929,11 +974,13 @@ void MemeRenderer123::init_imgui() {
 }
 
 void MemeRenderer123::shutdown_imgui() {
+  ZoneScoped;
   ImGui_ImplGlfw_Shutdown();
   ImGui::DestroyContext();
 }
 
 void MemeRenderer123::on_imgui() {
+  ZoneScoped;
   if (ImGui::TreeNodeEx("Window", ImGuiTreeNodeFlags_DefaultOpen)) {
     auto dims = window_->get_window_size();
     auto win_dims = window_->get_window_not_framebuffer_size();
@@ -1021,6 +1068,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
 }
 
 bool MemeRenderer123::on_key_event(int key, int action, int mods) {
+  ZoneScoped;
   if (action == GLFW_PRESS) {
     if (key == GLFW_KEY_G && mods & GLFW_MOD_CONTROL) {
       if (mods & GLFW_MOD_SHIFT) {
@@ -1078,7 +1126,10 @@ void MemeRenderer123::recreate_depth_pyramid_tex() {
   }
 }
 
-void MemeRenderer123::recreate_external_textures() { recreate_depth_pyramid_tex(); }
+void MemeRenderer123::recreate_external_textures() {
+  ZoneScoped;
+  recreate_depth_pyramid_tex();
+}
 
 void MemeRenderer123::shutdown() { mgr_.shutdown(); }
 

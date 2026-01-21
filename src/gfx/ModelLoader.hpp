@@ -15,15 +15,18 @@ class Device;
 }  // namespace MTL
 
 enum class CPUTextureLoadType : uint8_t {
-  StbImage,  // TODO: Jpeg/PNG/ktx instead
+  None,
+  StbImage,
+  Ktx2,
+  Malloc,
 };
 
 struct TextureUpload {
-  std::unique_ptr<void, UntypedDeleterFuncPtr> data;
+  std::unique_ptr<void, UntypedDeleterFuncPtr> data{nullptr, free};
   rhi::TextureDesc desc;
   uint32_t bytes_per_row;
-
-  TextureUpload() : data(nullptr, free) {}
+  uint32_t compressed_blocks_tall;
+  CPUTextureLoadType load_type{CPUTextureLoadType::None};
 };
 
 struct TextureArrayUpload {

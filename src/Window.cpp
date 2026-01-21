@@ -1,8 +1,11 @@
 #include "Window.hpp"
 
+#include <tracy/Tracy.hpp>
+
 #include "core/Logger.hpp"
 
 void Window::init(InitInfo& init_info) {
+  ZoneScoped;
   this->key_callback_fn_ = std::move(init_info.key_callback_fn);
   this->cursor_pos_callback_fn_ = std::move(init_info.cursor_pos_callback_fn);
   if (!glfwInit()) {

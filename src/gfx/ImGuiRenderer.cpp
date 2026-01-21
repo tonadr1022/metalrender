@@ -211,7 +211,7 @@ void ImGuiRenderer::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
             }
             enc->upload_texture_data(upload_buf_handle, 0, bytes_per_row,
                                      rhi::TextureHandle{im_tex->GetTexID()},
-                                     glm::uvec3{r.w, r.h, 1}, glm::uvec3{r.x, r.y, 0});
+                                     glm::uvec3{r.w, r.h, 1}, glm::uvec3{r.x, r.y, 0}, -1);
           }
           im_tex->SetStatus(ImTextureStatus_OK);
         } else if (im_tex->Status == ImTextureStatus_WantDestroy && im_tex->UnusedFrames > 0) {

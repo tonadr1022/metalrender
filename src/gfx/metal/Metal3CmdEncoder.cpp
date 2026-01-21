@@ -223,23 +223,23 @@ void Metal3CmdEncoder::set_cull_mode(rhi::CullMode cull_mode) {
 void Metal3CmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
                                            size_t src_bytes_per_row, rhi::TextureHandle dst_tex) {
   upload_texture_data(src_buf, src_offset, src_bytes_per_row, dst_tex,
-                      device_->get_tex(dst_tex)->desc().dims, glm::uvec3{0, 0, 0});
+                      device_->get_tex(dst_tex)->desc().dims, glm::uvec3{0, 0, 0}, -1);
 }
 
 void Metal3CmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
                                            size_t src_bytes_per_row, rhi::TextureHandle dst_tex,
-                                           glm::uvec3 src_size, glm::uvec3 dst_origin) {
+                                           glm::uvec3 src_size, glm::uvec3 dst_origin,
+                                           int mip_level) {
   start_blit_encoder();
   auto* buf = device_->get_mtl_buf(src_buf);
   auto* tex = device_->get_mtl_tex(dst_tex);
   ALWAYS_ASSERT(buf);
   ALWAYS_ASSERT(tex);
   MTL::Size img_size = MTL::Size::Make(src_size.x, src_size.y, src_size.z);
-  ALWAYS_ASSERT(img_size.width * img_size.depth * img_size.height * 4 <=
-                device_->get_buf(src_buf)->size());
-  blit_enc_->copyFromBuffer(buf, src_offset, src_bytes_per_row, 0, img_size, tex, 0, 0,
+  auto mip = mip_level < 0 ? 0 : mip_level;
+  blit_enc_->copyFromBuffer(buf, src_offset, src_bytes_per_row, 0, img_size, tex, 0, mip,
                             MTL::Origin::Make(dst_origin.x, dst_origin.y, dst_origin.z));
-  if (tex->mipmapLevelCount() > 1) {
+  if (mip_level < 0 && tex->mipmapLevelCount() > 1) {
     blit_enc_->generateMipmaps(tex);
   }
 }
