@@ -267,12 +267,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     if (!culling_paused_) {
       auto& clear_bufs_pass = rg_.add_compute_pass("clear_bufs");
       clear_bufs_pass.w_external("out_draw_count_buf1",
-                                 static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle);
+                                 static_draw_batch_->out_draw_count_buf_.handle);
       clear_bufs_pass.set_ex([this](rhi::CmdEncoder* enc) {
         enc->bind_pipeline(test_clear_buf_pso_);
         uint32_t pc =
-            device_->get_buf(static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle)
-                ->bindless_idx();
+            device_->get_buf(static_draw_batch_->out_draw_count_buf_.handle)->bindless_idx();
         enc->push_constants(&pc, sizeof(pc));
         enc->dispatch_compute(glm::uvec3{1, 1, 1}, glm::uvec3{1, 1, 1});
       });
@@ -283,11 +282,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     if (!culling_paused_) {
       prep_meshlets_pass.rw_external_buf(output_buf_name, "out_draw_count_buf1");
     } else {
-      prep_meshlets_pass.w_external(
-          output_buf_name, static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle);
+      prep_meshlets_pass.w_external(output_buf_name,
+                                    static_draw_batch_->out_draw_count_buf_.handle);
     }
-    prep_meshlets_pass.w_external("task_cmd_buf",
-                                  static_draw_batch_->task_cmd_bufs_[curr_frame_idx_].handle);
+    prep_meshlets_pass.w_external("task_cmd_buf", static_draw_batch_->task_cmd_buf_.handle);
     prep_meshlets_pass.set_ex([this](rhi::CmdEncoder* enc) {
       enc->bind_pipeline(draw_cull_pso_);
       if (!culling_paused_) {
@@ -296,12 +294,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
             .globals_buf_offset_bytes = frame_globals_buf_info_.offset_bytes,
             .cull_data_idx = frame_cull_data_buf_info_.idx,
             .cull_data_offset_bytes = frame_cull_data_buf_info_.offset_bytes,
-            .task_cmd_buf_idx =
-                device_->get_buf(static_draw_batch_->task_cmd_bufs_[curr_frame_idx_])
-                    ->bindless_idx(),
+            .task_cmd_buf_idx = device_->get_buf(static_draw_batch_->task_cmd_buf_)->bindless_idx(),
             .draw_cnt_buf_idx =
-                device_->get_buf(static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_])
-                    ->bindless_idx(),
+                device_->get_buf(static_draw_batch_->out_draw_count_buf_)->bindless_idx(),
             .instance_data_buf_idx =
                 device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
             .mesh_data_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
@@ -385,11 +380,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
             .instance_data_buf_idx =
                 device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
             .mat_buf_idx = materials_buf_->get_buffer()->bindless_idx(),
-            .tt_cmd_buf_idx = device_->get_buf(static_draw_batch_->task_cmd_bufs_[curr_frame_idx_])
-                                  ->bindless_idx(),
+            .tt_cmd_buf_idx = device_->get_buf(static_draw_batch_->task_cmd_buf_)->bindless_idx(),
             .draw_cnt_buf_idx =
-                device_->get_buf(static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle)
-                    ->bindless_idx(),
+                device_->get_buf(static_draw_batch_->out_draw_count_buf_.handle)->bindless_idx(),
             .max_draws = all_model_data_.max_objects,
             .max_meshlets = all_model_data_.max_meshlets,
             .flags = 0,
@@ -401,9 +394,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           pc.flags |= MESHLET_CONE_CULL_ENABLED_BIT;
         }
         enc->push_constants(&pc, sizeof(pc));
-        enc->draw_mesh_threadgroups_indirect(
-            static_draw_batch_->out_draw_count_bufs_[curr_frame_idx_].handle, 0,
-            {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+        enc->draw_mesh_threadgroups_indirect(static_draw_batch_->out_draw_count_buf_.handle, 0,
+                                             {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
       } else {
         enc->bind_pipeline(test2_pso_);
         ASSERT(indirect_cmd_buf_ids_.size());
@@ -885,19 +877,23 @@ DrawBatch::DrawBatch(DrawBatchType type, rhi::Device& device, const CreateInfo& 
       type(type) {
   // TODO: jank
   for (int i = 0; i < 2; i++) {
-    task_cmd_bufs_[i] = device.create_buf_h({
-        .storage_mode = rhi::StorageMode::CPUAndGPU,
-        .size = cinfo.initial_meshlet_capacity * sizeof(TaskCmd),
-        .bindless = true,
-        .name = "task_cmd_buf",
-    });
-    out_draw_count_bufs_[i] = device.create_buf_h({
-        .storage_mode = rhi::StorageMode::Default,
-        .usage = rhi::BufferUsage_Storage,
-        .size = sizeof(uint32_t) * 3,
-        .bindless = true,
-        .name = "out_draw_count_buf",
-    });
+    if (i == 0) {
+      task_cmd_buf_ = device.create_buf_h({
+          .storage_mode = rhi::StorageMode::CPUAndGPU,
+          .size = cinfo.initial_meshlet_capacity * sizeof(TaskCmd),
+          .bindless = true,
+          .name = "task_cmd_buf",
+      });
+    }
+    if (i == 0) {
+      out_draw_count_buf_ = device.create_buf_h({
+          .storage_mode = rhi::StorageMode::Default,
+          .usage = rhi::BufferUsage_Storage,
+          .size = sizeof(uint32_t) * 3,
+          .bindless = true,
+          .name = "out_draw_count_buf",
+      });
+    }
   }
 }
 
