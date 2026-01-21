@@ -8,6 +8,7 @@
 
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
+#include "core/ThreadPool.hpp"
 #include "core/Util.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "hlsl/shader_constants.h"
@@ -299,7 +300,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
     std::vector<std::future<void>> img_load_futures;
     img_load_futures.reserve(gltf->materials_count);
     for (size_t material_i = 0; material_i < gltf->materials_count; material_i++) {
-      img_load_futures.emplace_back(std::async(std::launch::async, [&, material_i]() {
+      img_load_futures.emplace_back(ThreadPool::get().submit_task([&, material_i]() {
         const cgltf_material *gltf_mat = &gltf->materials[material_i];
         if (!gltf_mat) {
           ALWAYS_ASSERT(0);
@@ -422,8 +423,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
       for (uint32_t prim_i = 0; prim_i < gltf->meshes[mesh_i].primitives_count;
            prim_i++, overall_mesh_i++) {
         const uint32_t overall_prim_i = overall_mesh_i;
-        mesh_load_futures.emplace_back(std::async(
-            std::launch::async,
+        mesh_load_futures.emplace_back(ThreadPool::get().submit_task(
             [mesh_i, prim_i, overall_prim_i, &gltf, &all_indices, &meshes, &all_vertices]() {
               ZoneScopedN("Process Mesh");
               const auto &primitive = gltf->meshes[mesh_i].primitives[prim_i];
@@ -486,13 +486,28 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
       std::ifstream meshlet_cache_file(meshlet_cache_path, std::ios::binary);
       read_meshlets(meshlet_cache_file, meshlet_datas);
     } else {
+      meshlet_datas.resize(meshes.size());
+      std::vector<std::future<void>> meshlet_load_futures;
+      meshlet_load_futures.reserve(meshes.size());
+      ;
+      size_t mesh_i = 0;
       for (const Mesh &mesh : meshes) {
         const uint32_t base_vertex = mesh.vertex_offset_bytes / sizeof(DefaultVertex);
-        meshlet_datas.emplace_back(load_meshlet_data(
-            std::span(&all_vertices[base_vertex], mesh.vertex_count),
-            std::span(&all_indices[mesh.index_offset / sizeof(rhi::DefaultIndexT)],
-                      mesh.index_count),
-            base_vertex));
+        meshlet_load_futures.emplace_back(ThreadPool::get().submit_task(
+            [&all_vertices, &all_indices, &meshlet_datas, mesh_i, base_vertex, &meshes]() {
+              ZoneScopedN("Process Meshlet");
+              auto &mesh = meshes[mesh_i];
+              meshlet_datas[mesh_i] = load_meshlet_data(
+                  std::span(&all_vertices[base_vertex], mesh.vertex_count),
+                  std::span(&all_indices[mesh.index_offset / sizeof(rhi::DefaultIndexT)],
+                            mesh.index_count),
+                  base_vertex);
+            }));
+        mesh_i++;
+      }
+
+      for (auto &fut : meshlet_load_futures) {
+        fut.get();
       }
     }
 
