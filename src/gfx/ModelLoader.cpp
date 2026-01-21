@@ -2,6 +2,7 @@
 
 #include <ktx.h>
 
+#include <fstream>
 #include <future>
 #include <tracy/Tracy.hpp>
 
@@ -12,7 +13,6 @@
 #include "hlsl/shader_constants.h"
 #include "texture/KtxLoad.hpp"
 #include "texture/VkFormatEnum.hpp"
-#include "util/Timer.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image/stb_image.h>
@@ -29,6 +29,66 @@
 #include "meshoptimizer.h"
 
 namespace {
+
+void write_meshlet_data(std::ostream &o_file, const MeshletLoadResult &meshlet_data) {
+  ZoneScoped;
+
+  const auto meshlet_count = meshlet_data.meshlets.size();
+  o_file.write(reinterpret_cast<const char *>(&meshlet_count), sizeof(uint32_t));
+  o_file.write(reinterpret_cast<const char *>(meshlet_data.meshlets.data()),
+               sizeof(Meshlet) * meshlet_count);
+
+  const auto meshlet_vertices_count = meshlet_data.meshlet_vertices.size();
+  o_file.write(reinterpret_cast<const char *>(&meshlet_vertices_count), sizeof(uint32_t));
+  o_file.write(reinterpret_cast<const char *>(meshlet_data.meshlet_vertices.data()),
+               sizeof(uint32_t) * meshlet_vertices_count);
+
+  const auto meshlet_triangles_count = meshlet_data.meshlet_triangles.size();
+  o_file.write(reinterpret_cast<const char *>(&meshlet_triangles_count), sizeof(uint32_t));
+  o_file.write(reinterpret_cast<const char *>(meshlet_data.meshlet_triangles.data()),
+               sizeof(uint8_t) * meshlet_triangles_count);
+}
+
+void read_meshlet_data(std::istream &i_file, MeshletLoadResult &meshlet_data) {
+  ZoneScoped;
+
+  uint32_t meshlet_count{};
+  i_file.read(reinterpret_cast<char *>(&meshlet_count), sizeof(uint32_t));
+  meshlet_data.meshlets.resize(meshlet_count);
+  i_file.read(reinterpret_cast<char *>(meshlet_data.meshlets.data()),
+              sizeof(Meshlet) * meshlet_count);
+
+  uint32_t meshlet_vertices_count{};
+  i_file.read(reinterpret_cast<char *>(&meshlet_vertices_count), sizeof(uint32_t));
+  meshlet_data.meshlet_vertices.resize(meshlet_vertices_count);
+  i_file.read(reinterpret_cast<char *>(meshlet_data.meshlet_vertices.data()),
+              sizeof(uint32_t) * meshlet_vertices_count);
+
+  uint32_t meshlet_triangles_count{};
+  i_file.read(reinterpret_cast<char *>(&meshlet_triangles_count), sizeof(uint32_t));
+  meshlet_data.meshlet_triangles.resize(meshlet_triangles_count);
+  i_file.read(reinterpret_cast<char *>(meshlet_data.meshlet_triangles.data()),
+              sizeof(uint8_t) * meshlet_triangles_count);
+}
+
+void write_meshlets(std::ostream &o_file, std::span<const MeshletLoadResult> meshlet_data) {
+  ZoneScoped;
+  const auto meshlet_data_count = static_cast<uint32_t>(meshlet_data.size());
+  o_file.write(reinterpret_cast<const char *>(&meshlet_data_count), sizeof(uint32_t));
+  for (const auto &m : meshlet_data) {
+    write_meshlet_data(o_file, m);
+  }
+}
+
+void read_meshlets(std::istream &i_file, std::vector<MeshletLoadResult> &meshlet_data) {
+  ZoneScoped;
+  uint32_t meshlet_data_count{};
+  i_file.read(reinterpret_cast<char *>(&meshlet_data_count), sizeof(uint32_t));
+  meshlet_data.resize(meshlet_data_count);
+  for (auto &m : meshlet_data) {
+    read_meshlet_data(i_file, m);
+  }
+}
 
 int32_t add_node_to_hierarchy(std::vector<Hierarchy> &hierarchies, int32_t parent, int32_t level) {
   ZoneScoped;
@@ -168,7 +228,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
   auto &texture_uploads = out_load_result.texture_uploads;
   texture_uploads.resize(gltf->images_count);
 
-  auto load_img = [&](uint32_t gltf_img_i, rhi::TextureFormat format, bool basis_u) -> uint32_t {
+  auto load_img = [&](uint32_t gltf_img_i, rhi::TextureFormat format) -> uint32_t {
     const cgltf_image &img = gltf->images[gltf_img_i];
     const std::filesystem::path full_img_path = directory_path / img.uri;
     if (!img.buffer_view) {
@@ -269,7 +329,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
           if (texture_uploads[gltf_image_i].data) {
             result_tex_id = gltf_image_i;
           } else {
-            result_tex_id = load_img(gltf_image_i, format, tex_view->texture->has_basisu);
+            result_tex_id = load_img(gltf_image_i, format);
           }
         };
         set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.base_color_texture,
@@ -312,94 +372,137 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
 
   std::vector<std::vector<uint32_t>> primitive_mesh_indices_per_mesh;
   primitive_mesh_indices_per_mesh.resize(gltf->meshes_count);
-  std::vector<MeshletLoadResult> &meshlet_datas =
-      out_load_result.meshlet_process_result.meshlet_datas;
-  meshlet_datas.reserve(model_vertex_count / k_max_vertices_per_meshlet);
 
   {  // process mesh/primitive
     ZoneScopedN("Process meshes");
     uint32_t overall_mesh_i = 0;
+    size_t total_indices = 0;
+    size_t total_vertices = 0;
+
     for (uint32_t mesh_i = 0; mesh_i < gltf->meshes_count; mesh_i++) {
       const auto &mesh = gltf->meshes[mesh_i];
       for (uint32_t prim_i = 0; prim_i < mesh.primitives_count; prim_i++, overall_mesh_i++) {
         primitive_mesh_indices_per_mesh[mesh_i].push_back(overall_mesh_i);
         const cgltf_primitive &primitive = mesh.primitives[prim_i];
-
-        const auto base_vertex = static_cast<uint32_t>(all_vertices.size());
+        const auto base_vertex = total_vertices;
         const size_t vertex_offset = base_vertex * sizeof(DefaultVertex);
         uint32_t index_offset = UINT32_MAX;
         uint32_t index_count = UINT32_MAX;
+        ASSERT(primitive.indices);
         if (primitive.indices) {
           index_count = primitive.indices->count;
-          // TODO: uint32_t indices
-          index_offset = all_indices.size() * sizeof(rhi::DefaultIndexT);
-          all_indices.reserve(all_indices.size() + index_count);
-          for (size_t i = 0; i < primitive.indices->count; i++) {
-            all_indices.push_back(cgltf_accessor_read_index(primitive.indices, i));
-          }
-        } else {
-          ALWAYS_ASSERT(0 && "don't support non indexed meshes");
+          index_offset = total_indices * sizeof(rhi::DefaultIndexT);
+          total_indices += index_count;
         }
-        assert(primitive.attributes_count > 0);
+        ASSERT(primitive.attributes[0].data);
         const auto vertex_count = static_cast<uint32_t>(primitive.attributes[0].data->count);
-        all_vertices.resize(all_vertices.size() + vertex_count);
-        for (size_t attr_i = 0; attr_i < primitive.attributes_count; attr_i++) {
-          const auto &attr = primitive.attributes[attr_i];
-          const cgltf_accessor *accessor = attr.data;
-          if (attr.type == cgltf_attribute_type_position) {
-            for (size_t i = 0; i < accessor->count; i++) {
-              float pos[3] = {0, 0, 0};
-              cgltf_accessor_read_float(accessor, i, pos, 3);
-              all_vertices[base_vertex + i].pos = glm::vec4{pos[0], pos[1], pos[2], 0};
-            }
-          } else if (attr.type == cgltf_attribute_type_texcoord) {
-            for (size_t i = 0; i < accessor->count; i++) {
-              float uv[2] = {0, 0};
-              cgltf_accessor_read_float(accessor, i, uv, 2);
-              all_vertices[base_vertex + i].uv = glm::vec2{uv[0], uv[1]};
-            }
-          } else if (attr.type == cgltf_attribute_type_normal) {
-            float normal[3] = {0, 0, 0};
-            for (size_t i = 0; i < accessor->count; i++) {
-              cgltf_accessor_read_float(accessor, i, normal, 3);
-              all_vertices[base_vertex + i].normal = glm::vec3{normal[0], normal[1], normal[2]};
-            }
-          }
-        }
-
-        glm::vec3 center{};
-        float radius{};
-        for (size_t i = base_vertex; i < base_vertex + vertex_count; i++) {
-          center += all_vertices[i].pos;
-        }
-        center /= vertex_count;
-        for (size_t i = base_vertex; i < base_vertex + vertex_count; i++) {
-          radius = glm::max(radius, glm::distance(glm::vec3{all_vertices[i].pos}, center));
-        }
-
+        total_vertices += vertex_count;
         const uint32_t material_idx =
             primitive.material ? primitive.material - gltf->materials : UINT32_MAX;
-        assert(vertex_offset < UINT32_MAX);
+
         meshes.push_back(Mesh{
             .vertex_offset_bytes = static_cast<uint32_t>(vertex_offset),
             .index_offset = index_offset,
             .vertex_count = vertex_count,
             .index_count = index_count,
             .material_id = material_idx,
-            .center = center,
-            .radius = radius,
         });
       }
     }
 
-    for (const Mesh &mesh : meshes) {
-      const uint32_t base_vertex = mesh.vertex_offset_bytes / sizeof(DefaultVertex);
-      meshlet_datas.emplace_back(load_meshlet_data(
-          std::span(&all_vertices[base_vertex], mesh.vertex_count),
-          std::span(&all_indices[mesh.index_offset / sizeof(rhi::DefaultIndexT)], mesh.index_count),
-          base_vertex));
+    all_indices.resize(total_indices);
+    all_vertices.resize(total_vertices);
+
+    std::vector<std::future<void>> mesh_load_futures;
+    auto total_meshes = overall_mesh_i;
+    mesh_load_futures.reserve(total_meshes);
+    overall_mesh_i = 0;
+
+    for (uint32_t mesh_i = 0; mesh_i < gltf->meshes_count; mesh_i++) {
+      for (uint32_t prim_i = 0; prim_i < gltf->meshes[mesh_i].primitives_count;
+           prim_i++, overall_mesh_i++) {
+        const uint32_t overall_prim_i = overall_mesh_i;
+        mesh_load_futures.emplace_back(std::async(
+            std::launch::async,
+            [mesh_i, prim_i, overall_prim_i, &gltf, &all_indices, &meshes, &all_vertices]() {
+              ZoneScopedN("Process Mesh");
+              const auto &primitive = gltf->meshes[mesh_i].primitives[prim_i];
+              auto &result_mesh = meshes[overall_prim_i];
+              size_t base_index = result_mesh.index_offset / sizeof(rhi::DefaultIndexT);
+              for (size_t i = 0; i < primitive.indices->count; i++) {
+                all_indices[base_index + i] = cgltf_accessor_read_index(primitive.indices, i);
+              }
+
+              auto base_vertex =
+                  static_cast<size_t>(result_mesh.vertex_offset_bytes / sizeof(DefaultVertex));
+              glm::vec3 tot_center{};
+              for (size_t attr_i = 0; attr_i < primitive.attributes_count; attr_i++) {
+                const auto &attr = primitive.attributes[attr_i];
+                const cgltf_accessor *accessor = attr.data;
+                if (attr.type == cgltf_attribute_type_position) {
+                  for (size_t i = 0; i < accessor->count; i++) {
+                    float pos[3] = {0, 0, 0};
+                    cgltf_accessor_read_float(accessor, i, pos, 3);
+                    all_vertices[base_vertex + i].pos = glm::vec4{pos[0], pos[1], pos[2], 0};
+                    tot_center += glm::vec3{pos[0], pos[1], pos[2]};
+                  }
+                } else if (attr.type == cgltf_attribute_type_texcoord) {
+                  for (size_t i = 0; i < accessor->count; i++) {
+                    float uv[2] = {0, 0};
+                    cgltf_accessor_read_float(accessor, i, uv, 2);
+                    all_vertices[base_vertex + i].uv = glm::vec2{uv[0], uv[1]};
+                  }
+                } else if (attr.type == cgltf_attribute_type_normal) {
+                  float normal[3] = {0, 0, 0};
+                  for (size_t i = 0; i < accessor->count; i++) {
+                    cgltf_accessor_read_float(accessor, i, normal, 3);
+                    all_vertices[base_vertex + i].normal =
+                        glm::vec3{normal[0], normal[1], normal[2]};
+                  }
+                }
+              }
+
+              auto vertex_count = result_mesh.vertex_count;
+              glm::vec3 center = tot_center / glm::vec3{static_cast<float>(vertex_count)};
+              float radius{};
+              for (size_t i = base_vertex; i < base_vertex + vertex_count; i++) {
+                radius = glm::max(radius, glm::distance(glm::vec3{all_vertices[i].pos}, center));
+              }
+              result_mesh.center = center;
+              result_mesh.radius = radius;
+            }));
+      }
+    }
+
+    for (auto &fut : mesh_load_futures) {
+      fut.get();
+    }
+
+    auto &meshlet_datas = out_load_result.meshlet_process_result.meshlet_datas;
+    meshlet_datas.reserve(model_vertex_count / k_max_vertices_per_meshlet);
+    std::filesystem::path meshlet_cache_path =
+        std::filesystem::path(path).replace_extension(".meshletcache");
+    if (std::filesystem::exists(meshlet_cache_path)) {
+      std::ifstream meshlet_cache_file(meshlet_cache_path, std::ios::binary);
+      read_meshlets(meshlet_cache_file, meshlet_datas);
+    } else {
+      for (const Mesh &mesh : meshes) {
+        const uint32_t base_vertex = mesh.vertex_offset_bytes / sizeof(DefaultVertex);
+        meshlet_datas.emplace_back(load_meshlet_data(
+            std::span(&all_vertices[base_vertex], mesh.vertex_count),
+            std::span(&all_indices[mesh.index_offset / sizeof(rhi::DefaultIndexT)],
+                      mesh.index_count),
+            base_vertex));
+      }
+    }
+
+    if (!std::filesystem::exists(meshlet_cache_path)) {
+      std::ofstream meshlet_cache_file(meshlet_cache_path, std::ios::binary);
+      write_meshlets(meshlet_cache_file, std::span<const MeshletLoadResult>(meshlet_datas.data(),
+                                                                            meshlet_datas.size()));
     }
   }
+
   {
     ZoneScopedN("Process nodes");
     auto &model = out_model;
