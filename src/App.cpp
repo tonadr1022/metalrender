@@ -59,8 +59,9 @@ App::App() {
 
   on_hide_mouse_change();
 
-  ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_});
-  renderer_.init(gfx::MemeRenderer123::CreateInfo{
+  renderer_.emplace();
+  ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_.value()});
+  renderer_->init(gfx::MemeRenderer123::CreateInfo{
       .device = device_.get(), .window = window_.get(), .resource_dir = resource_dir_});
   // voxel_renderer_ = std::make_unique<vox::Renderer>();
   // voxel_renderer_->init(&renderer_);
@@ -164,7 +165,7 @@ void App::run() {
         .clear_color = config_.clear_color,
         .draw_imgui = imgui_enabled_,
     };
-    renderer_.render(args);
+    renderer_->render(args);
 
     ImGui::EndFrame();
   }
@@ -175,7 +176,8 @@ void App::run() {
 
   write_config();
   write_camera();
-  renderer_.shutdown();
+  renderer_->shutdown();
+  renderer_.reset();
   ResourceManager::shutdown();
   window_->shutdown();
   device_->shutdown();
@@ -223,7 +225,7 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
       window_->set_fullscreen(!window_->get_fullscreen());
     }
   }
-  renderer_.on_key_event(key, action, mods);
+  renderer_->on_key_event(key, action, mods);
 }
 
 void App::on_hide_mouse_change() {
@@ -286,7 +288,7 @@ void App::write_config() {
 void App::on_imgui(float dt) {
   ImGui::Begin("Renderer");
   ImGui::Text("Frame time %f (ms)", dt * 1000);
-  renderer_.on_imgui();
+  renderer_->on_imgui();
   if (ImGui::TreeNodeEx("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Position: %f %f %f", camera_.pos.x, camera_.pos.y, camera_.pos.z);
     ImGui::TreePop();

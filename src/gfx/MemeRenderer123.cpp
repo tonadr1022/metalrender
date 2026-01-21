@@ -533,11 +533,11 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
         uint32_t blocks_wide = align_divide_up(mip_width, 4u);
         auto bytes_per_row = blocks_wide * 16;
 
-        auto upload_buf_handle = device_->create_buf({.size = image_size});
+        auto upload_buf_handle = device_->create_buf_h({.size = image_size});
         auto* upload_buf = device_->get_buf(upload_buf_handle);
         memcpy(upload_buf->contents(), (uint8_t*)ktx_tex->pData + offset, image_size);
 
-        enc->upload_texture_data(upload_buf_handle, 0, bytes_per_row, upload.tex,
+        enc->upload_texture_data(upload_buf_handle.handle, 0, bytes_per_row, upload.tex,
                                  glm::uvec3{mip_width, mip_height, 1}, glm::uvec3{0, 0, 0},
                                  mip_level);
       }
@@ -545,7 +545,7 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
       size_t src_bytes_per_row = tex_upload.bytes_per_row;
       size_t bytes_per_row = align_up(src_bytes_per_row, 256);
       // TODO: staging buffer pool
-      auto upload_buf_handle = device_->create_buf({.size = bytes_per_row * tex->desc().dims.y});
+      auto upload_buf_handle = device_->create_buf_h({.size = bytes_per_row * tex->desc().dims.y});
       auto* upload_buf = device_->get_buf(upload_buf_handle);
       size_t dst_offset = 0;
       size_t src_offset = 0;
@@ -557,7 +557,7 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
         src_offset += src_bytes_per_row;
       }
 
-      enc->upload_texture_data(upload_buf_handle, 0, bytes_per_row, upload.tex);
+      enc->upload_texture_data(upload_buf_handle.handle, 0, bytes_per_row, upload.tex);
     }
     pending_texture_uploads_.pop_back();
   }

@@ -206,7 +206,24 @@ void MetalDevice::init(const InitInfo& init_info) {
   init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = false});
 }
 
-void MetalDevice::shutdown() { device_->release(); }
+void MetalDevice::shutdown() {
+  resource_descriptor_table_ = {};
+  sampler_descriptor_table_ = {};
+  arg_buf_allocator_.reset();
+  push_constant_allocator_.reset();
+  test_allocator_.reset();
+
+  device_->release();
+  LINFO("buffer pool size at shutdown: {}", buffer_pool_.size());
+  for (size_t i = 0; i < buffer_pool_.num_blocks(); i++) {
+    for (const auto& entry : buffer_pool_.get_block_entries(i)) {
+      if (entry.live_) {
+        LWARN("leaked buffer of size {}", entry.object.desc().size);
+      }
+    }
+  }
+  ASSERT(buffer_pool_.empty());
+}
 
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   auto options = mtl::util::convert(desc.storage_mode);
@@ -620,13 +637,16 @@ void MetalDevice::submit_frame() {
 }
 
 void MetalDevice::init_bindless() {
-  auto create_descriptor_table = [this](rhi::BufferHandleHolder* out_buf, size_t count) {
-    *out_buf = create_buf_h(
-        rhi::BufferDesc{.size = sizeof(IRDescriptorTableEntry) * count, .bindless = false});
+  auto create_descriptor_table = [this](rhi::BufferHandleHolder* out_buf, size_t count,
+                                        const char* name) {
+    *out_buf = create_buf_h(rhi::BufferDesc{
+        .size = sizeof(IRDescriptorTableEntry) * count, .bindless = false, .name = name});
   };
 
-  create_descriptor_table(&resource_descriptor_table_, k_max_buffers + k_max_textures);
-  create_descriptor_table(&sampler_descriptor_table_, k_max_samplers);
+  create_descriptor_table(&resource_descriptor_table_, k_max_buffers + k_max_textures,
+                          "bindless_resource_descriptor_table");
+  create_descriptor_table(&sampler_descriptor_table_, k_max_samplers,
+                          "bindless_sampler_descriptor_table");
 }
 
 void MetalDevice::copy_to_buffer(const void* src, size_t src_size, rhi::BufferHandle buf,
@@ -994,4 +1014,25 @@ MTL::ComputePipelineState* MetalDevice::create_compute_pipeline_internal(
     return nullptr;
   }
   return compile_mtl_compute_pipeline(path, "main");
+}
+
+MetalDevice::GPUFrameAllocator::GPUFrameAllocator(size_t size, MetalDevice* device,
+                                                  size_t frames_in_flight) {
+  capacity_ = size;
+  device_ = device;
+  for (size_t i = 0; i < frames_in_flight; i++) {
+    buffers[i] = device->create_buf_h(rhi::BufferDesc{.usage = rhi::BufferUsage_Storage,
+                                                      .size = size,
+                                                      .bindless = false,
+                                                      .name = "gpu_frame_allocator"});
+  }
+}
+MetalDevice::GPUFrameAllocator::Alloc MetalDevice::GPUFrameAllocator::alloc(size_t size) {
+  size = align_up(size, 8);
+  ALWAYS_ASSERT(size + offset_ <= capacity_);
+  auto* buf = device_->get_mtl_buf(buffers[frame_idx_]);
+  ASSERT(buf);
+  size_t offset = offset_;
+  offset_ += size;
+  return {buf, offset};
 }

@@ -205,6 +205,7 @@ namespace model {
 
 bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transform,
                 ModelInstance &out_model, ModelLoadResult &out_load_result) {
+  PrintTimerMilli t{"model load"};
   ZoneScoped;
   out_load_result = {};
   out_model = {};
@@ -482,7 +483,6 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
     }
 
     {
-      PrintTimerMilli t{"process meshlets"};
       auto &meshlet_datas = out_load_result.meshlet_process_result.meshlet_datas;
       meshlet_datas.reserve(model_vertex_count / k_max_vertices_per_meshlet);
       std::filesystem::path meshlet_cache_path =

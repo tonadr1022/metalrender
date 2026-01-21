@@ -186,24 +186,9 @@ class MetalDevice : public rhi::Device {
       size_t offset;
     };
 
-    GPUFrameAllocator(size_t size, MetalDevice* device, size_t frames_in_flight) {
-      capacity_ = size;
-      device_ = device;
-      for (size_t i = 0; i < frames_in_flight; i++) {
-        buffers[i] = device->create_buf_h(
-            rhi::BufferDesc{.usage = rhi::BufferUsage_Storage, .size = size, .bindless = false});
-      }
-    }
+    GPUFrameAllocator(size_t size, MetalDevice* device, size_t frames_in_flight);
 
-    Alloc alloc(size_t size) {
-      size = align_up(size, 8);
-      ALWAYS_ASSERT(size + offset_ <= capacity_);
-      auto* buf = device_->get_mtl_buf(buffers[frame_idx_]);
-      ASSERT(buf);
-      size_t offset = offset_;
-      offset_ += size;
-      return {buf, offset};
-    }
+    Alloc alloc(size_t size);
 
     void reset(size_t frame_idx) {
       frame_idx_ = frame_idx;

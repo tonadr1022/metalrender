@@ -46,7 +46,7 @@ struct App {
 
   glm::vec2 last_pos_{};
   // TODO: ptr for impl/RHI
-  gfx::MemeRenderer123 renderer_;
+  std::optional<gfx::MemeRenderer123> renderer_;
   // std::unique_ptr<vox::Renderer> voxel_renderer_;
   // std::unique_ptr<vox::World> voxel_world_;
 };
