@@ -5,6 +5,7 @@
 
 #define MESHLET_FRUSTUM_CULL_ENABLED_BIT (1 << 0)
 #define MESHLET_CONE_CULL_ENABLED_BIT (1 << 1)
+#define MESHLET_OCCLUSION_CULL_ENABLED_BIT (1 << 2)
 
 cbuffer Task2PC HLSL_PC_REG {
   uint globals_buf_idx;
@@ -20,8 +21,11 @@ cbuffer Task2PC HLSL_PC_REG {
   uint mat_buf_idx;
   uint tt_cmd_buf_idx;
   uint draw_cnt_buf_idx;
+  uint meshlet_vis_buf_idx;
   uint max_draws;
   uint max_meshlets;
+  uint pass;
+  uint depth_pyramid_tex_idx;
   uint flags;
 };
 

@@ -230,6 +230,9 @@ void ShaderManager::init(rhi::Device* device) {
     }
     auto depfile_filepath =
         (depfile_dir_ / path_after_word(entry.path(), "hlsl")).replace_extension(".d");
+    if (!std::filesystem::exists(depfile_filepath)) {
+      continue;
+    }
     auto deps = get_dep_filepaths(depfile_filepath);
     ASSERT(deps.file.extension() == ".hlsl");
     for (const auto& d : deps.deps) {

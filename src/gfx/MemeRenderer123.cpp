@@ -38,6 +38,7 @@
 #include "imgui_impl_glfw.h"
 #include "ktx.h"
 
+using rhi::PipelineStage;
 namespace {
 
 using rhi::RenderingAttachmentInfo;
@@ -113,6 +114,13 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
         .mipmap_mode = rhi::FilterMode::Linear,
         .address_mode = rhi::AddressMode::Repeat,
     }));
+
+    samplers_.emplace_back(device_->create_sampler_h(rhi::SamplerDesc{
+        .min_filter = rhi::FilterMode::Nearest,
+        .mag_filter = rhi::FilterMode::Nearest,
+        .mipmap_mode = rhi::FilterMode::Nearest,
+        .address_mode = rhi::AddressMode::ClampToEdge,
+    }));
   }
 
   {
@@ -160,7 +168,9 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
                                  .initial_meshlet_triangle_capacity = 10'000,
                                  .initial_meshlet_vertex_capacity = 10'000,
                              });
-  meshlet_vis_buf_.emplace(*device_, rhi::BufferDesc{.size = 100'0000}, sizeof(uint32_t));
+  meshlet_vis_buf_.emplace(
+      *device_, rhi::BufferDesc{.size = 100'0000, .bindless = true, .name = "meshlet_vis_buf"},
+      sizeof(uint32_t));
 
   scratch_buffer_pool_.emplace(device_);
   imgui_renderer_.emplace(mgr_, device_);
@@ -195,7 +205,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_.bake(window_->get_window_size(), i++ == -1);
+  rg_.bake(window_->get_window_size(), i++ == 2);
   rg_.execute();
 
   device_->submit_frame();
@@ -326,35 +336,50 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     });
   }
 
-  {
-    auto& gbuffer_pass = rg_.add_graphics_pass("gbuffer");
+  std::string final_depth_pyramid_name;
+
+  auto add_draw_pass = [&args, this, &final_depth_pyramid_name](bool late, const char* name) {
+    auto& p = rg_.add_graphics_pass(name);
     if (k_use_mesh_shader) {
-      gbuffer_pass.r_external_buf("out_draw_count_buf2");
-      gbuffer_pass.r_external_buf("task_cmd_buf");
+      p.r_external_buf("out_draw_count_buf2", rhi::PipelineStage_TaskShader);
+      p.r_external_buf("task_cmd_buf", (PipelineStage)(rhi::PipelineStage_MeshShader |
+                                                       rhi::PipelineStage_TaskShader));
+      if (late) {
+        p.r_external_tex(final_depth_pyramid_name, rhi::PipelineStage_TaskShader);
+        p.rw_external_buf("meshlet_vis_buf2", "meshlet_vis_buf", rhi::PipelineStage_TaskShader);
+      } else {
+        p.w_external("meshlet_vis_buf", meshlet_vis_buf_->get_buffer_handle(),
+                     rhi::PipelineStage_TaskShader);
+      }
     } else {
-      gbuffer_pass.r_external_buf("indirect_buffer", rhi::PipelineStage_DrawIndirect);
+      p.r_external_buf("indirect_buffer", rhi::PipelineStage_DrawIndirect);
     }
-    auto rg_gbuffer_a_handle =
-        gbuffer_pass.w_color_output("gbuffer_a", {.format = rhi::TextureFormat::B8G8R8A8Unorm});
-    auto rg_depth_handle =
-        gbuffer_pass.w_depth_output("depth_tex", {.format = rhi::TextureFormat::D32float});
+    RGResourceHandle rg_gbuffer_a_handle;
+    RGResourceHandle rg_depth_handle;
+    if (late) {
+      rg_gbuffer_a_handle = p.rw_color_output("gbuffer_a2", "gbuffer_a");
+      rg_depth_handle = p.rw_depth_output("depth_tex2", "depth_tex");
+    } else {
+      rg_gbuffer_a_handle =
+          p.w_color_output("gbuffer_a", {.format = rhi::TextureFormat::B8G8R8A8Unorm});
+      rg_depth_handle = p.w_depth_output("depth_tex", {.format = rhi::TextureFormat::D32float});
+    }
 
     for (const auto& t : pending_texture_uploads_) {
-      gbuffer_pass.sample_external_tex(t.name);
+      p.sample_external_tex(t.name);
     }
-    imgui_renderer_->add_dirty_textures_to_pass(gbuffer_pass, true);
+    imgui_renderer_->add_dirty_textures_to_pass(p, true);
 
-    gbuffer_pass.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, &args](rhi::CmdEncoder* enc) {
+    p.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, &args, late](rhi::CmdEncoder* enc) {
       ZoneScopedN("Execute gbuffer pass");
       auto depth_handle = rg_.get_att_img(rg_depth_handle);
       ASSERT(depth_handle.is_valid());
       auto gbuffer_a_tex = rg_.get_att_img(rg_gbuffer_a_handle);
+      auto load_op = late ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
       enc->begin_rendering({
-          RenderingAttachmentInfo::color_att(gbuffer_a_tex, rhi::LoadOp::Clear,
-                                             {.color = args.clear_color}),
+          RenderingAttachmentInfo::color_att(gbuffer_a_tex, load_op, {.color = args.clear_color}),
           RenderingAttachmentInfo::depth_stencil_att(
-              depth_handle, rhi::LoadOp::Clear,
-              {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
+              depth_handle, load_op, {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
       });
 
       enc->set_depth_stencil_state(reverse_z_ ? rhi::CompareOp::Greater : rhi::CompareOp::Less,
@@ -383,8 +408,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
             .tt_cmd_buf_idx = device_->get_buf(static_draw_batch_->task_cmd_buf_)->bindless_idx(),
             .draw_cnt_buf_idx =
                 device_->get_buf(static_draw_batch_->out_draw_count_buf_.handle)->bindless_idx(),
+            .meshlet_vis_buf_idx = meshlet_vis_buf_->get_buffer()->bindless_idx(),
             .max_draws = all_model_data_.max_objects,
             .max_meshlets = all_model_data_.max_meshlets,
+            .pass = late,
+            .depth_pyramid_tex_idx =
+                late ? device_->get_tex(depth_pyramid_tex_.handle)->bindless_idx() : 0,
             .flags = 0,
         };
         if (meshlet_frustum_culling_enabled_) {
@@ -392,6 +421,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         }
         if (meshlet_cone_culling_enabled_) {
           pc.flags |= MESHLET_CONE_CULL_ENABLED_BIT;
+        }
+        if (meshlet_occlusion_culling_enabled_) {
+          pc.flags |= MESHLET_OCCLUSION_CULL_ENABLED_BIT;
         }
         enc->push_constants(&pc, sizeof(pc));
         enc->draw_mesh_threadgroups_indirect(static_draw_batch_->out_draw_count_buf_.handle, 0,
@@ -404,60 +436,68 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       }
       enc->end_rendering();
     });
-  }
-  auto* dp_tex = device_->get_tex(depth_pyramid_tex_);
-  auto dp_dims = glm::uvec2{dp_tex->desc().dims};
-  uint32_t mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
-  std::string final_depth_pyramid_name;
-  std::string read_name;
-  uint32_t final_mip = mip_levels - 1;
-  for (uint32_t mip = 0; mip < final_mip; mip++) {
-    auto& p = rg_.add_compute_pass("depth_reduce_" + std::to_string(mip));
-    RGResourceHandle depth_handle{};
-    if (mip == 0) {
-      depth_handle = p.r_tex("depth_tex");
-      p.r_tex("gbuffer_a");
-    } else {
-      p.r_external_tex(read_name);
-    }
-    auto write_name = "depth_pyramid_tex_reduce_" + std::to_string(mip);
-    if (mip == final_mip - 1) {
-      final_depth_pyramid_name = write_name;
-    }
+  };
 
-    read_name = write_name;
-    p.w_external_tex(write_name, depth_pyramid_tex_.handle);
-    p.set_ex([this, mip, depth_handle, dp_dims](rhi::CmdEncoder* enc) {
-      enc->bind_pipeline(depth_reduce_pso_);
-      glm::uvec2 in_dims = (mip == 0) ? device_->get_tex(rg_.get_att_img(depth_handle))->desc().dims
-                                      : glm::uvec2{std::max(1u, dp_dims.x >> (mip - 1)),
-                                                   std::max(1u, dp_dims.y >> (mip - 1))};
-      auto read_idx = mip == 0 ? device_->get_tex(rg_.get_att_img(depth_handle))->bindless_idx()
-                               : device_->get_tex_view_bindless_idx(
-                                     depth_pyramid_tex_.handle, depth_pyramid_tex_.views[mip - 1]);
-      DepthReducePC pc{
-          .in_tex_dim_x = in_dims.x,
-          .in_tex_dim_y = in_dims.y,
-          .out_tex_dim_x = dp_dims.x >> mip,
-          .out_tex_dim_y = dp_dims.y >> mip,
-          .in_tex_idx = read_idx,
-          .out_tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
-                                                            depth_pyramid_tex_.views[mip]),
-      };
-      enc->push_constants(&pc, sizeof(pc));
-      constexpr size_t k_tg_size = 8;
-      enc->dispatch_compute(glm::uvec3{align_divide_up(pc.out_tex_dim_x, k_tg_size),
-                                       align_divide_up(pc.out_tex_dim_y, k_tg_size), 1},
-                            glm::uvec3{k_tg_size, k_tg_size, 1});
-    });
+  add_draw_pass(false, "draw_pass_early");
+
+  {
+    auto* dp_tex = device_->get_tex(depth_pyramid_tex_);
+    auto dp_dims = glm::uvec2{dp_tex->desc().dims};
+    uint32_t mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
+    std::string read_name;
+    uint32_t final_mip = mip_levels - 1;
+    for (uint32_t mip = 0; mip < final_mip; mip++) {
+      auto& p = rg_.add_compute_pass("depth_reduce_" + std::to_string(mip));
+      RGResourceHandle depth_handle{};
+      if (mip == 0) {
+        depth_handle = p.r_tex("depth_tex");
+      } else {
+        p.r_external_tex(read_name);
+      }
+      auto write_name = "depth_pyramid_tex_reduce_" + std::to_string(mip);
+      if (mip == final_mip - 1) {
+        final_depth_pyramid_name = write_name;
+      }
+
+      read_name = write_name;
+      p.w_external_tex(write_name, depth_pyramid_tex_.handle);
+      p.set_ex([this, mip, depth_handle, dp_dims](rhi::CmdEncoder* enc) {
+        enc->bind_pipeline(depth_reduce_pso_);
+        glm::uvec2 in_dims = (mip == 0)
+                                 ? device_->get_tex(rg_.get_att_img(depth_handle))->desc().dims
+                                 : glm::uvec2{std::max(1u, dp_dims.x >> (mip - 1)),
+                                              std::max(1u, dp_dims.y >> (mip - 1))};
+        auto read_idx = mip == 0
+                            ? device_->get_tex(rg_.get_att_img(depth_handle))->bindless_idx()
+                            : device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
+                                                                 depth_pyramid_tex_.views[mip - 1]);
+        DepthReducePC pc{
+            .in_tex_dim_x = in_dims.x,
+            .in_tex_dim_y = in_dims.y,
+            .out_tex_dim_x = dp_dims.x >> mip,
+            .out_tex_dim_y = dp_dims.y >> mip,
+            .in_tex_idx = read_idx,
+            .out_tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
+                                                              depth_pyramid_tex_.views[mip]),
+        };
+        enc->push_constants(&pc, sizeof(pc));
+        constexpr size_t k_tg_size = 8;
+        enc->dispatch_compute(glm::uvec3{align_divide_up(pc.out_tex_dim_x, k_tg_size),
+                                         align_divide_up(pc.out_tex_dim_y, k_tg_size), 1},
+                              glm::uvec3{k_tg_size, k_tg_size, 1});
+      });
+    }
   }
+
+  add_draw_pass(true, "draw_pass_late");
 
   {
     auto& p = rg_.add_graphics_pass("shade");
-    auto gbuffer_a_rg_handle = p.sample_tex("gbuffer_a");
+    auto gbuffer_a_rg_handle = p.sample_tex("gbuffer_a2");
     p.sample_external_tex(final_depth_pyramid_name);
     p.w_external_tex_color_output("output_result_tex",
                                   device_->get_swapchain().get_texture(curr_frame_idx_));
+    // p.r_external_buf("out_tot_buf2");
     p.set_ex([this, gbuffer_a_rg_handle, &args](rhi::CmdEncoder* enc) {
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
       auto dims = gbuffer_a_tex->desc().dims;
@@ -478,9 +518,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         mult = 100.f;
       }
       TexOnlyPC pc{
+          .color_mult = glm::vec4{mult, mult, mult, 1},
           .tex_idx = tex_idx,
           .mip_level = static_cast<uint32_t>(view_mip_),
-          .color_mult = glm::vec4{mult, mult, mult, 1},
+          // .tmp_meshlet_vis_count = static_cast<uint32_t>(tmp_meshlet_vis_buf_elements_),
+          // .count_buf_idx = device_->get_buf(tmp_meshlet_vis_buf_tot_)->bindless_idx(),
       };
       enc->push_constants(&pc, sizeof(pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
@@ -610,9 +652,9 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
   instance_id_to_node.reserve(model.tot_mesh_nodes);
 
   uint32_t total_instance_vertices{};
+  uint32_t total_instance_meshlets{};
   {
-    // uint32_t instance_copy_idx = 0;
-    // uint32_t curr_meshlet_vis_buf_offset = 0;
+    uint32_t curr_meshlet_vis_buf_i{};
     for (size_t node = 0; node < model.nodes.size(); node++) {
       auto mesh_id = model.mesh_ids[node];
       if (model.mesh_ids[node] == Mesh::k_invalid_mesh_id) {
@@ -621,12 +663,13 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
       base_instance_datas.emplace_back(InstanceData{
           .mat_id = result.meshes[mesh_id].material_id + material_alloc.offset,
           .mesh_id = draw_batch_alloc.mesh_alloc.offset + mesh_id,
+          .meshlet_vis_base = curr_meshlet_vis_buf_i,
       });
       instance_id_to_node.push_back(node);
-      // instance_copy_idx++;
-      // curr_meshlet_vis_buf_offset +=
-      result.meshlet_process_result.meshlet_datas[mesh_id].meshlets.size();
+      curr_meshlet_vis_buf_i +=
+          result.meshlet_process_result.meshlet_datas[mesh_id].meshlets.size();
       total_instance_vertices += result.meshes[mesh_id].vertex_count;
+      total_instance_meshlets += result.meshes[mesh_id].meshlet_count;
     }
   }
 
@@ -637,10 +680,13 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
       .base_instance_datas = std::move(base_instance_datas),
       .meshes = std::move(result.meshes),
       .instance_id_to_node = instance_id_to_node,
-      .totals = ModelGPUResources::Totals{.meshlets = static_cast<uint32_t>(
-                                              result.meshlet_process_result.tot_meshlet_count),
-                                          .vertices = static_cast<uint32_t>(result.vertices.size()),
-                                          .instance_vertices = total_instance_vertices},
+      .totals =
+          ModelGPUResources::Totals{
+              .meshlets = static_cast<uint32_t>(result.meshlet_process_result.tot_meshlet_count),
+              .vertices = static_cast<uint32_t>(result.vertices.size()),
+              .instance_vertices = total_instance_vertices,
+              .instance_meshlets = total_instance_meshlets,
+          },
   });
   return true;
 }
@@ -750,8 +796,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   const OffsetAllocator::Allocation instance_data_gpu_alloc =
       instance_data_mgr_.allocate(model_instance_datas.size());
   all_model_data_.max_objects = instance_data_mgr_.max_seen_size();
-
-  stats_.total_instance_meshlets += model_resources->totals.meshlets;
+  stats_.total_instance_meshlets += model_resources->totals.instance_meshlets;
   stats_.total_instance_vertices += model_resources->totals.instance_vertices;
   OffsetAllocator::Allocation meshlet_vis_buf_alloc{};
   if (k_use_mesh_shader) {
@@ -769,7 +814,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
     instance_datas[i].translation = transform.translation;
     instance_datas[i].rotation = glm::vec4{rot[0], rot[1], rot[2], rot[3]};
     instance_datas[i].scale = transform.scale;
-    // instance_datas[i].meshlet_vis_base += meshlet_vis_buf_alloc.offset;
+    instance_datas[i].meshlet_vis_base += meshlet_vis_buf_alloc.offset;
     size_t mesh_id = model.mesh_ids[node_i];
     auto& mesh = model_resources->meshes[mesh_id];
     cmds.push_back(IndexedIndirectDrawCmd{
@@ -784,6 +829,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
             model_resources->static_draw_batch_alloc.vertex_alloc.offset * sizeof(DefaultVertex)),
         .first_instance = static_cast<uint32_t>(i + instance_data_gpu_alloc.offset),
     });
+    tmp_meshlet_vis_buf_elements_ += mesh.meshlet_count;
   }
 
   stats_.total_instances += instance_datas.size();
@@ -984,9 +1030,11 @@ void MemeRenderer123::on_imgui() {
     ImGui::Text("Fullscreen: %d", window_->get_fullscreen());
     ImGui::TreePop();
   }
+  ImGui::Text("tmp %zu", tmp_meshlet_vis_buf_elements_);
   if (ImGui::TreeNodeEx("Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
                 stats_.total_instance_vertices, stats_.total_instances);
+    ImGui::Text("Total total instance meshlets: %d", stats_.total_instance_meshlets);
 
     ImGui::TreePop();
   }
@@ -1014,6 +1062,7 @@ void MemeRenderer123::on_imgui() {
     ImGui::Checkbox("Culling paused", &culling_paused_);
     ImGui::Checkbox("Meshlet frustum culling enabled", &meshlet_frustum_culling_enabled_);
     ImGui::Checkbox("Meshlet cone culling enabled", &meshlet_cone_culling_enabled_);
+    ImGui::Checkbox("Meshlet occlusion culling enabled", &meshlet_occlusion_culling_enabled_);
     ImGui::TreePop();
   }
 }
@@ -1055,6 +1104,13 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
     cull_data.frustum[3] = frustum_y.z;
     cull_data.z_near = k_z_near;
     cull_data.z_far = k_z_far;
+    const auto& dp_tex_desc = device_->get_tex(depth_pyramid_tex_)->desc();
+    cull_data.pyramid_width = dp_tex_desc.dims.x;
+    cull_data.pyramid_height = dp_tex_desc.dims.y;
+    cull_data.pyramid_mip_count = dp_tex_desc.mip_levels;
+    cull_data.p00 = proj_mat[0][0];
+    cull_data.p11 = proj_mat[1][1];
+    cull_data.paused = culling_paused_;
 
     auto [buf, offset, write_ptr] = uniforms_allocator_->alloc(sizeof(CullData), &cull_data);
     frame_cull_data_buf_info_.idx = device_->get_buf(buf)->bindless_idx();

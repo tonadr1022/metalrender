@@ -1,5 +1,6 @@
 # TODOs
 
+- move device\_->copy_to_buffer outside device interface.
 - staging buffer for texture uploads
 - consolidate upload functions with imgui renderer
 - meshlet visibility bit buffer, meshlet occlusion culling

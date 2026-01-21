@@ -11,6 +11,8 @@ enum PipelineStage : uint64_t {
   PipelineStage_DrawIndirect = 0x2ull,
   PipelineStage_VertexInput = 0x4ull,
   PipelineStage_VertexShader = 0x8ull,
+  PipelineStage_TaskShader = 0x00080000ULL,
+  PipelineStage_MeshShader = 0x00100000ULL,
   PipelineStage_FragmentShader = 0x40ull,
   PipelineStage_EarlyFragmentTests = 0x100ull,
   PipelineStage_LateFragmentTests = 0x200ull,
@@ -136,6 +138,8 @@ class CmdEncoder {
   virtual void dispatch_compute(glm::uvec3 thread_groups, glm::uvec3 threads_per_threadgroup) = 0;
   virtual void fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes, uint32_t size,
                            uint32_t value) = 0;
+  virtual void push_debug_group(const char* name) = 0;
+  virtual void pop_debug_group() = 0;
 };
 
 }  // namespace rhi

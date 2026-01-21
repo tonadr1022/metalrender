@@ -100,6 +100,8 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
                    uint32_t /*value*/) override {
     exit(1);
   }
+  void push_debug_group(const char* name) override;
+  void pop_debug_group() override;
 
  private:
   void init_icb_arg_encoder_and_buf();
@@ -114,14 +116,9 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   MTL4::RenderCommandEncoder* render_enc_{};
   MTL4::ComputeCommandEncoder* compute_enc_{};
   MTL4::ArgumentTable* arg_table_{};
-  MTL::Stages compute_enc_flush_stages_{};
-  MTL::Stages render_enc_flush_stages_{};
-  MTL::Stages compute_enc_dst_stages_{};
-  MTL::Stages render_enc_dst_stages_{};
 
   MetalCmdEncoderICBMgr cmd_icb_mgr_;
-  // rhi::BufferHandleHolder main_icb_container_buf_;
-  // MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
+  int push_debug_group_stack_size_{};
 
   uint8_t pc_data_[168]{};
 };

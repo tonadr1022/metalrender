@@ -322,30 +322,32 @@ void MetalCmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
   auto src_mtl_stage = convert_stage(src_stage);
   auto dst_mtl_stage = convert_stage(dst_stage);
   if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
-    compute_enc_flush_stages_ |= src_mtl_stage;
-    compute_enc_dst_stages_ |= dst_mtl_stage;
+    device_->compute_enc_flush_stages_ |= src_mtl_stage;
+    device_->compute_enc_dst_stages_ |= dst_mtl_stage;
   }
   if (dst_mtl_stage & (MTL::StageVertex | MTL::StageFragment | MTL::StageObject | MTL::StageMesh)) {
-    render_enc_flush_stages_ |= src_mtl_stage;
-    render_enc_dst_stages_ |= dst_mtl_stage;
+    device_->render_enc_flush_stages_ |= src_mtl_stage;
+    device_->render_enc_dst_stages_ |= dst_mtl_stage;
   }
 }
 
 void MetalCmdEncoder::flush_compute_barriers() {
-  if (compute_enc_ && compute_enc_flush_stages_) {
-    compute_enc_->barrierAfterQueueStages(compute_enc_flush_stages_, compute_enc_dst_stages_,
+  if (compute_enc_ && device_->compute_enc_flush_stages_) {
+    compute_enc_->barrierAfterQueueStages(device_->compute_enc_flush_stages_,
+                                          device_->compute_enc_dst_stages_,
                                           MTL4::VisibilityOptionDevice);
-    compute_enc_flush_stages_ = 0;
-    compute_enc_dst_stages_ = 0;
+    device_->compute_enc_flush_stages_ = 0;
+    device_->compute_enc_dst_stages_ = 0;
   }
 }
 
 void MetalCmdEncoder::flush_render_barriers() {
-  if (render_enc_ && render_enc_flush_stages_) {
-    render_enc_->barrierAfterQueueStages(render_enc_flush_stages_, render_enc_dst_stages_,
+  if (render_enc_ && device_->render_enc_flush_stages_) {
+    render_enc_->barrierAfterQueueStages(device_->render_enc_flush_stages_,
+                                         device_->render_enc_dst_stages_,
                                          MTL4::VisibilityOptionDevice);
-    render_enc_flush_stages_ = 0;
-    render_enc_dst_stages_ = 0;
+    device_->render_enc_flush_stages_ = 0;
+    device_->render_enc_dst_stages_ = 0;
   }
 }
 
@@ -386,4 +388,15 @@ void MetalCmdEncoder::draw_mesh_threadgroups(glm::uvec3 thread_groups,
                       threads_per_task_thread_group.z),
       MTL::Size::Make(threads_per_mesh_thread_group.x, threads_per_mesh_thread_group.y,
                       threads_per_mesh_thread_group.z));
+}
+
+void MetalCmdEncoder::pop_debug_group() {
+  ALWAYS_ASSERT(push_debug_group_stack_size_ > 0);
+  push_debug_group_stack_size_--;
+  cmd_buf_->popDebugGroup();
+}
+
+void MetalCmdEncoder::push_debug_group(const char* name) {
+  cmd_buf_->pushDebugGroup(mtl::util::string(name));
+  push_debug_group_stack_size_++;
 }

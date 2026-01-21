@@ -6,6 +6,7 @@
 struct TaskCmd {
   uint32_t instance_id;
   uint32_t task_offset;
+  uint32_t group_base;
   uint32_t task_count;
 };
 

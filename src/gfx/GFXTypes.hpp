@@ -68,7 +68,7 @@ struct BufferDesc {
   StorageMode storage_mode{StorageMode::Default};
   BufferUsage usage{BufferUsage_None};
   size_t size{};
-  bool bindless{false};
+  bool bindless{true};
   bool random_host_access{};
   const char* name{};
 };

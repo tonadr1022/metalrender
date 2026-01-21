@@ -129,6 +129,7 @@ void App::run() {
     }
   } else if (scene == 3) {
     load_model(config_.paths[1], glm::scale(glm::mat4{1}, glm::vec3{1}));
+    load_model(config_.paths[1], glm::translate(glm::mat4{1}, glm::vec3{0, 1, 0}));
   }
 
   // load_model(config_.paths[0], glm::translate(glm::mat4{1}, glm::vec3{0, 0, 0}));
@@ -304,23 +305,28 @@ void App::load_model(const std::filesystem::path& path, const glm::mat4& transfo
   models_.push_back(ResourceManager::get().load_model(full_path, transform));
 }
 
+namespace {
+
+std::filesystem::path get_camera_path(const std::filesystem::path& resource_dir) {
+  return resource_dir / "camera.txt";
+}
+
+}  // namespace
+
 void App::init_camera() {
-  std::ifstream f(resource_dir_ / "camera.txt");
+  std::ifstream f(get_camera_path(resource_dir_));
   if (!f.is_open()) {
     return;
   }
-  glm::vec3 pos;
-  f >> pos.x >> pos.y >> pos.z;
-  glm::vec2 pitch_yaw;
-  f >> pitch_yaw.x >> pitch_yaw.y;
-  camera_.pos = pos;
-  camera_.pitch = pitch_yaw.x;
-  camera_.yaw = pitch_yaw.y;
+  f >> camera_.pos.x >> camera_.pos.y >> camera_.pos.z;
+  f >> camera_.pitch >> camera_.yaw;
+  f >> camera_.acceleration_strength >> camera_.max_velocity;
   camera_.calc_vectors();
 }
 
 void App::write_camera() {
-  std::ofstream f(resource_dir_ / "camera.txt");
+  std::ofstream f(get_camera_path(resource_dir_));
   f << camera_.pos.x << ' ' << camera_.pos.y << ' ' << camera_.pos.z << '\n';
   f << camera_.pitch << ' ' << camera_.yaw << '\n';
+  f << camera_.acceleration_strength << ' ' << camera_.max_velocity << '\n';
 }

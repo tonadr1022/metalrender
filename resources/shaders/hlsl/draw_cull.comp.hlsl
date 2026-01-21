@@ -65,6 +65,7 @@ struct DispatchIndirectCmd {
       task_cmd_buf[task_group_base_i + task_group_i].instance_id = dtid;
       task_cmd_buf[task_group_base_i + task_group_i].task_offset =
           mesh_data.meshlet_base + task_group_i * K_TASK_TG_SIZE;
+      task_cmd_buf[task_group_base_i + task_group_i].group_base = task_group_i * K_TASK_TG_SIZE;
       task_cmd_buf[task_group_base_i + task_group_i].task_count =
           min(K_TASK_TG_SIZE, mesh_data.meshlet_count - task_group_i * K_TASK_TG_SIZE);
     }

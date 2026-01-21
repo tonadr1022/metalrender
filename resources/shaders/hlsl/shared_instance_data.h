@@ -9,6 +9,7 @@ struct InstanceData {
   packed_float4 rotation;
   uint32_t mat_id;
   uint32_t mesh_id;
+  uint32_t meshlet_vis_base;
 };
 
 #endif

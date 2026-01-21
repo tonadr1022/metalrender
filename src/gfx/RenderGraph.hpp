@@ -116,16 +116,21 @@ class RGPass {
   RGResourceHandle sample_tex(const std::string& name);
   void sample_external_tex(std::string name);
   void r_external_tex(std::string name);
+  void r_external_tex(std::string name, rhi::PipelineStage stage);
   void w_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
   void w_external_tex_color_output(const std::string& name, rhi::TextureHandle tex_handle);
   void w_external(const std::string& name, rhi::BufferHandle buf);
+  void w_external(const std::string& name, rhi::BufferHandle buf, rhi::PipelineStage stage);
   RGResourceHandle r_tex(const std::string& name);
   RGResourceHandle w_tex(const std::string& name);
   RGResourceHandle w_color_output(const std::string& name, const AttachmentInfo& att_info);
+  RGResourceHandle rw_color_output(const std::string& name, const std::string& input_name);
   RGResourceHandle w_depth_output(const std::string& name, const AttachmentInfo& att_info);
+  RGResourceHandle rw_depth_output(const std::string& name, const std::string& input_name);
   void r_external_buf(std::string name, rhi::PipelineStage stage);
   void r_external_buf(std::string name);
   void rw_external_buf(std::string name, const std::string& input_name);
+  void rw_external_buf(std::string name, const std::string& input_name, rhi::PipelineStage stage);
 
   struct NameAndAccess {
     std::string name;
@@ -221,6 +226,8 @@ class RenderGraph {
                                  RGAccess access, RGPass& pass);
   void add_external_write_usage(const std::string& name, rhi::TextureHandle handle, RGPass& pass);
   void add_external_write_usage(const std::string& name, rhi::BufferHandle handle, RGPass& pass);
+  void add_internal_rw_tex_usage(const std::string& name, const std::string& input_name,
+                                 RGPass& pass);
   void add_external_rw_buffer_usage(const std::string& name, const std::string& input_name,
                                     RGPass& pass);
 

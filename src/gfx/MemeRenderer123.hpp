@@ -130,6 +130,7 @@ struct ModelGPUResources {
     uint32_t meshlets;
     uint32_t vertices;
     uint32_t instance_vertices;
+    uint32_t instance_meshlets;
   };
   Totals totals{};
 };
@@ -255,7 +256,6 @@ class MemeRenderer123 {
   rhi::BufferHandleHolder tmp_out_draw_cnt_buf_;
   rhi::BufferHandleHolder tmp_test_buf_;
   TexAndViewHolder depth_pyramid_tex_;
-  // std::vector<int> depth_pyramid_tex_views_;
   void recreate_depth_pyramid_tex();
   void recreate_external_textures();
   int view_mip_{};
@@ -303,6 +303,7 @@ class MemeRenderer123 {
   bool culling_paused_{};
   bool meshlet_frustum_culling_enabled_{true};
   bool meshlet_cone_culling_enabled_{true};
+  bool meshlet_occlusion_culling_enabled_{true};
   IdxOffset frame_globals_buf_info_;
   IdxOffset frame_cull_data_buf_info_;
   bool reverse_z_{true};
@@ -313,6 +314,7 @@ class MemeRenderer123 {
     Count,
   };
   DebugRenderMode debug_render_mode_{DebugRenderMode::None};
+  size_t tmp_meshlet_vis_buf_elements_{};
 };
 
 }  // namespace gfx

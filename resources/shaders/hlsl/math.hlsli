@@ -9,4 +9,39 @@ bool cone_cull(float3 center, float radius, float3 cone_axis, float cone_cutoff,
          cone_cutoff * length(center - camera_position) + radius;
 }
 
+// Ref:
+// https://github.com/zeux/niagara/blob/7fa51801abc258c3cb05e9a615091224f02e11cf/src/shaders/math.h#L2
+// Original Ref: 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere. Michael Mara,
+// Morgan McGuire. 2013
+struct ProjectSphereResult {
+  float4 aabb;
+  bool success;
+};
+
+ProjectSphereResult project_sphere(float3 c, float r, float znear, float P00, float P11) {
+  ProjectSphereResult res;
+  res.success = false;
+  c.z = abs(c.z);
+  if (c.z < r + znear) return res;
+
+  float3 cr = c * r;
+  float czr2 = c.z * c.z - r * r;
+
+  float vx = sqrt(c.x * c.x + czr2);
+  float minx = (vx * c.x - cr.z) / (vx * c.z + cr.x);
+  float maxx = (vx * c.x + cr.z) / (vx * c.z - cr.x);
+
+  float vy = sqrt(c.y * c.y + czr2);
+  float miny = (vy * c.y - cr.z) / (vy * c.z + cr.y);
+  float maxy = (vy * c.y + cr.z) / (vy * c.z - cr.y);
+
+  res.aabb = float4(minx * P00, miny * P11, maxx * P00, maxy * P11);
+  res.aabb = res.aabb.xwzy * float4(0.5f, -0.5f, 0.5f, -0.5f) +
+             float4(.5f, .5f, .5f, .5f);  // clip space -> uv space
+
+  res.success = true;
+
+  return res;
+}
+
 #endif

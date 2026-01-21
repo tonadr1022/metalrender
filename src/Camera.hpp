@@ -14,7 +14,7 @@ class Camera {
   glm::vec3 pos{};
   float pitch{}, yaw{};
   glm::vec3 front{}, right{};
-  glm::vec3 max_velocity{5.f};
+  float max_velocity{5.f};
   glm::vec3 velocity{};
   float acceleration_strength{100.0f};
   float damping{0.9f};

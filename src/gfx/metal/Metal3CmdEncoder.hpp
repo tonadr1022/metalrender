@@ -86,10 +86,13 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf, size_t indirect_buf_offset,
                                        glm::uvec3 threads_per_task_thread_group,
                                        glm::uvec3 threads_per_mesh_thread_group) override;
+  void push_debug_group(const char* name) override;
+  void pop_debug_group() override;
 
  private:
   void flush_compute_barriers();
   void flush_render_barriers();
+  void flush_blit_barriers();
 
   enum EncoderType {
     EncoderType_Render = 1,
@@ -106,10 +109,6 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
  private:
   std::vector<rhi::BufferHandle> pending_buffers_to_barrier_;
   void flush_barriers();
-  MTL::Stages compute_enc_flush_stages_{};
-  MTL::Stages render_enc_flush_stages_{};
-  MTL::Stages compute_enc_dst_stages_{};
-  MTL::Stages render_enc_dst_stages_{};
 
   MTL::ComputeCommandEncoder* compute_enc_{};
   MTL::BlitCommandEncoder* blit_enc_{};
@@ -120,4 +119,5 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
 
   uint8_t pc_data_[168]{};
   size_t pc_data_size_{};
+  int push_debug_group_stack_size_{};
 };

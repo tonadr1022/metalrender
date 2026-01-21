@@ -30,6 +30,12 @@ MTL::Stages convert_stage(rhi::PipelineStage stage) {
                rhi::PipelineStage_AllGraphics)) {
     result |= MTL::StageFragment;
   }
+  if (stage & (rhi::PipelineStage_MeshShader | rhi::PipelineStage_AllGraphics)) {
+    result |= MTL::StageMesh;
+  }
+  if (stage & (rhi::PipelineStage_TaskShader | rhi::PipelineStage_AllGraphics)) {
+    result |= MTL::StageObject;
+  }
   if (stage & (rhi::PipelineStage_VertexShader | rhi::PipelineStage_VertexInput |
                rhi::PipelineStage_AllGraphics | rhi::PipelineStage_DrawIndirect)) {
     result |= MTL::StageVertex;
@@ -87,7 +93,6 @@ void Metal3CmdEncoder::begin_rendering(
   }
   flush_barriers();
 
-  render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
   render_enc_->setObjectBuffer(device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
                                kIRDescriptorHeapBindPoint);
   render_enc_->setObjectBuffer(device_->get_mtl_buf(device_->sampler_descriptor_table_), 0,
@@ -376,12 +381,16 @@ void Metal3CmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
   auto src_mtl_stage = convert_stage(src_stage);
   auto dst_mtl_stage = convert_stage(dst_stage);
   if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
-    compute_enc_flush_stages_ |= src_mtl_stage;
-    compute_enc_dst_stages_ |= dst_mtl_stage;
+    device_->compute_enc_flush_stages_ |= src_mtl_stage;
+    device_->compute_enc_dst_stages_ |= dst_mtl_stage;
   }
   if (dst_mtl_stage & (MTL::StageVertex | MTL::StageFragment | MTL::StageObject | MTL::StageMesh)) {
-    render_enc_flush_stages_ |= src_mtl_stage;
-    render_enc_dst_stages_ |= dst_mtl_stage;
+    device_->render_enc_flush_stages_ |= src_mtl_stage;
+    device_->render_enc_dst_stages_ |= dst_mtl_stage;
+  }
+  if (dst_mtl_stage & MTL::StageBlit) {
+    device_->blit_enc_flush_stages_ |= src_mtl_stage;
+    device_->blit_enc_dst_stages_ |= dst_mtl_stage;
   }
 }
 
@@ -391,12 +400,16 @@ void Metal3CmdEncoder::barrier(rhi::BufferHandle buf, rhi::PipelineStage src_sta
   auto src_mtl_stage = convert_stage(src_stage);
   auto dst_mtl_stage = convert_stage(dst_stage);
   if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
-    compute_enc_flush_stages_ |= src_mtl_stage;
-    compute_enc_dst_stages_ |= dst_mtl_stage;
+    device_->compute_enc_flush_stages_ |= src_mtl_stage;
+    device_->compute_enc_dst_stages_ |= dst_mtl_stage;
   }
   if (dst_mtl_stage & (MTL::StageVertex | MTL::StageFragment | MTL::StageObject | MTL::StageMesh)) {
-    render_enc_flush_stages_ |= src_mtl_stage;
-    render_enc_dst_stages_ |= dst_mtl_stage;
+    device_->render_enc_flush_stages_ |= src_mtl_stage;
+    device_->render_enc_dst_stages_ |= dst_mtl_stage;
+  }
+  if (dst_mtl_stage & MTL::StageBlit) {
+    device_->blit_enc_flush_stages_ |= src_mtl_stage;
+    device_->blit_enc_dst_stages_ |= dst_mtl_stage;
   }
 }
 
@@ -527,21 +540,45 @@ void Metal3CmdEncoder::fill_buffer(rhi::BufferHandle handle, uint32_t offset_byt
 }
 
 void Metal3CmdEncoder::flush_compute_barriers() {
-  if (compute_enc_ && compute_enc_flush_stages_) {
-    compute_enc_->barrierAfterQueueStages(compute_enc_flush_stages_, compute_enc_dst_stages_);
+  if (compute_enc_ && device_->compute_enc_flush_stages_) {
+    compute_enc_->barrierAfterQueueStages(device_->compute_enc_flush_stages_,
+                                          device_->compute_enc_dst_stages_);
+    device_->compute_enc_flush_stages_ = 0;
+    device_->compute_enc_dst_stages_ = 0;
   }
 }
 
 void Metal3CmdEncoder::flush_render_barriers() {
-  if (render_enc_ && render_enc_flush_stages_) {
-    render_enc_->barrierAfterQueueStages(render_enc_flush_stages_, render_enc_dst_stages_);
-    render_enc_flush_stages_ = 0;
-    render_enc_dst_stages_ = 0;
+  if (render_enc_ && device_->render_enc_flush_stages_) {
+    render_enc_->barrierAfterQueueStages(device_->render_enc_flush_stages_,
+                                         device_->render_enc_dst_stages_);
+    device_->render_enc_flush_stages_ = 0;
+    device_->render_enc_dst_stages_ = 0;
+  }
+}
+void Metal3CmdEncoder::flush_blit_barriers() {
+  if (blit_enc_ && device_->blit_enc_flush_stages_) {
+    blit_enc_->barrierAfterQueueStages(device_->blit_enc_flush_stages_,
+                                       device_->blit_enc_dst_stages_);
+    device_->blit_enc_flush_stages_ = 0;
+    device_->blit_enc_dst_stages_ = 0;
   }
 }
 
 void Metal3CmdEncoder::flush_barriers() {
   flush_compute_barriers();
   flush_render_barriers();
+  flush_blit_barriers();
   pending_buffers_to_barrier_.clear();
+}
+
+void Metal3CmdEncoder::pop_debug_group() {
+  ALWAYS_ASSERT(push_debug_group_stack_size_ > 0);
+  push_debug_group_stack_size_--;
+  cmd_buf_->popDebugGroup();
+}
+
+void Metal3CmdEncoder::push_debug_group(const char* name) {
+  cmd_buf_->pushDebugGroup(mtl::util::string(name));
+  push_debug_group_stack_size_++;
 }

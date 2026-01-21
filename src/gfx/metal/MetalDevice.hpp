@@ -267,6 +267,15 @@ class MetalDevice : public rhi::Device {
   };
   RequestedAllocationSizes req_alloc_sizes_{};
   bool hot_reload_enabled_{true};
+
+  // TODO: move
+ public:
+  MTL::Stages compute_enc_flush_stages_{};
+  MTL::Stages render_enc_flush_stages_{};
+  MTL::Stages blit_enc_flush_stages_{};
+  MTL::Stages compute_enc_dst_stages_{};
+  MTL::Stages render_enc_dst_stages_{};
+  MTL::Stages blit_enc_dst_stages_{};
 };
 
 struct GLFWwindow;
