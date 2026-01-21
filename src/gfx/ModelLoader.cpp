@@ -14,6 +14,7 @@
 #include "hlsl/shader_constants.h"
 #include "texture/KtxLoad.hpp"
 #include "texture/VkFormatEnum.hpp"
+#include "util/Timer.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image/stb_image.h>
@@ -215,6 +216,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
 
   if (gltf_res != cgltf_result_success) {
     if (gltf_res == cgltf_result_file_not_found) {
+      LINFO("File not found {}", path.string());
       return false;
     }
     return false;
@@ -223,6 +225,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
   gltf_res = cgltf_load_buffers(&gltf_load_opts, gltf.get(), path.c_str());
 
   if (gltf_res != cgltf_result_success) {
+    LINFO("Failed to load cgltf buffers for {}", path.string());
     return false;
   }
 
@@ -478,43 +481,45 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
       fut.get();
     }
 
-    auto &meshlet_datas = out_load_result.meshlet_process_result.meshlet_datas;
-    meshlet_datas.reserve(model_vertex_count / k_max_vertices_per_meshlet);
-    std::filesystem::path meshlet_cache_path =
-        std::filesystem::path(path).replace_extension(".meshletcache");
-    if (std::filesystem::exists(meshlet_cache_path)) {
-      std::ifstream meshlet_cache_file(meshlet_cache_path, std::ios::binary);
-      read_meshlets(meshlet_cache_file, meshlet_datas);
-    } else {
-      meshlet_datas.resize(meshes.size());
-      std::vector<std::future<void>> meshlet_load_futures;
-      meshlet_load_futures.reserve(meshes.size());
-      ;
-      size_t mesh_i = 0;
-      for (const Mesh &mesh : meshes) {
-        const uint32_t base_vertex = mesh.vertex_offset_bytes / sizeof(DefaultVertex);
-        meshlet_load_futures.emplace_back(ThreadPool::get().submit_task(
-            [&all_vertices, &all_indices, &meshlet_datas, mesh_i, base_vertex, &meshes]() {
-              ZoneScopedN("Process Meshlet");
-              auto &mesh = meshes[mesh_i];
-              meshlet_datas[mesh_i] = load_meshlet_data(
-                  std::span(&all_vertices[base_vertex], mesh.vertex_count),
-                  std::span(&all_indices[mesh.index_offset / sizeof(rhi::DefaultIndexT)],
-                            mesh.index_count),
-                  base_vertex);
-            }));
-        mesh_i++;
+    {
+      PrintTimerMilli t{"process meshlets"};
+      auto &meshlet_datas = out_load_result.meshlet_process_result.meshlet_datas;
+      meshlet_datas.reserve(model_vertex_count / k_max_vertices_per_meshlet);
+      std::filesystem::path meshlet_cache_path =
+          std::filesystem::path(path).replace_extension(".meshletcache");
+      if (std::filesystem::exists(meshlet_cache_path)) {
+        std::ifstream meshlet_cache_file(meshlet_cache_path, std::ios::binary);
+        read_meshlets(meshlet_cache_file, meshlet_datas);
+      } else {
+        meshlet_datas.resize(meshes.size());
+        std::vector<std::future<void>> meshlet_load_futures;
+        meshlet_load_futures.reserve(meshes.size());
+        size_t mesh_i = 0;
+        for (const Mesh &mesh : meshes) {
+          const uint32_t base_vertex = mesh.vertex_offset_bytes / sizeof(DefaultVertex);
+          meshlet_load_futures.emplace_back(ThreadPool::get().submit_task(
+              [&all_vertices, &all_indices, &meshlet_datas, mesh_i, base_vertex, &meshes]() {
+                ZoneScopedN("Process Meshlet");
+                auto &mesh = meshes[mesh_i];
+                meshlet_datas[mesh_i] = load_meshlet_data(
+                    std::span(&all_vertices[base_vertex], mesh.vertex_count),
+                    std::span(&all_indices[mesh.index_offset / sizeof(rhi::DefaultIndexT)],
+                              mesh.index_count),
+                    base_vertex);
+              }));
+          mesh_i++;
+        }
+
+        for (auto &fut : meshlet_load_futures) {
+          fut.get();
+        }
       }
 
-      for (auto &fut : meshlet_load_futures) {
-        fut.get();
+      if (!std::filesystem::exists(meshlet_cache_path)) {
+        std::ofstream meshlet_cache_file(meshlet_cache_path, std::ios::binary);
+        write_meshlets(meshlet_cache_file, std::span<const MeshletLoadResult>(
+                                               meshlet_datas.data(), meshlet_datas.size()));
       }
-    }
-
-    if (!std::filesystem::exists(meshlet_cache_path)) {
-      std::ofstream meshlet_cache_file(meshlet_cache_path, std::ios::binary);
-      write_meshlets(meshlet_cache_file, std::span<const MeshletLoadResult>(meshlet_datas.data(),
-                                                                            meshlet_datas.size()));
     }
   }
 
