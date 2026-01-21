@@ -127,7 +127,8 @@ struct BlockPool {
   }
 
   struct Entry {
-    explicit Entry(auto&&... args) : object(std::forward<decltype(args)>(args)...) {}
+    template <class... Args>
+    explicit Entry(Args&&... args) : object(std::forward<Args>(args)...) {}
 
     ObjectT object{};
     uint32_t gen_{1};

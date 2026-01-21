@@ -186,7 +186,7 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
   }
 
   push_constant_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
-  test_allocator_.emplace(1024ul * 1024 * 100, this, info_.frames_in_flight);
+  test_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
   arg_buf_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
 
   init_bindless();
@@ -214,7 +214,6 @@ void MetalDevice::shutdown() {
   test_allocator_.reset();
 
   device_->release();
-  LINFO("buffer pool size at shutdown: {}", buffer_pool_.size());
   for (size_t i = 0; i < buffer_pool_.num_blocks(); i++) {
     for (const auto& entry : buffer_pool_.get_block_entries(i)) {
       if (entry.live_) {
@@ -613,6 +612,7 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
 }
 
 void MetalDevice::submit_frame() {
+  ZoneScoped;
   if (mtl4_enabled_) {
     mtl4_resources_->main_cmd_buf->endCommandBuffer();
 

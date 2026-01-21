@@ -1,6 +1,7 @@
 #include "RenderGraph.hpp"
 
 #include <ranges>
+#include <tracy/Tracy.hpp>
 #include <utility>
 
 #include "core/EAssert.hpp"
@@ -229,6 +230,7 @@ RGPass& RenderGraph::add_pass(const std::string& name, RGPassType type) {
 }
 
 void RenderGraph::execute() {
+  ZoneScoped;
   for (auto pass_i : pass_stack_) {
     rhi::CmdEncoder* enc = device_->begin_command_list();
     for (auto& barrier : pass_barrier_infos_[pass_i]) {
@@ -274,6 +276,7 @@ void RenderGraph::execute() {
 void RenderGraph::reset() {}
 
 void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
+  ZoneScoped;
   if (verbose) {
     LINFO("//////////// Baking Render Graph ////////////");
   }

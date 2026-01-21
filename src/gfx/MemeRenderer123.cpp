@@ -37,7 +37,6 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "ktx.h"
-#include "util/Timer.hpp"
 
 namespace {
 
@@ -154,12 +153,12 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   instance_data_mgr_.init(100'000, device_);
   static_draw_batch_.emplace(DrawBatchType::Static, *device_,
                              DrawBatch::CreateInfo{
-                                 .initial_vertex_capacity = 10'000'000,
-                                 .initial_index_capacity = 1'000'000,
-                                 .initial_meshlet_capacity = 1'000'000,
-                                 .initial_mesh_capacity = 20'000,
-                                 .initial_meshlet_triangle_capacity = 1'000'000,
-                                 .initial_meshlet_vertex_capacity = 1'000'000,
+                                 .initial_vertex_capacity = 10'000,
+                                 .initial_index_capacity = 10'000,
+                                 .initial_meshlet_capacity = 1000,
+                                 .initial_mesh_capacity = 1000,
+                                 .initial_meshlet_triangle_capacity = 10'000,
+                                 .initial_meshlet_vertex_capacity = 10'000,
                              });
   meshlet_vis_buf_.emplace(*device_, rhi::BufferDesc{.size = 100'0000}, sizeof(uint32_t));
 
@@ -1009,7 +1008,7 @@ void MemeRenderer123::on_imgui() {
       std::ranges::sort(
           buffers, [](rhi::Buffer* a, rhi::Buffer* b) { return a->desc().size > b->desc().size; });
       for (auto& b : buffers) {
-        ImGui::Text("%s: %zu", b->desc().name, b->desc().size);
+        ImGui::Text("%s: %f mb", b->desc().name, b->desc().size / 1024.f / 1024.f);
       }
       ImGui::TreePop();
     }

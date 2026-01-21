@@ -45,21 +45,6 @@ add_library(lib_imgui STATIC
     imgui/backends/imgui_impl_glfw.cpp
 )
 
-if (BUILD_METAL)
-    target_sources(lib_imgui PRIVATE
-        imgui/backends/imgui_impl_metal.mm
-    )
-
-    set_source_files_properties(
-        imgui/backends/imgui_impl_metal.mm
-        PROPERTIES
-        COMPILE_DEFINITIONS "IMGUI_IMPL_METAL_CPP"
-        COMPILE_FLAGS "-x objective-c++"
-    )
-    target_link_libraries(lib_imgui PUBLIC METAL_CPP)
-endif()
-
-
 if (BUILD_VULKAN)
     target_sources(lib_imgui PRIVATE
         imgui/backends/imgui_impl_vulkan.cpp
