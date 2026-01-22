@@ -18,38 +18,7 @@
 
 using namespace gfx::mtl;
 
-namespace {
-
-MTL::Stages convert_stage(rhi::PipelineStage stage) {
-  MTL::Stages result{};
-  if (stage & (rhi::PipelineStage_AllCommands)) {
-    result |= MTL::StageAll;
-  }
-  if (stage & (rhi::PipelineStage_FragmentShader | rhi::PipelineStage_EarlyFragmentTests |
-               rhi::PipelineStage_LateFragmentTests | rhi::PipelineStage_ColorAttachmentOutput |
-               rhi::PipelineStage_AllGraphics)) {
-    result |= MTL::StageFragment;
-  }
-  if (stage & (rhi::PipelineStage_MeshShader | rhi::PipelineStage_AllGraphics)) {
-    result |= MTL::StageMesh;
-  }
-  if (stage & (rhi::PipelineStage_TaskShader | rhi::PipelineStage_AllGraphics)) {
-    result |= MTL::StageObject;
-  }
-  if (stage & (rhi::PipelineStage_VertexShader | rhi::PipelineStage_VertexInput |
-               rhi::PipelineStage_AllGraphics | rhi::PipelineStage_DrawIndirect)) {
-    result |= MTL::StageVertex;
-  }
-  if (stage & (rhi::PipelineStage_ComputeShader)) {
-    result |= MTL::StageDispatch;
-  }
-  if (stage & (rhi::PipelineStage_AllTransfer)) {
-    result |= MTL::StageBlit;
-  }
-  return result;
-}
-
-}  // namespace
+namespace {}  // namespace
 
 void Metal3CmdEncoder::end_rendering() {
   ASSERT(render_enc_);
@@ -378,8 +347,8 @@ void Metal3CmdEncoder::prepare_mesh_threadgroups_indirect(
 void Metal3CmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
                                rhi::PipelineStage dst_stage, rhi::AccessFlags) {
   // TODO: fence or something else to enable concurrent anywhere?
-  auto src_mtl_stage = convert_stage(src_stage);
-  auto dst_mtl_stage = convert_stage(dst_stage);
+  auto src_mtl_stage = mtl::util::convert_stage(src_stage);
+  auto dst_mtl_stage = mtl::util::convert_stage(dst_stage);
   if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
     device_->compute_enc_flush_stages_ |= src_mtl_stage;
     device_->compute_enc_dst_stages_ |= dst_mtl_stage;
@@ -396,9 +365,10 @@ void Metal3CmdEncoder::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
 
 void Metal3CmdEncoder::barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage,
                                rhi::AccessFlags, rhi::PipelineStage dst_stage, rhi::AccessFlags) {
+  // TODO: address buffer barriers.
   pending_buffers_to_barrier_.push_back(buf);
-  auto src_mtl_stage = convert_stage(src_stage);
-  auto dst_mtl_stage = convert_stage(dst_stage);
+  auto src_mtl_stage = mtl::util::convert_stage(src_stage);
+  auto dst_mtl_stage = mtl::util::convert_stage(dst_stage);
   if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
     device_->compute_enc_flush_stages_ |= src_mtl_stage;
     device_->compute_enc_dst_stages_ |= dst_mtl_stage;
@@ -445,17 +415,6 @@ void Metal3CmdEncoder::draw_mesh_threadgroups_indirect(rhi::BufferHandle indirec
                       threads_per_task_thread_group.z),
       MTL::Size::Make(threads_per_mesh_thread_group.x, threads_per_mesh_thread_group.y,
                       threads_per_mesh_thread_group.z));
-}
-
-void Metal3CmdEncoder::draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indirect_buf*/,
-                                                       uint32_t /*indirect_buf_id*/,
-                                                       size_t /*draw_cnt*/) {
-  ZoneScoped;
-  exit(1);
-  ASSERT(render_enc_);
-  // render_enc_->executeCommandsInBuffer(
-  //     device_->icb_mgr_draw_mesh_threadgroups_.get(indirect_buf, indirect_buf_id),
-  //     NS::Range::Make(0, draw_cnt));
 }
 
 Metal3CmdEncoder::Metal3CmdEncoder(MetalDevice* device, MTL::CommandBuffer* cmd_buf)
@@ -515,8 +474,6 @@ void Metal3CmdEncoder::draw_mesh_threadgroups(glm::uvec3 thread_groups,
 
 void Metal3CmdEncoder::dispatch_compute(glm::uvec3 thread_groups,
                                         glm::uvec3 threads_per_threadgroup) {
-  // start_compute_encoder();
-  // TODO: only do this if needed!
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(160);
   auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
   memcpy(tlab->pc_data, &pc_data_, sizeof(tlab->pc_data));
@@ -541,9 +498,9 @@ void Metal3CmdEncoder::fill_buffer(rhi::BufferHandle handle, uint32_t offset_byt
 
 void Metal3CmdEncoder::flush_compute_barriers() {
   if (compute_enc_ && device_->compute_enc_flush_stages_) {
-    // compute_enc_->barrierAfterQueueStages(device_->compute_enc_flush_stages_,
-    //                                       device_->compute_enc_dst_stages_);
-    compute_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
+    compute_enc_->barrierAfterQueueStages(device_->compute_enc_flush_stages_,
+                                          device_->compute_enc_dst_stages_);
+    // compute_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
     device_->compute_enc_flush_stages_ = 0;
     device_->compute_enc_dst_stages_ = 0;
   }
@@ -551,9 +508,9 @@ void Metal3CmdEncoder::flush_compute_barriers() {
 
 void Metal3CmdEncoder::flush_render_barriers() {
   if (render_enc_ && device_->render_enc_flush_stages_) {
-    // render_enc_->barrierAfterQueueStages(device_->render_enc_flush_stages_,
-    //                                      device_->render_enc_dst_stages_);
-    render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
+    render_enc_->barrierAfterQueueStages(device_->render_enc_flush_stages_,
+                                         device_->render_enc_dst_stages_);
+    // render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
     device_->render_enc_flush_stages_ = 0;
     device_->render_enc_dst_stages_ = 0;
   }
@@ -561,9 +518,9 @@ void Metal3CmdEncoder::flush_render_barriers() {
 
 void Metal3CmdEncoder::flush_blit_barriers() {
   if (blit_enc_ && device_->blit_enc_flush_stages_) {
-    // blit_enc_->barrierAfterQueueStages(device_->blit_enc_flush_stages_,
-    //                                    device_->blit_enc_dst_stages_);
-    blit_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
+    blit_enc_->barrierAfterQueueStages(device_->blit_enc_flush_stages_,
+                                       device_->blit_enc_dst_stages_);
+    // blit_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
     device_->blit_enc_flush_stages_ = 0;
     device_->blit_enc_dst_stages_ = 0;
   }

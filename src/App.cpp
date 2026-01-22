@@ -33,7 +33,13 @@ App::App() {
   ZoneScoped;
   resource_dir_ = get_resource_dir();
   std::filesystem::current_path(resource_dir_.parent_path());
+  local_resource_dir_ = resource_dir_ / "local";
+  std::filesystem::create_directories(local_resource_dir_);
   shader_dir_ = resource_dir_ / "shaders";
+
+  camera_path_ = local_resource_dir_ / "camera.txt";
+  config_path_ = local_resource_dir_ / "config.txt";
+
   load_config();
   device_ = rhi::create_device(rhi::GfxAPI::Metal);
   window_ = std::make_unique<AppleWindow>();
@@ -45,7 +51,7 @@ App::App() {
       .transparent_window = transparent_window,
       .win_dims_x = config_.win_dims.x,
       .win_dims_y = config_.win_dims.y,
-      .floating_window = true,
+      .floating_window = false,
   };
   window_->init(win_init_info);
   window_->set_window_position(config_.win_pos);
@@ -212,7 +218,10 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
     if (key == GLFW_KEY_G && mods & GLFW_MOD_ALT) {
       imgui_enabled_ = !imgui_enabled_;
     }
-    if (key == GLFW_KEY_C) {
+    if (key == GLFW_KEY_C && mods & GLFW_MOD_CONTROL && mods & GLFW_MOD_SHIFT) {
+      camera_ = {};
+      camera_.calc_vectors();
+    } else if (key == GLFW_KEY_C) {
       if (!models_.empty()) {
         ResourceManager::get().free_model(models_[0]);
         models_.erase(models_.begin());
@@ -236,17 +245,9 @@ void App::on_hide_mouse_change() {
 
 void App::load_config() {
   ZoneScoped;
-  std::filesystem::path config_file{resource_dir_ / "config.txt"};
-  if (!std::filesystem::exists(config_file)) {
-    config_file = resource_dir_ / "default_config.txt";
-  }
-  ALWAYS_ASSERT(std::filesystem::exists(config_file));
-  std::ifstream f(config_file);
-  if (!f.is_open()) {
-    LCRITICAL("Failed to load config file: {}", config_file.string());
-    return;
-  }
-
+  std::ifstream f(std::filesystem::exists(config_path_) ? config_path_
+                                                        : resource_dir_ / "default_config.txt");
+  ASSERT(f.is_open());
   std::string token;
   while (f >> token) {
     if (token == "win_dims") {
@@ -272,8 +273,7 @@ void App::load_config() {
 }
 
 void App::write_config() {
-  const std::filesystem::path config_file{resource_dir_ / "config.txt"};
-  std::ofstream f(config_file);
+  std::ofstream f(config_path_);
   auto win_dims = window_->get_window_not_framebuffer_size();
   f << "win_dims " << win_dims.x << ' ' << win_dims.y << '\n';
   auto win_pos = window_->get_window_position();
@@ -299,22 +299,18 @@ void App::on_imgui(float dt) {
   ImGui::ShowDemoWindow();
 }
 
-void App::load_model(const std::filesystem::path& path, const glm::mat4& transform) {
-  auto full_path =
-      path.string().contains("Models") ? resource_dir_ / "models" / "gltf" / path : path;
-  models_.push_back(ResourceManager::get().load_model(full_path, transform));
+void App::load_model(const std::string& path, const glm::mat4& transform) {
+  std::string full_path;
+  if (path.starts_with("Models")) {
+    full_path = resource_dir_ / "models" / "gltf" / path;
+  } else {
+    full_path = path;
+  }
+  models_.emplace_back(ResourceManager::get().load_model(full_path, transform));
 }
-
-namespace {
-
-std::filesystem::path get_camera_path(const std::filesystem::path& resource_dir) {
-  return resource_dir / "camera.txt";
-}
-
-}  // namespace
 
 void App::init_camera() {
-  std::ifstream f(get_camera_path(resource_dir_));
+  std::ifstream f(camera_path_);
   if (!f.is_open()) {
     return;
   }
@@ -325,7 +321,7 @@ void App::init_camera() {
 }
 
 void App::write_camera() {
-  std::ofstream f(get_camera_path(resource_dir_));
+  std::ofstream f(camera_path_);
   f << camera_.pos.x << ' ' << camera_.pos.y << ' ' << camera_.pos.z << '\n';
   f << camera_.pitch << ' ' << camera_.yaw << '\n';
   f << camera_.acceleration_strength << ' ' << camera_.max_velocity << '\n';

@@ -190,4 +190,32 @@ MTL::TextureUsage convert(rhi::TextureUsage usage) {
   return result;
 }
 
+MTL::Stages convert_stage(rhi::PipelineStage stage) {
+  MTL::Stages result{};
+  if (stage & (rhi::PipelineStage_AllCommands)) {
+    result |= MTL::StageAll;
+  }
+  if (stage & (rhi::PipelineStage_FragmentShader | rhi::PipelineStage_EarlyFragmentTests |
+               rhi::PipelineStage_LateFragmentTests | rhi::PipelineStage_ColorAttachmentOutput |
+               rhi::PipelineStage_AllGraphics)) {
+    result |= MTL::StageFragment;
+  }
+  if (stage & (rhi::PipelineStage_MeshShader | rhi::PipelineStage_AllGraphics)) {
+    result |= MTL::StageMesh;
+  }
+  if (stage & (rhi::PipelineStage_TaskShader | rhi::PipelineStage_AllGraphics)) {
+    result |= MTL::StageObject;
+  }
+  if (stage & (rhi::PipelineStage_VertexShader | rhi::PipelineStage_VertexInput |
+               rhi::PipelineStage_AllGraphics | rhi::PipelineStage_DrawIndirect)) {
+    result |= MTL::StageVertex;
+  }
+  if (stage & (rhi::PipelineStage_ComputeShader)) {
+    result |= MTL::StageDispatch;
+  }
+  if (stage & (rhi::PipelineStage_AllTransfer)) {
+    result |= MTL::StageBlit;
+  }
+  return result;
+}
 }  // namespace mtl::util

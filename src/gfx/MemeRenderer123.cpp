@@ -170,7 +170,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
                                  .initial_meshlet_vertex_capacity = 10'000,
                              });
   meshlet_vis_buf_.emplace(
-      *device_, rhi::BufferDesc{.size = 100'0000, .bindless = true, .name = "meshlet_vis_buf"},
+      *device_, rhi::BufferDesc{.size = 1000, .bindless = true, .name = "meshlet_vis_buf"},
       sizeof(uint32_t));
 
   scratch_buffer_pool_.emplace(device_);
@@ -182,6 +182,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   recreate_external_textures();
 
   uniforms_allocator_.emplace(1024 * 1024, device_);
+  staging_buffer_allocator_.emplace(device_);
   for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
     out_counts_buf_[i] = device_->create_buf_h(rhi::BufferDesc{
         .storage_mode = rhi::StorageMode::CPUAndGPU,
@@ -196,6 +197,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   ZoneScoped;
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
   uniforms_allocator_->reset(curr_frame_idx_);
+  staging_buffer_allocator_->reset(curr_frame_idx_);
 
   if (!device_->begin_frame(window_->get_window_size())) {
     return;
@@ -214,7 +216,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_.bake(window_->get_window_size(), i++ == 2);
+  rg_.bake(window_->get_window_size(), i++ == -1);
   rg_.execute();
 
   device_->submit_frame();
@@ -553,7 +555,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
 void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
   ZoneScoped;
-  imgui_renderer_->flush_pending_texture_uploads(enc);
+  imgui_renderer_->flush_pending_texture_uploads(enc, staging_buffer_allocator_.value());
 
   while (pending_texture_uploads_.size()) {
     auto& upload = pending_texture_uploads_.back();
@@ -578,8 +580,10 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
         total_img_size += image_size;
       }
 
-      auto upload_buf_handle = device_->create_buf_h({.size = total_img_size});
-      size_t upload_buf_offset = 0;
+      auto upload_buf = staging_buffer_allocator_->alloc(total_img_size);
+      ASSERT(upload_buf.buf.is_valid());
+
+      size_t curr_dst_offset = 0;
       for (uint32_t mip_level = 0; mip_level < desc.mip_levels; mip_level++) {
         size_t offset;
         auto result = ktxTexture_GetImageOffset(ktxTexture(ktx_tex), mip_level, 0, 0, &offset);
@@ -590,31 +594,29 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
         uint32_t mip_height = std::max(1u, desc.dims.y >> mip_level);
         uint32_t blocks_wide = align_divide_up(mip_width, block_width);
         auto bytes_per_row = blocks_wide * bytes_per_block;
-        auto* upload_buf = device_->get_buf(upload_buf_handle);
-        memcpy((uint8_t*)upload_buf->contents() + upload_buf_offset,
-               (uint8_t*)ktx_tex->pData + offset, img_mip_level_size_bytes);
-        enc->upload_texture_data(upload_buf_handle.handle, upload_buf_offset, bytes_per_row,
+        memcpy((uint8_t*)upload_buf.write_ptr + curr_dst_offset, (uint8_t*)ktx_tex->pData + offset,
+               img_mip_level_size_bytes);
+        enc->upload_texture_data(upload_buf.buf, upload_buf.offset + curr_dst_offset, bytes_per_row,
                                  upload.tex, glm::uvec3{mip_width, mip_height, 1},
                                  glm::uvec3{0, 0, 0}, mip_level);
-        upload_buf_offset += img_mip_level_size_bytes;
+        curr_dst_offset += img_mip_level_size_bytes;
       }
     } else {
       size_t src_bytes_per_row = tex_upload.bytes_per_row;
       size_t bytes_per_row = align_up(src_bytes_per_row, 256);
       // TODO: staging buffer pool
-      auto upload_buf_handle = device_->create_buf_h({.size = bytes_per_row * tex->desc().dims.y});
-      auto* upload_buf = device_->get_buf(upload_buf_handle);
+      size_t total_size = bytes_per_row * tex->desc().dims.y;
+      auto upload_buf = staging_buffer_allocator_->alloc(total_size);
       size_t dst_offset = 0;
       size_t src_offset = 0;
       for (size_t row = 0; row < tex->desc().dims.y; row++) {
-        ASSERT(dst_offset + bytes_per_row <= upload_buf->size());
-        memcpy((uint8_t*)upload_buf->contents() + dst_offset,
+        memcpy((uint8_t*)upload_buf.write_ptr + dst_offset,
                (uint8_t*)tex_upload.data.get() + src_offset, src_bytes_per_row);
         dst_offset += bytes_per_row;
         src_offset += src_bytes_per_row;
       }
 
-      enc->upload_texture_data(upload_buf_handle.handle, 0, bytes_per_row, upload.tex);
+      enc->upload_texture_data(upload_buf.buf, upload_buf.offset, bytes_per_row, upload.tex);
     }
     pending_texture_uploads_.pop_back();
   }
@@ -1034,7 +1036,6 @@ void MemeRenderer123::init_imgui() {
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
   io.BackendRendererName = "imgui_impl_memes";
   io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_RendererHasTextures;
-  // TODO: uuuuuhhhhhhhhhh
   ImGui_ImplGlfw_InitForOther(window_->get_handle(), true);
 }
 
@@ -1076,7 +1077,7 @@ void MemeRenderer123::on_imgui() {
       std::ranges::sort(
           buffers, [](rhi::Buffer* a, rhi::Buffer* b) { return a->desc().size > b->desc().size; });
       for (auto& b : buffers) {
-        ImGui::Text("%s: %f mb", b->desc().name, b->desc().size / 1024.f / 1024.f);
+        ImGui::Text("%s: %.1f mb", b->desc().name, b->desc().size / 1024.f / 1024.f);
       }
       ImGui::TreePop();
     }

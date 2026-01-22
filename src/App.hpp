@@ -23,7 +23,7 @@ struct App {
   void load_config();
   void write_config();
   void on_imgui(float dt);
-  void load_model(const std::filesystem::path &path, const glm::mat4 &transform);
+  void load_model(const std::string &path, const glm::mat4 &transform);
   void init_camera();
   void write_camera();
 
@@ -36,6 +36,9 @@ struct App {
   Config config_;
   std::filesystem::path resource_dir_;
   std::filesystem::path shader_dir_;
+  std::filesystem::path local_resource_dir_;
+  std::filesystem::path camera_path_;
+  std::filesystem::path config_path_;
   std::unique_ptr<rhi::Device> device_;
   std::unique_ptr<Window> window_;
   Camera camera_;

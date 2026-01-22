@@ -5,6 +5,7 @@
 
 namespace gfx {
 
+struct GPUFrameAllocator3;
 class RGPass;
 class ShaderManager;
 
@@ -12,7 +13,8 @@ class ImGuiRenderer {
  public:
   explicit ImGuiRenderer(ShaderManager& shader_mgr, rhi::Device* device);
   void render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t frame_in_flight);
-  void flush_pending_texture_uploads(rhi::CmdEncoder* enc);
+  void flush_pending_texture_uploads(rhi::CmdEncoder* enc,
+                                     GPUFrameAllocator3& staging_buffer_allocator);
   rhi::PipelineHandleHolder pso_;
 
   std::vector<rhi::BufferHandleHolder> buffers_[k_max_frames_in_flight];

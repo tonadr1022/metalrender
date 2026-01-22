@@ -7,6 +7,7 @@
 #include "core/Util.hpp"
 #include "gfx/Buffer.hpp"
 #include "gfx/CmdEncoder.hpp"
+#include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/Pipeline.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/ShaderManager.hpp"
@@ -162,7 +163,8 @@ void ImGuiRenderer::return_buffer(rhi::BufferHandleHolder&& handle, size_t frame
   buffers_[frame_in_flight].push_back(std::move(handle));
 }
 
-void ImGuiRenderer::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
+void ImGuiRenderer::flush_pending_texture_uploads(rhi::CmdEncoder* enc,
+                                                  GPUFrameAllocator3& staging_buffer_allocator) {
   auto* draw_data = ImGui::GetDrawData();
   ASSERT(draw_data);
   if (draw_data->Textures) {
@@ -177,40 +179,34 @@ void ImGuiRenderer::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
           auto* tex = device_->get_tex(tex_handle);
           size_t bytes_per_element = im_tex->BytesPerPixel;
           size_t src_bytes_per_row = tex->desc().dims.x * bytes_per_element;
+          // TODO: remove
           size_t bytes_per_row = align_up(src_bytes_per_row, 256);
-          // TODO: staging buffer pool
-          auto upload_buf_handle =
-              device_->create_buf_h({.storage_mode = rhi::StorageMode::CPUAndGPU,
-                                     .size = bytes_per_row * tex->desc().dims.y,
-                                     .name = "tex upload buf"});
-          auto* upload_buf = device_->get_buf(upload_buf_handle);
+          auto total_size = bytes_per_row * tex->desc().dims.y;
+          auto upload_buf = staging_buffer_allocator.alloc(total_size);
           size_t dst_offset = 0;
           size_t src_offset = 0;
           for (size_t row = 0; row < tex->desc().dims.y; row++) {
-            memcpy((uint8_t*)upload_buf->contents() + dst_offset,
+            memcpy((uint8_t*)upload_buf.write_ptr + dst_offset,
                    (uint8_t*)im_tex->Pixels + src_offset, src_bytes_per_row);
             dst_offset += bytes_per_row;
             src_offset += src_bytes_per_row;
           }
 
-          enc->upload_texture_data(upload_buf_handle.handle, 0, bytes_per_row, tex_handle);
+          enc->upload_texture_data(upload_buf.buf, upload_buf.offset, bytes_per_row, tex_handle);
           im_tex->SetTexID(tex_handle.to64());
           im_tex->SetStatus(ImTextureStatus_OK);
         } else if (im_tex->Status == ImTextureStatus_WantUpdates) {
           for (ImTextureRect& r : im_tex->Updates) {
             size_t bytes_per_row = r.w * 4ull;
-            auto upload_buf_handle =
-                device_->create_buf_h({.storage_mode = rhi::StorageMode::CPUAndGPU,
-                                       .size = static_cast<size_t>(r.h * r.w) * 4ull,
-                                       .name = "tex upload buf"});
-            auto* upload_buf = device_->get_buf(upload_buf_handle);
+            auto size = static_cast<size_t>(r.h * r.w) * 4ull;
+            auto upload_buf = staging_buffer_allocator.alloc(size);
             size_t offset = 0;
             for (size_t y = r.y; y < r.y + r.h; y++) {
-              memcpy((uint8_t*)upload_buf->contents() + offset,
-                     (uint8_t*)im_tex->GetPixelsAt(r.x, y), bytes_per_row);
+              memcpy((uint8_t*)upload_buf.write_ptr + offset, (uint8_t*)im_tex->GetPixelsAt(r.x, y),
+                     bytes_per_row);
               offset += r.w * 4ull;
             }
-            enc->upload_texture_data(upload_buf_handle.handle, 0, bytes_per_row,
+            enc->upload_texture_data(upload_buf.buf, upload_buf.offset, bytes_per_row,
                                      rhi::TextureHandle{im_tex->GetTexID()},
                                      glm::uvec3{r.w, r.h, 1}, glm::uvec3{r.x, r.y, 0}, -1);
           }

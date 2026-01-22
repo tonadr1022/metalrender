@@ -258,4 +258,61 @@ enum class WindOrder : uint8_t {
   CounterClockwise,
 };
 
+enum PipelineStage : uint64_t {
+  PipelineStage_None = 0,
+  PipelineStage_TopOfPipe = 0x1ull,
+  PipelineStage_DrawIndirect = 0x2ull,
+  PipelineStage_VertexInput = 0x4ull,
+  PipelineStage_VertexShader = 0x8ull,
+  PipelineStage_TaskShader = 0x00080000ULL,
+  PipelineStage_MeshShader = 0x00100000ULL,
+  PipelineStage_FragmentShader = 0x40ull,
+  PipelineStage_EarlyFragmentTests = 0x100ull,
+  PipelineStage_LateFragmentTests = 0x200ull,
+  PipelineStage_ColorAttachmentOutput = 0x400ull,
+  PipelineStage_ComputeShader = 0x800ull,
+  PipelineStage_AllTransfer = 0x1000ull,
+  PipelineStage_BottomOfPipe = 0x2000ull,
+  PipelineStage_Host = 0x4000ull,
+  PipelineStage_AllGraphics = 0x8000ull,
+  PipelineStage_AllCommands = 0x10000ull,
+};
+
+using PipelineStageBits = uint64_t;
+
+enum AccessFlags : uint64_t {
+  AccessFlags_None = 0ULL,
+  AccessFlags_IndirectCommandRead = 0X00000001ULL,
+  AccessFlags_IndexRead = 0X00000002ULL,
+  AccessFlags_VertexAttributeRead = 0X00000004ULL,
+  AccessFlags_UniformRead = 0X00000008ULL,
+  AccessFlags_InputAttachmentRead = 0X00000010ULL,
+  AccessFlags_ShaderRead = 0X00000020ULL,
+  AccessFlags_ShaderWrite = 0X00000040ULL,
+  AccessFlags_ColorAttachmentRead = 0X00000080ULL,
+  AccessFlags_ColorAttachmentWrite = 0X00000100ULL,
+  AccessFlags_DepthStencilRead = 0X00000200ULL,
+  AccessFlags_DepthStencilWrite = 0X00000400ULL,
+  AccessFlags_TransferRead = 0X00000800ULL,
+  AccessFlags_TransferWrite = 0X00001000ULL,
+  AccessFlags_HostRead = 0X00002000ULL,
+  AccessFlags_HostWrite = 0X00004000ULL,
+  AccessFlags_MemoryRead = 0X00008000ULL,
+  AccessFlags_MemoryWrite = 0X00010000ULL,
+  AccessFlags_ShaderSampledRead = 0X100000000ULL,
+  AccessFlags_ShaderStorageRead = 0X200000000ULL,
+  AccessFlags_ShaderStorageWrite = 0X400000000ULL,
+  AccessFlags_AnyRead = rhi::AccessFlags_IndirectCommandRead | rhi::AccessFlags_IndexRead |
+                        rhi::AccessFlags_VertexAttributeRead | rhi::AccessFlags_UniformRead |
+                        rhi::AccessFlags_InputAttachmentRead | rhi::AccessFlags_ShaderRead |
+                        rhi::AccessFlags_ColorAttachmentRead | rhi::AccessFlags_DepthStencilRead |
+                        rhi::AccessFlags_TransferRead | rhi::AccessFlags_HostRead |
+                        rhi::AccessFlags_MemoryRead | rhi::AccessFlags_ShaderSampledRead |
+                        rhi::AccessFlags_ShaderStorageRead,
+  AccessFlags_AnyWrite = rhi::AccessFlags_ShaderWrite | rhi::AccessFlags_ColorAttachmentWrite |
+                         rhi::AccessFlags_DepthStencilWrite | rhi::AccessFlags_TransferWrite |
+                         rhi::AccessFlags_HostWrite | rhi::AccessFlags_MemoryWrite |
+                         rhi::AccessFlags_ShaderStorageWrite,
+};
+
 }  // namespace rhi

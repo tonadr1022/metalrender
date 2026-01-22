@@ -68,48 +68,34 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
   void barrier(rhi::BufferHandle, rhi::PipelineStage, rhi::AccessFlags, rhi::PipelineStage,
-               rhi::AccessFlags) override {}
+               rhi::AccessFlags) override;
 
   void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
                              size_t draw_cnt, size_t offset_i) override;
   void draw_mesh_threadgroups(glm::uvec3 thread_groups, glm::uvec3 threads_per_task_thread_group,
                               glm::uvec3 threads_per_mesh_thread_group) override;
+  void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf, size_t indirect_buf_offset,
+                                       glm::uvec3 threads_per_task_thread_group,
+                                       glm::uvec3 threads_per_mesh_thread_group) override;
   void prepare_mesh_threadgroups_indirect(
       rhi::BufferHandle /*mesh_cmd_indirect_buf*/, size_t /*mesh_cmd_indirect_buf_offset*/,
       glm::uvec3 /*threads_per_task_thread_group*/, glm::uvec3 /*threads_per_mesh_thread_group*/,
       void* /*push_constant_data*/, size_t /*push_constant_size*/, uint32_t /*draw_cnt*/) override {
-    exit(1);
-  }
-  void draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indirect_buf*/,
-                                       uint32_t /*indirect_buf_id*/, size_t /*draw_cnt*/) override {
-    exit(1);
+    ALWAYS_ASSERT(0 && "unimplemented");
   }
 
-  void draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indirect_buf*/,
-                                       size_t /*indirect_buf_offset*/,
-                                       glm::uvec3 /*threads_per_task_thread_group*/,
-                                       glm::uvec3 /*threads_per_mesh_thread_group*/) override {
-    exit(1);
-  }
-
-  void dispatch_compute(glm::uvec3 /*thread_groups*/,
-                        glm::uvec3 /*threads_per_threadgroup*/) override {
-    exit(1);
-  }
-  void fill_buffer(rhi::BufferHandle /*handle*/, uint32_t /*offset_bytes*/, uint32_t /*size*/,
-                   uint32_t /*value*/) override {
-    exit(1);
-  }
+  void dispatch_compute(glm::uvec3 thread_groups, glm::uvec3 threads_per_threadgroup) override;
+  void fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes, uint32_t size,
+                   uint32_t value) override;
   void push_debug_group(const char* name) override;
   void pop_debug_group() override;
 
  private:
   void init_icb_arg_encoder_and_buf();
-  void flush_compute_barriers();
-  void flush_render_barriers();
   void end_render_encoder();
   void end_compute_encoder();
   void start_compute_encoder();
+  void flush_barriers();
 
   MetalDevice* device_{};
   MTL4::CommandBuffer* cmd_buf_{};
@@ -121,4 +107,6 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   int push_debug_group_stack_size_{};
 
   uint8_t pc_data_[168]{};
+  size_t pc_data_size_{};
+  bool push_constant_dirty_{false};
 };

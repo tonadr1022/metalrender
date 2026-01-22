@@ -296,6 +296,7 @@ class MemeRenderer123 {
 
   // TODO: rename or sum?
   std::optional<GPUFrameAllocator2> uniforms_allocator_;
+  std::optional<GPUFrameAllocator3> staging_buffer_allocator_;
   static constexpr float k_z_near = 0.01f;
   static constexpr float k_z_far = 30000.f;
   static constexpr float k_default_fov_deg = 70.0f;

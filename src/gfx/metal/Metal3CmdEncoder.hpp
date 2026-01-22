@@ -69,10 +69,11 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
 
   void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
                              size_t draw_cnt, size_t offset_i) override;
-  void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
-                                       size_t draw_cnt) override;
   void draw_mesh_threadgroups(glm::uvec3 thread_groups, glm::uvec3 threads_per_task_thread_group,
                               glm::uvec3 threads_per_mesh_thread_group) override;
+  void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf, size_t indirect_buf_offset,
+                                       glm::uvec3 threads_per_task_thread_group,
+                                       glm::uvec3 threads_per_mesh_thread_group) override;
 
   void prepare_mesh_threadgroups_indirect(rhi::BufferHandle mesh_cmd_indirect_buf,
                                           size_t mesh_cmd_indirect_buf_offset,
@@ -83,9 +84,6 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   void dispatch_compute(glm::uvec3 thread_groups, glm::uvec3 threads_per_threadgroup) override;
   void fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes, uint32_t size,
                    uint32_t value) override;
-  void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf, size_t indirect_buf_offset,
-                                       glm::uvec3 threads_per_task_thread_group,
-                                       glm::uvec3 threads_per_mesh_thread_group) override;
   void push_debug_group(const char* name) override;
   void pop_debug_group() override;
 

@@ -207,7 +207,6 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
   auto* tex = curr_drawable_->texture();
   swap_img_desc.dims = {tex->width(), tex->height(), 1};
   swap_img_desc.format = mtl::util::convert(tex->pixelFormat());
-  LINFO("format {}", (int)swap_img_desc.format);
   swap_img_desc.mip_levels = 1;
   swap_img_desc.array_length = 1;
   swapchain_.get_textures()[frame_idx()] = rhi::TextureHandleHolder{
@@ -229,11 +228,12 @@ void MetalDevice::shutdown() {
   for (size_t i = 0; i < buffer_pool_.num_blocks(); i++) {
     for (const auto& entry : buffer_pool_.get_block_entries(i)) {
       if (entry.live_) {
-        LWARN("leaked buffer of size {}", entry.object.desc().size);
+        LWARN("leaked buffer {}, SIZE {}",
+              entry.object.desc().name ? entry.object.desc().name : "unnamed_buffer",
+              entry.object.desc().size);
       }
     }
   }
-  ASSERT(buffer_pool_.empty());
 }
 
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
@@ -922,7 +922,7 @@ MTL::RenderPipelineState* MetalDevice::create_graphics_pipeline_internal(
     }
   }
 
-  auto set_color_blend_atts = [&cinfo](auto& desc) {
+  auto set_color_blend_atts = [&cinfo](auto desc) {
     int color_format_cnt = 0;
     for (auto format : cinfo.rendering.color_formats) {
       if (format != rhi::TextureFormat::Undefined) {
@@ -955,25 +955,37 @@ MTL::RenderPipelineState* MetalDevice::create_graphics_pipeline_internal(
   NS::Error* err{};
 
   if (mtl4_enabled_) {
-    MTL4::RenderPipelineDescriptor* desc = MTL4::RenderPipelineDescriptor::alloc()->init();
-    for (const auto& shader_info : cinfo.shaders) {
-      if (shader_info.type == ShaderType::None) {
-        break;
+    auto set_shader_stage_functions_for_desc = [this, &cinfo](auto desc) {
+      for (const auto& shader_info : cinfo.shaders) {
+        if (shader_info.type == ShaderType::None) {
+          break;
+        }
+        set_shader_stage_functions(
+            shader_info, desc, "main",
+            create_or_get_lib(get_metallib_path_from_shader_info(shader_info)));
       }
-      set_shader_stage_functions(
-          shader_info, desc, "main",
-          create_or_get_lib(get_metallib_path_from_shader_info(shader_info)));
+    };
+
+    auto create_pso = [this, &set_shader_stage_functions_for_desc, &set_color_blend_atts, &cinfo](
+                          auto desc, NS::Error** err) -> MTL::RenderPipelineState* {
+      set_shader_stage_functions_for_desc(desc);
+      set_color_blend_atts(desc);
+      for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
+        desc->colorAttachments()->object(i)->setBlendingState(
+            cinfo.blend.attachments[i].enable ? MTL4::BlendStateEnabled : MTL4::BlendStateDisabled);
+      }
+      desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);
+      return mtl4_resources_->shader_compiler->newRenderPipelineState(desc, nullptr, err);
+    };
+
+    if (!is_vertex_pipeline) {
+      MTL4::MeshRenderPipelineDescriptor* desc =
+          MTL4::MeshRenderPipelineDescriptor::alloc()->init();
+      result = create_pso(desc, &err);
+    } else {
+      MTL4::RenderPipelineDescriptor* desc = MTL4::RenderPipelineDescriptor::alloc()->init();
+      result = create_pso(desc, &err);
     }
-
-    set_color_blend_atts(desc);
-
-    for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
-      desc->colorAttachments()->object(i)->setBlendingState(
-          cinfo.blend.attachments[i].enable ? MTL4::BlendStateEnabled : MTL4::BlendStateDisabled);
-    }
-    desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);
-
-    result = mtl4_resources_->shader_compiler->newRenderPipelineState(desc, nullptr, &err);
 
   } else {
     auto set_shader_stage_functions_for_desc = [this, &cinfo](auto desc) {
@@ -1007,7 +1019,6 @@ MTL::RenderPipelineState* MetalDevice::create_graphics_pipeline_internal(
 
     if (!is_vertex_pipeline) {
       MTL::MeshRenderPipelineDescriptor* desc = MTL::MeshRenderPipelineDescriptor::alloc()->init();
-      desc->setDepthAttachmentPixelFormat(mtl::util::convert(cinfo.rendering.depth_format));
       result = create_pso(desc, &err);
     } else {
       MTL::RenderPipelineDescriptor* desc = MTL::RenderPipelineDescriptor::alloc()->init();
