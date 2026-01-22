@@ -234,7 +234,9 @@ void ShaderManager::init(rhi::Device* device) {
       continue;
     }
     auto deps = get_dep_filepaths(depfile_filepath);
-    ASSERT(deps.file.extension() == ".hlsl");
+    if (deps.file.empty()) {
+      continue;
+    }
     for (const auto& d : deps.deps) {
       filepath_to_src_hlsl_includers_[d].emplace_back(deps.file);
     }

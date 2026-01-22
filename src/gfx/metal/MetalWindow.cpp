@@ -36,14 +36,14 @@ CA::MetalLayer *init_metal_window(GLFWwindow *window, MTL::Device *device,
   mtl_layer.device = (__bridge id<MTLDevice>)device;
   mtl_layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
 
-  CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
-  CGFloat bg_color[] = {0.0, 0.0, 0.0, 0.0};
-  CGColorRef bg_color_ref = CGColorCreate(color_space, bg_color);
-  mtl_layer.backgroundColor = bg_color_ref;
-
-  CGColorRelease(bg_color_ref);
-  CGColorSpaceRelease(color_space);
   [ns_view setLayer:mtl_layer];
+  // CGColorSpaceRef color_space = CGColorSpaceCreateDeviceRGB();
+  // CGFloat bg_color[] = {0.0, 0.0, 0.0, 0.0};
+  // CGColorRef bg_color_ref = CGColorCreate(color_space, bg_color);
+  // mtl_layer.backgroundColor = bg_color_ref;
+  //
+  // CGColorRelease(bg_color_ref);
+  // CGColorSpaceRelease(color_space);
   [ns_view setWantsLayer:YES];
   init_pool->release();
   return (CA::MetalLayer *)mtl_layer;
