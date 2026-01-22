@@ -34,7 +34,9 @@ App::App() {
   resource_dir_ = get_resource_dir();
   std::filesystem::current_path(resource_dir_.parent_path());
   local_resource_dir_ = resource_dir_ / "local";
-  std::filesystem::create_directories(local_resource_dir_);
+  if (!std::filesystem::exists(local_resource_dir_)) {
+    std::filesystem::create_directories(local_resource_dir_);
+  }
   shader_dir_ = resource_dir_ / "shaders";
 
   camera_path_ = local_resource_dir_ / "camera.txt";

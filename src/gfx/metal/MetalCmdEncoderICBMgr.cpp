@@ -13,11 +13,6 @@ void MetalCmdEncoderICBMgr::init_icb_arg_encoder_and_buf_and_set_icb(
     main_icb_container_arg_enc_->setIndirectCommandBuffer(icbs[i], 0);
   };
 
-  if (i < main_icb_container_buf_.size()) {
-    encode_icb();
-    return;
-  }
-
   if (!main_icb_container_arg_enc_) {
     MTL::ArgumentDescriptor* arg = MTL::ArgumentDescriptor::alloc()->init();
     arg->setIndex(0);
@@ -29,6 +24,11 @@ void MetalCmdEncoderICBMgr::init_icb_arg_encoder_and_buf_and_set_icb(
   }
   main_icb_container_buf_.emplace_back(
       device_->create_buf_h({.size = main_icb_container_arg_enc_->encodedLength()}));
+
+  if (i < main_icb_container_buf_.size()) {
+    encode_icb();
+    return;
+  }
 
   encode_icb();
 }

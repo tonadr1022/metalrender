@@ -386,7 +386,7 @@ rhi::PipelineHandleHolder ShaderManager::create_compute_pipeline(
 
 std::filesystem::path ShaderManager::get_shader_path(const std::string& relative_path,
                                                      rhi::ShaderType type) {
-  static const fs::path shader_src_dir = fs::path("resources") / "shaders" / "hlsl";
+  const fs::path shader_src_dir = fs::path("resources") / "shaders" / "hlsl";
   return (shader_src_dir / relative_path)
       .concat(".")
       .concat(get_shader_type_string(type))

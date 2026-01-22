@@ -32,6 +32,6 @@ class MetalCmdEncoderICBMgr {
 
  private:
   std::vector<rhi::BufferHandleHolder> main_icb_container_buf_;
-  MTL::ArgumentEncoder* main_icb_container_arg_enc_;
+  MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
   MetalDevice* device_{};
 };

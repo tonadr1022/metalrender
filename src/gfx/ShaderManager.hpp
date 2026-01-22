@@ -54,8 +54,7 @@ class ShaderManager {
   std::filesystem::path depfile_dir_;
   std::filesystem::path hashes_filepath_;
   rhi::Device* device_{};
-  inline static const std::filesystem::path hlsl_src_dir =
-      std::filesystem::path("resources/shaders/hlsl");
+  const std::filesystem::path hlsl_src_dir = std::filesystem::path("resources/shaders/hlsl");
 
   std::jthread file_watcher_thread_;
   std::mutex file_watch_mtx_;

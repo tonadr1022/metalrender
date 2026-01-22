@@ -9,4 +9,5 @@ target_link_libraries(METAL_CPP INTERFACE
         "-framework Metal"
         "-framework Foundation"
         "-framework QuartzCore"
+        "-framework CoreGraphics"
 )
