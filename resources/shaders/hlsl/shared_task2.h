@@ -26,6 +26,7 @@ cbuffer Task2PC HLSL_PC_REG {
   uint max_meshlets;
   uint pass;
   uint depth_pyramid_tex_idx;
+  uint out_counts_buf_idx;
   uint flags;
 };
 

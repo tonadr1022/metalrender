@@ -1,6 +1,8 @@
 #ifndef SHADER_CORE_H
 #define SHADER_CORE_H
 
+#define DEBUG_MODE 1
+
 #ifdef __HLSL__
 
 #define HLSL_REG(x) : register(x)

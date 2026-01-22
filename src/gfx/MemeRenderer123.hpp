@@ -15,6 +15,7 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/ShaderManager.hpp"
+#include "hlsl/shared_globals.h"
 #include "hlsl/shared_instance_data.h"
 #include "hlsl/shared_mesh_data.h"
 #include "offsetAllocator.hpp"
@@ -309,12 +310,16 @@ class MemeRenderer123 {
   bool reverse_z_{true};
 
   enum class DebugRenderMode {
-    None,
-    DepthReduceMips,
-    Count,
+    None = DEBUG_RENDER_MODE_NONE,
+    DepthReduceMips = DEBUG_RENDER_MODE_DEPTH_REDUCE_MIPS,
+    MeshletColors = DEBUG_RENDER_MODE_MESHLET_COLORS,
+    TriangleColors = DEBUG_RENDER_MODE_TRIANGLE_COLORS,
+    InstanceColors = DEBUG_RENDER_MODE_INSTANCE_COLORS,
+    Count = DEBUG_RENDER_MODE_COUNT,
   };
   DebugRenderMode debug_render_mode_{DebugRenderMode::None};
   size_t tmp_meshlet_vis_buf_elements_{};
+  rhi::BufferHandleHolder out_counts_buf_[k_max_frames_in_flight];
 };
 
 }  // namespace gfx

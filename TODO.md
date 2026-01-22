@@ -1,5 +1,6 @@
 # TODOs
 
+- Don't read meshlet stats buffer with contents() like a total clown.
 - move device\_->copy_to_buffer outside device interface.
 - staging buffer for texture uploads
 - consolidate upload functions with imgui renderer

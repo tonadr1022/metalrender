@@ -129,7 +129,7 @@ void App::run() {
     }
   } else if (scene == 3) {
     load_model(config_.paths[1], glm::scale(glm::mat4{1}, glm::vec3{1}));
-    load_model(config_.paths[1], glm::translate(glm::mat4{1}, glm::vec3{0, 1, 0}));
+    // load_model(config_.paths[1], glm::translate(glm::mat4{1}, glm::vec3{0, 1, 0}));
   }
 
   // load_model(config_.paths[0], glm::translate(glm::mat4{1}, glm::vec3{0, 0, 0}));

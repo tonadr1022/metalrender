@@ -181,6 +181,14 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   recreate_external_textures();
 
   uniforms_allocator_.emplace(1024 * 1024, device_);
+  for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
+    out_counts_buf_[i] = device_->create_buf_h(rhi::BufferDesc{
+        .storage_mode = rhi::StorageMode::CPUAndGPU,
+        .usage = rhi::BufferUsage_Storage,
+        .size = sizeof(uint32_t) * 2,
+        .name = "out_counts_buf",
+    });
+  }
 }
 
 void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
@@ -337,6 +345,13 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   }
 
   std::string final_depth_pyramid_name;
+  {
+    auto& p = rg_.add_transfer_pass("clear_out_counts_buf");
+    p.w_external("out_counts_buf", out_counts_buf_[curr_frame_idx_].handle);
+    p.set_ex([this](rhi::CmdEncoder* enc) {
+      enc->fill_buffer(out_counts_buf_[curr_frame_idx_].handle, 0, sizeof(uint32_t) * 2, 0);
+    });
+  }
 
   auto add_draw_pass = [&args, this, &final_depth_pyramid_name](bool late, const char* name) {
     auto& p = rg_.add_graphics_pass(name);
@@ -345,7 +360,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       p.r_external_buf("task_cmd_buf", (PipelineStage)(rhi::PipelineStage_MeshShader |
                                                        rhi::PipelineStage_TaskShader));
       if (late) {
-        p.r_external_tex(final_depth_pyramid_name, rhi::PipelineStage_TaskShader);
+        p.sample_external_tex(final_depth_pyramid_name, rhi::PipelineStage_TaskShader);
         p.rw_external_buf("meshlet_vis_buf2", "meshlet_vis_buf", rhi::PipelineStage_TaskShader);
       } else {
         p.w_external("meshlet_vis_buf", meshlet_vis_buf_->get_buffer_handle(),
@@ -359,7 +374,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     if (late) {
       rg_gbuffer_a_handle = p.rw_color_output("gbuffer_a2", "gbuffer_a");
       rg_depth_handle = p.rw_depth_output("depth_tex2", "depth_tex");
+      p.rw_external_buf("out_counts_buf3", "out_counts_buf2", rhi::PipelineStage_TaskShader);
     } else {
+      p.rw_external_buf("out_counts_buf2", "out_counts_buf", rhi::PipelineStage_TaskShader);
       rg_gbuffer_a_handle =
           p.w_color_output("gbuffer_a", {.format = rhi::TextureFormat::B8G8R8A8Unorm});
       rg_depth_handle = p.w_depth_output("depth_tex", {.format = rhi::TextureFormat::D32float});
@@ -414,6 +431,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
             .pass = late,
             .depth_pyramid_tex_idx =
                 late ? device_->get_tex(depth_pyramid_tex_.handle)->bindless_idx() : 0,
+            .out_counts_buf_idx =
+                device_->get_buf(out_counts_buf_[curr_frame_idx_])->bindless_idx(),
             .flags = 0,
         };
         if (meshlet_frustum_culling_enabled_) {
@@ -490,6 +509,15 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   }
 
   add_draw_pass(true, "draw_pass_late");
+  {
+    // TODO: LMAOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
+    auto* counts = (uint32_t*)device_->get_buf(out_counts_buf_[curr_frame_idx_])->contents();
+    auto* counts2 =
+        (uint32_t*)device_
+            ->get_buf(out_counts_buf_[(curr_frame_idx_ + 1) % device_->get_info().frames_in_flight])
+            ->contents();
+    LINFO("This {} {}\tPrevious {} {}", counts[0], counts[1], counts2[0], counts2[1]);
+  }
 
   {
     auto& p = rg_.add_graphics_pass("shade");
@@ -510,9 +538,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
       uint32_t tex_idx{};
       float mult = 1.f;
-      if (debug_render_mode_ == DebugRenderMode::None) {
+      if (debug_render_mode_ != DebugRenderMode::DepthReduceMips) {
         tex_idx = gbuffer_a_tex->bindless_idx();
-      } else if (debug_render_mode_ == DebugRenderMode::DepthReduceMips) {
+      } else {
         tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
                                                      depth_pyramid_tex_.views[view_mip_]);
         mult = 100.f;
@@ -727,7 +755,8 @@ DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType
   size_t meshlet_vertices_offset{};
   size_t mesh_i{};
 
-  // TODO: explicit staging buffer. this is writing all over the place and probably blowing caches.
+  // TODO: explicit staging buffer. this is writing all over the place and probably blowing
+  // caches.
   for (const auto& meshlet_data : meshlets.meshlet_datas) {
     device_->copy_to_buffer(meshlet_data.meshlets.data(),
                             meshlet_data.meshlets.size() * sizeof(Meshlet),
@@ -1075,6 +1104,7 @@ glm::mat4 MemeRenderer123::get_proj_matrix(float fov) {
 void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
   glm::mat4 proj_mat = get_proj_matrix();
   GlobalData global_data{
+      .render_mode = (uint32_t)debug_render_mode_,
       .vp = proj_mat * args.view_mat,
       .view = args.view_mat,
       .proj = proj_mat,
@@ -1120,7 +1150,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
 
 bool MemeRenderer123::on_key_event(int key, int action, int mods) {
   ZoneScoped;
-  if (action == GLFW_PRESS) {
+  if (action == GLFW_PRESS || action == GLFW_REPEAT) {
     if (key == GLFW_KEY_G && mods & GLFW_MOD_CONTROL) {
       if (mods & GLFW_MOD_SHIFT) {
         if (debug_render_mode_ == DebugRenderMode::None) {
@@ -1136,7 +1166,7 @@ bool MemeRenderer123::on_key_event(int key, int action, int mods) {
       return true;
     }
 
-    if (key == GLFW_KEY_R && mods & GLFW_MOD_CONTROL) {
+    if (action == GLFW_PRESS && key == GLFW_KEY_R && mods & GLFW_MOD_CONTROL) {
       LINFO("Recompiling shaders.");
       mgr_.recompile_shaders();
       return true;

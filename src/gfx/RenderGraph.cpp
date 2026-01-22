@@ -729,6 +729,10 @@ void RGPass::sample_external_tex(std::string name) {
   } else {
     ASSERT(0);
   }
+  sample_external_tex(std::move(name), stage);
+}
+
+void RGPass::sample_external_tex(std::string name, rhi::PipelineStage stage) {
   rg_->external_read_names.insert(name);
   external_reads_.emplace_back(NameAndAccess{
       std::move(name), stage, rhi::AccessFlags_ShaderSampledRead, RGResourceType::ExternalTexture});

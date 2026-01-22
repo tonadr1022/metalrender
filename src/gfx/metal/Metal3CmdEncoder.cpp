@@ -541,8 +541,9 @@ void Metal3CmdEncoder::fill_buffer(rhi::BufferHandle handle, uint32_t offset_byt
 
 void Metal3CmdEncoder::flush_compute_barriers() {
   if (compute_enc_ && device_->compute_enc_flush_stages_) {
-    compute_enc_->barrierAfterQueueStages(device_->compute_enc_flush_stages_,
-                                          device_->compute_enc_dst_stages_);
+    // compute_enc_->barrierAfterQueueStages(device_->compute_enc_flush_stages_,
+    //                                       device_->compute_enc_dst_stages_);
+    compute_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
     device_->compute_enc_flush_stages_ = 0;
     device_->compute_enc_dst_stages_ = 0;
   }
@@ -550,16 +551,19 @@ void Metal3CmdEncoder::flush_compute_barriers() {
 
 void Metal3CmdEncoder::flush_render_barriers() {
   if (render_enc_ && device_->render_enc_flush_stages_) {
-    render_enc_->barrierAfterQueueStages(device_->render_enc_flush_stages_,
-                                         device_->render_enc_dst_stages_);
+    // render_enc_->barrierAfterQueueStages(device_->render_enc_flush_stages_,
+    //                                      device_->render_enc_dst_stages_);
+    render_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
     device_->render_enc_flush_stages_ = 0;
     device_->render_enc_dst_stages_ = 0;
   }
 }
+
 void Metal3CmdEncoder::flush_blit_barriers() {
   if (blit_enc_ && device_->blit_enc_flush_stages_) {
-    blit_enc_->barrierAfterQueueStages(device_->blit_enc_flush_stages_,
-                                       device_->blit_enc_dst_stages_);
+    // blit_enc_->barrierAfterQueueStages(device_->blit_enc_flush_stages_,
+    //                                    device_->blit_enc_dst_stages_);
+    blit_enc_->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
     device_->blit_enc_flush_stages_ = 0;
     device_->blit_enc_dst_stages_ = 0;
   }

@@ -1,7 +1,7 @@
 # Another Renderer
 
 I've been working on this renderer to enlighten myself on the wonders
-of the Metal API while I don't have access to a desktop. As of Jan 2026, I might be quitting this for now, since HLSL shader debugging in Xcode is quite lacking.
+of the Metal API while I don't have access to a desktop. As of Jan 2026, I might be quitting this for now, since HLSL shader debugging in Xcode is quite lacking. As of later Jan 2026, I came back to this, since I once again was sentenced to MacOS only. My current work is inspiring me to continue this and add a Vulkan backend so the RHI is actually an RHI and is provably not leaky.
 
 ## The deal
 

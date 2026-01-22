@@ -23,20 +23,35 @@ float3 hue2rgb(float hue) {
   return rgb;
 }
 
-VOut get_vertex_attributes(in InstanceData instance_data, uint vertex_idx, uint meshlet_idx,
-                           uint instance_data_idx) {
+#ifdef DEBUG_MODE
+VOut get_vertex_attributes(in InstanceData instance_data, in float4x4 vp, uint render_mode,
+                           uint vertex_idx, uint meshlet_idx, uint instance_data_idx,
+                           uint triangle_idx) {
+#else
+VOut get_vertex_attributes(in InstanceData instance_data, in float4x4 vp, uint render_mode,
+                           uint vertex_idx) {
+#endif
   StructuredBuffer<DefaultVertex> vertex_buf = ResourceDescriptorHeap[vertex_buf_idx];
   DefaultVertex vert = vertex_buf[vertex_idx];
 
   float3 pos = rotate_quat(instance_data.scale * vert.pos.xyz, instance_data.rotation) +
                instance_data.translation;
-  ByteAddressBuffer global_data_buf = ResourceDescriptorHeap[globals_buf_idx];
-  GlobalData globals = global_data_buf.Load<GlobalData>(globals_buf_offset_bytes);
-  float4x4 vp = globals.vp;
   VOut v;
   v.pos = mul(vp, float4(pos, 1.0));
   v.uv = vert.uv;
-  v.color = float4(hue2rgb((instance_data_idx + meshlet_idx) * 1.71f), 1.0);
+#ifdef DEBUG_MODE
+#define COLOR_MULTIPLIER 1.71f
+  if (render_mode == DEBUG_RENDER_MODE_TRIANGLE_COLORS) {
+    v.color =
+        float4(hue2rgb((instance_data_idx + meshlet_idx + triangle_idx) * COLOR_MULTIPLIER), 1.0);
+  } else if (render_mode == DEBUG_RENDER_MODE_MESHLET_COLORS) {
+    v.color = float4(hue2rgb((instance_data_idx + meshlet_idx) * COLOR_MULTIPLIER), 1.0);
+  } else if (render_mode == DEBUG_RENDER_MODE_INSTANCE_COLORS) {
+    v.color = float4(hue2rgb(instance_data_idx * COLOR_MULTIPLIER), 1.0);
+  } else {
+    v.color = float4(1.0, 1.0, 1.0, 1.0);
+  }
+#endif
   v.material_id = instance_data.mat_id;
   return v;
 }
@@ -82,11 +97,19 @@ main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload pay
 
   StructuredBuffer<uint> meshlet_vertex_buf = ResourceDescriptorHeap[meshlet_vertex_buf_idx];
 
+  ByteAddressBuffer global_data_buf = ResourceDescriptorHeap[globals_buf_idx];
+  GlobalData globals = global_data_buf.Load<GlobalData>(globals_buf_offset_bytes);
   for (uint i = gtid; i < meshlet.vertex_count;) {
     uint vertex_idx =
         meshlet_vertex_buf[meshlet.vertex_offset + i + task_cmd.meshlet_vertices_offset];
-    verts[i] = get_vertex_attributes(instance_data, vertex_idx + task_cmd.vertex_base, meshlet_idx,
-                                     tt.instance_id);
+#ifdef DEBUG_MODE
+    verts[i] =
+        get_vertex_attributes(instance_data, globals.vp, globals.render_mode,
+                              vertex_idx + task_cmd.vertex_base, meshlet_idx, tt.instance_id, i);
+#else
+    verts[i] = get_vertex_attributes(instance_data, globals.vp, globals.render_mode,
+                                     vertex_idx + task_cmd.vertex_base);
+#endif
     i += K_MESH_TG_SIZE;
   }
 

@@ -115,6 +115,7 @@ class RGPass {
 
   RGResourceHandle sample_tex(const std::string& name);
   void sample_external_tex(std::string name);
+  void sample_external_tex(std::string name, rhi::PipelineStage stage);
   void r_external_tex(std::string name);
   void r_external_tex(std::string name, rhi::PipelineStage stage);
   void w_external_tex(const std::string& name, rhi::TextureHandle tex_handle);

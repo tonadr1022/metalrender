@@ -34,6 +34,8 @@ groupshared uint s_count;
   RWStructuredBuffer<uint> meshlet_vis_buf = ResourceDescriptorHeap[meshlet_vis_buf_idx];
   Texture2D depth_pyramid_tex = ResourceDescriptorHeap[depth_pyramid_tex_idx];
   SamplerState samp = SamplerDescriptorHeap[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
+  ByteAddressBuffer cull_data_buf = ResourceDescriptorHeap[cull_data_idx];
+  CullData cull_data = cull_data_buf.Load<CullData>(sizeof(GlobalData));
 
   if (task_group_id < task_dispatch_buf[0].x) {
     TaskCmd tt = tts[task_group_id];
@@ -59,8 +61,6 @@ groupshared uint s_count;
       if (pass != 0 && visible_last_frame) {
         skip_draw = true;
       }
-      ByteAddressBuffer cull_data_buf = ResourceDescriptorHeap[cull_data_idx];
-      CullData cull_data = cull_data_buf.Load<CullData>(sizeof(GlobalData));
       float3 world_center =
           rotate_quat(instance_data.scale * meshlet.center_radius.xyz, instance_data.rotation) +
           instance_data.translation;
@@ -108,14 +108,18 @@ groupshared uint s_count;
           float2 halfTexel = texelSizeAtLod * 0.5f;
           float2 smid = (aabb.xy + aabb.zw) * 0.5f;
           smid = clamp(smid, float2(0.f, 0.f), float2(1.f, 1.f));
+          int lod_i = int(lod);
           float d0 =
-              depth_pyramid_tex.SampleLevel(samp, smid + float2(-halfTexel.x, -halfTexel.y), lod).x;
+              depth_pyramid_tex.SampleLevel(samp, smid + float2(-halfTexel.x, -halfTexel.y), lod_i)
+                  .x;
           float d1 =
-              depth_pyramid_tex.SampleLevel(samp, smid + float2(-halfTexel.x, halfTexel.y), lod).x;
+              depth_pyramid_tex.SampleLevel(samp, smid + float2(-halfTexel.x, halfTexel.y), lod_i)
+                  .x;
           float d2 =
-              depth_pyramid_tex.SampleLevel(samp, smid + float2(halfTexel.x, -halfTexel.y), lod).x;
+              depth_pyramid_tex.SampleLevel(samp, smid + float2(halfTexel.x, -halfTexel.y), lod_i)
+                  .x;
           float d3 =
-              depth_pyramid_tex.SampleLevel(samp, smid + float2(halfTexel.x, halfTexel.y), lod).x;
+              depth_pyramid_tex.SampleLevel(samp, smid + float2(halfTexel.x, halfTexel.y), lod_i).x;
           float depth = min(min(d0, d1), min(d2, d3));
 
           float view_z = center.z + radius;
@@ -125,19 +129,29 @@ groupshared uint s_count;
         }
       }
 
-      visible = visible || (cull_data.paused != 0 && visible_last_frame);
+      // visible = visible || (cull_data.paused != 0 && visible_last_frame);
+      if (cull_data.paused == 0) {
+        // Only update visibility when NOT paused
+        // visible stays as calculated above
+        if (pass != 0 && meshlet_vis_i != UINT_MAX) {
+          meshlet_vis_buf[meshlet_vis_i] = visible;
+        }
+      } else {
+        // When paused, use the last frame's visibility state
+        visible = visible_last_frame;
+      }
 
       draw = visible && !skip_draw;
     }
   }
 
-  if (pass != 0 && meshlet_vis_i != UINT_MAX) {
-    meshlet_vis_buf[meshlet_vis_i] = visible;
-  }
-
   if (gtid == 0) {
     s_count = 0;
   }
+
+  RWStructuredBuffer<uint> out_counts_buf = ResourceDescriptorHeap[out_counts_buf_idx];
+  uint cnt;
+  InterlockedAdd(out_counts_buf[pass], draw ? 1 : 0, cnt);
 
   GroupMemoryBarrierWithGroupSync();
 
