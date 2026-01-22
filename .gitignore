@@ -12,3 +12,4 @@ build-debug
 resources/models/gltf
 resources/local/
 build*
+.cache

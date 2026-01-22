@@ -1,3 +1,5 @@
+set(CMAKE_CXX_STANDARD 23)
+
 if (BUILD_METAL)
     add_subdirectory(metal-cpp)
     add_subdirectory(metal_irconverter_runtime)
@@ -76,7 +78,7 @@ target_include_directories(lib_imgui PUBLIC
 set(MESHOPT_INSTALL OFF)
 add_subdirectory(meshoptimizer)
 
-option(TRACY_ENABLE "Enable profiling" ON)
+option(TRACY_ENABLE "Enable Tracy profiler" OFF)
 option(TRACY_ONLY_IPV4 "IPv4 only" ON)
 
 if (MSVC)
