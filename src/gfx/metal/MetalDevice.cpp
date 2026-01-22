@@ -200,6 +200,18 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 
   shared_event_ = device_->newSharedEvent();
   test_event_ = get_device()->newEvent();
+  ASSERT(metal_layer_);
+  curr_drawable_ = metal_layer_->nextDrawable();
+
+  rhi::TextureDesc swap_img_desc{};
+  auto* tex = curr_drawable_->texture();
+  swap_img_desc.dims = {tex->width(), tex->height(), 1};
+  swap_img_desc.format = mtl::util::convert(tex->pixelFormat());
+  LINFO("format {}", (int)swap_img_desc.format);
+  swap_img_desc.mip_levels = 1;
+  swap_img_desc.array_length = 1;
+  swapchain_.get_textures()[frame_idx()] = rhi::TextureHandleHolder{
+      texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
@@ -281,7 +293,6 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   texture_desc->setMipmapLevelCount(desc.mip_levels);
   texture_desc->setArrayLength(desc.array_length);
   texture_desc->setHazardTrackingMode(MTL::HazardTrackingModeUntracked);
-  // TODO: parameterize this?
   texture_desc->setAllowGPUOptimizedContents(true);
   auto usage = mtl::util::convert(desc.usage);
   if (desc.flags & rhi::TextureDescFlags_PixelFormatView) {
@@ -587,8 +598,9 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   push_constant_allocator_->reset(frame_idx());
   test_allocator_->reset(frame_idx());
   arg_buf_allocator_->reset(frame_idx());
-  ASSERT(metal_layer_);
-  curr_drawable_ = metal_layer_->nextDrawable();
+  if (frame_num_ > 0) {
+    curr_drawable_ = metal_layer_->nextDrawable();
+  }
 
   if (!curr_drawable_) {
     return false;
@@ -597,8 +609,11 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
 
   rhi::TextureDesc swap_img_desc{};
-
   auto* tex = curr_drawable_->texture();
+  swap_img_desc.dims = {tex->width(), tex->height(), 1};
+  swap_img_desc.format = mtl::util::convert(tex->pixelFormat());
+  swap_img_desc.mip_levels = 1;
+  swap_img_desc.array_length = 1;
   swapchain_.get_textures()[frame_idx()] = rhi::TextureHandleHolder{
       texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
 
@@ -810,9 +825,10 @@ std::filesystem::path MetalDevice::get_metallib_path_from_shader_info(
   return (shader_lib_dir_ / shader_info.path).concat(".").concat(type_str).concat(".metallib");
 }
 
-int MetalDevice::create_subresource(rhi::TextureHandle handle, uint32_t base_mip_level,
-                                    uint32_t level_count, uint32_t base_array_layer,
-                                    uint32_t layer_count) {
+rhi::TextureViewHandle MetalDevice::create_tex_view(rhi::TextureHandle handle,
+                                                    uint32_t base_mip_level, uint32_t level_count,
+                                                    uint32_t base_array_layer,
+                                                    uint32_t layer_count) {
   auto* tex = reinterpret_cast<MetalTexture*>(get_tex(handle));
   ALWAYS_ASSERT(tex);
   auto* mtl_tex = tex->texture();
@@ -821,7 +837,7 @@ int MetalDevice::create_subresource(rhi::TextureHandle handle, uint32_t base_mip
                                        NS::Range::Make(base_mip_level, level_count),
                                        NS::Range::Make(base_array_layer, layer_count));
   auto bindless_idx = resource_desc_heap_allocator_.alloc_idx();
-  auto subresource_id = static_cast<int>(tex->tex_views.size());
+  auto subresource_id = static_cast<rhi::TextureViewHandle>(tex->tex_views.size());
   tex->tex_views.emplace_back(view, bindless_idx);
   auto* resource_table =
       (IRDescriptorTableEntry*)(get_mtl_buf(resource_descriptor_table_))->contents();
@@ -829,7 +845,7 @@ int MetalDevice::create_subresource(rhi::TextureHandle handle, uint32_t base_mip
   return subresource_id;
 }
 
-void MetalDevice::destroy_subresource(rhi::TextureHandle handle, int subresource_id) {
+void MetalDevice::destroy_tex_view(rhi::TextureHandle handle, int subresource_id) {
   auto* tex = reinterpret_cast<MetalTexture*>(get_tex(handle));
   ASSERT((subresource_id >= 0 && subresource_id < (int)tex->tex_views.size()));
   auto& tv = tex->tex_views[subresource_id];
@@ -1027,6 +1043,7 @@ MetalDevice::GPUFrameAllocator::GPUFrameAllocator(size_t size, MetalDevice* devi
                                                       .name = "gpu_frame_allocator"});
   }
 }
+
 MetalDevice::GPUFrameAllocator::Alloc MetalDevice::GPUFrameAllocator::alloc(size_t size) {
   size = align_up(size, 8);
   ALWAYS_ASSERT(size + offset_ <= capacity_);

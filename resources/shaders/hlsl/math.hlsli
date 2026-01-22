@@ -44,4 +44,23 @@ ProjectSphereResult project_sphere(float3 c, float r, float znear, float P00, fl
   return res;
 }
 
+// Optimized filmic operator by Jim Hejl and Richard Burgess-Dawson
+// http://filmicworlds.com/blog/filmic-tonemapping-operators/
+float3 tonemap(float3 c) {
+  float3 x = max(float3(0, 0, 0), c - 0.004);
+  return (x * (6.2 * x + .5)) / (x * (6.2 * x + 1.7) + 0.06);
+}
+
+float3 gamma_correct(float3 c) { return pow(c, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2)); }
+
+// https://64.github.io/tonemapping/
+float3 ACESFilm(float3 x) {
+  float a = 2.51;
+  float b = 0.03;
+  float c = 2.43;
+  float d = 0.59;
+  float e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
 #endif

@@ -20,6 +20,7 @@
 #include "gfx/RendererTypes.hpp"
 #include "gfx/Swapchain.hpp"
 #include "gfx/Texture.hpp"
+#include "gfx/rhi/Texture.hpp"
 #include "hlsl/default_vertex.h"
 #include "hlsl/depth_reduce/shared_depth_reduce.h"
 #include "hlsl/material.h"
@@ -130,21 +131,21 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
         .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
                       .depth_format = TextureFormat::D32float},
     });
-    test_mesh_pso_ = mgr_.create_graphics_pipeline({
-        .shaders = {{{"test_mesh", ShaderType::Mesh}, {"test_mesh", ShaderType::Fragment}}},
-        .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
-                      .depth_format = TextureFormat::D32float},
-    });
     test_task_pso_ = mgr_.create_graphics_pipeline({
         .shaders = {{{"task2", ShaderType::Task},
                      {"task2", ShaderType::Mesh},
                      {"test_task", ShaderType::Fragment}}},
-        .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
+        .rendering = {.color_formats{TextureFormat::R16G16B16A16Sfloat},
                       .depth_format = TextureFormat::D32float},
     });
+
+    auto* tex = device_->get_tex(device_->get_swapchain().get_texture(0));
+    ASSERT(tex);
+    auto format = tex->desc().format;
     tex_only_pso_ = mgr_.create_graphics_pipeline(
         {.shaders = {{{"fullscreen_quad", ShaderType::Vertex}, {"tex_only", ShaderType::Fragment}}},
-         .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm}}});
+         .rendering = {.color_formats{format}}});
+
     draw_cull_pso_ = mgr_.create_compute_pipeline({"draw_cull"});
     test_clear_buf_pso_ = mgr_.create_compute_pipeline({"test_clear_cnt_buf"});
     depth_reduce_pso_ = mgr_.create_compute_pipeline({"depth_reduce/depth_reduce"});
@@ -378,7 +379,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     } else {
       p.rw_external_buf("out_counts_buf2", "out_counts_buf", rhi::PipelineStage_TaskShader);
       rg_gbuffer_a_handle =
-          p.w_color_output("gbuffer_a", {.format = rhi::TextureFormat::B8G8R8A8Unorm});
+          p.w_color_output("gbuffer_a", {.format = rhi::TextureFormat::R16G16B16A16Sfloat});
       rg_depth_handle = p.w_depth_output("depth_tex", {.format = rhi::TextureFormat::D32float});
     }
 
@@ -510,22 +511,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
   add_draw_pass(true, "draw_pass_late");
   {
-    // TODO: LMAOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO
-    auto* counts = (uint32_t*)device_->get_buf(out_counts_buf_[curr_frame_idx_])->contents();
-    auto* counts2 =
-        (uint32_t*)device_
-            ->get_buf(out_counts_buf_[(curr_frame_idx_ + 1) % device_->get_info().frames_in_flight])
-            ->contents();
-    LINFO("This {} {}\tPrevious {} {}", counts[0], counts[1], counts2[0], counts2[1]);
-  }
-
-  {
     auto& p = rg_.add_graphics_pass("shade");
     auto gbuffer_a_rg_handle = p.sample_tex("gbuffer_a2");
     p.sample_external_tex(final_depth_pyramid_name);
     p.w_external_tex_color_output("output_result_tex",
                                   device_->get_swapchain().get_texture(curr_frame_idx_));
-    // p.r_external_buf("out_tot_buf2");
     p.set_ex([this, gbuffer_a_rg_handle, &args](rhi::CmdEncoder* enc) {
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
       auto dims = gbuffer_a_tex->desc().dims;
@@ -549,8 +539,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           .color_mult = glm::vec4{mult, mult, mult, 1},
           .tex_idx = tex_idx,
           .mip_level = static_cast<uint32_t>(view_mip_),
-          // .tmp_meshlet_vis_count = static_cast<uint32_t>(tmp_meshlet_vis_buf_elements_),
-          // .count_buf_idx = device_->get_buf(tmp_meshlet_vis_buf_tot_)->bindless_idx(),
       };
       enc->push_constants(&pc, sizeof(pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
@@ -580,27 +568,35 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
       ASSERT(tex);
       ASSERT(tex_upload.data);
 
-      // TODO: generalize this
+      const auto& desc = upload.upload.desc;
+      size_t block_width = get_block_width_bytes(desc.format);
+      size_t bytes_per_block = get_bytes_per_block(desc.format);
+      size_t total_img_size = 0;
 
-      // Upload each mip level separately
-      for (uint32_t mip_level = 0; mip_level < ktx_tex->numLevels; mip_level++) {
+      for (uint32_t mip_level = 0; mip_level < desc.mip_levels; mip_level++) {
+        size_t image_size = ktxTexture_GetImageSize(ktxTexture(ktx_tex), mip_level);
+        total_img_size += image_size;
+      }
+
+      auto upload_buf_handle = device_->create_buf_h({.size = total_img_size});
+      size_t upload_buf_offset = 0;
+      for (uint32_t mip_level = 0; mip_level < desc.mip_levels; mip_level++) {
         size_t offset;
-        ktx_error_code_e result =
-            ktxTexture_GetImageOffset(ktxTexture(ktx_tex), mip_level, 0, 0, &offset);
+        auto result = ktxTexture_GetImageOffset(ktxTexture(ktx_tex), mip_level, 0, 0, &offset);
         ASSERT(result == KTX_SUCCESS);
-        ktx_size_t image_size = ktxTexture_GetImageSize(ktxTexture(ktx_tex), mip_level);
-        uint32_t mip_width = std::max(1u, ktx_tex->baseWidth >> mip_level);
-        uint32_t mip_height = std::max(1u, ktx_tex->baseHeight >> mip_level);
-        uint32_t blocks_wide = align_divide_up(mip_width, 4u);
-        auto bytes_per_row = blocks_wide * 16;
-
-        auto upload_buf_handle = device_->create_buf_h({.size = image_size});
+        auto img_mip_level_size_bytes = ktxTexture_GetImageSize(ktxTexture(ktx_tex), mip_level);
+        ktxTexture_GetLevelSize(ktxTexture(ktx_tex), mip_level);
+        uint32_t mip_width = std::max(1u, desc.dims.x >> mip_level);
+        uint32_t mip_height = std::max(1u, desc.dims.y >> mip_level);
+        uint32_t blocks_wide = align_divide_up(mip_width, block_width);
+        auto bytes_per_row = blocks_wide * bytes_per_block;
         auto* upload_buf = device_->get_buf(upload_buf_handle);
-        memcpy(upload_buf->contents(), (uint8_t*)ktx_tex->pData + offset, image_size);
-
-        enc->upload_texture_data(upload_buf_handle.handle, 0, bytes_per_row, upload.tex,
-                                 glm::uvec3{mip_width, mip_height, 1}, glm::uvec3{0, 0, 0},
-                                 mip_level);
+        memcpy((uint8_t*)upload_buf->contents() + upload_buf_offset,
+               (uint8_t*)ktx_tex->pData + offset, img_mip_level_size_bytes);
+        enc->upload_texture_data(upload_buf_handle.handle, upload_buf_offset, bytes_per_row,
+                                 upload.tex, glm::uvec3{mip_width, mip_height, 1},
+                                 glm::uvec3{0, 0, 0}, mip_level);
+        upload_buf_offset += img_mip_level_size_bytes;
       }
     } else {
       size_t src_bytes_per_row = tex_upload.bytes_per_row;
@@ -670,7 +666,6 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
     }
   }
 
-  // result.indices.clear();
   auto draw_batch_alloc = upload_geometry(DrawBatchType::Static, result.vertices, result.indices,
                                           result.meshlet_process_result, result.meshes);
 
@@ -1190,7 +1185,7 @@ void MemeRenderer123::recreate_depth_pyramid_tex() {
     }
   }
   for (auto& v : depth_pyramid_tex_.views) {
-    device_->destroy_subresource(depth_pyramid_tex_.handle, v);
+    device_->destroy_tex_view(depth_pyramid_tex_.handle, v);
   }
   depth_pyramid_tex_.views.clear();
   depth_pyramid_tex_ = TexAndViewHolder{device_->create_tex_h(rhi::TextureDesc{
@@ -1203,7 +1198,7 @@ void MemeRenderer123::recreate_depth_pyramid_tex() {
   depth_pyramid_tex_.views.reserve(mip_levels);
   for (size_t i = 0; i < mip_levels; i++) {
     depth_pyramid_tex_.views.emplace_back(
-        device_->create_subresource(depth_pyramid_tex_.handle, i, 1, 0, 1));
+        device_->create_tex_view(depth_pyramid_tex_.handle, i, 1, 0, 1));
   }
 }
 
@@ -1216,7 +1211,7 @@ void MemeRenderer123::shutdown() { mgr_.shutdown(); }
 
 TexAndViewHolder::~TexAndViewHolder() {
   for (auto v : views) {
-    context->destroy_subresource(handle, v);
+    context->destroy_tex_view(handle, v);
   }
   views.clear();
 }

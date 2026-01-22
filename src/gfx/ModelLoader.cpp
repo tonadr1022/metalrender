@@ -241,34 +241,26 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
         auto load_result = gfx::load_ktx_texture(full_img_path);
         auto *ktx_tex = load_result.texture;
         const rhi::TextureDesc desc{
-            // TODO: fix
-            .format = rhi::TextureFormat::R8G8B8A8Unorm,
+            .format = load_result.format,
             .storage_mode = rhi::StorageMode::Default,
             .usage = rhi::TextureUsageSample,
             .dims = glm::uvec3{ktx_tex->baseWidth, ktx_tex->baseHeight, ktx_tex->baseDepth},
             .mip_levels = ktx_tex->numLevels,
             .array_length = 1,
             .bindless = true};
-        if (!ktx_tex) {
-          ASSERT(0);
-        }
-        if (ktx_tex->numLevels == 0) {
-          ASSERT(0);
-        }
-        if (ktx_tex->vkFormat != VK_FORMAT_ASTC_4x4_SRGB_BLOCK &&
-            ktx_tex->vkFormat != VK_FORMAT_ASTC_4x4_UNORM_BLOCK) {
-          ASSERT(0 && "unhandled format");
-        }
+        ASSERT(ktx_tex);
+        ASSERT(ktx_tex->numLevels > 0);
 
         auto &upload = texture_uploads[gltf_img_i];
         upload.data = std::unique_ptr<void, UntypedDeleterFuncPtr>(ktx_tex, &free_ktx_texture);
         upload.desc = desc;
+        // TODO: handle other block sizes
+        // TODO: handle BC7
         int blocks_wide = align_divide_up(ktx_tex->baseWidth, 4);
         int blocks_tall = align_divide_up(ktx_tex->baseHeight, 4);
         int src_bytes_per_row = blocks_wide * 16;
         upload.bytes_per_row = src_bytes_per_row;
         upload.load_type = CPUTextureLoadType::Ktx2;
-        upload.desc.format = load_result.format;
         upload.compressed_blocks_tall = blocks_tall;
       } else {
         int w{}, h{}, comp{};

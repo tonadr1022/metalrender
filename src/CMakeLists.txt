@@ -26,8 +26,8 @@ add_executable(${target_name}
     # voxels/VoxelDB.cpp
     # voxels/VoxelWorld.cpp
     util/Stats.cpp
-
     gfx/texture/KtxLoad.cpp
+    gfx/rhi/Texture.cpp
 )
 
 

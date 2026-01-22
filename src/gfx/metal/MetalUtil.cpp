@@ -103,8 +103,35 @@ MTL::StorageMode convert_storage_mode(rhi::StorageMode mode) {
   return MTL::StorageModePrivate;
 }
 
-}  // namespace mtl::util
-MTL::PixelFormat mtl::util::convert(rhi::TextureFormat format) {
+rhi::TextureFormat convert(MTL::PixelFormat format) {
+  using namespace rhi;
+  switch (format) {
+    case MTL::PixelFormatRGBA8Unorm_sRGB:
+      return TextureFormat::R8G8B8A8Srgb;
+    case MTL::PixelFormatRGBA8Unorm:
+      return TextureFormat::R8G8B8A8Unorm;
+    case MTL::PixelFormatDepth32Float:
+      return TextureFormat::D32float;
+    case MTL::PixelFormatR32Float:
+      return TextureFormat::R32float;
+    case MTL::PixelFormatBGRA8Unorm_sRGB:
+      return TextureFormat::B8G8R8A8Srgb;
+    case MTL::PixelFormatBGRA8Unorm:
+      return TextureFormat::B8G8R8A8Unorm;
+    case MTL::PixelFormatASTC_4x4_sRGB:
+      return TextureFormat::ASTC4x4SrgbBlock;
+    case MTL::PixelFormatASTC_4x4_LDR:
+      return TextureFormat::ASTC4x4UnormBlock;
+    case MTL::PixelFormatRGBA16Float:
+      return TextureFormat::R16G16B16A16Sfloat;
+    default:
+      ASSERT(0 && "unhandled texture format");
+      return TextureFormat::Undefined;
+  }
+  return TextureFormat::Undefined;
+}
+
+MTL::PixelFormat convert(rhi::TextureFormat format) {
   using namespace rhi;
   switch (format) {
     case TextureFormat::R8G8B8A8Srgb:
@@ -121,6 +148,8 @@ MTL::PixelFormat mtl::util::convert(rhi::TextureFormat format) {
       return MTL::PixelFormatASTC_4x4_sRGB;
     case TextureFormat::ASTC4x4UnormBlock:
       return MTL::PixelFormatASTC_4x4_LDR;
+    case TextureFormat::R16G16B16A16Sfloat:
+      return MTL::PixelFormatRGBA16Float;
     default:
       ASSERT(0 && "unhandled texture format");
       return MTL::PixelFormatInvalid;
@@ -128,7 +157,7 @@ MTL::PixelFormat mtl::util::convert(rhi::TextureFormat format) {
   return MTL::PixelFormatInvalid;
 }
 
-MTL::ResourceOptions mtl::util::convert(rhi::StorageMode mode) {
+MTL::ResourceOptions convert(rhi::StorageMode mode) {
   using namespace rhi;
   switch (mode) {
     case StorageMode::CPUAndGPU:
@@ -144,7 +173,7 @@ MTL::ResourceOptions mtl::util::convert(rhi::StorageMode mode) {
   return MTL::StorageModePrivate;
 }
 
-MTL::TextureUsage mtl::util::convert(rhi::TextureUsage usage) {
+MTL::TextureUsage convert(rhi::TextureUsage usage) {
   using namespace rhi;
   MTL::TextureUsage result{};
 
@@ -160,3 +189,5 @@ MTL::TextureUsage mtl::util::convert(rhi::TextureUsage usage) {
 
   return result;
 }
+
+}  // namespace mtl::util

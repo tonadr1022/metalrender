@@ -34,5 +34,6 @@ MTL::CompareFunction convert(rhi::CompareOp op);
 MTL::LoadAction convert(rhi::LoadOp op);
 MTL::StoreAction convert(rhi::StoreOp op);
 MTL::PrimitiveType convert(rhi::PrimitiveTopology top);
+rhi::TextureFormat convert(MTL::PixelFormat format);
 
 }  // namespace mtl::util

@@ -185,7 +185,7 @@ struct TexAndViewHolder : public rhi::TextureHandleHolder {
   TexAndViewHolder& operator=(const TexAndViewHolder&) = delete;
   TexAndViewHolder& operator=(TexAndViewHolder&&) = default;
   ~TexAndViewHolder();
-  std::vector<int> views;
+  std::vector<rhi::TextureViewHandle> views;
 };
 
 class MemeRenderer123 {
@@ -245,7 +245,6 @@ class MemeRenderer123 {
   Window* window_{};
   gfx::ShaderManager mgr_;
   rhi::PipelineHandleHolder test2_pso_;
-  rhi::PipelineHandleHolder test_mesh_pso_;
   rhi::PipelineHandleHolder test_task_pso_;
   rhi::PipelineHandleHolder draw_cull_pso_;
   rhi::PipelineHandleHolder test_clear_buf_pso_;
