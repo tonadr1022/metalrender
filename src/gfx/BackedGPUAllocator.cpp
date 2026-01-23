@@ -46,6 +46,7 @@ gfx::BackedGPUAllocator::BackedGPUAllocator(BackedGPUAllocator&& other) noexcept
       bytes_per_element_(std::exchange(other.bytes_per_element_, 0)),
       device_(other.device_),
       buffer_copy_mgr_(other.buffer_copy_mgr_) {}
+
 void gfx::BackedGPUAllocator::free(OffsetAllocator::Allocation alloc) {
   if (alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
     allocated_element_count_ -= allocator_.allocationSize(alloc);

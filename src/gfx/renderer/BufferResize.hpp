@@ -29,6 +29,7 @@ struct BufferCopyMgr {
         .dst_offset = dst_offset,
     });
   }
+  void enqueue_fill_buffer() {}
 
   void copy_to_buffer(const void* src_data, size_t src_size, rhi::BufferHandle dst_buffer,
                       size_t dst_offset);

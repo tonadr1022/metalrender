@@ -23,6 +23,9 @@ struct DispatchIndirectCmd {
   }
   StructuredBuffer<InstanceData> instance_data_buf = ResourceDescriptorHeap[instance_data_buf_idx];
   InstanceData instance_data = instance_data_buf[dtid];
+  if (instance_data.mesh_id == 0xFFFFFFFF) {
+    return;
+  }
   StructuredBuffer<MeshData> mesh_data_buf = ResourceDescriptorHeap[mesh_data_buf_idx];
   MeshData mesh_data = mesh_data_buf[instance_data.mesh_id];
 

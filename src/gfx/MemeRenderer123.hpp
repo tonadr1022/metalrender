@@ -144,10 +144,12 @@ struct ModelInstanceGPUResources {
 
 class InstanceDataMgr {
  public:
-  void init(size_t initial_element_cap, rhi::Device* device, BufferCopyMgr* buffer_copy_mgr) {
+  void init(size_t initial_element_cap, rhi::Device* device, BufferCopyMgr* buffer_copy_mgr,
+            uint32_t frames_in_flight) {
     allocator_.emplace(initial_element_cap);
     device_ = device;
     buffer_copy_mgr_ = buffer_copy_mgr;
+    frames_in_flight_ = frames_in_flight;
     allocate_buffers(initial_element_cap);
   }
   OffsetAllocator::Allocation allocate(size_t element_count);
@@ -156,11 +158,15 @@ class InstanceDataMgr {
     return allocator_->allocationSize(alloc);
   }
 
-  void free(OffsetAllocator::Allocation alloc);
+  void free(OffsetAllocator::Allocation alloc, uint32_t frame_in_flight);
+  void flush_pending_frees(uint32_t curr_frame_in_flight, rhi::CmdEncoder* enc);
+  [[nodiscard]] bool has_pending_frees(uint32_t curr_frame_in_flight) const;
+  void zero_out_freed_instances(rhi::CmdEncoder* enc);
   [[nodiscard]] uint32_t max_seen_size() const { return max_seen_size_; }
   [[nodiscard]] rhi::BufferHandle get_instance_data_buf() const {
     return instance_data_buf_.handle;
   }
+  std::array<std::vector<OffsetAllocator::Allocation>, k_max_frames_in_flight> pending_frees_;
   [[nodiscard]] rhi::BufferHandle get_draw_cmd_buf() const { return draw_cmd_buf_.handle; }
 
  private:
@@ -171,6 +177,7 @@ class InstanceDataMgr {
   BufferCopyMgr* buffer_copy_mgr_{};
   uint32_t max_seen_size_{};
   uint32_t curr_element_count_{};
+  uint32_t frames_in_flight_{};
   rhi::Device* device_{};
 };
 
@@ -323,6 +330,7 @@ class MemeRenderer123 {
   DebugRenderMode debug_render_mode_{DebugRenderMode::None};
   size_t tmp_meshlet_vis_buf_elements_{};
   rhi::BufferHandleHolder out_counts_buf_[k_max_frames_in_flight];
+  bool rg_verbose_{};
 };
 
 }  // namespace gfx
