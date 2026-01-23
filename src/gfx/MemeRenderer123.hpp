@@ -145,11 +145,12 @@ struct ModelInstanceGPUResources {
 class InstanceDataMgr {
  public:
   void init(size_t initial_element_cap, rhi::Device* device, BufferCopyMgr* buffer_copy_mgr,
-            uint32_t frames_in_flight) {
+            uint32_t frames_in_flight, bool mesh_shaders_enabled) {
     allocator_.emplace(initial_element_cap);
     device_ = device;
     buffer_copy_mgr_ = buffer_copy_mgr;
     frames_in_flight_ = frames_in_flight;
+    mesh_shaders_enabled_ = mesh_shaders_enabled;
     allocate_buffers(initial_element_cap);
   }
   OffsetAllocator::Allocation allocate(size_t element_count);
@@ -179,6 +180,7 @@ class InstanceDataMgr {
   uint32_t curr_element_count_{};
   uint32_t frames_in_flight_{};
   rhi::Device* device_{};
+  bool mesh_shaders_enabled_{};
 };
 
 struct IdxOffset {
@@ -204,6 +206,7 @@ class MemeRenderer123 {
     rhi::Device* device;
     Window* window;
     std::filesystem::path resource_dir;
+    std::filesystem::path config_file_path;
   };
   void init(const CreateInfo& cinfo);
   void shutdown();
@@ -253,7 +256,7 @@ class MemeRenderer123 {
 
   rhi::Device* device_{};
   Window* window_{};
-  gfx::ShaderManager mgr_;
+  gfx::ShaderManager shader_mgr_;
   rhi::PipelineHandleHolder test2_pso_;
   rhi::PipelineHandleHolder test_task_pso_;
   rhi::PipelineHandleHolder draw_cull_pso_;
@@ -274,6 +277,7 @@ class MemeRenderer123 {
   size_t frame_num_{};
   size_t curr_frame_idx_{};
   std::filesystem::path resource_dir_;
+  std::filesystem::path config_file_path_;
   std::optional<ScratchBufferPool> scratch_buffer_pool_;
   InstanceDataMgr instance_data_mgr_;
   std::optional<DrawBatch> static_draw_batch_;
@@ -318,6 +322,7 @@ class MemeRenderer123 {
   IdxOffset frame_globals_buf_info_;
   IdxOffset frame_cull_data_buf_info_;
   bool reverse_z_{true};
+  bool mesh_shaders_enabled_{true};
 
   enum class DebugRenderMode {
     None = DEBUG_RENDER_MODE_NONE,
@@ -328,7 +333,6 @@ class MemeRenderer123 {
     Count = DEBUG_RENDER_MODE_COUNT,
   };
   DebugRenderMode debug_render_mode_{DebugRenderMode::None};
-  size_t tmp_meshlet_vis_buf_elements_{};
   rhi::BufferHandleHolder out_counts_buf_[k_max_frames_in_flight];
   bool rg_verbose_{};
 };

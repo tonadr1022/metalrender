@@ -1,6 +1,7 @@
 #include "MemeRenderer123.hpp"
 
 #include <algorithm>
+#include <fstream>
 #include <glm/ext/vector_integer.hpp>
 #include <tracy/Tracy.hpp>
 
@@ -9,10 +10,10 @@
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
 #include "core/MathUtil.hpp"
+#include "core/StringUtil.hpp"
 #include "core/Util.hpp"
 #include "gfx/Buffer.hpp"
 #include "gfx/CmdEncoder.hpp"
-#include "gfx/Config.hpp"
 #include "gfx/GFXTypes.hpp"
 #include "gfx/ModelLoader.hpp"
 #include "gfx/Pipeline.hpp"
@@ -74,7 +75,31 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   device_ = cinfo.device;
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
-  mgr_.init(device_);
+  config_file_path_ = cinfo.config_file_path;
+  {
+    const char* key_mesh_shaders_enabled = "mesh_shaders_enabled";
+    std::ifstream file(config_file_path_);
+    if (file.is_open()) {
+      std::string line;
+      while (std::getline(file, line)) {
+        auto kv = core::split_string_at_first(line, '=');
+        if (kv.first == key_mesh_shaders_enabled) {
+          mesh_shaders_enabled_ = kv.second == "1";
+        }
+      }
+    } else {
+      // write the default config.
+      std::ofstream file(config_file_path_);
+      if (file.is_open()) {
+        file << key_mesh_shaders_enabled << '=' << mesh_shaders_enabled_ << '\n';
+      } else {
+        ASSERT(0 && "Failed to open config file for writing");
+        LINFO("Failed to open config file for writing: {}", config_file_path_.string());
+      }
+    }
+  }
+
+  shader_mgr_.init(device_);
 
   {
     // TODO: streamline
@@ -124,31 +149,30 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   }
 
   {
-    test2_pso_ = mgr_.create_graphics_pipeline({
+    auto draw_img_format = rhi::TextureFormat::R16G16B16A16Sfloat;
+    test2_pso_ = shader_mgr_.create_graphics_pipeline({
         .shaders = {{{"basic_indirect", ShaderType::Vertex},
                      {"basic_indirect", ShaderType::Fragment}}},
-        .rendering = {.color_formats{TextureFormat::B8G8R8A8Unorm},
-                      .depth_format = TextureFormat::D32float},
+        .rendering = {.color_formats{draw_img_format}, .depth_format = TextureFormat::D32float},
     });
-    test_task_pso_ = mgr_.create_graphics_pipeline({
+    test_task_pso_ = shader_mgr_.create_graphics_pipeline({
         .shaders = {{{"task2", ShaderType::Task},
                      {"task2", ShaderType::Mesh},
                      {"test_task", ShaderType::Fragment}}},
-        .rendering = {.color_formats{TextureFormat::R16G16B16A16Sfloat},
-                      .depth_format = TextureFormat::D32float},
+        .rendering = {.color_formats{draw_img_format}, .depth_format = TextureFormat::D32float},
     });
 
     auto* tex = device_->get_tex(device_->get_swapchain().get_texture(0));
     ASSERT(tex);
     auto format = tex->desc().format;
-    tex_only_pso_ = mgr_.create_graphics_pipeline(
+    tex_only_pso_ = shader_mgr_.create_graphics_pipeline(
         {.shaders = {{{"fullscreen_quad", ShaderType::Vertex}, {"tex_only", ShaderType::Fragment}}},
          .rendering = {.color_formats{format}}});
 
-    draw_cull_pso_ = mgr_.create_compute_pipeline({"draw_cull"});
-    test_clear_buf_pso_ = mgr_.create_compute_pipeline({"test_clear_cnt_buf"});
-    depth_reduce_pso_ = mgr_.create_compute_pipeline({"depth_reduce/depth_reduce"});
-    shade_pso_ = mgr_.create_compute_pipeline({"shade"});
+    draw_cull_pso_ = shader_mgr_.create_compute_pipeline({"draw_cull"});
+    test_clear_buf_pso_ = shader_mgr_.create_compute_pipeline({"test_clear_cnt_buf"});
+    depth_reduce_pso_ = shader_mgr_.create_compute_pipeline({"depth_reduce/depth_reduce"});
+    shade_pso_ = shader_mgr_.create_compute_pipeline({"shade"});
   }
 
   uniforms_allocator_.emplace(1024 * 1024, device_);
@@ -163,7 +187,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
                                          .name = "all materials buf"},
                          sizeof(M4Material));
   instance_data_mgr_.init(100'000, device_, &buffer_copy_mgr_.value(),
-                          device_->get_info().frames_in_flight);
+                          device_->get_info().frames_in_flight, mesh_shaders_enabled_);
   static_draw_batch_.emplace(DrawBatchType::Static, *device_, buffer_copy_mgr_.value(),
                              DrawBatch::CreateInfo{
                                  .initial_vertex_capacity = 1000,
@@ -178,7 +202,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
       rhi::BufferDesc{.size = 1000, .bindless = true, .name = "meshlet_vis_buf"}, sizeof(uint32_t));
 
   scratch_buffer_pool_.emplace(device_);
-  imgui_renderer_.emplace(mgr_, device_);
+  imgui_renderer_.emplace(shader_mgr_, device_);
 
   rg_.init(device_);
   init_imgui();
@@ -205,7 +229,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
     return;
   }
 
-  mgr_.replace_dirty_pipelines();
+  shader_mgr_.replace_dirty_pipelines();
 
   indirect_cmd_buf_ids_.clear();
 
@@ -304,7 +328,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     }
   }
 
-  if (k_use_mesh_shader) {
+  if (mesh_shaders_enabled_) {
     if (!culling_paused_) {
       auto& clear_bufs_pass = rg_.add_compute_pass("clear_bufs");
       clear_bufs_pass.w_external("out_draw_count_buf1",
@@ -381,7 +405,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
   auto add_draw_pass = [&args, this, &final_depth_pyramid_name](bool late, const char* name) {
     auto& p = rg_.add_graphics_pass(name);
-    if (k_use_mesh_shader) {
+    if (mesh_shaders_enabled_) {
       p.r_external_buf("out_draw_count_buf2", rhi::PipelineStage_TaskShader);
       p.r_external_buf("task_cmd_buf", (PipelineStage)(rhi::PipelineStage_MeshShader |
                                                        rhi::PipelineStage_TaskShader));
@@ -426,7 +450,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
 
-      if (k_use_mesh_shader) {
+      if (mesh_shaders_enabled_) {
         enc->bind_pipeline(test_task_pso_);
         Task2PC pc{
             .globals_buf_idx = frame_globals_buf_info_.idx,
@@ -829,7 +853,8 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   std::vector<InstanceData> instance_datas = {model_instance_datas.begin(),
                                               model_instance_datas.end()};
   std::vector<IndexedIndirectDrawCmd> cmds;
-  cmds.reserve(instance_datas.size());
+  if (!mesh_shaders_enabled_) cmds.reserve(instance_datas.size());
+
   ASSERT(instance_datas.size() == instance_id_to_node.size());
   all_model_data_.max_meshlets += model_resources->totals.meshlets;
 
@@ -839,7 +864,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   stats_.total_instance_meshlets += model_resources->totals.instance_meshlets;
   stats_.total_instance_vertices += model_resources->totals.instance_vertices;
   OffsetAllocator::Allocation meshlet_vis_buf_alloc{};
-  if (k_use_mesh_shader) {
+  if (mesh_shaders_enabled_) {
     bool resized{};
     meshlet_vis_buf_alloc =
         meshlet_vis_buf_->allocate(model_resources->totals.instance_meshlets, resized);
@@ -858,19 +883,20 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
     instance_datas[i].meshlet_vis_base += meshlet_vis_buf_alloc.offset;
     size_t mesh_id = model.mesh_ids[node_i];
     auto& mesh = model_resources->meshes[mesh_id];
-    cmds.push_back(IndexedIndirectDrawCmd{
-        .index_count = mesh.index_count,
-        .instance_count = 1,
-        .first_index = static_cast<uint32_t>(
-            (mesh.index_offset + model_resources->static_draw_batch_alloc.index_alloc.offset *
-                                     sizeof(rhi::DefaultIndexT)) /
-            sizeof(rhi::DefaultIndexT)),
-        .vertex_offset = static_cast<int32_t>(
-            mesh.vertex_offset_bytes +
-            model_resources->static_draw_batch_alloc.vertex_alloc.offset * sizeof(DefaultVertex)),
-        .first_instance = static_cast<uint32_t>(i + instance_data_gpu_alloc.offset),
-    });
-    tmp_meshlet_vis_buf_elements_ += mesh.meshlet_count;
+    if (!mesh_shaders_enabled_) {
+      cmds.push_back(IndexedIndirectDrawCmd{
+          .index_count = mesh.index_count,
+          .instance_count = 1,
+          .first_index = static_cast<uint32_t>(
+              (mesh.index_offset + model_resources->static_draw_batch_alloc.index_alloc.offset *
+                                       sizeof(rhi::DefaultIndexT)) /
+              sizeof(rhi::DefaultIndexT)),
+          .vertex_offset = static_cast<int32_t>(
+              mesh.vertex_offset_bytes +
+              model_resources->static_draw_batch_alloc.vertex_alloc.offset * sizeof(DefaultVertex)),
+          .first_instance = static_cast<uint32_t>(i + instance_data_gpu_alloc.offset),
+      });
+    }
   }
 
   stats_.total_instances += instance_datas.size();
@@ -878,9 +904,12 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
                                    instance_datas.size() * sizeof(InstanceData),
                                    instance_data_mgr_.get_instance_data_buf(),
                                    instance_data_gpu_alloc.offset * sizeof(InstanceData));
-  buffer_copy_mgr_->copy_to_buffer(cmds.data(), cmds.size() * sizeof(IndexedIndirectDrawCmd),
-                                   instance_data_mgr_.get_draw_cmd_buf(),
-                                   instance_data_gpu_alloc.offset * sizeof(IndexedIndirectDrawCmd));
+  if (!mesh_shaders_enabled_) {
+    buffer_copy_mgr_->copy_to_buffer(
+        cmds.data(), cmds.size() * sizeof(IndexedIndirectDrawCmd),
+        instance_data_mgr_.get_draw_cmd_buf(),
+        instance_data_gpu_alloc.offset * sizeof(IndexedIndirectDrawCmd));
+  }
   return model_instance_gpu_resource_pool_.alloc(
       ModelInstanceGPUResources{.instance_data_gpu_alloc = instance_data_gpu_alloc,
                                 .meshlet_vis_buf_alloc = meshlet_vis_buf_alloc});
@@ -1027,8 +1056,10 @@ void InstanceDataMgr::flush_pending_frees(uint32_t curr_frame_in_flight, rhi::Cm
     auto element_count = allocator_->allocationSize(alloc);
     enc->fill_buffer(instance_data_buf_.handle, alloc.offset * sizeof(InstanceData),
                      element_count * sizeof(InstanceData), 0xFFFFFFFF);
-    enc->fill_buffer(draw_cmd_buf_.handle, alloc.offset * sizeof(IndexedIndirectDrawCmd),
-                     element_count * sizeof(IndexedIndirectDrawCmd), 0xFFFFFFFF);
+    if (!mesh_shaders_enabled_) {
+      enc->fill_buffer(draw_cmd_buf_.handle, alloc.offset * sizeof(IndexedIndirectDrawCmd),
+                       element_count * sizeof(IndexedIndirectDrawCmd), 0xFFFFFFFF);
+    }
     allocator_->free(alloc);
     curr_element_count_ -= element_count;
   }
@@ -1041,11 +1072,13 @@ void InstanceDataMgr::allocate_buffers(size_t element_count) {
                                             .usage = rhi::BufferUsage_Storage,
                                             .size = sizeof(InstanceData) * element_count,
                                             .bindless = true});
-  draw_cmd_buf_ =
-      device_->create_buf_h(rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
-                                            .usage = rhi::BufferUsage_Indirect,
-                                            .size = sizeof(IndexedIndirectDrawCmd) * element_count,
-                                            .bindless = true});
+  if (!mesh_shaders_enabled_) {
+    draw_cmd_buf_ = device_->create_buf_h(
+        rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
+                        .usage = rhi::BufferUsage_Indirect,
+                        .size = sizeof(IndexedIndirectDrawCmd) * element_count,
+                        .bindless = true});
+  }
 }
 
 void MemeRenderer123::init_imgui() {
@@ -1072,6 +1105,10 @@ void MemeRenderer123::shutdown_imgui() {
 
 void MemeRenderer123::on_imgui() {
   ZoneScoped;
+  if (ImGui::TreeNodeEx("Config")) {
+    ImGui::Text("mesh shaders enabled: %d", mesh_shaders_enabled_);
+    ImGui::TreePop();
+  }
   if (ImGui::TreeNodeEx("Window", ImGuiTreeNodeFlags_DefaultOpen)) {
     auto dims = window_->get_window_size();
     auto win_dims = window_->get_window_not_framebuffer_size();
@@ -1080,7 +1117,6 @@ void MemeRenderer123::on_imgui() {
     ImGui::Text("Fullscreen: %d", window_->get_fullscreen());
     ImGui::TreePop();
   }
-  ImGui::Text("tmp %zu", tmp_meshlet_vis_buf_elements_);
   if (ImGui::TreeNodeEx("Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
                 stats_.total_instance_vertices, stats_.total_instances);
@@ -1189,7 +1225,7 @@ bool MemeRenderer123::on_key_event(int key, int action, int mods) {
 
     if (action == GLFW_PRESS && key == GLFW_KEY_R && mods & GLFW_MOD_CONTROL) {
       LINFO("Recompiling shaders.");
-      mgr_.recompile_shaders();
+      shader_mgr_.recompile_shaders();
       return true;
     }
   }
@@ -1233,7 +1269,7 @@ void MemeRenderer123::recreate_external_textures() {
   recreate_depth_pyramid_tex();
 }
 
-void MemeRenderer123::shutdown() { mgr_.shutdown(); }
+void MemeRenderer123::shutdown() { shader_mgr_.shutdown(); }
 
 TexAndViewHolder::~TexAndViewHolder() {
   for (auto v : views) {

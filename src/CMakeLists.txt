@@ -6,6 +6,7 @@ add_executable(${target_name}
     Camera.cpp
     core/FileUtil.cpp
     core/Util.cpp
+    core/StringUtil.cpp
     gfx/ModelLoader.cpp
     gfx/MemeRenderer123.cpp
     gfx/Pipeline.cpp

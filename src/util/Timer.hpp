@@ -25,7 +25,7 @@ class Timer {
   void Print() { LINFO("ElapsedMS: {}", ElapsedMS()); }
   void Print(const char* msg) {
     if (msg) {
-      LINFO("{}: {}", msg, ElapsedMS());
+      LINFO("{}: {:.3f} ms", msg, ElapsedMS());
     } else {
       Print();
     }

@@ -224,6 +224,18 @@ void MetalDevice::shutdown() {
   push_constant_allocator_.reset();
   test_allocator_.reset();
 
+  if (mtl4_enabled_) {
+    mtl4_resources_->main_cmd_q->release();
+    for (size_t i = 0; i < info_.frames_in_flight; i++) {
+      mtl4_resources_->cmd_allocators[i]->release();
+    }
+    mtl4_resources_->shader_compiler->release();
+    mtl4_resources_.reset();
+  } else {
+    mtl3_resources_->main_cmd_q->release();
+    mtl3_resources_->cmd_lists_.clear();
+  }
+
   delete_queues_.flush_deletions(SIZE_T_MAX);
 
   device_->release();

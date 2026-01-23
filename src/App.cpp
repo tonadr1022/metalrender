@@ -66,11 +66,14 @@ App::App() {
   });
 
   on_hide_mouse_change();
-
   renderer_.emplace();
   ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_.value()});
   renderer_->init(gfx::MemeRenderer123::CreateInfo{
-      .device = device_.get(), .window = window_.get(), .resource_dir = resource_dir_});
+      .device = device_.get(),
+      .window = window_.get(),
+      .resource_dir = resource_dir_,
+      .config_file_path = local_resource_dir_ / "renderer_config.txt",
+  });
   // voxel_renderer_ = std::make_unique<vox::Renderer>();
   // voxel_renderer_->init(&renderer_);
   // voxel_world_ = std::make_unique<vox::World>();
@@ -293,7 +296,10 @@ void App::on_imgui(float dt) {
   ImGui::Text("Frame time %f (ms)", dt * 1000);
   renderer_->on_imgui();
   if (ImGui::TreeNodeEx("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
-    ImGui::Text("Position: %f %f %f", camera_.pos.x, camera_.pos.y, camera_.pos.z);
+    ImGui::DragFloat3("Position", &camera_.pos.x, 0.1f);
+    ImGui::DragFloat("Acceleration Strength", &camera_.acceleration_strength, 0.1f, 0.1f, 1000.f);
+    ImGui::DragFloat("Mouse Sensitivity", &camera_.mouse_sensitivity, 0.01f, 0.01f, 1.f);
+
     ImGui::TreePop();
   }
   ImGui::ColorEdit4("Clear Color", &config_.clear_color.r, ImGuiColorEditFlags_Float);
