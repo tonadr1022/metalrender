@@ -17,6 +17,8 @@ add_executable(${target_name}
     gfx/GPUFrameAllocator2.cpp
     gfx/Device.cpp
     gfx/RenderGraph.cpp
+    gfx/BackedGPUAllocator.cpp
+    gfx/renderer/BufferResize.cpp
     platform/apple/AppleWindow.mm # TODO: move this please
     Window.cpp
     # voxels/Chunk.cpp

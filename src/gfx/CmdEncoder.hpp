@@ -49,6 +49,8 @@ class CmdEncoder {
                                    glm::uvec3 src_size, glm::uvec3 dst_origin, int mip_level) = 0;
   virtual void copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice, size_t src_level,
                                rhi::BufferHandle dst_buf, size_t dst_offset) = 0;
+  virtual void copy_buffer_to_buffer(rhi::BufferHandle src_buf, size_t src_offset,
+                                     rhi::BufferHandle dst_buf, size_t dst_offset, size_t size) = 0;
 
   [[nodiscard]] virtual uint32_t prepare_indexed_indirect_draws(
       rhi::BufferHandle indirect_buf, size_t offset, size_t tot_draw_cnt,

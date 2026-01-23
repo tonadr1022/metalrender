@@ -2,6 +2,7 @@
 
 #include <Metal/Metal.hpp>
 #include <filesystem>
+#include <queue>
 
 #include "MetalBuffer.hpp"
 #include "MetalPipeline.hpp"
@@ -68,6 +69,7 @@ class MetalDevice : public rhi::Device {
 
   rhi::BufferHandle create_buf(const rhi::BufferDesc& desc) override;
   rhi::Buffer* get_buf(rhi::BufferHandle handle) override { return buffer_pool_.get(handle); }
+  void cmd_list_wait_for(rhi::CmdEncoder* cmd_enc1, rhi::CmdEncoder* cmd_enc2) override;
 
   rhi::TextureHandle create_tex(const rhi::TextureDesc& desc) override;
   rhi::TextureViewHandle create_tex_view(rhi::TextureHandle handle, uint32_t base_mip_level,
@@ -117,8 +119,6 @@ class MetalDevice : public rhi::Device {
   const rhi::Swapchain& get_swapchain() const override { return swapchain_; }
 
   void init_bindless();
-  void copy_to_buffer(const void* src, size_t src_size, rhi::BufferHandle buf,
-                      size_t dst_offset) override;
 
   void get_all_buffers(std::vector<rhi::Buffer*>& out_buffers) override;
 
@@ -276,6 +276,26 @@ class MetalDevice : public rhi::Device {
   MTL::Stages compute_enc_dst_stages_{};
   MTL::Stages render_enc_dst_stages_{};
   MTL::Stages blit_enc_dst_stages_{};
+
+  void destroy_actual(rhi::BufferHandle handle);
+
+ private:
+  struct DeleteQueues {
+    explicit DeleteQueues(MetalDevice* device) : device_(device) {}
+    template <typename HandleT>
+    struct Entry {
+      HandleT handle;
+      size_t valid_to_delete_frame_num;
+    };
+    void enqueue_deletion(rhi::BufferHandle handle, size_t curr_frame_num, size_t frames_in_flight);
+    void flush_deletions(size_t curr_frame_num);
+
+   private:
+    std::queue<Entry<rhi::BufferHandle>> to_delete_buffers;
+    MetalDevice* device_{};
+  };
+
+  DeleteQueues delete_queues_{this};
 };
 
 struct GLFWwindow;

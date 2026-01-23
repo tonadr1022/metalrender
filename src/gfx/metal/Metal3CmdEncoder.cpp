@@ -543,3 +543,19 @@ void Metal3CmdEncoder::push_debug_group(const char* name) {
   cmd_buf_->pushDebugGroup(mtl::util::string(name));
   push_debug_group_stack_size_++;
 }
+
+void Metal3CmdEncoder::copy_buffer_to_buffer(rhi::BufferHandle src_buf, size_t src_offset,
+                                             rhi::BufferHandle dst_buf, size_t dst_offset,
+                                             size_t size) {
+  start_blit_encoder();
+  auto* src_b = (MetalBuffer*)device_->get_buf(src_buf);
+  auto* dst_b = (MetalBuffer*)device_->get_buf(dst_buf);
+  if (src_b->desc().storage_mode != rhi::StorageMode::GPUOnly &&
+      dst_b->desc().storage_mode != rhi::StorageMode::GPUOnly) {
+    // both buffers are CPU accessible, do a memcpy
+    memcpy((uint8_t*)dst_b->buffer()->contents() + dst_offset,
+           (uint8_t*)src_b->buffer()->contents() + src_offset, size);
+  } else {
+    blit_enc_->copyFromBuffer(src_b->buffer(), src_offset, dst_b->buffer(), dst_offset, size);
+  }
+}

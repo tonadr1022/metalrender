@@ -15,9 +15,9 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/ShaderManager.hpp"
+#include "gfx/renderer/BufferResize.hpp"
 #include "hlsl/shared_globals.h"
 #include "hlsl/shared_instance_data.h"
-#include "hlsl/shared_mesh_data.h"
 #include "offsetAllocator.hpp"
 
 struct ImDrawData;
@@ -77,7 +77,8 @@ struct DrawBatch {
 
   [[nodiscard]] Stats get_stats() const;
 
-  DrawBatch(DrawBatchType type, rhi::Device& device, const CreateInfo& cinfo);
+  DrawBatch(DrawBatchType type, rhi::Device& device, BufferCopyMgr& buffer_copier,
+            const CreateInfo& cinfo);
 
   struct Alloc {
     OffsetAllocator::Allocation vertex_alloc;
@@ -143,9 +144,10 @@ struct ModelInstanceGPUResources {
 
 class InstanceDataMgr {
  public:
-  void init(size_t initial_element_cap, rhi::Device* device) {
+  void init(size_t initial_element_cap, rhi::Device* device, BufferCopyMgr* buffer_copy_mgr) {
     allocator_.emplace(initial_element_cap);
     device_ = device;
+    buffer_copy_mgr_ = buffer_copy_mgr;
     allocate_buffers(initial_element_cap);
   }
   OffsetAllocator::Allocation allocate(size_t element_count);
@@ -166,6 +168,7 @@ class InstanceDataMgr {
   std::optional<OffsetAllocator::Allocator> allocator_;
   rhi::BufferHandleHolder instance_data_buf_;
   rhi::BufferHandleHolder draw_cmd_buf_;
+  BufferCopyMgr* buffer_copy_mgr_{};
   uint32_t max_seen_size_{};
   uint32_t curr_element_count_{};
   rhi::Device* device_{};
@@ -252,6 +255,7 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder shade_pso_;
   rhi::PipelineHandleHolder tex_only_pso_;
   std::optional<BackedGPUAllocator> materials_buf_;
+  std::optional<BufferCopyMgr> buffer_copy_mgr_;
 
   rhi::BufferHandleHolder tmp_out_draw_cnt_buf_;
   rhi::BufferHandleHolder tmp_test_buf_;
@@ -292,7 +296,6 @@ class MemeRenderer123 {
   rhi::TextureHandleHolder default_white_tex_;
   std::vector<uint32_t> indirect_cmd_buf_ids_;
   glm::mat4 get_proj_matrix(float fov = k_default_fov_deg);
-  std::vector<MeshData> mesh_datas_;
 
   // TODO: rename or sum?
   std::optional<GPUFrameAllocator2> uniforms_allocator_;

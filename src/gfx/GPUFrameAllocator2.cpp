@@ -1,6 +1,5 @@
 #include "GPUFrameAllocator2.hpp"
 
-#include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/Buffer.hpp"
 #include "gfx/Device.hpp"

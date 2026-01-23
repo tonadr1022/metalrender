@@ -84,6 +84,8 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   void dispatch_compute(glm::uvec3 thread_groups, glm::uvec3 threads_per_threadgroup) override;
   void fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes, uint32_t size,
                    uint32_t value) override;
+  void copy_buffer_to_buffer(rhi::BufferHandle src_buf, size_t src_offset,
+                             rhi::BufferHandle dst_buf, size_t dst_offset, size_t size) override;
   void push_debug_group(const char* name) override;
   void pop_debug_group() override;
 

@@ -18,6 +18,10 @@ class Buffer {
     return bindless_idx_;
   }
 
+  [[nodiscard]] virtual bool is_cpu_visible() const {
+    return desc_.storage_mode == StorageMode::CPUAndGPU;
+  }
+
  protected:
   explicit Buffer(const BufferDesc& desc, uint32_t bindless_idx = k_invalid_bindless_idx)
       : desc_(desc), bindless_idx_(bindless_idx) {}

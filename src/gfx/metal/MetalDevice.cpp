@@ -224,6 +224,8 @@ void MetalDevice::shutdown() {
   push_constant_allocator_.reset();
   test_allocator_.reset();
 
+  delete_queues_.flush_deletions(SIZE_T_MAX);
+
   device_->release();
   for (size_t i = 0; i < buffer_pool_.num_blocks(); i++) {
     for (const auto& entry : buffer_pool_.get_block_entries(i)) {
@@ -320,34 +322,7 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
 }
 
 void MetalDevice::destroy(rhi::BufferHandle handle) {
-  auto* buf = buffer_pool_.get(handle);
-  ASSERT(buf);
-  if (!buf) {
-    return;
-  }
-
-  ASSERT(buf->buffer());
-  if (buf->buffer()) {
-    main_res_set_->removeAllocation(buf->buffer());
-    req_alloc_sizes_.total_buffer_space_allocated -= buf->desc().size;
-    buf->buffer()->release();
-    if (mtl4_enabled_) {
-      buf->buffer()->release();
-    }
-  }
-
-  if (buf->desc().bindless) {
-    ASSERT(buf->bindless_idx() != rhi::k_invalid_bindless_idx);
-    resource_desc_heap_allocator_.free_idx(buf->bindless_idx());
-  }
-
-  if (buf->desc().usage & rhi::BufferUsage_Indirect) {
-    // TODO: improve this cringe
-    icb_mgr_draw_indexed_.remove(handle);
-    icb_mgr_draw_mesh_threadgroups_.remove(handle);
-  }
-
-  buffer_pool_.destroy(handle);
+  delete_queues_.enqueue_deletion(handle, frame_num_, info_.frames_in_flight);
 }
 
 void MetalDevice::destroy(rhi::TextureHandle handle) {
@@ -592,6 +567,8 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
     }
   }
 
+  delete_queues_.flush_deletions(frame_num_);
+
   icb_mgr_draw_indexed_.reset_for_frame();
   icb_mgr_draw_mesh_threadgroups_.reset_for_frame();
 
@@ -662,19 +639,6 @@ void MetalDevice::init_bindless() {
                           "bindless_resource_descriptor_table");
   create_descriptor_table(&sampler_descriptor_table_, k_max_samplers,
                           "bindless_sampler_descriptor_table");
-}
-
-void MetalDevice::copy_to_buffer(const void* src, size_t src_size, rhi::BufferHandle buf,
-                                 size_t dst_offset) {
-  auto* buffer = get_buf(buf);
-  ASSERT(buffer);
-  if (!buffer) {
-    LERROR("[copy_to_buffer]: Buffer not found");
-    return;
-  }
-  ASSERT(buffer->size() - dst_offset >= src_size);
-  // TODO: don't assume it's shared on metal
-  memcpy((uint8_t*)buffer->contents() + dst_offset, src, src_size);
 }
 
 MTL::ComputePipelineState* MetalDevice::compile_mtl_compute_pipeline(
@@ -1063,4 +1027,58 @@ MetalDevice::GPUFrameAllocator::Alloc MetalDevice::GPUFrameAllocator::alloc(size
   size_t offset = offset_;
   offset_ += size;
   return {buf, offset};
+}
+
+void MetalDevice::DeleteQueues::flush_deletions(size_t curr_frame_num) {
+  while (!to_delete_buffers.empty() &&
+         to_delete_buffers.front().valid_to_delete_frame_num <= curr_frame_num) {
+    device_->destroy_actual(to_delete_buffers.front().handle);
+    to_delete_buffers.pop();
+  }
+}
+
+void MetalDevice::DeleteQueues::enqueue_deletion(rhi::BufferHandle handle, size_t curr_frame_num,
+                                                 size_t frames_in_flight) {
+  to_delete_buffers.push(Entry<rhi::BufferHandle>{handle, curr_frame_num + frames_in_flight});
+}
+
+void MetalDevice::destroy_actual(rhi::BufferHandle handle) {
+  auto* buf = buffer_pool_.get(handle);
+  ASSERT(buf);
+  if (!buf) {
+    return;
+  }
+
+  ASSERT(buf->buffer());
+  if (buf->buffer()) {
+    main_res_set_->removeAllocation(buf->buffer());
+    req_alloc_sizes_.total_buffer_space_allocated -= buf->desc().size;
+    buf->buffer()->release();
+    if (mtl4_enabled_) {
+      buf->buffer()->release();
+    }
+  }
+
+  if (buf->desc().bindless) {
+    ASSERT(buf->bindless_idx() != rhi::k_invalid_bindless_idx);
+    resource_desc_heap_allocator_.free_idx(buf->bindless_idx());
+  }
+
+  if (buf->desc().usage & rhi::BufferUsage_Indirect) {
+    // TODO: improve this cringe
+    icb_mgr_draw_indexed_.remove(handle);
+    icb_mgr_draw_mesh_threadgroups_.remove(handle);
+  }
+
+  buffer_pool_.destroy(handle);
+}
+
+// Ensures cmd_enc2 executes after cmd_enc1.
+// No-op when both encoders are recorded into the same command buffer.
+void MetalDevice::cmd_list_wait_for(rhi::CmdEncoder*, rhi::CmdEncoder*) {
+  if (mtl4_enabled_) {
+    // } else {
+    // auto* mtl_cmd_enc1 = static_cast<Metal3CmdEncoder*>(cmd_enc1);
+    // auto* mtl_cmd_enc2 = static_cast<Metal3CmdEncoder*>(cmd_enc2);
+  }
 }

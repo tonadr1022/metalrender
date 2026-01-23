@@ -16,6 +16,10 @@ class MetalBuffer final : public rhi::Buffer {
   void* contents() override;
   [[nodiscard]] MTL::Buffer* buffer() { return buffer_; }
 
+  [[nodiscard]] bool is_cpu_visible() const override {
+    return desc_.storage_mode != rhi::StorageMode::GPUOnly;
+  }
+
  private:
   [[maybe_unused]] MTL::Buffer* buffer_{};
 };
