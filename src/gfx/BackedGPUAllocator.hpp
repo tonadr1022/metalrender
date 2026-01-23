@@ -4,6 +4,7 @@
 #include <offsetAllocator.hpp>
 
 #include "core/EAssert.hpp"
+#include "core/Logger.hpp"
 #include "gfx/Buffer.hpp"
 #include "gfx/Device.hpp"
 
@@ -41,8 +42,8 @@ class BackedGPUAllocator {
       new_buffer_desc.size = new_cap_elements * bytes_per_element_;
       auto new_buf_handle = device_.create_buf_h(new_buffer_desc);
       auto* new_buf = device_.get_buf(new_buf_handle);
+      // TODO: fix
       ALWAYS_ASSERT(new_buf->contents());
-
       memcpy(new_buf->contents(), device_.get_buf(backing_buffer_)->contents(),
              old_cap_elements * bytes_per_element_);
 

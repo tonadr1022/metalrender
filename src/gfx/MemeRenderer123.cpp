@@ -162,12 +162,12 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
   instance_data_mgr_.init(100'000, device_);
   static_draw_batch_.emplace(DrawBatchType::Static, *device_,
                              DrawBatch::CreateInfo{
-                                 .initial_vertex_capacity = 10'000,
-                                 .initial_index_capacity = 10'000,
+                                 .initial_vertex_capacity = 1000,
+                                 .initial_index_capacity = 1000,
                                  .initial_meshlet_capacity = 1000,
                                  .initial_mesh_capacity = 1000,
-                                 .initial_meshlet_triangle_capacity = 10'000,
-                                 .initial_meshlet_vertex_capacity = 10'000,
+                                 .initial_meshlet_triangle_capacity = 1000,
+                                 .initial_meshlet_vertex_capacity = 1000,
                              });
   meshlet_vis_buf_.emplace(
       *device_, rhi::BufferDesc{.size = 1000, .bindless = true, .name = "meshlet_vis_buf"},
@@ -827,7 +827,8 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   OffsetAllocator::Allocation meshlet_vis_buf_alloc{};
   if (k_use_mesh_shader) {
     bool resized{};
-    meshlet_vis_buf_alloc = meshlet_vis_buf_->allocate(model_resources->totals.meshlets, resized);
+    meshlet_vis_buf_alloc =
+        meshlet_vis_buf_->allocate(model_resources->totals.instance_meshlets, resized);
     meshlet_vis_buf_dirty_ = true;
   }
 
@@ -876,7 +877,6 @@ void MemeRenderer123::free_instance(ModelInstanceGPUHandle handle) {
   if (!gpu_resources) {
     return;
   }
-  // TODO: anything else?
   instance_data_mgr_.free(gpu_resources->instance_data_gpu_alloc);
   if (meshlet_vis_buf_) {
     meshlet_vis_buf_->free(gpu_resources->meshlet_vis_buf_alloc);
@@ -890,8 +890,7 @@ void MemeRenderer123::free_model(ModelGPUHandle handle) {
   if (!gpu_resources) {
     return;
   }
-  // TODO: free textures
-
+  gpu_resources->textures.clear();
   materials_buf_->free(gpu_resources->material_alloc);
   static_draw_batch_->free(gpu_resources->static_draw_batch_alloc);
   model_gpu_resource_pool_.destroy(handle);

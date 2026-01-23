@@ -12,7 +12,6 @@ void Window::init(InitInfo& init_info) {
     LCRITICAL("Failed to initialize glfw");
     exit(1);
   }
-  glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_TRUE);
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
   if (init_info.transparent_window) {
     glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
