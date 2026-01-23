@@ -231,6 +231,13 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
     buffer_copy_mgr_->clear_copies();
   }
 
+  // flush textures
+  if (imgui_renderer_->has_dirty_textures() || !pending_texture_uploads_.empty()) {
+    auto* enc = device_->begin_command_list();
+    flush_pending_texture_uploads(enc);
+    enc->end_encoding();
+  }
+
   rg_.execute();
 
   device_->submit_frame();
@@ -287,17 +294,6 @@ void ScratchBufferPool::reset(size_t frame_idx) {
 
 void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   ZoneScoped;
-  bool imgui_has_dirty_textures = imgui_renderer_->has_dirty_textures();
-  if (!pending_texture_uploads_.empty() || imgui_has_dirty_textures) {
-    auto& tex_flush_pass = rg_.add_transfer_pass("flush_textures");
-    for (const auto& t : pending_texture_uploads_) {
-      tex_flush_pass.w_external_tex(t.name, t.tex);
-    }
-    imgui_renderer_->add_dirty_textures_to_pass(tex_flush_pass, false);
-
-    tex_flush_pass.set_ex([this](rhi::CmdEncoder* enc) { flush_pending_texture_uploads(enc); });
-  }
-
   {
     if (instance_data_mgr_.has_pending_frees(curr_frame_idx_)) {
       auto& p = rg_.add_transfer_pass("free_instance_data");
@@ -411,11 +407,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           p.w_color_output("gbuffer_a", {.format = rhi::TextureFormat::R16G16B16A16Sfloat});
       rg_depth_handle = p.w_depth_output("depth_tex", {.format = rhi::TextureFormat::D32float});
     }
-
-    for (const auto& t : pending_texture_uploads_) {
-      p.sample_external_tex(t.name);
-    }
-    imgui_renderer_->add_dirty_textures_to_pass(p, true);
 
     p.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, &args, late](rhi::CmdEncoder* enc) {
       ZoneScopedN("Execute gbuffer pass");
@@ -584,15 +575,13 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
   ZoneScoped;
   imgui_renderer_->flush_pending_texture_uploads(enc, staging_buffer_allocator_.value());
 
-  while (pending_texture_uploads_.size()) {
-    auto& upload = pending_texture_uploads_.back();
-    auto& tex_upload = upload.upload;
+  for (const auto& upload : pending_texture_uploads_) {
+    const auto& tex_upload = upload.upload;
     auto* tex = device_->get_tex(upload.tex);
     ASSERT(tex);
     ASSERT(upload.upload.data);
     if (tex_upload.load_type == CPUTextureLoadType::Ktx2) {
       auto* ktx_tex = (ktxTexture2*)tex_upload.data.get();
-      auto& upload = pending_texture_uploads_.back();
       auto* tex = device_->get_tex(upload.tex);
       ASSERT(tex);
       ASSERT(tex_upload.data);
@@ -645,7 +634,6 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
 
       enc->upload_texture_data(upload_buf.buf, upload_buf.offset, bytes_per_row, upload.tex);
     }
-    pending_texture_uploads_.pop_back();
   }
 
   pending_texture_uploads_.clear();
