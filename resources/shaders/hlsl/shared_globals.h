@@ -19,4 +19,9 @@ struct GlobalData {
   float4 camera_pos;
 };
 
+#ifdef __HLSL__
+#define load_globals() \
+  (bindless_buffers[globals_buf_idx].Load<GlobalData>(globals_buf_offset_bytes))
+#endif
+
 #endif

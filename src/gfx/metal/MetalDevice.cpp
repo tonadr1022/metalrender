@@ -773,9 +773,11 @@ void MetalDevice::set_name(rhi::BufferHandle handle, const char* name) {
 }
 
 void MetalDevice::on_imgui() {
-  ImGui::Text("Active Textures: %zu\nActive Buffers: %zu\nGPU Buffer Space Requested: %zu (mb)",
-              texture_pool_.size(), buffer_pool_.size(),
-              req_alloc_sizes_.total_buffer_space_allocated / 1024 / 1024);
+  ImGui::Text(
+      "Active Textures: %zu\nActive Buffers: %zu\nActive Samplers: %zu\nGPU Buffer Space "
+      "Requested: %zu (mb)",
+      texture_pool_.size(), buffer_pool_.size(), sampler_pool_.size(),
+      req_alloc_sizes_.total_buffer_space_allocated / 1024 / 1024);
 }
 
 std::filesystem::path MetalDevice::get_metallib_path_from_shader_info(

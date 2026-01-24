@@ -1,6 +1,6 @@
 // clang-format off
 #define COMPUTE_ROOT_SIG
-#include "../root_sig.h"
+#include "../root_sig.hlsl"
 #include "shared_depth_reduce.h"
 // clang-format on
 
@@ -16,8 +16,8 @@
 [RootSignature(ROOT_SIGNATURE)][NumThreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
   if (dtid.x >= out_tex_dim_x || dtid.y >= out_tex_dim_y) return;
 
-  Texture2D<float> in_tex = ResourceDescriptorHeap[in_tex_idx];
-  RWTexture2D<float> out_tex = ResourceDescriptorHeap[out_tex_idx];
+  Texture2D<float> in_tex = bindless_textures_float[in_tex_idx];
+  RWTexture2D<float> out_tex = bindless_rwtextures_float[out_tex_idx];
 
   int2 in_start =
       int2(dtid.x * in_tex_dim_x / out_tex_dim_x, dtid.y * in_tex_dim_y / out_tex_dim_y);

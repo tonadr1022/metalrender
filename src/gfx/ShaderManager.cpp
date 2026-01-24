@@ -415,8 +415,22 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path) {
   std::system(cmd2.c_str());
   auto metallib_path =
       (fs::path("resources/shader_out/metal") / relative).replace_extension(".metallib");
+
+  bool output_reflection = true;
+
+  std::string output_reflection_arg;
+  if (output_reflection) {
+    auto reflection_path = metallib_path;
+    output_reflection_arg =
+        output_reflection
+            ? "--output-reflection-file " + reflection_path.replace_extension(".json").string()
+            : "";
+  }
+
   std::string metallib_compile_args =
-      std::format("metal-shaderconverter {} -o {}", out_filepath.string(), metallib_path.string());
+      std::format("metal-shaderconverter {} -o {} {}", out_filepath.string(),
+                  metallib_path.string(), output_reflection_arg);
+  LINFO("compiling metallib: {}", metallib_compile_args);
   std::system(metallib_compile_args.c_str());
 
   // update hash

@@ -1,4 +1,4 @@
-#include "root_sig.h"
+#include "root_sig.hlsl"
 
 struct VOut {
   float4 pos : SV_Position;

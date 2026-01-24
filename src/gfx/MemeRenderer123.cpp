@@ -126,21 +126,21 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
                      .name = get_next_tex_upload_name()});
   }
   {
-    samplers_.emplace_back(device_->create_sampler_h(rhi::SamplerDesc{
+    samplers_.emplace_back(device_->create_sampler_h({
         .min_filter = rhi::FilterMode::Nearest,
         .mag_filter = rhi::FilterMode::Nearest,
         .mipmap_mode = rhi::FilterMode::Nearest,
         .address_mode = rhi::AddressMode::Repeat,
     }));
 
-    samplers_.emplace_back(device_->create_sampler_h(rhi::SamplerDesc{
+    samplers_.emplace_back(device_->create_sampler_h({
         .min_filter = rhi::FilterMode::Linear,
         .mag_filter = rhi::FilterMode::Linear,
         .mipmap_mode = rhi::FilterMode::Linear,
         .address_mode = rhi::AddressMode::Repeat,
     }));
 
-    samplers_.emplace_back(device_->create_sampler_h(rhi::SamplerDesc{
+    samplers_.emplace_back(device_->create_sampler_h({
         .min_filter = rhi::FilterMode::Nearest,
         .mag_filter = rhi::FilterMode::Nearest,
         .mipmap_mode = rhi::FilterMode::Nearest,
@@ -467,7 +467,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
             .instance_data_buf_idx =
                 device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
             .mat_buf_idx = materials_buf_->get_buffer()->bindless_idx(),
-            .tt_cmd_buf_idx = device_->get_buf(static_draw_batch_->task_cmd_buf_)->bindless_idx(),
+            .task_cmd_buf_idx = device_->get_buf(static_draw_batch_->task_cmd_buf_)->bindless_idx(),
             .draw_cnt_buf_idx =
                 device_->get_buf(static_draw_batch_->out_draw_count_buf_.handle)->bindless_idx(),
             .meshlet_vis_buf_idx = meshlet_vis_buf_->get_buffer()->bindless_idx(),

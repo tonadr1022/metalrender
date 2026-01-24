@@ -1,6 +1,6 @@
 // clang-format off
 #define COMPUTE_ROOT_SIG
-#include "root_sig.h"
+#include "root_sig.hlsl"
 #include "shader_constants.h"
 #include "shader_core.h"
 #include "default_vertex.h"
@@ -31,8 +31,8 @@ VOut get_vertex_attributes(in InstanceData instance_data, in float4x4 vp, uint r
 VOut get_vertex_attributes(in InstanceData instance_data, in float4x4 vp, uint render_mode,
                            uint vertex_idx) {
 #endif
-  StructuredBuffer<DefaultVertex> vertex_buf = ResourceDescriptorHeap[vertex_buf_idx];
-  DefaultVertex vert = vertex_buf[vertex_idx];
+  DefaultVertex vert =
+      bindless_buffers[vertex_buf_idx].Load<DefaultVertex>(vertex_idx * sizeof(DefaultVertex));
 
   float3 pos = rotate_quat(instance_data.scale * vert.pos.xyz, instance_data.rotation) +
                instance_data.translation;
@@ -78,47 +78,42 @@ uint3 LoadThreeBytes(ByteAddressBuffer buf, uint byte_offset) {
 main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload payload,
      out indices uint3 tris[K_MAX_TRIS_PER_MESHLET],
      out vertices VOut verts[K_MAX_VERTS_PER_MESHLET]) {
-  StructuredBuffer<MeshData> task_cmds = ResourceDescriptorHeap[mesh_data_buf_idx];
-  StructuredBuffer<TaskCmd> tts = ResourceDescriptorHeap[tt_cmd_buf_idx];
-
   uint task_i = payload.meshlet_indices[gid];
-  TaskCmd tt = tts[task_i & 0xffffff];
-  uint meshlet_idx = tt.task_offset + (task_i >> 24);
+  TaskCmd task_cmd =
+      bindless_buffers[task_cmd_buf_idx].Load<TaskCmd>((task_i & 0xffffff) * sizeof(TaskCmd));
+  uint meshlet_idx = task_cmd.task_offset + (task_i >> 24);
 
-  StructuredBuffer<InstanceData> instance_data_buf = ResourceDescriptorHeap[instance_data_buf_idx];
-  InstanceData instance_data = instance_data_buf[tt.instance_id];
+  InstanceData instance_data = bindless_buffers[instance_data_buf_idx].Load<InstanceData>(
+      task_cmd.instance_id * sizeof(InstanceData));
 
-  MeshData task_cmd = task_cmds[instance_data.mesh_id];
-
-  StructuredBuffer<Meshlet> meshlet_buf = ResourceDescriptorHeap[meshlet_buf_idx];
-  Meshlet meshlet = meshlet_buf[meshlet_idx];
+  MeshData mesh_data =
+      bindless_buffers[mesh_data_buf_idx].Load<MeshData>(instance_data.mesh_id * sizeof(MeshData));
+  Meshlet meshlet = bindless_buffers[meshlet_buf_idx].Load<Meshlet>(meshlet_idx * sizeof(Meshlet));
 
   SetMeshOutputCounts(meshlet.vertex_count, meshlet.triangle_count);
 
-  StructuredBuffer<uint> meshlet_vertex_buf = ResourceDescriptorHeap[meshlet_vertex_buf_idx];
-
-  ByteAddressBuffer global_data_buf = ResourceDescriptorHeap[globals_buf_idx];
-  GlobalData globals = global_data_buf.Load<GlobalData>(globals_buf_offset_bytes);
+  GlobalData globals = load_globals();
   for (uint i = gtid; i < meshlet.vertex_count;) {
     uint vertex_idx =
-        meshlet_vertex_buf[meshlet.vertex_offset + i + task_cmd.meshlet_vertices_offset];
+        bindless_buffers_uint[meshlet_vertex_buf_idx]
+                             [meshlet.vertex_offset + i + mesh_data.meshlet_vertices_offset];
 #ifdef DEBUG_MODE
-    verts[i] =
-        get_vertex_attributes(instance_data, globals.vp, globals.render_mode,
-                              vertex_idx + task_cmd.vertex_base, meshlet_idx, tt.instance_id, i);
+    verts[i] = get_vertex_attributes(instance_data, globals.vp, globals.render_mode,
+                                     vertex_idx + mesh_data.vertex_base, meshlet_idx,
+                                     task_cmd.instance_id, i);
 #else
     verts[i] = get_vertex_attributes(instance_data, globals.vp, globals.render_mode,
-                                     vertex_idx + task_cmd.vertex_base);
+                                     vertex_idx + mesh_data.vertex_base);
 #endif
     i += K_MESH_TG_SIZE;
   }
 
   for (uint i = gtid; i < meshlet.triangle_count;) {
-    ByteAddressBuffer meshlet_tris = ResourceDescriptorHeap[meshlet_tri_buf_idx];
+    ByteAddressBuffer meshlet_tris = bindless_buffers[meshlet_tri_buf_idx];
     // The byte value must be a multiple of four so that it is DWORD aligned. If any other value is
     // provided, behavior is undefined.
     tris[i] = LoadThreeBytes(meshlet_tris,
-                             task_cmd.meshlet_triangles_offset + meshlet.triangle_offset + i * 3);
+                             mesh_data.meshlet_triangles_offset + meshlet.triangle_offset + i * 3);
     i += K_MESH_TG_SIZE;
   }
 }

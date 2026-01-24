@@ -1,5 +1,5 @@
 // clang-format off
-#include "root_sig.h"
+#include "root_sig.hlsl"
 #include "shared_tex_only.h"
 #include "math.hlsli"
 // clang-format on
@@ -10,8 +10,8 @@ struct VOut {
 };
 
 [RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target {
-  Texture2D tex = ResourceDescriptorHeap[tex_idx];
-  SamplerState samp = SamplerDescriptorHeap[NEAREST_SAMPLER_IDX];
+  Texture2D tex = bindless_textures[tex_idx];
+  SamplerState samp = bindless_samplers[NEAREST_SAMPLER_IDX];
   float4 color = color_mult * tex.SampleLevel(samp, input.uv, 0);
   color = float4(tonemap(color.xyz), color.a);
   // color = float4(gamma_correct(color.xyz), color.a);

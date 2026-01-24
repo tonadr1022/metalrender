@@ -1,6 +1,6 @@
 // clang-format off
 #define COMPUTE_ROOT_SIG
-#include "root_sig.h"
+#include "root_sig.hlsl"
 #include "shader_constants.h"
 #include "shader_core.h"
 #include "shared_task2.h"
@@ -29,29 +29,25 @@ groupshared uint s_count;
   bool draw = false;
   uint meshlet_vis_i = UINT_MAX;
 
-  StructuredBuffer<TaskCmd> tts = ResourceDescriptorHeap[tt_cmd_buf_idx];
-  StructuredBuffer<uint3> task_dispatch_buf = ResourceDescriptorHeap[draw_cnt_buf_idx];
-  RWStructuredBuffer<uint> meshlet_vis_buf = ResourceDescriptorHeap[meshlet_vis_buf_idx];
-  Texture2D depth_pyramid_tex = ResourceDescriptorHeap[depth_pyramid_tex_idx];
-  SamplerState samp = SamplerDescriptorHeap[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
-  ByteAddressBuffer cull_data_buf = ResourceDescriptorHeap[cull_data_idx];
-  CullData cull_data = cull_data_buf.Load<CullData>(sizeof(GlobalData));
+  RWStructuredBuffer<uint> meshlet_vis_buf = bindless_rwbuffers_uint[meshlet_vis_buf_idx];
+  Texture2D depth_pyramid_tex = bindless_textures[depth_pyramid_tex_idx];
+  SamplerState samp = bindless_samplers[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
+  CullData cull_data = bindless_buffers[cull_data_idx].Load<CullData>(cull_data_offset_bytes);
 
-  if (task_group_id < task_dispatch_buf[0].x) {
-    TaskCmd tt = tts[task_group_id];
-    if (gtid < tt.task_count) {
+  if (task_group_id < bindless_buffers_uint3[draw_cnt_buf_idx][0].x) {
+    TaskCmd task_cmd =
+        bindless_buffers[task_cmd_buf_idx].Load<TaskCmd>(task_group_id * sizeof(TaskCmd));
+    if (gtid < task_cmd.task_count) {
       visible = true;
 
-      ByteAddressBuffer global_data_buf = ResourceDescriptorHeap[globals_buf_idx];
-      GlobalData globals = global_data_buf.Load<GlobalData>(globals_buf_offset_bytes);
-      StructuredBuffer<Meshlet> meshlet_buf = ResourceDescriptorHeap[meshlet_buf_idx];
-      uint meshlet_index = tt.task_offset + gtid;
-      Meshlet meshlet = meshlet_buf[meshlet_index];
-      StructuredBuffer<InstanceData> instance_data_buf =
-          ResourceDescriptorHeap[instance_data_buf_idx];
-      InstanceData instance_data = instance_data_buf[tt.instance_id];
+      GlobalData globals = load_globals();
+      uint meshlet_index = task_cmd.task_offset + gtid;
+      Meshlet meshlet =
+          bindless_buffers[meshlet_buf_idx].Load<Meshlet>(meshlet_index * sizeof(Meshlet));
+      InstanceData instance_data = bindless_buffers[instance_data_buf_idx].Load<InstanceData>(
+          task_cmd.instance_id * sizeof(InstanceData));
 
-      meshlet_vis_i = instance_data.meshlet_vis_base + gtid + tt.group_base;
+      meshlet_vis_i = instance_data.meshlet_vis_base + gtid + task_cmd.group_base;
       bool visible_last_frame = meshlet_vis_buf[meshlet_vis_i] != 0;
       bool skip_draw = false;
 
@@ -149,7 +145,7 @@ groupshared uint s_count;
     s_count = 0;
   }
 
-  RWStructuredBuffer<uint> out_counts_buf = ResourceDescriptorHeap[out_counts_buf_idx];
+  RWStructuredBuffer<uint> out_counts_buf = bindless_rwbuffers_uint[out_counts_buf_idx];
   uint cnt;
   InterlockedAdd(out_counts_buf[pass], draw ? 1 : 0, cnt);
 

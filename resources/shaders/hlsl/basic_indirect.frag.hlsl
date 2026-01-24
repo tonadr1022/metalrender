@@ -1,17 +1,16 @@
 // clang-format off
-#include "root_sig.h"
+#include "root_sig.hlsl"
 #include "material.h"
 #include "shared_basic_indirect.h"
 // clang-format on
 
 [RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target0 {
-  StructuredBuffer<M4Material> material_buf = ResourceDescriptorHeap[mat_buf_idx];
-  M4Material material = material_buf[input.material_id];
+  M4Material material =
+      bindless_buffers[mat_buf_idx].Load<M4Material>(input.material_id * sizeof(M4Material));
   SamplerState samp = SamplerDescriptorHeap[LINEAR_SAMPLER_IDX];
   float4 albedo = material.color;
   if (material.albedo_tex_idx != 0) {
-    Texture2D albedo_tex = ResourceDescriptorHeap[material.albedo_tex_idx];
-    albedo *= albedo_tex.Sample(samp, input.uv);
+    albedo *= (bindless_textures[material.albedo_tex_idx]).Sample(samp, input.uv);
   }
   if (albedo.a < 0.5) {
     discard;
