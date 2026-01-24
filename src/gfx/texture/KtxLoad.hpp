@@ -14,5 +14,6 @@ struct LoadKtxTextureResult {
 };
 
 LoadKtxTextureResult load_ktx_texture(const std::filesystem::path& path);
+LoadKtxTextureResult load_ktx_texture(const void* data, size_t data_size);
 
 }  // namespace gfx

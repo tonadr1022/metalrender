@@ -139,7 +139,6 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
         .mipmap_mode = rhi::FilterMode::Linear,
         .address_mode = rhi::AddressMode::Repeat,
     }));
-
     samplers_.emplace_back(device_->create_sampler_h({
         .min_filter = rhi::FilterMode::Nearest,
         .mag_filter = rhi::FilterMode::Nearest,

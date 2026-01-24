@@ -53,4 +53,29 @@ cleanup_failed_load:
   return load_result;
 }
 
+LoadKtxTextureResult load_ktx_texture(const void *data, size_t data_size) {
+  LoadKtxTextureResult load_result{};
+  ktxTexture2 *&texture = load_result.texture;
+  KTX_error_code result = ktxTexture2_CreateFromMemory(
+      (ktx_uint8_t *)data, data_size, KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
+  if (result != KTX_SUCCESS) {
+    LERROR("Failed to load KTX texture from memory: {}", ktxErrorString(result));
+    load_result.texture = nullptr;
+    return load_result;
+  }
+  auto transcodable = ktxTexture2_NeedsTranscoding(texture);
+  if (transcodable) {
+    result = ktxTexture2_TranscodeBasis(texture, KTX_TTF_ASTC_4x4_RGBA, KTX_TF_HIGH_QUALITY);
+    if (result != KTX_SUCCESS) {
+      LERROR("Failed to transcode KTX texture from memory: {}", ktxErrorString(result));
+      goto cleanup_failed_load;
+    }
+  }
+  load_result.format = convert((VkFormat)texture->vkFormat);
+  return load_result;
+cleanup_failed_load:
+  ktxTexture2_Destroy(texture);
+  return load_result;
+}
+
 }  // namespace gfx

@@ -32,6 +32,70 @@
 
 namespace {
 
+void load_stb_image(const void *data, size_t data_size, const std::filesystem::path &path,
+                    rhi::TextureFormat format, TextureUpload &upload) {
+  int w{}, h{}, comp{};
+  uint8_t *img_data{};
+  if (data) {
+    img_data = stbi_load_from_memory((const stbi_uc *)data, data_size, &w, &h, &comp, 4);
+  } else {
+    img_data = stbi_load(path.string().c_str(), &w, &h, &comp, 4);
+  }
+  const uint32_t mip_levels = math::get_mip_levels(w, h);
+  const rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
+                              .storage_mode = rhi::StorageMode::Default,
+                              .usage = rhi::TextureUsageSample,
+                              .dims = glm::uvec3{w, h, 1},
+                              .mip_levels = mip_levels,
+                              .array_length = 1,
+                              .bindless = true};
+  if (!img_data) {
+    ASSERT(0);
+  }
+  upload.data = std::unique_ptr<void, UntypedDeleterFuncPtr>(img_data, &stbi_image_free);
+  upload.desc = desc;
+  upload.load_type = CPUTextureLoadType::StbImage;
+  upload.bytes_per_row = desc.dims.x * 4;
+  upload.desc.format = format;
+};
+
+void free_ktx_texture(void *ktx_tex) {
+  if (ktx_tex) {
+    ktxTexture2_Destroy((ktxTexture2 *)ktx_tex);
+  }
+}
+
+void load_ktx(const void *data, size_t data_size, const std::filesystem::path &path,
+              TextureUpload &upload) {
+  gfx::LoadKtxTextureResult load_result;
+  if (data) {
+    load_result = gfx::load_ktx_texture(data, data_size);
+  } else {
+    load_result = gfx::load_ktx_texture(path);
+  }
+  auto *ktx_tex = load_result.texture;
+  const rhi::TextureDesc desc{
+      .format = load_result.format,
+      .storage_mode = rhi::StorageMode::Default,
+      .usage = rhi::TextureUsageSample,
+      .dims = glm::uvec3{ktx_tex->baseWidth, ktx_tex->baseHeight, ktx_tex->baseDepth},
+      .mip_levels = ktx_tex->numLevels,
+      .array_length = 1,
+      .bindless = true};
+  ASSERT(ktx_tex);
+  ASSERT(ktx_tex->numLevels > 0);
+
+  upload.data = std::unique_ptr<void, UntypedDeleterFuncPtr>(ktx_tex, &free_ktx_texture);
+  upload.desc = desc;
+  // TODO: handle other block sizes
+  // TODO: handle BC7
+  int blocks_wide = align_divide_up(ktx_tex->baseWidth, 4);
+  int blocks_tall = align_divide_up(ktx_tex->baseHeight, 4);
+  int src_bytes_per_row = blocks_wide * 16;
+  upload.bytes_per_row = src_bytes_per_row;
+  upload.load_type = CPUTextureLoadType::Ktx2;
+  upload.compressed_blocks_tall = blocks_tall;
+};
 void write_meshlet_data(std::ostream &o_file, const MeshletLoadResult &meshlet_data) {
   ZoneScoped;
 
@@ -193,12 +257,6 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
                            .meshlet_triangles = std::move(meshlet_triangles)};
 }
 
-void free_ktx_texture(void *ktx_tex) {
-  if (ktx_tex) {
-    ktxTexture2_Destroy((ktxTexture2 *)ktx_tex);
-  }
-}
-
 }  // namespace
 
 namespace model {
@@ -235,56 +293,23 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
 
   auto load_img = [&](uint32_t gltf_img_i, rhi::TextureFormat format) -> uint32_t {
     const cgltf_image &img = gltf->images[gltf_img_i];
-    const std::filesystem::path full_img_path = directory_path / img.uri;
-    if (!img.buffer_view) {
-      if (full_img_path.extension() == ".ktx2") {
-        auto load_result = gfx::load_ktx_texture(full_img_path);
-        auto *ktx_tex = load_result.texture;
-        const rhi::TextureDesc desc{
-            .format = load_result.format,
-            .storage_mode = rhi::StorageMode::Default,
-            .usage = rhi::TextureUsageSample,
-            .dims = glm::uvec3{ktx_tex->baseWidth, ktx_tex->baseHeight, ktx_tex->baseDepth},
-            .mip_levels = ktx_tex->numLevels,
-            .array_length = 1,
-            .bindless = true};
-        ASSERT(ktx_tex);
-        ASSERT(ktx_tex->numLevels > 0);
 
-        auto &upload = texture_uploads[gltf_img_i];
-        upload.data = std::unique_ptr<void, UntypedDeleterFuncPtr>(ktx_tex, &free_ktx_texture);
-        upload.desc = desc;
-        // TODO: handle other block sizes
-        // TODO: handle BC7
-        int blocks_wide = align_divide_up(ktx_tex->baseWidth, 4);
-        int blocks_tall = align_divide_up(ktx_tex->baseHeight, 4);
-        int src_bytes_per_row = blocks_wide * 16;
-        upload.bytes_per_row = src_bytes_per_row;
-        upload.load_type = CPUTextureLoadType::Ktx2;
-        upload.compressed_blocks_tall = blocks_tall;
+    if (!img.buffer_view) {
+      const std::filesystem::path full_img_path = directory_path / img.uri;
+      if (full_img_path.extension() == ".ktx2") {
+        load_ktx(nullptr, 0, full_img_path, texture_uploads[gltf_img_i]);
       } else {
-        int w{}, h{}, comp{};
-        uint8_t *data = stbi_load(full_img_path.c_str(), &w, &h, &comp, 4);
-        const uint32_t mip_levels = math::get_mip_levels(w, h);
-        const rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
-                                    .storage_mode = rhi::StorageMode::Default,
-                                    .usage = rhi::TextureUsageSample,
-                                    .dims = glm::uvec3{w, h, 1},
-                                    .mip_levels = mip_levels,
-                                    .array_length = 1,
-                                    .bindless = true};
-        if (!data) {
-          ASSERT(0);
-        }
-        auto &upload = texture_uploads[gltf_img_i];
-        upload.data = std::unique_ptr<void, UntypedDeleterFuncPtr>(data, &stbi_image_free);
-        upload.desc = desc;
-        upload.load_type = CPUTextureLoadType::StbImage;
-        upload.bytes_per_row = desc.dims.x * 4;
-        upload.desc.format = format;
+        load_stb_image(nullptr, 0, full_img_path, format, texture_uploads[gltf_img_i]);
       }
     } else {
-      ASSERT(0 && "need to handle yet");
+      std::string_view mime_type = img.mime_type ? img.mime_type : "";
+      if (mime_type.ends_with("ktx2")) {
+        load_ktx((unsigned char *)img.buffer_view->buffer->data + img.buffer_view->offset,
+                 img.buffer_view->size, "", texture_uploads[gltf_img_i]);
+      } else {
+        load_stb_image((unsigned char *)img.buffer_view->buffer->data + img.buffer_view->offset,
+                       img.buffer_view->size, "", format, texture_uploads[gltf_img_i]);
+      }
     }
     return gltf_img_i;
   };
