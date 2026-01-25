@@ -36,6 +36,7 @@ class MetalCmdEncoder : public rhi::CmdEncoder {
   MetalCmdEncoder(MetalDevice* device, MTL4::CommandBuffer* cmd_buf);
   MetalCmdEncoder(MetalDevice* device, MTL::CommandBuffer* cmd_buf);
 
+  void set_debug_name(const char* name) override;
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
   void end_rendering() override;
   void end_encoding() override;

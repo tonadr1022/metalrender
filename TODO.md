@@ -1,6 +1,9 @@
 # TODOs
 
-- Don't read meshlet stats buffer with contents() like a total clown.
+- investigate performance vs Apple's bistro render demo
+- use fill_buffer() instead of compute for clear_bufs pass
+- actual readback
+- meshlet stats buffer actual readback
 - move device\_->copy_to_buffer outside device interface.
 - staging buffer for texture uploads
 - consolidate upload functions with imgui renderer

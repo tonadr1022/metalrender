@@ -395,7 +395,7 @@ std::filesystem::path ShaderManager::get_shader_path(const std::string& relative
       .concat(".hlsl");
 }
 
-bool ShaderManager::compile_shader(const std::filesystem::path& path) {
+bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug_enabled) {
   // TODO: handle spirv
   auto shader_model = shader_model_from_hlsl_path(path);
   ASSERT(!path.empty());
@@ -407,8 +407,8 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path) {
   fs::create_directories(out_filepath.parent_path());
   fs::create_directories(dep_filepath.parent_path());
   std::string cmd1 =
-      std::format("dxc {} -Fo {} -T {} -E main -Zi -Qembed_debug -Qsource_in_debug_module",
-                  path.string(), out_filepath.string(), shader_model);
+      std::format("dxc {} -Fo {} -T {} -E main {}", path.string(), out_filepath.string(),
+                  shader_model, debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");
   std::system(cmd1.c_str());
   std::string cmd2 = std::format("dxc {} -T {} -E main -MF {}", path.string(), shader_model,
                                  dep_filepath.string());

@@ -251,6 +251,7 @@ void RenderGraph::execute() {
     }
 
     auto& pass = passes_[pass_i];
+    enc->set_debug_name(pass.get_name().c_str());
     pass.get_execute_fn()(enc);
     enc->end_encoding();
   }

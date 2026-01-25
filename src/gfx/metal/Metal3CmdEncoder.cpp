@@ -59,6 +59,9 @@ void Metal3CmdEncoder::begin_rendering(
   if (!render_enc_) {
     ASSERT(cmd_buf_);
     render_enc_ = cmd_buf_->renderCommandEncoder(desc);
+    if (!curr_debug_name_.empty()) {
+      render_enc_->setLabel(mtl::util::string(curr_debug_name_));
+    }
   }
   flush_barriers();
 
@@ -440,6 +443,9 @@ void Metal3CmdEncoder::start_compute_encoder() {
   if (!compute_enc_) {
     // TODO: re-evaluate dispatch type
     compute_enc_ = cmd_buf_->computeCommandEncoder(MTL::DispatchTypeConcurrent);
+    if (!curr_debug_name_.empty()) {
+      compute_enc_->setLabel(mtl::util::string(curr_debug_name_));
+    }
 
     flush_barriers();
   }
@@ -449,6 +455,9 @@ void Metal3CmdEncoder::start_blit_encoder() {
   end_encoders_of_types((EncoderType)(EncoderType_Compute | EncoderType_Render));
   if (!blit_enc_) {
     blit_enc_ = cmd_buf_->blitCommandEncoder();
+    if (!curr_debug_name_.empty()) {
+      blit_enc_->setLabel(mtl::util::string(curr_debug_name_));
+    }
     flush_barriers();
   }
 }
@@ -559,3 +568,5 @@ void Metal3CmdEncoder::copy_buffer_to_buffer(rhi::BufferHandle src_buf, size_t s
     blit_enc_->copyFromBuffer(src_b->buffer(), src_offset, dst_b->buffer(), dst_offset, size);
   }
 }
+
+void Metal3CmdEncoder::set_debug_name(const char* name) { curr_debug_name_ = name; }

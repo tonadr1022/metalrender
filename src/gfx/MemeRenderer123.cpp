@@ -30,10 +30,10 @@
 #include "hlsl/shared_basic_tri.h"
 #include "hlsl/shared_cull_data.h"
 #include "hlsl/shared_draw_cull.h"
+#include "hlsl/shared_forward_meshlet.h"
 #include "hlsl/shared_globals.h"
 #include "hlsl/shared_indirect.h"
 #include "hlsl/shared_mesh_data.h"
-#include "hlsl/shared_task2.h"
 #include "hlsl/shared_task_cmd.h"
 #include "hlsl/shared_tex_only.h"
 #include "imgui.h"
@@ -155,9 +155,9 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
         .rendering = {.color_formats{draw_img_format}, .depth_format = TextureFormat::D32float},
     });
     test_task_pso_ = shader_mgr_.create_graphics_pipeline({
-        .shaders = {{{"task2", ShaderType::Task},
-                     {"task2", ShaderType::Mesh},
-                     {"test_task", ShaderType::Fragment}}},
+        .shaders = {{{"forward_meshlet", ShaderType::Task},
+                     {"forward_meshlet", ShaderType::Mesh},
+                     {"forward_meshlet", ShaderType::Fragment}}},
         .rendering = {.color_formats{draw_img_format}, .depth_format = TextureFormat::D32float},
     });
 
@@ -241,7 +241,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_verbose_ = i++ == -1;
+  rg_verbose_ = i++ == 2;
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
   if (!buffer_copy_mgr_->get_copies().empty()) {
@@ -1001,7 +1001,7 @@ DrawBatch::DrawBatch(DrawBatchType type, rhi::Device& device, BufferCopyMgr& buf
     }
     if (i == 0) {
       out_draw_count_buf_ = device.create_buf_h({
-          .storage_mode = rhi::StorageMode::Default,
+          .storage_mode = rhi::StorageMode::GPUOnly,
           .usage = rhi::BufferUsage_Storage,
           .size = sizeof(uint32_t) * 3,
           .bindless = true,

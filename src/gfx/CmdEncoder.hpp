@@ -9,6 +9,7 @@ using AccessFlagsBits = uint64_t;
 
 class CmdEncoder {
  public:
+  virtual void set_debug_name(const char* name) = 0;
   virtual void begin_rendering(std::initializer_list<RenderingAttachmentInfo> attachments) = 0;
   virtual void end_rendering() = 0;
   virtual void bind_pipeline(PipelineHandle handle) = 0;

@@ -32,6 +32,7 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
 
   Metal3CmdEncoder(MetalDevice* device, MTL::CommandBuffer* cmd_buf);
 
+  void set_debug_name(const char* name) override;
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
   void end_rendering() override;
   void end_encoding() override;
@@ -120,4 +121,5 @@ class Metal3CmdEncoder : public rhi::CmdEncoder {
   uint8_t pc_data_[168]{};
   size_t pc_data_size_{};
   int push_debug_group_stack_size_{};
+  std::string curr_debug_name_;
 };

@@ -452,3 +452,4 @@ void MetalCmdEncoder::copy_buffer_to_buffer(rhi::BufferHandle src_buf, size_t sr
     compute_enc_->copyFromBuffer(src_b->buffer(), src_offset, dst_b->buffer(), dst_offset, size);
   }
 }
+void MetalCmdEncoder::set_debug_name(const char* name) {}
