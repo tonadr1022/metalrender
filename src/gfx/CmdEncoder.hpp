@@ -73,12 +73,6 @@ class CmdEncoder {
                                                size_t indirect_buf_offset,
                                                glm::uvec3 threads_per_task_thread_group,
                                                glm::uvec3 threads_per_mesh_thread_group) = 0;
-  virtual void prepare_mesh_threadgroups_indirect(rhi::BufferHandle mesh_cmd_indirect_buf,
-                                                  size_t mesh_cmd_indirect_buf_offset,
-                                                  glm::uvec3 threads_per_task_thread_group,
-                                                  glm::uvec3 threads_per_mesh_thread_group,
-                                                  void* push_constant_data,
-                                                  size_t push_constant_size, uint32_t draw_cnt) = 0;
   virtual void dispatch_compute(glm::uvec3 thread_groups, glm::uvec3 threads_per_threadgroup) = 0;
   virtual void fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes, uint32_t size,
                            uint32_t value) = 0;

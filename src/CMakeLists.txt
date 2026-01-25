@@ -58,7 +58,6 @@ if(BUILD_METAL)
         gfx/metal/MetalBuffer.cpp
         gfx/metal/MetalUtil.cpp
         gfx/metal/MetalCmdEncoder.cpp
-        gfx/metal/Metal3CmdEncoder.cpp
         gfx/metal/MetalWindow.cpp
     )
 

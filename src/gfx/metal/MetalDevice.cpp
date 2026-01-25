@@ -11,7 +11,7 @@
 #include <tracy/Tracy.hpp>
 
 #include "Window.hpp"
-#include "gfx/metal/Metal3CmdEncoder.hpp"
+#include "core/Util.hpp"
 #include "imgui.h"
 
 #define IR_RUNTIME_METALCPP
@@ -23,6 +23,7 @@
 #include "gfx/GFXTypes.hpp"
 #include "gfx/Pipeline.hpp"
 #include "gfx/RendererTypes.hpp"
+#include "gfx/metal/MetalCmdEncoder.hpp"
 #include "gfx/metal/MetalPipeline.hpp"
 #include "gfx/metal/MetalUtil.hpp"
 
@@ -214,7 +215,7 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
-  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = false});
+  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = true});
 }
 
 void MetalDevice::shutdown() {
@@ -547,18 +548,19 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
       return ret;
     }
     mtl4_resources_->cmd_lists_.emplace_back(
-        std::make_unique<MetalCmdEncoder>(this, mtl4_resources_->main_cmd_buf));
+        std::make_unique<MetalCmdEncoderBase<Metal4EncoderAPI>>());
     curr_cmd_list_idx_++;
+    mtl4_resources_->cmd_lists_.back()->init(this, mtl4_resources_->main_cmd_buf);
     return mtl4_resources_->cmd_lists_.back().get();
   }
 
   // MTL3 path
   if (curr_cmd_list_idx_ >= mtl3_resources_->cmd_lists_.size()) {
-    mtl3_resources_->cmd_lists_.emplace_back(std::make_unique<Metal3CmdEncoder>(this, nullptr));
+    mtl3_resources_->cmd_lists_.emplace_back(std::make_unique<Metal3CmdEncoder>());
   }
   ASSERT(curr_cmd_list_idx_ < mtl3_resources_->cmd_lists_.size());
   auto* ret = (Metal3CmdEncoder*)mtl3_resources_->cmd_lists_[curr_cmd_list_idx_].get();
-  ret->cmd_buf_ = mtl3_resources_->main_cmd_buf;
+  ret->encoder_state_.cmd_buf = mtl3_resources_->main_cmd_buf;
   curr_cmd_list_idx_++;
 
   return ret;
@@ -778,6 +780,7 @@ void MetalDevice::on_imgui() {
       "Requested: %zu (mb)",
       texture_pool_.size(), buffer_pool_.size(), sampler_pool_.size(),
       req_alloc_sizes_.total_buffer_space_allocated / 1024 / 1024);
+  ImGui::Text("API Version: %s", mtl4_enabled_ ? "Metal 4" : "Metal 3");
 }
 
 std::filesystem::path MetalDevice::get_metallib_path_from_shader_info(

@@ -10,10 +10,8 @@
 #include "core/Allocator.hpp"
 #include "core/Handle.hpp"
 #include "core/Pool.hpp"
-#include "core/Util.hpp"
 #include "gfx/Config.hpp"
 #include "gfx/Device.hpp"
-#include "gfx/metal/Metal3CmdEncoder.hpp"
 #include "gfx/metal/MetalCmdEncoder.hpp"
 #include "gfx/metal/MetalSampler.hpp"
 #include "gfx/metal/MetalSwapchain.hpp"
@@ -151,7 +149,7 @@ class MetalDevice : public rhi::Device {
     std::array<MTL4::CommandAllocator*, k_max_frames_in_flight> cmd_allocators{};
     MTL4::CommandBuffer* main_cmd_buf{};
     MTL4::CommandQueue* main_cmd_q{};
-    std::vector<std::unique_ptr<MetalCmdEncoder>> cmd_lists_;
+    std::vector<std::unique_ptr<Metal4CmdEncoder>> cmd_lists_;
   };
   std::optional<MTL4_Resources> mtl4_resources_;
 

@@ -25,7 +25,7 @@ class MetalCmdEncoderICBMgr {
   MetalCmdEncoderICBMgr& operator=(MetalCmdEncoderICBMgr&&) = delete;
   ~MetalCmdEncoderICBMgr();
 
-  explicit MetalCmdEncoderICBMgr(MetalDevice* device) : device_(device) {}
+  void init(MetalDevice* device) { device_ = device; }
   void init_icb_arg_encoder_and_buf_and_set_icb(std::span<MTL::IndirectCommandBuffer*> icbs,
                                                 size_t i);
   MTL::Buffer* get_icb(size_t i);
