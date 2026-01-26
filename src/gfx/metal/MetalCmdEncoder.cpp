@@ -414,7 +414,7 @@ template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::draw_primitives(rhi::PrimitiveTopology topology,
                                                       size_t vertex_start, size_t count,
                                                       size_t instance_count) {
-  flush_binds(EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment);
+  flush_binds();
   encoder_state_.render_enc->drawPrimitives(mtl::util::convert(topology), vertex_start, count,
                                             instance_count);
 }
@@ -443,7 +443,7 @@ void MetalCmdEncoderBase<EncoderAPI>::draw_indexed_primitives(
     rhi::IndexType index_type) {
   root_layout_.constants.gfx_constants.draw_id = base_instance;
   root_layout_.constants.gfx_constants.base_vertex = base_vertex_idx;
-  flush_binds(EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment);
+  flush_binds();
 
   auto* buf = device_->get_mtl_buf(index_buf);
   if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
@@ -702,8 +702,7 @@ template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::draw_mesh_threadgroups(
     glm::uvec3 thread_groups, glm::uvec3 threads_per_task_thread_group,
     glm::uvec3 threads_per_mesh_thread_group) {
-  flush_binds(EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh |
-              EncoderSetBufferStage::Fragment);
+  flush_binds();
   encoder_state_.render_enc->drawMeshThreadgroups(
       MTL::Size::Make(thread_groups.x, thread_groups.y, thread_groups.z),
       MTL::Size::Make(threads_per_task_thread_group.x, threads_per_task_thread_group.y,
@@ -728,7 +727,7 @@ void MetalCmdEncoderBase<EncoderAPI>::push_debug_group(const char* name) {
 template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::dispatch_compute(glm::uvec3 thread_groups,
                                                        glm::uvec3 threads_per_threadgroup) {
-  flush_binds(EncoderSetBufferStage::Compute);
+  flush_binds();
   // TODO: do this on start of compute encoder and cache any changes during internal stuff
   set_buffer<EncoderAPI>(encoder_state_, encoder_state_.compute_enc, kIRDescriptorHeapBindPoint,
                          device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
@@ -830,7 +829,7 @@ void MetalCmdEncoderBase<EncoderAPI>::end_rendering() {
 }
 
 template <typename EncoderAPI>
-void MetalCmdEncoderBase<EncoderAPI>::flush_binds(uint32_t encoder_stage) {
+void MetalCmdEncoderBase<EncoderAPI>::flush_binds() {
   if (binding_table_dirty_) {
     ResourceTable table = {};
     for (uint32_t i = 0; i < ARRAY_SIZE(binding_table_.SRV); i++) {
@@ -863,15 +862,27 @@ void MetalCmdEncoderBase<EncoderAPI>::flush_binds(uint32_t encoder_stage) {
   auto* root_layout = reinterpret_cast<RootLayout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
   memcpy(root_layout, &root_layout_, sizeof(RootLayout));
 
-  if (encoder_stage & (EncoderSetBufferStage::Compute)) {
+  if (encoder_state_.compute_enc) {
     set_buffer<EncoderAPI>(encoder_state_, encoder_state_.compute_enc, kIRArgumentBufferBindPoint,
-                           pc_buf, pc_buf_offset, encoder_stage);
-  } else {
+                           pc_buf, pc_buf_offset, EncoderSetBufferStage::Compute);
+  } else if (encoder_state_.render_enc) {
     set_buffer<EncoderAPI>(encoder_state_, encoder_state_.render_enc, kIRArgumentBufferBindPoint,
-                           pc_buf, pc_buf_offset, encoder_stage);
+                           pc_buf, pc_buf_offset,
+                           EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment |
+                               EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh);
+  } else {
+    ASSERT(0 && "no encoder to flush binds to");
   }
   push_constant_dirty_ = false;
-  // }
+}
+
+template <typename EncoderAPI>
+void MetalCmdEncoderBase<EncoderAPI>::bind_resource(rhi::TextureHandle texture, uint32_t slot,
+                                                    int subresource_id) {
+  ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
+  binding_table_.SRV[slot] = texture;
+  binding_table_.SRV_subresources[slot] = subresource_id;
+  binding_table_dirty_ = true;
 }
 
 template class MetalCmdEncoderBase<Metal3EncoderAPI>;

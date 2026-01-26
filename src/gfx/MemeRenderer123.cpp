@@ -546,7 +546,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         enc->push_constants(&pc, sizeof(pc));
 
         if (mip == 0) {
-          enc->bind_resource(rg_.get_att_img(depth_handle), 0, -1);
+          enc->bind_resource(rg_.get_att_img(depth_handle), 0);
         } else {
           enc->bind_resource(depth_pyramid_tex_.handle, 0, depth_pyramid_tex_.views[mip - 1]);
         }

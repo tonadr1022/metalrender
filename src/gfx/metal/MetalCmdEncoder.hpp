@@ -125,17 +125,8 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   void start_compute_encoder();
   void start_blit_encoder();
   void start_blit_equivalent_encoder();
-  void flush_binds(uint32_t encoder_stage);
+  void flush_binds();
 };
-
-template <typename EncoderAPI>
-void MetalCmdEncoderBase<EncoderAPI>::bind_resource(rhi::TextureHandle texture, uint32_t slot,
-                                                    int subresource_id) {
-  ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
-  binding_table_.SRV[slot] = texture;
-  binding_table_.SRV_subresources[slot] = subresource_id;
-  binding_table_dirty_ = true;
-}
 
 struct Metal3EncoderAPI;
 struct Metal4EncoderAPI;

@@ -1037,7 +1037,7 @@ MetalDevice::GPUFrameAllocator::GPUFrameAllocator(size_t size, MetalDevice* devi
 
 MetalDevice::GPUFrameAllocator::Alloc MetalDevice::GPUFrameAllocator::alloc(size_t size) {
   size = align_up(size, 8);
-  ALWAYS_ASSERT(size + offset_ <= capacity_);
+  ASSERT(size + offset_ <= capacity_);
   auto* buf = device_->get_mtl_buf(buffers[frame_idx_]);
   ASSERT(buf);
   size_t offset = offset_;

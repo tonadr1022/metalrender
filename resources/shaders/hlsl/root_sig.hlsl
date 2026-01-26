@@ -6,11 +6,8 @@
   "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED), "                \
   "RootConstants(num32BitConstants = 20, b998, space = 0, visibility = SHADER_VISIBILITY_ALL),"   \
   "RootConstants(num32BitConstants = 2, b999, space = 0, visibility = SHADER_VISIBILITY_ALL),"    \
-  "CBV(b0), "                                                                                     \
-  "CBV(b1), "                                                                                     \
-  "CBV(b2), "                                                                                     \
   "DescriptorTable( "                                                                             \
-  "CBV(b3, numDescriptors = 9, space = 0, flags = DATA_STATIC_WHILE_SET_AT_EXECUTE),"             \
+  "CBV(b3, numDescriptors = 12, space = 0, flags = DATA_STATIC_WHILE_SET_AT_EXECUTE),"            \
   "SRV(t0, numDescriptors = 12,space = 0,  flags = DESCRIPTORS_VOLATILE | "                       \
   "DATA_STATIC_WHILE_SET_AT_EXECUTE),"                                                            \
   "UAV(u0, numDescriptors = 12, flags = DESCRIPTORS_VOLATILE | DATA_STATIC_WHILE_SET_AT_EXECUTE)" \
