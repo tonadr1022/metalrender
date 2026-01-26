@@ -241,7 +241,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_verbose_ = i++ == 2;
+  rg_verbose_ = i++ == -1;
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
   if (!buffer_copy_mgr_->get_copies().empty()) {

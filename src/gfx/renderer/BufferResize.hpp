@@ -18,17 +18,7 @@ struct BufferCopy {
 struct BufferCopyMgr {
   explicit BufferCopyMgr(rhi::Device* device, GPUFrameAllocator3& staging_buffer_allocator)
       : staging_buffer_allocator_(staging_buffer_allocator), device_(device) {}
-  void add_copy(const BufferCopy& copy) { copies_.push_back(copy); }
-  void add_copy(rhi::BufferHandle src_buf, size_t src_offset, rhi::BufferHandle dst_buf,
-                size_t dst_offset, size_t size) {
-    copies_.push_back({
-        .src_buf = src_buf,
-        .dst_buf = dst_buf,
-        .size = size,
-        .src_offset = src_offset,
-        .dst_offset = dst_offset,
-    });
-  }
+  void add_copy(const BufferCopy& copy);
   void enqueue_fill_buffer() {}
 
   void copy_to_buffer(const void* src_data, size_t src_size, rhi::BufferHandle dst_buffer,
