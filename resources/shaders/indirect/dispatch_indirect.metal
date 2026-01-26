@@ -18,15 +18,17 @@ struct Args2 {
     uint stride;
 };
 
-#define PC_SIZE 160
-struct TLAB_Layout {
-    packed_uint4 pad[10]; // 160 bytes
-    uint draw_id;
-    uint vertex_id_base;
+struct RootLayout {
+    packed_uint2 pad[11]; // 160 bytes
+    device void* root_cbvs[3];
+    device void* resource_table_ptr;
+    device void* sampler_table_ptr;
 };
 
+static_assert(sizeof(RootLayout) == 128);
 
-kernel void comp_main(const device uint4* pc [[buffer(0)]],
+
+kernel void comp_main(const device uint2* pc [[buffer(0)]],
                       constant Args2& args2 [[buffer(1)]],
                       device Args& args [[buffer(2)]],
                       device uint8_t* out_args [[buffer(3)]],
@@ -39,15 +41,14 @@ kernel void comp_main(const device uint4* pc [[buffer(0)]],
     if (gid >= draw_cnt) {
             return;
     }
-    device uint4* out_ptr = reinterpret_cast<device uint4*>(out_args + gid * sizeof(TLAB_Layout));
-    static_assert(PC_SIZE / sizeof(uint4) == 10);
-    for (uint i = 0; i < PC_SIZE / sizeof(packed_uint4); i++) {
+    device packed_uint2* out_ptr = reinterpret_cast<device packed_uint2*>(out_args + gid * sizeof(RootLayout));
+    for (uint i = 0; i < 10; i++) {
         out_ptr[i] = pc[i];
     }
     const device IndexedIndirectDrawCmd& cmd = in_cmds[gid];
-    device TLAB_Layout* tlab_lay = reinterpret_cast<device TLAB_Layout*>(out_ptr);
-    tlab_lay->draw_id = cmd.first_instance;
-    tlab_lay->vertex_id_base = cmd.vertex_offset / args2.stride;
+    device RootLayout* root_layout = reinterpret_cast<device RootLayout*>(out_ptr);
+    root_layout->pad[10].x = cmd.first_instance;
+    root_layout->pad[10].y = cmd.vertex_offset / args2.stride;
 
     render_command ren_cmd(args.cmd_buf, gid);
     ren_cmd.reset();

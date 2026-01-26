@@ -22,13 +22,13 @@ void MetalCmdEncoderICBMgr::init_icb_arg_encoder_and_buf_and_set_icb(
     const NS::Array* args = NS::Array::array(args_arr.data(), args_arr.size());
     main_icb_container_arg_enc_ = device_->get_device()->newArgumentEncoder(args);
   }
-  main_icb_container_buf_.emplace_back(
-      device_->create_buf_h({.size = main_icb_container_arg_enc_->encodedLength()}));
 
   if (i < main_icb_container_buf_.size()) {
     encode_icb();
     return;
   }
+  main_icb_container_buf_.emplace_back(
+      device_->create_buf_h({.size = main_icb_container_arg_enc_->encodedLength()}));
 
   encode_icb();
 }

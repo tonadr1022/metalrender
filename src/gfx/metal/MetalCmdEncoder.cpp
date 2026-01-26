@@ -531,11 +531,12 @@ void MetalCmdEncoderBase<EncoderAPI>::upload_texture_data(
 template <typename EncoderAPI>
 uint32_t MetalCmdEncoderBase<EncoderAPI>::prepare_indexed_indirect_draws(
     rhi::BufferHandle indirect_buf, size_t offset, size_t tot_draw_cnt, rhi::BufferHandle index_buf,
-    size_t index_buf_offset, void*, size_t, size_t vertex_stride) {
-  ASSERT(0 && "unhandled push constants");
-  // // TODO: only if needed
-  // auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
-  // memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, push_constant_data, push_constant_size);
+    size_t index_buf_offset, void* push_constant_data, size_t push_constant_size,
+    size_t vertex_stride) {
+  ASSERT(push_constant_size <= sizeof(RootLayout) - 8);
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(sizeof(RootLayout));
+  auto* root_layout_ptr = (RootLayout*)((uint8_t*)pc_buf->contents() + pc_buf_offset);
+  memcpy(root_layout_ptr->constants, push_constant_data, push_constant_size);
 
   start_compute_encoder();
 
@@ -569,9 +570,9 @@ uint32_t MetalCmdEncoderBase<EncoderAPI>::prepare_indexed_indirect_draws(
 
     cmd_icb_mgr_.init_icb_arg_encoder_and_buf_and_set_icb(icbs, i);
 
-    // set_buffer<EncoderAPI, typename EncoderAPI::ComputeEnc>(
-    //     encoder_state_, encoder_state_.compute_enc, 0, pc_buf, pc_buf_offset,
-    //     EncoderSetBufferStage::Compute);
+    set_buffer<EncoderAPI, typename EncoderAPI::ComputeEnc>(
+        encoder_state_, encoder_state_.compute_enc, 0, pc_buf, pc_buf_offset,
+        EncoderSetBufferStage::Compute);
 
     struct Args2 {
       uint32_t draw_cnt;
@@ -591,12 +592,12 @@ uint32_t MetalCmdEncoderBase<EncoderAPI>::prepare_indexed_indirect_draws(
         encoder_state_, encoder_state_.compute_enc, 2, cmd_icb_mgr_.get_icb(i), 0,
         EncoderSetBufferStage::Compute);
 
-    // auto [out_pc_arg_buf, out_pc_arg_buf_offset] =
-    //     device_->test_allocator_->alloc(draw_cnt * sizeof(TLAB_Layout));
+    auto [out_pc_arg_buf, out_pc_arg_buf_offset] =
+        device_->test_allocator_->alloc(draw_cnt * sizeof(RootLayout));
 
-    // set_buffer<EncoderAPI, typename EncoderAPI::ComputeEnc>(
-    //     encoder_state_, encoder_state_.compute_enc, 3, out_pc_arg_buf, out_pc_arg_buf_offset,
-    //     EncoderSetBufferStage::Compute);
+    set_buffer<EncoderAPI, typename EncoderAPI::ComputeEnc>(
+        encoder_state_, encoder_state_.compute_enc, 3, out_pc_arg_buf, out_pc_arg_buf_offset,
+        EncoderSetBufferStage::Compute);
 
     auto* indirect_buffer = device_->get_mtl_buf(indirect_buf);
     ASSERT(indirect_buffer);
