@@ -75,6 +75,7 @@ class MetalDevice : public rhi::Device {
                                          uint32_t layer_count) override;
   void destroy_tex_view(rhi::TextureHandle handle, int subresource_id) override;
   uint32_t get_tex_view_bindless_idx(rhi::TextureHandle handle, int subresource_id) override;
+  MetalTexture::TexView* get_tex_view(rhi::TextureHandle handle, int subresource_id);
   rhi::Texture* get_tex(rhi::TextureHandle handle) override { return texture_pool_.get(handle); }
   rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) override;
 

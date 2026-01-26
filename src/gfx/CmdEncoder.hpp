@@ -78,6 +78,11 @@ class CmdEncoder {
                            uint32_t value) = 0;
   virtual void push_debug_group(const char* name) = 0;
   virtual void pop_debug_group() = 0;
+
+  virtual void bind_resource(rhi::TextureHandle texture, uint32_t slot) {
+    bind_resource(texture, slot, -1);
+  }
+  virtual void bind_resource(rhi::TextureHandle texture, uint32_t slot, int subresource_id) = 0;
 };
 
 }  // namespace rhi

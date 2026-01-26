@@ -15,7 +15,6 @@
 #include "imgui.h"
 
 #define IR_RUNTIME_METALCPP
-#define IR_PRIVATE_IMPLEMENTATION
 #include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
 
 #include "MetalUtil.hpp"
@@ -215,7 +214,7 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
-  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = true});
+  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = false});
 }
 
 void MetalDevice::shutdown() {
@@ -550,7 +549,7 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
     mtl4_resources_->cmd_lists_.emplace_back(
         std::make_unique<MetalCmdEncoderBase<Metal4EncoderAPI>>());
     curr_cmd_list_idx_++;
-    mtl4_resources_->cmd_lists_.back()->init(this, mtl4_resources_->main_cmd_buf);
+    mtl4_resources_->cmd_lists_.back()->reset(this, mtl4_resources_->main_cmd_buf);
     return mtl4_resources_->cmd_lists_.back().get();
   }
 
@@ -560,7 +559,7 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
   }
   ASSERT(curr_cmd_list_idx_ < mtl3_resources_->cmd_lists_.size());
   auto* ret = (Metal3CmdEncoder*)mtl3_resources_->cmd_lists_[curr_cmd_list_idx_].get();
-  ret->encoder_state_.cmd_buf = mtl3_resources_->main_cmd_buf;
+  ret->reset(this, mtl3_resources_->main_cmd_buf);
   curr_cmd_list_idx_++;
 
   return ret;
@@ -1098,4 +1097,10 @@ void MetalDevice::cmd_list_wait_for(rhi::CmdEncoder*, rhi::CmdEncoder*) {
     // auto* mtl_cmd_enc1 = static_cast<Metal3CmdEncoder*>(cmd_enc1);
     // auto* mtl_cmd_enc2 = static_cast<Metal3CmdEncoder*>(cmd_enc2);
   }
+}
+MetalTexture::TexView* MetalDevice::get_tex_view(rhi::TextureHandle handle, int subresource_id) {
+  auto* tex = reinterpret_cast<MetalTexture*>(get_tex(handle));
+  ASSERT(tex);
+  ASSERT((subresource_id >= 0 && (size_t)subresource_id < tex->tex_views.size()));
+  return &tex->tex_views[subresource_id];
 }

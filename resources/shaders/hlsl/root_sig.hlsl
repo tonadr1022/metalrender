@@ -2,16 +2,22 @@
 #define __HLSL__ 1
 #endif
 
-#ifdef COMPUTE_ROOT_SIG
-#define ROOT_SIGNATURE                                                             \
-  "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED), " \
-  "RootConstants(num32BitConstants = 40, b0, space = 0, visibility = SHADER_VISIBILITY_ALL)"
-#else
-#define ROOT_SIGNATURE                                                                         \
-  "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED), "             \
-  "RootConstants(num32BitConstants = 40, b0, space = 0, visibility = SHADER_VISIBILITY_ALL), " \
-  "RootConstants(num32BitConstants = 1, b1, space = 0, visibility = SHADER_VISIBILITY_ALL)"
-#endif
+#define ROOT_SIGNATURE                                                                            \
+  "RootFlags(CBV_SRV_UAV_HEAP_DIRECTLY_INDEXED | SAMPLER_HEAP_DIRECTLY_INDEXED), "                \
+  "RootConstants(num32BitConstants = 20, b998, space = 0, visibility = SHADER_VISIBILITY_ALL),"   \
+  "RootConstants(num32BitConstants = 2, b999, space = 0, visibility = SHADER_VISIBILITY_ALL),"    \
+  "CBV(b0), "                                                                                     \
+  "CBV(b1), "                                                                                     \
+  "CBV(b2), "                                                                                     \
+  "DescriptorTable( "                                                                             \
+  "CBV(b3, numDescriptors = 9, space = 0, flags = DATA_STATIC_WHILE_SET_AT_EXECUTE),"             \
+  "SRV(t0, numDescriptors = 12,space = 0,  flags = DESCRIPTORS_VOLATILE | "                       \
+  "DATA_STATIC_WHILE_SET_AT_EXECUTE),"                                                            \
+  "UAV(u0, numDescriptors = 12, flags = DESCRIPTORS_VOLATILE | DATA_STATIC_WHILE_SET_AT_EXECUTE)" \
+  ")"
+
+#define CONSTANT_BUFFER(type, name, reg) ConstantBuffer<type> name : register(b##reg)
+#define DRAW_COUNT_CONSTANT_BUFFER(type, name) CONSTANT_BUFFER(type, name, 999)
 
 template <typename T>
 struct BindlessResource {

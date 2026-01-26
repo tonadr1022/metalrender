@@ -12,7 +12,7 @@ struct DrawID {
   uint vert_id;
 };
 
-ConstantBuffer<DrawID> gDrawID : register(b1);
+CONSTANT_BUFFER(DrawID, gDrawID, 999);
 
 [RootSignature(ROOT_SIGNATURE)] VOut main(uint vert_id : SV_VertexID,
                                           uint instance_id : SV_InstanceID) {

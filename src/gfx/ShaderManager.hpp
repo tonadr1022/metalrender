@@ -28,7 +28,7 @@ class ShaderManager {
   bool shader_dirty(const std::filesystem::path& path);
   rhi::PipelineHandleHolder create_graphics_pipeline(const rhi::GraphicsPipelineCreateInfo& cinfo);
   rhi::PipelineHandleHolder create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo);
-  bool compile_shader(const std::filesystem::path& path, bool debug_enabled = false);
+  bool compile_shader(const std::filesystem::path& path, bool debug_enabled = true);
   void recompile_shaders();
   void recompile_shaders_no_lock();
   void replace_dirty_pipelines();

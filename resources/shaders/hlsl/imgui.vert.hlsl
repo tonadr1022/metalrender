@@ -6,7 +6,7 @@ struct DrawID {
   uint vert_id;
 };
 
-ConstantBuffer<DrawID> gDrawID : register(b1);
+CONSTANT_BUFFER(DrawID, gDrawID, 999);
 
 float4 ConvertUint32RGBAtoFloat4(uint c) {
   float r = (c & 0xFF) / 255.0;

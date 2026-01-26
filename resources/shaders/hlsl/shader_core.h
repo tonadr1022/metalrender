@@ -6,7 +6,7 @@
 #ifdef __HLSL__
 
 #define HLSL_REG(x) : register(x)
-#define HLSL_PC_REG HLSL_REG(b0)
+#define HLSL_PC_REG HLSL_REG(b998)
 
 #define packed_float2 float2
 #define packed_float3 float3
@@ -20,7 +20,7 @@
 #define uint32_t uint
 #define ATTR_POSITION [[position]]
 
-#define PUSH_CONSTANT(x) cbuffer x HLSL_REG(b0)
+#define PUSH_CONSTANT(x) cbuffer x HLSL_REG(b998)
 
 #elif defined(__cplusplus)
 

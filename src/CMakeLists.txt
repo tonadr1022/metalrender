@@ -59,6 +59,7 @@ if(BUILD_METAL)
         gfx/metal/MetalUtil.cpp
         gfx/metal/MetalCmdEncoder.cpp
         gfx/metal/MetalWindow.cpp
+        gfx/metal/MetalIRRuntime.cpp
     )
 
     target_compile_definitions(${target_name} PRIVATE METAL_BACKEND=1)

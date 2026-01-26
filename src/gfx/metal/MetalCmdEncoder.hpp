@@ -3,8 +3,10 @@
 #include <Metal/MTLCommandEncoder.hpp>
 #include <Metal/MTLGPUAddress.hpp>
 
+#include "core/Util.hpp"
 #include "gfx/CmdEncoder.hpp"
 #include "gfx/metal/MetalCmdEncoderICBMgr.hpp"
+#include "gfx/metal/RootLayout.hpp"
 
 class MetalDevice;
 
@@ -102,24 +104,38 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
                                        glm::uvec3 threads_per_mesh_thread_group) override;
   void copy_buffer_to_buffer(rhi::BufferHandle src_buf, size_t src_offset,
                              rhi::BufferHandle dst_buf, size_t dst_offset, size_t size) override;
+  void bind_resource(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
 
   EncoderState<EncoderAPI> encoder_state_{};
   MetalDevice* device_{};
   std::string curr_debug_name_;
   MetalCmdEncoderICBMgr cmd_icb_mgr_;
 
-  uint8_t pc_data_[168]{};
-  size_t pc_data_size_{};
+  RootLayout root_layout_{};
+  DescriptorBindingTable binding_table_{};
+  bool binding_table_dirty_{false};
   bool push_constant_dirty_{false};
+  bool draw_id_dirty_{false};
+  bool vertex_id_base_dirty_{false};
   int64_t push_debug_group_stack_size_{};
 
  private:
-  void init(MetalDevice* device, EncoderAPI::CommandBuffer cmd_buf);
+  void reset(MetalDevice* device, EncoderAPI::CommandBuffer cmd_buf);
   void flush_barriers();
   void start_compute_encoder();
   void start_blit_encoder();
   void start_blit_equivalent_encoder();
+  void flush_binds(uint32_t encoder_stage);
 };
+
+template <typename EncoderAPI>
+void MetalCmdEncoderBase<EncoderAPI>::bind_resource(rhi::TextureHandle texture, uint32_t slot,
+                                                    int subresource_id) {
+  ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
+  binding_table_.SRV[slot] = texture;
+  binding_table_.SRV_subresources[slot] = subresource_id;
+  binding_table_dirty_ = true;
+}
 
 struct Metal3EncoderAPI;
 struct Metal4EncoderAPI;

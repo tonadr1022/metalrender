@@ -1,5 +1,7 @@
 #include "MetalCmdEncoder.hpp"
 
+#include <sys/wait.h>
+
 // clang-format off
 #include <Metal/Metal.hpp>
 #include "gfx/metal/Config.hpp"
@@ -12,11 +14,8 @@
 
 #include "core/EAssert.hpp"
 #include "gfx/GFXTypes.hpp"
-#include "gfx/metal/MetalCmdEncoderCommon.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "gfx/metal/MetalUtil.hpp"
-
-using namespace gfx::mtl;
 
 template <typename API>
 typename API::RPDesc* create_render_pass(
@@ -176,23 +175,28 @@ void MetalCmdEncoderBase<EncoderAPI>::begin_rendering(
 }
 
 template <typename EncoderAPI>
-void MetalCmdEncoderBase<EncoderAPI>::init(MetalDevice* device, EncoderAPI::CommandBuffer cmd_buf) {
+void MetalCmdEncoderBase<EncoderAPI>::reset(MetalDevice* device,
+                                            EncoderAPI::CommandBuffer cmd_buf) {
   device_ = device;
+  // TODO: refactor
   cmd_icb_mgr_.init(device_);
-
   encoder_state_ = {};
   ASSERT(cmd_buf);
   encoder_state_.cmd_buf = cmd_buf;
+  root_layout_ = {};
+  binding_table_ = {};
 
   if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
-    MTL4::ArgumentTableDescriptor* desc = MTL4::ArgumentTableDescriptor::alloc()->init();
-    desc->setInitializeBindings(false);
-    desc->setMaxBufferBindCount(10);
-    desc->setMaxSamplerStateBindCount(0);
-    desc->setMaxTextureBindCount(0);
-    NS::Error* err{};
-    encoder_state_.arg_table = device_->get_device()->newArgumentTable(desc, &err);
-    desc->release();
+    if (!encoder_state_.arg_table) {
+      MTL4::ArgumentTableDescriptor* desc = MTL4::ArgumentTableDescriptor::alloc()->init();
+      desc->setInitializeBindings(false);
+      desc->setMaxBufferBindCount(10);
+      desc->setMaxSamplerStateBindCount(0);
+      desc->setMaxTextureBindCount(0);
+      NS::Error* err{};
+      encoder_state_.arg_table = device_->get_device()->newArgumentTable(desc, &err);
+      desc->release();
+    }
   }
 }
 
@@ -410,17 +414,7 @@ template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::draw_primitives(rhi::PrimitiveTopology topology,
                                                       size_t vertex_start, size_t count,
                                                       size_t instance_count) {
-  if (push_constant_dirty_) {
-    auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
-    auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
-    memcpy(tlab->pc_data, pc_data_, k_pc_size);
-    tlab->cbuffer2.draw_id = 0;  // TODO: don't use this root signature
-    tlab->cbuffer2.vertex_id_base = 0;
-    set_buffer<EncoderAPI>(encoder_state_, encoder_state_.render_enc, kIRArgumentBufferBindPoint,
-                           pc_buf, pc_buf_offset,
-                           EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment);
-    push_constant_dirty_ = false;
-  }
+  flush_binds(EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment);
   encoder_state_.render_enc->drawPrimitives(mtl::util::convert(topology), vertex_start, count,
                                             instance_count);
 }
@@ -428,6 +422,7 @@ void MetalCmdEncoderBase<EncoderAPI>::draw_primitives(rhi::PrimitiveTopology top
 template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::push_constants(void* data, size_t size) {
   // TODO: hacky lmao
+  // TODO: move this to the start of compute encoder
   if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
     set_buffer<EncoderAPI, typename EncoderAPI::RenderEnc>(
         encoder_state_, nullptr, kIRDescriptorHeapBindPoint,
@@ -436,8 +431,8 @@ void MetalCmdEncoderBase<EncoderAPI>::push_constants(void* data, size_t size) {
         encoder_state_, nullptr, kIRSamplerHeapBindPoint,
         device_->get_mtl_buf(device_->sampler_descriptor_table_), 0, 0);
   }
-  memcpy(pc_data_, data, size);
-  pc_data_size_ = size;
+  ASSERT(size <= sizeof(root_layout_.constants.constants));
+  memcpy(root_layout_.constants.constants, data, size);
   push_constant_dirty_ = true;
 }
 
@@ -446,19 +441,11 @@ void MetalCmdEncoderBase<EncoderAPI>::draw_indexed_primitives(
     rhi::PrimitiveTopology topology, rhi::BufferHandle index_buf, size_t index_start, size_t count,
     size_t instance_count, size_t base_vertex_idx, size_t base_instance,
     rhi::IndexType index_type) {
-  // TODO: only if dirty
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
-  auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
-  memcpy(tlab->pc_data, pc_data_, k_pc_size);
-  tlab->cbuffer2.draw_id = base_instance;
-  tlab->cbuffer2.vertex_id_base = base_vertex_idx;
+  root_layout_.constants.gfx_constants.draw_id = base_instance;
+  root_layout_.constants.gfx_constants.base_vertex = base_vertex_idx;
+  flush_binds(EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment);
 
   auto* buf = device_->get_mtl_buf(index_buf);
-
-  set_buffer<EncoderAPI, typename EncoderAPI::RenderEnc>(
-      encoder_state_, nullptr, kIRArgumentBufferBindPoint, pc_buf, pc_buf_offset,
-      EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment);
-
   if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
     encoder_state_.render_enc->drawIndexedPrimitives(
         mtl::util::convert(topology), count,
@@ -544,11 +531,11 @@ void MetalCmdEncoderBase<EncoderAPI>::upload_texture_data(
 template <typename EncoderAPI>
 uint32_t MetalCmdEncoderBase<EncoderAPI>::prepare_indexed_indirect_draws(
     rhi::BufferHandle indirect_buf, size_t offset, size_t tot_draw_cnt, rhi::BufferHandle index_buf,
-    size_t index_buf_offset, void* push_constant_data, size_t push_constant_size,
-    size_t vertex_stride) {
-  // TODO: only if needed
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
-  memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, push_constant_data, push_constant_size);
+    size_t index_buf_offset, void*, size_t, size_t vertex_stride) {
+  ASSERT(0 && "unhandled push constants");
+  // // TODO: only if needed
+  // auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
+  // memcpy((uint8_t*)pc_buf->contents() + pc_buf_offset, push_constant_data, push_constant_size);
 
   start_compute_encoder();
 
@@ -582,9 +569,9 @@ uint32_t MetalCmdEncoderBase<EncoderAPI>::prepare_indexed_indirect_draws(
 
     cmd_icb_mgr_.init_icb_arg_encoder_and_buf_and_set_icb(icbs, i);
 
-    set_buffer<EncoderAPI, typename EncoderAPI::ComputeEnc>(
-        encoder_state_, encoder_state_.compute_enc, 0, pc_buf, pc_buf_offset,
-        EncoderSetBufferStage::Compute);
+    // set_buffer<EncoderAPI, typename EncoderAPI::ComputeEnc>(
+    //     encoder_state_, encoder_state_.compute_enc, 0, pc_buf, pc_buf_offset,
+    //     EncoderSetBufferStage::Compute);
 
     struct Args2 {
       uint32_t draw_cnt;
@@ -604,12 +591,12 @@ uint32_t MetalCmdEncoderBase<EncoderAPI>::prepare_indexed_indirect_draws(
         encoder_state_, encoder_state_.compute_enc, 2, cmd_icb_mgr_.get_icb(i), 0,
         EncoderSetBufferStage::Compute);
 
-    auto [out_pc_arg_buf, out_pc_arg_buf_offset] =
-        device_->test_allocator_->alloc(draw_cnt * sizeof(TLAB_Layout));
+    // auto [out_pc_arg_buf, out_pc_arg_buf_offset] =
+    //     device_->test_allocator_->alloc(draw_cnt * sizeof(TLAB_Layout));
 
-    set_buffer<EncoderAPI, typename EncoderAPI::ComputeEnc>(
-        encoder_state_, encoder_state_.compute_enc, 3, out_pc_arg_buf, out_pc_arg_buf_offset,
-        EncoderSetBufferStage::Compute);
+    // set_buffer<EncoderAPI, typename EncoderAPI::ComputeEnc>(
+    //     encoder_state_, encoder_state_.compute_enc, 3, out_pc_arg_buf, out_pc_arg_buf_offset,
+    //     EncoderSetBufferStage::Compute);
 
     auto* indirect_buffer = device_->get_mtl_buf(indirect_buf);
     ASSERT(indirect_buffer);
@@ -715,15 +702,8 @@ template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::draw_mesh_threadgroups(
     glm::uvec3 thread_groups, glm::uvec3 threads_per_task_thread_group,
     glm::uvec3 threads_per_mesh_thread_group) {
-  // TODO: only if needed
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_tlab_size);
-  auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
-  memcpy(tlab->pc_data, pc_data_, k_pc_size);
-
-  set_buffer<EncoderAPI>(encoder_state_, encoder_state_.render_enc, kIRArgumentBufferBindPoint,
-                         pc_buf, pc_buf_offset,
-                         EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh |
-                             EncoderSetBufferStage::Fragment);
+  flush_binds(EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh |
+              EncoderSetBufferStage::Fragment);
   encoder_state_.render_enc->drawMeshThreadgroups(
       MTL::Size::Make(thread_groups.x, thread_groups.y, thread_groups.z),
       MTL::Size::Make(threads_per_task_thread_group.x, threads_per_task_thread_group.y,
@@ -748,12 +728,7 @@ void MetalCmdEncoderBase<EncoderAPI>::push_debug_group(const char* name) {
 template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::dispatch_compute(glm::uvec3 thread_groups,
                                                        glm::uvec3 threads_per_threadgroup) {
-  // TODO: only if needed
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(160);
-  auto* tlab = reinterpret_cast<TLAB_Layout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
-  memcpy(tlab->pc_data, &pc_data_, sizeof(tlab->pc_data));
-  set_buffer<EncoderAPI>(encoder_state_, encoder_state_.compute_enc, kIRArgumentBufferBindPoint,
-                         pc_buf, pc_buf_offset, EncoderSetBufferStage::Compute);
+  flush_binds(EncoderSetBufferStage::Compute);
   // TODO: do this on start of compute encoder and cache any changes during internal stuff
   set_buffer<EncoderAPI>(encoder_state_, encoder_state_.compute_enc, kIRDescriptorHeapBindPoint,
                          device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
@@ -787,9 +762,9 @@ void MetalCmdEncoderBase<EncoderAPI>::draw_mesh_threadgroups_indirect(
   auto* buf = device_->get_mtl_buf(indirect_buf);
   ASSERT(buf);
   // TODO: only do this if dirty
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(k_pc_size);
-  auto* tlab = reinterpret_cast<uint8_t*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
-  memcpy(tlab, pc_data_, pc_data_size_);
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(sizeof(RootLayout));
+  auto* root_layout = reinterpret_cast<RootLayout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
+  memcpy(root_layout, &root_layout_, sizeof(RootLayout));
   set_buffer<EncoderAPI>(encoder_state_, encoder_state_.render_enc, kIRArgumentBufferBindPoint,
                          pc_buf, pc_buf_offset,
                          EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh |
@@ -852,6 +827,51 @@ void MetalCmdEncoderBase<EncoderAPI>::set_debug_name(const char* name) {
 template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::end_rendering() {
   EncoderAPI::end_render_encoder(encoder_state_.render_enc);
+}
+
+template <typename EncoderAPI>
+void MetalCmdEncoderBase<EncoderAPI>::flush_binds(uint32_t encoder_stage) {
+  if (binding_table_dirty_) {
+    ResourceTable table = {};
+    for (uint32_t i = 0; i < ARRAY_SIZE(binding_table_.SRV); i++) {
+      if (!binding_table_.SRV[i].is_valid()) {
+        continue;
+      }
+      IRDescriptorTableEntry entry;
+      entry.gpuVA = 0;
+      entry.metadata = 0;
+      auto id = binding_table_.SRV_subresources[i];
+      if (id < 0) {
+        auto* tex = device_->get_mtl_tex(binding_table_.SRV[i]);
+        entry.textureViewID = tex->gpuResourceID()._impl;
+      } else {
+        auto* tex_view =
+            device_->get_tex_view(binding_table_.SRV[i], binding_table_.SRV_subresources[i]);
+        entry.textureViewID = tex_view->tex->gpuResourceID()._impl;
+      }
+      table.srvs[i] = entry;
+    }
+    binding_table_dirty_ = false;
+    auto [binding_table, binding_table_offset] =
+        device_->push_constant_allocator_->alloc(sizeof(ResourceTable));
+    root_layout_.resource_table_ptr = binding_table->gpuAddress() + binding_table_offset;
+    memcpy((uint8_t*)binding_table->contents() + binding_table_offset, &table,
+           sizeof(ResourceTable));
+  }
+
+  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(sizeof(RootLayout));
+  auto* root_layout = reinterpret_cast<RootLayout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
+  memcpy(root_layout, &root_layout_, sizeof(RootLayout));
+
+  if (encoder_stage & (EncoderSetBufferStage::Compute)) {
+    set_buffer<EncoderAPI>(encoder_state_, encoder_state_.compute_enc, kIRArgumentBufferBindPoint,
+                           pc_buf, pc_buf_offset, encoder_stage);
+  } else {
+    set_buffer<EncoderAPI>(encoder_state_, encoder_state_.render_enc, kIRArgumentBufferBindPoint,
+                           pc_buf, pc_buf_offset, encoder_stage);
+  }
+  push_constant_dirty_ = false;
+  // }
 }
 
 template class MetalCmdEncoderBase<Metal3EncoderAPI>;
