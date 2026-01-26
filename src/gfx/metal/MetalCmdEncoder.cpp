@@ -431,8 +431,8 @@ void MetalCmdEncoderBase<EncoderAPI>::push_constants(void* data, size_t size) {
         encoder_state_, nullptr, kIRSamplerHeapBindPoint,
         device_->get_mtl_buf(device_->sampler_descriptor_table_), 0, 0);
   }
-  ASSERT(size <= sizeof(root_layout_.constants.constants));
-  memcpy(root_layout_.constants.constants, data, size);
+  ASSERT(size <= sizeof(root_layout_.constants) - 8);
+  memcpy(root_layout_.constants, data, size);
   push_constant_dirty_ = true;
 }
 
@@ -441,8 +441,8 @@ void MetalCmdEncoderBase<EncoderAPI>::draw_indexed_primitives(
     rhi::PrimitiveTopology topology, rhi::BufferHandle index_buf, size_t index_start, size_t count,
     size_t instance_count, size_t base_vertex_idx, size_t base_instance,
     rhi::IndexType index_type) {
-  root_layout_.constants.gfx_constants.draw_id = base_instance;
-  root_layout_.constants.gfx_constants.base_vertex = base_vertex_idx;
+  root_layout_.constants[20] = base_instance;
+  root_layout_.constants[21] = base_vertex_idx;
   flush_binds();
 
   auto* buf = device_->get_mtl_buf(index_buf);
@@ -850,6 +850,26 @@ void MetalCmdEncoderBase<EncoderAPI>::flush_binds() {
       }
       table.srvs[i] = entry;
     }
+
+    for (uint32_t i = 0; i < ARRAY_SIZE(binding_table_.UAV); i++) {
+      if (!binding_table_.UAV[i].is_valid()) {
+        continue;
+      }
+      IRDescriptorTableEntry entry;
+      entry.gpuVA = 0;
+      entry.metadata = 0;
+      auto id = binding_table_.UAV_subresources[i];
+      if (id < 0) {
+        auto* tex = device_->get_mtl_tex(binding_table_.UAV[i]);
+        entry.textureViewID = tex->gpuResourceID()._impl;
+      } else {
+        auto* tex_view =
+            device_->get_tex_view(binding_table_.UAV[i], binding_table_.UAV_subresources[i]);
+        entry.textureViewID = tex_view->tex->gpuResourceID()._impl;
+      }
+      table.uavs[i] = entry;
+    }
+
     binding_table_dirty_ = false;
     auto [binding_table, binding_table_offset] =
         device_->push_constant_allocator_->alloc(sizeof(ResourceTable));
@@ -882,6 +902,15 @@ void MetalCmdEncoderBase<EncoderAPI>::bind_resource(rhi::TextureHandle texture, 
   ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
   binding_table_.SRV[slot] = texture;
   binding_table_.SRV_subresources[slot] = subresource_id;
+  binding_table_dirty_ = true;
+}
+
+template <typename EncoderAPI>
+void MetalCmdEncoderBase<EncoderAPI>::bind_uav(rhi::TextureHandle texture, uint32_t slot,
+                                               int subresource_id) {
+  ASSERT(slot < ARRAY_SIZE(binding_table_.UAV));
+  binding_table_.UAV[slot] = texture;
+  binding_table_.UAV_subresources[slot] = subresource_id;
   binding_table_dirty_ = true;
 }
 

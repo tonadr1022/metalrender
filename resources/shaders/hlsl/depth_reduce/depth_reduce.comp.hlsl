@@ -14,12 +14,10 @@
 #endif
 
 Texture2D<float> in_tex : register(t0);
+RWTexture2D<float> out_tex : register(u0);
 
 [RootSignature(ROOT_SIGNATURE)][NumThreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
   if (dtid.x >= out_tex_dim_x || dtid.y >= out_tex_dim_y) return;
-
-  //  Texture2D<float> in_tex = bindless_textures_float[in_tex_idx];
-  RWTexture2D<float> out_tex = bindless_rwtextures_float[out_tex_idx];
 
   int2 in_start =
       int2(dtid.x * in_tex_dim_x / out_tex_dim_x, dtid.y * in_tex_dim_y / out_tex_dim_y);

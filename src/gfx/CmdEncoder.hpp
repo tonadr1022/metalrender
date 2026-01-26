@@ -83,6 +83,8 @@ class CmdEncoder {
     bind_resource(texture, slot, -1);
   }
   virtual void bind_resource(rhi::TextureHandle texture, uint32_t slot, int subresource_id) = 0;
+  virtual void bind_uav(rhi::TextureHandle texture, uint32_t slot) { bind_uav(texture, slot, -1); }
+  virtual void bind_uav(rhi::TextureHandle texture, uint32_t slot, int subresource_id) = 0;
 };
 
 }  // namespace rhi

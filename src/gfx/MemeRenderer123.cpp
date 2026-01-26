@@ -535,14 +535,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
             .in_tex_dim_y = in_dims.y,
             .out_tex_dim_x = dp_dims.x >> mip,
             .out_tex_dim_y = dp_dims.y >> mip,
-            .in_tex_idx = (mip == 0)
-                              ? device_->get_tex(rg_.get_att_img(depth_handle))->bindless_idx()
-                              : device_->get_tex_view_bindless_idx(
-                                    depth_pyramid_tex_.handle, depth_pyramid_tex_.views[mip - 1]),
-            .out_tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
-                                                              depth_pyramid_tex_.views[mip]),
         };
-
         enc->push_constants(&pc, sizeof(pc));
 
         if (mip == 0) {
@@ -550,6 +543,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         } else {
           enc->bind_resource(depth_pyramid_tex_.handle, 0, depth_pyramid_tex_.views[mip - 1]);
         }
+        enc->bind_uav(depth_pyramid_tex_.handle, 0, depth_pyramid_tex_.views[mip]);
+
         constexpr size_t k_tg_size = 8;
         enc->dispatch_compute(glm::uvec3{align_divide_up(pc.out_tex_dim_x, k_tg_size),
                                          align_divide_up(pc.out_tex_dim_y, k_tg_size), 1},
