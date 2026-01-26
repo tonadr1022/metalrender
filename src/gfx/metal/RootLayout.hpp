@@ -28,6 +28,7 @@ static_assert(sizeof(RootLayout) == 128);
 
 struct DescriptorBindingTable {
   rhi::BufferHandle CBV[TOTAL_CBV_BINDINGS] = {};
+  int CBV_offsets[TOTAL_CBV_BINDINGS] = {};
   rhi::TextureHandle SRV[TOTAL_SRV_BINDINGS] = {};
   int SRV_subresources[TOTAL_SRV_BINDINGS] = {};
   rhi::TextureHandle UAV[TOTAL_UAV_BINDINGS] = {};

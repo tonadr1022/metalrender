@@ -1,5 +1,6 @@
 #include "GPUFrameAllocator2.hpp"
 
+#include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/Buffer.hpp"
 #include "gfx/Device.hpp"
@@ -85,8 +86,11 @@ GPUFrameAllocator3::Alloc GPUFrameAllocator3::alloc(uint32_t size) {
 void GPUFrameAllocator3::reset(uint32_t frame_idx) {
   frame_idx_ = frame_idx;
   for (auto& buf : curr_frame().full_staging_buffers) {
-    buf.curr_offset = 0;
     curr_frame().free_staging_buffers.emplace_back(std::move(buf));
+  }
+  curr_frame().full_staging_buffers.clear();
+  for (auto& buf : curr_frame().free_staging_buffers) {
+    buf.curr_offset = 0;
   }
 }
 

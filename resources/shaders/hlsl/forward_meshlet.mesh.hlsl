@@ -12,6 +12,8 @@
 #include "shared_globals.h"
 // clang-format on
 
+CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
+
 // https://www.ronja-tutorials.com/post/041-hsv-colorspace/
 float3 hue2rgb(float hue) {
   hue = frac(hue);                 // only use fractional part of hue, making it loop
@@ -92,7 +94,6 @@ main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload pay
 
   SetMeshOutputCounts(meshlet.vertex_count, meshlet.triangle_count);
 
-  GlobalData globals = load_globals();
   for (uint i = gtid; i < meshlet.vertex_count;) {
     uint vertex_idx =
         bindless_buffers_uint[meshlet_vertex_buf_idx]

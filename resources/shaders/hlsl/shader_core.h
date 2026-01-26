@@ -5,6 +5,8 @@
 
 #ifdef __HLSL__
 
+#define alignas(x)
+
 #define HLSL_REG(x) : register(x)
 #define HLSL_PC_REG HLSL_REG(b998)
 
@@ -50,6 +52,8 @@
 #define HLSL_PC_REG
 
 #define PUSH_CONSTANT(x) struct x
+#define BIND_CBV(type, name, slot)
+#define row_major
 
 #define ATTR_POSITION
 

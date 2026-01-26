@@ -16,7 +16,10 @@
   "UAV(u0, numDescriptors = 12, flags = DESCRIPTORS_VOLATILE | DATA_STATIC_WHILE_SET_AT_EXECUTE)" \
   ")"
 
-#define CONSTANT_BUFFER(type, name, reg) ConstantBuffer<type> name : register(b##reg)
+#define PASTE1(a, b) a##b
+#define PASTE(a, b) PASTE1(a, b)
+#define CONSTANT_BUFFER(type, name, reg) ConstantBuffer<type> name : register(PASTE(b, reg))
+
 #define DRAW_COUNT_CONSTANT_BUFFER(type, name) CONSTANT_BUFFER(type, name, 999)
 
 template <typename T>

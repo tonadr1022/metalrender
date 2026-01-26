@@ -106,6 +106,7 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
                              rhi::BufferHandle dst_buf, size_t dst_offset, size_t size) override;
   void bind_resource(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
   void bind_uav(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
+  void bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
 
   EncoderState<EncoderAPI> encoder_state_{};
   MetalDevice* device_{};

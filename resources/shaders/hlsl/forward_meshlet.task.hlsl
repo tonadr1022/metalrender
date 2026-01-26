@@ -1,5 +1,4 @@
 // clang-format off
-#define COMPUTE_ROOT_SIG
 #include "root_sig.hlsl"
 #include "shader_constants.h"
 #include "shader_core.h"
@@ -17,6 +16,8 @@
 
 groupshared Payload s_Payload;
 groupshared uint s_count;
+
+CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
 
 [RootSignature(ROOT_SIGNATURE)][NumThreads(K_TASK_TG_SIZE, 1, 1)] void main(
     uint gtid : SV_GroupThreadID, uint dtid : SV_DispatchThreadID, uint gid : SV_GroupID) {
@@ -40,7 +41,6 @@ groupshared uint s_count;
     if (gtid < task_cmd.task_count) {
       visible = true;
 
-      GlobalData globals = load_globals();
       uint meshlet_index = task_cmd.task_offset + gtid;
       Meshlet meshlet =
           bindless_buffers[meshlet_buf_idx].Load<Meshlet>(meshlet_index * sizeof(Meshlet));
@@ -61,6 +61,7 @@ groupshared uint s_count;
           rotate_quat(instance_data.scale * meshlet.center_radius.xyz, instance_data.rotation) +
           instance_data.translation;
       float radius = meshlet.center_radius.w * instance_data.scale;
+      //     GlobalData globals = load_globals();
       float3 center = mul(globals.view, float4(world_center, 1.0)).xyz;
       // Ref:
       // https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102

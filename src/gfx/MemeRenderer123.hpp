@@ -309,7 +309,7 @@ class MemeRenderer123 {
   glm::mat4 get_proj_matrix(float fov = k_default_fov_deg);
 
   // TODO: rename or sum?
-  std::optional<GPUFrameAllocator2> uniforms_allocator_;
+  std::optional<GPUFrameAllocator3> uniforms_allocator_;
   std::optional<GPUFrameAllocator3> staging_buffer_allocator_;
   static constexpr float k_z_near = 0.01f;
   static constexpr float k_z_far = 30000.f;
@@ -320,6 +320,8 @@ class MemeRenderer123 {
   bool meshlet_cone_culling_enabled_{true};
   bool meshlet_occlusion_culling_enabled_{true};
   IdxOffset frame_globals_buf_info_;
+  // TODO: fixxxxxx
+  rhi::BufferHandle frame_globals_buf_;
   IdxOffset frame_cull_data_buf_info_;
   bool reverse_z_{true};
   bool mesh_shaders_enabled_{true};

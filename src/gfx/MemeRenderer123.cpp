@@ -174,7 +174,7 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
     shade_pso_ = shader_mgr_.create_compute_pipeline({"shade"});
   }
 
-  uniforms_allocator_.emplace(1024 * 1024, device_);
+  uniforms_allocator_.emplace(device_);
   staging_buffer_allocator_.emplace(device_);
 
   buffer_copy_mgr_.emplace(device_, staging_buffer_allocator_.value());
@@ -479,6 +479,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                 device_->get_buf(out_counts_buf_[curr_frame_idx_])->bindless_idx(),
             .flags = 0,
         };
+        static_assert(sizeof(Task2PC) <= 80);
+
+        ASSERT((frame_globals_buf_.is_valid() && frame_globals_buf_info_.offset_bytes == 0));
+        enc->bind_cbv(frame_globals_buf_, GLOBALS_SLOT, frame_globals_buf_info_.offset_bytes);
+
         if (meshlet_frustum_culling_enabled_) {
           pc.flags |= MESHLET_FRUSTUM_CULL_ENABLED_BIT;
         }
@@ -1161,14 +1166,15 @@ glm::mat4 MemeRenderer123::get_proj_matrix(float fov) {
 void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
   glm::mat4 proj_mat = get_proj_matrix();
   GlobalData global_data{
-      .render_mode = (uint32_t)debug_render_mode_,
       .vp = proj_mat * args.view_mat,
       .view = args.view_mat,
       .proj = proj_mat,
+      .render_mode = (uint32_t)debug_render_mode_,
       .camera_pos = glm::vec4{args.camera_pos, 0},
   };
   {
     auto [buf, offset, write_ptr] = uniforms_allocator_->alloc(sizeof(GlobalData), &global_data);
+    frame_globals_buf_ = buf;
     frame_globals_buf_info_.idx = device_->get_buf(buf)->bindless_idx();
     frame_globals_buf_info_.offset_bytes = offset;
   }

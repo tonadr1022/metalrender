@@ -5,10 +5,11 @@
 #include "shared_globals.h"
 // clang-format on
 
+CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
+
 [RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target0 {
 #ifdef DEBUG_MODE
-  ByteAddressBuffer global_data_buf = bindless_buffers[globals_buf_idx];
-  GlobalData globals = global_data_buf.Load<GlobalData>(globals_buf_offset_bytes);
+  // GlobalData globals = load_globals();
   uint render_mode = globals.render_mode;
   if (render_mode == DEBUG_RENDER_MODE_TRIANGLE_COLORS ||
       render_mode == DEBUG_RENDER_MODE_MESHLET_COLORS ||

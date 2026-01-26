@@ -5,6 +5,7 @@
 // clang-format off
 #include <Metal/Metal.hpp>
 #include "gfx/metal/Config.hpp"
+#include "gfx/metal/RootLayout.hpp"
 #include "hlsl/shared_indirect.h"
 #define IR_RUNTIME_METALCPP
 #include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
@@ -80,10 +81,10 @@ void barrier_after_queue_stages(EncoderT& encoder, size_t src_stages, size_t dst
 }
 
 enum EncoderSetBufferStage : uint32_t {
-  Vertex = 1,
-  Mesh = (1 << 1),
-  Object = (1 << 2),
-  Fragment = (1 << 3),
+  Vertex = (1 << 0),
+  Fragment = (1 << 1),
+  Mesh = (1 << 2),
+  Object = (1 << 3),
   Compute = (1 << 4)
 };
 
@@ -98,6 +99,7 @@ void set_buffer(EncoderState<EncoderAPI>& state, const EncoderT& encoder, uint32
         encoder->setVertexBuffer(buffer, offset, bind_point);
       }
       if (stages & EncoderSetBufferStage::Mesh) {
+        LINFO("set mesh buffer");
         encoder->setMeshBuffer(buffer, offset, bind_point);
       }
       if (stages & EncoderSetBufferStage::Object) {
@@ -759,16 +761,9 @@ template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::draw_mesh_threadgroups_indirect(
     rhi::BufferHandle indirect_buf, size_t indirect_buf_offset,
     glm::uvec3 threads_per_task_thread_group, glm::uvec3 threads_per_mesh_thread_group) {
+  flush_binds();
   auto* buf = device_->get_mtl_buf(indirect_buf);
   ASSERT(buf);
-  // TODO: only do this if dirty
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(sizeof(RootLayout));
-  auto* root_layout = reinterpret_cast<RootLayout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
-  memcpy(root_layout, &root_layout_, sizeof(RootLayout));
-  set_buffer<EncoderAPI>(encoder_state_, encoder_state_.render_enc, kIRArgumentBufferBindPoint,
-                         pc_buf, pc_buf_offset,
-                         EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh |
-                             EncoderSetBufferStage::Fragment);
   if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
     encoder_state_.render_enc->drawMeshThreadgroups(
         buf->gpuAddress() + indirect_buf_offset,
@@ -871,6 +866,29 @@ void MetalCmdEncoderBase<EncoderAPI>::flush_binds() {
       table.uavs[i] = entry;
     }
 
+    // TODO: dirty root flag instead of only dirty resources flag.
+    for (uint32_t i = 0; i < ROOT_CBV_COUNT; i++) {
+      if (!binding_table_.CBV[i].is_valid()) {
+        continue;
+      }
+      auto* buf = device_->get_mtl_buf(binding_table_.CBV[i]);
+      root_layout_.root_cbvs[i] = buf->gpuAddress() + binding_table_.CBV_offsets[i];
+      ASSERT(root_layout_.root_cbvs[i] % 256 == 0);
+    }
+
+    for (uint32_t i = ARRAY_SIZE(root_layout_.root_cbvs); i < ARRAY_SIZE(binding_table_.CBV); i++) {
+      if (!binding_table_.CBV[i].is_valid()) {
+        continue;
+      }
+      const auto* buf = device_->get_mtl_buf(binding_table_.CBV[i]);
+      const auto gpu_va = buf->gpuAddress() + binding_table_.CBV_offsets[i];
+      ASSERT(gpu_va % 256 == 0);
+      const size_t metadata = buf->length();
+      ASSERT(i - ROOT_CBV_COUNT < ARRAY_SIZE(table.cbvs));
+      IRDescriptorTableSetBuffer(table.cbvs + (i - ARRAY_SIZE(root_layout_.root_cbvs)), gpu_va,
+                                 metadata);
+    }
+
     binding_table_dirty_ = false;
     auto [binding_table, binding_table_offset] =
         device_->push_constant_allocator_->alloc(sizeof(ResourceTable));
@@ -912,6 +930,14 @@ void MetalCmdEncoderBase<EncoderAPI>::bind_uav(rhi::TextureHandle texture, uint3
   ASSERT(slot < ARRAY_SIZE(binding_table_.UAV));
   binding_table_.UAV[slot] = texture;
   binding_table_.UAV_subresources[slot] = subresource_id;
+  binding_table_dirty_ = true;
+}
+
+template <typename EncoderAPI>
+void MetalCmdEncoderBase<EncoderAPI>::bind_cbv(rhi::BufferHandle buffer, uint32_t slot,
+                                               size_t offset_bytes) {
+  binding_table_.CBV[slot] = buffer;
+  binding_table_.CBV_offsets[slot] = offset_bytes;
   binding_table_dirty_ = true;
 }
 
