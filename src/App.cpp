@@ -102,16 +102,36 @@ float get_float(float min, float max) {
 
 void App::run() {
   ZoneScoped;
-  int scene = 3;
-  if (scene == 0) {
+  int scene = 0;
+  // auto load_grid = [&](int radius, float dist, const std::string& path, float scale = 1.0f) {
+  //   glm::ivec3 iter{};
+  //   glm::ivec3 dims{radius, 1, radius};
+  //   for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
+  //     for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
+  //       glm::vec3 pos = glm::vec3{iter} * dist;
+  //       load_model(path, glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
+  //     }
+  //   }
+  // };
+  const char* sponza_path = "Models/Sponza/glTF_ktx2/Sponza.gltf";
+  // [[maybe_unused]] auto chessboards = [&]() {
+  //   load_grid(4, 1.0, "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf", 10);
+  // };
+  // [[maybe_unused]] auto sponzas = [&]() { load_grid(10, 40.0, sponza_path); };
+  // chessboards();
+  // sponzas();
+  [[maybe_unused]] auto sponza_single = [&]() { load_model(sponza_path, glm::mat4{1}); };
+  sponza_single();
+
+  if (scene == -1) {
     glm::ivec3 iter{};
     int n = 4;
     glm::ivec3 dims{n, 1, n};
-    float dist = 4.0;
+    float dist = 1.0;
     for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
       for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
         glm::vec3 pos = glm::vec3{iter} * dist;
-        load_model(config_.paths[0], glm::translate(glm::mat4{1}, pos));
+        load_model(config_.paths[1], glm::translate(glm::mat4{1}, pos));
       }
     }
     // load_model(config_.paths[1], glm::mat4{1});
@@ -143,6 +163,7 @@ void App::run() {
     // load_model(config_.paths[1], glm::translate(glm::mat4{1}, glm::vec3{0, 1, 0}));
   }
 
+  std::vector<float> frame_times;
   // load_model(config_.paths[0], glm::translate(glm::mat4{1}, glm::vec3{0, 0, 0}));
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
@@ -155,6 +176,11 @@ void App::run() {
     const double curr_time = glfwGetTime();
     auto dt = static_cast<float>(curr_time - last_time);
     last_time = curr_time;
+    frame_times.push_back(dt);
+    if (frame_times.size() > 100) {
+      frame_times.erase(frame_times.begin());
+    }
+    avg_dt_ = std::accumulate(frame_times.begin(), frame_times.end(), 0.f) / frame_times.size();
     camera_.update_pos(window_->get_handle(), dt);
 
     // if (voxel_world_) {
@@ -291,15 +317,14 @@ void App::write_config() {
   }
 }
 
-void App::on_imgui(float dt) {
+void App::on_imgui(float) {
   ImGui::Begin("Renderer");
-  ImGui::Text("Frame time %f (ms)", dt * 1000);
+  ImGui::Text("Avg time %f (ms)", avg_dt_ * 1000.f);
   renderer_->on_imgui();
   if (ImGui::TreeNodeEx("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::DragFloat3("Position", &camera_.pos.x, 0.1f);
     ImGui::DragFloat("Acceleration Strength", &camera_.acceleration_strength, 0.1f, 0.1f, 1000.f);
     ImGui::DragFloat("Mouse Sensitivity", &camera_.mouse_sensitivity, 0.01f, 0.01f, 1.f);
-
     ImGui::TreePop();
   }
   ImGui::ColorEdit4("Clear Color", &config_.clear_color.r, ImGuiColorEditFlags_Float);
