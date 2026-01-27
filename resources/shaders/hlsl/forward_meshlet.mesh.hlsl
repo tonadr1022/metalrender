@@ -14,6 +14,14 @@
 
 CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
 
+StructuredBuffer<MeshData> mesh_data_buf : register(t5);
+StructuredBuffer<Meshlet> meshlet_buf : register(t6);
+ByteAddressBuffer meshlet_tri_buf : register(t7);
+StructuredBuffer<uint> meshlet_verts_buf : register(t8);
+StructuredBuffer<DefaultVertex> vertex_buf : register(t9);
+StructuredBuffer<InstanceData> instance_data_buf : register(t10);
+StructuredBuffer<TaskCmd> task_cmd_buf : register(t4);
+
 // https://www.ronja-tutorials.com/post/041-hsv-colorspace/
 float3 hue2rgb(float hue) {
   hue = frac(hue);                 // only use fractional part of hue, making it loop
@@ -33,8 +41,7 @@ VOut get_vertex_attributes(in InstanceData instance_data, in float4x4 vp, uint r
 VOut get_vertex_attributes(in InstanceData instance_data, in float4x4 vp, uint render_mode,
                            uint vertex_idx) {
 #endif
-  DefaultVertex vert =
-      bindless_buffers[vertex_buf_idx].Load<DefaultVertex>(vertex_idx * sizeof(DefaultVertex));
+  DefaultVertex vert = vertex_buf[vertex_idx];
 
   float3 pos = rotate_quat(instance_data.scale * vert.pos.xyz, instance_data.rotation) +
                instance_data.translation;
@@ -81,23 +88,19 @@ main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload pay
      out indices uint3 tris[K_MAX_TRIS_PER_MESHLET],
      out vertices VOut verts[K_MAX_VERTS_PER_MESHLET]) {
   uint task_i = payload.meshlet_indices[gid];
-  TaskCmd task_cmd =
-      bindless_buffers[task_cmd_buf_idx].Load<TaskCmd>((task_i & 0xffffff) * sizeof(TaskCmd));
+  TaskCmd task_cmd = task_cmd_buf[task_i & 0xffffff];
   uint meshlet_idx = task_cmd.task_offset + (task_i >> 24);
 
-  InstanceData instance_data = bindless_buffers[instance_data_buf_idx].Load<InstanceData>(
-      task_cmd.instance_id * sizeof(InstanceData));
+  InstanceData instance_data = instance_data_buf[task_cmd.instance_id];
 
-  MeshData mesh_data =
-      bindless_buffers[mesh_data_buf_idx].Load<MeshData>(instance_data.mesh_id * sizeof(MeshData));
-  Meshlet meshlet = bindless_buffers[meshlet_buf_idx].Load<Meshlet>(meshlet_idx * sizeof(Meshlet));
+  MeshData mesh_data = mesh_data_buf[instance_data.mesh_id];
+  Meshlet meshlet = meshlet_buf[meshlet_idx];
 
   SetMeshOutputCounts(meshlet.vertex_count, meshlet.triangle_count);
 
   for (uint i = gtid; i < meshlet.vertex_count;) {
     uint vertex_idx =
-        bindless_buffers_uint[meshlet_vertex_buf_idx]
-                             [meshlet.vertex_offset + i + mesh_data.meshlet_vertices_offset];
+        meshlet_verts_buf[meshlet.vertex_offset + i + mesh_data.meshlet_vertices_offset];
 #ifdef DEBUG_MODE
     verts[i] = get_vertex_attributes(instance_data, globals.vp, globals.render_mode,
                                      vertex_idx + mesh_data.vertex_base, meshlet_idx,
@@ -110,10 +113,9 @@ main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload pay
   }
 
   for (uint i = gtid; i < meshlet.triangle_count;) {
-    ByteAddressBuffer meshlet_tris = bindless_buffers[meshlet_tri_buf_idx];
     // The byte value must be a multiple of four so that it is DWORD aligned. If any other value is
     // provided, behavior is undefined.
-    tris[i] = LoadThreeBytes(meshlet_tris,
+    tris[i] = LoadThreeBytes(meshlet_tri_buf,
                              mesh_data.meshlet_triangles_offset + meshlet.triangle_offset + i * 3);
     i += K_MESH_TG_SIZE;
   }

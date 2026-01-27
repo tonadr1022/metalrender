@@ -35,3 +35,5 @@ struct GenerationalHandle {
   uint32_t idx_{};
   uint32_t gen_{};
 };
+
+inline bool generational_handle_u64_is_valid(uint64_t packed) { return packed >> 32 != 0; }

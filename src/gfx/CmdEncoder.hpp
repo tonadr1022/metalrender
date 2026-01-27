@@ -79,12 +79,16 @@ class CmdEncoder {
   virtual void push_debug_group(const char* name) = 0;
   virtual void pop_debug_group() = 0;
 
-  virtual void bind_resource(rhi::TextureHandle texture, uint32_t slot) {
-    bind_resource(texture, slot, -1);
-  }
-  virtual void bind_resource(rhi::TextureHandle texture, uint32_t slot, int subresource_id) = 0;
+  virtual void bind_srv(rhi::TextureHandle texture, uint32_t slot) { bind_srv(texture, slot, -1); }
+  virtual void bind_srv(rhi::TextureHandle texture, uint32_t slot, int subresource_id) = 0;
+  virtual void bind_srv(rhi::BufferHandle buffer, uint32_t slot) { bind_srv(buffer, slot, 0); }
+  virtual void bind_srv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) = 0;
+
   virtual void bind_uav(rhi::TextureHandle texture, uint32_t slot) { bind_uav(texture, slot, -1); }
   virtual void bind_uav(rhi::TextureHandle texture, uint32_t slot, int subresource_id) = 0;
+  virtual void bind_uav(rhi::BufferHandle buffer, uint32_t slot) { bind_uav(buffer, slot, 0); }
+  virtual void bind_uav(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) = 0;
+
   virtual void bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) = 0;
 };
 

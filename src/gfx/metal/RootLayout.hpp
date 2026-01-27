@@ -29,10 +29,17 @@ static_assert(sizeof(RootLayout) == 128);
 struct DescriptorBindingTable {
   rhi::BufferHandle CBV[TOTAL_CBV_BINDINGS] = {};
   int CBV_offsets[TOTAL_CBV_BINDINGS] = {};
-  rhi::TextureHandle SRV[TOTAL_SRV_BINDINGS] = {};
+  // uint64_t version of rhi::BufferHandle/TextureHandle
+  uint64_t SRV[TOTAL_SRV_BINDINGS] = {};
+  // -2 == buffer, -1 == texture, >= 0 == texture view;
   int SRV_subresources[TOTAL_SRV_BINDINGS] = {};
-  rhi::TextureHandle UAV[TOTAL_UAV_BINDINGS] = {};
+  static constexpr int k_tex_resource = -1;
+  static constexpr int k_buffer_resource = -2;
+  int SRV_offsets[TOTAL_SRV_BINDINGS] = {};
+  uint64_t UAV[TOTAL_UAV_BINDINGS] = {};
+  // -2 == buffer, -1 == texture, >= 0 == texture view;
   int UAV_subresources[TOTAL_SRV_BINDINGS] = {};
+  int UAV_offsets[TOTAL_SRV_BINDINGS] = {};
 };
 
 struct ResourceTable {

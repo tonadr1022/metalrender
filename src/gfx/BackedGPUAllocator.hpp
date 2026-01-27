@@ -37,6 +37,7 @@ class BackedGPUAllocator {
 
  private:
   rhi::BufferHandleHolder backing_buffer_;
+  rhi::BufferDesc buffer_desc_;
   OffsetAllocator::Allocator allocator_;
   size_t bytes_per_element_{};
   uint32_t max_seen_size_{};

@@ -459,6 +459,7 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
               glm::vec3 tot_center{};
               for (size_t attr_i = 0; attr_i < primitive.attributes_count; attr_i++) {
                 const auto &attr = primitive.attributes[attr_i];
+                if (attr.index != 0) continue;
                 const cgltf_accessor *accessor = attr.data;
                 if (attr.type == cgltf_attribute_type_position) {
                   for (size_t i = 0; i < accessor->count; i++) {

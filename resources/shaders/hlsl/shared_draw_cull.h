@@ -13,6 +13,7 @@ cbuffer DrawCullPC HLSL_PC_REG {
   uint instance_data_buf_idx;
   uint mesh_data_buf_idx;
   uint max_draws;
+  uint culling_enabled;
 };
 
 #endif

@@ -104,8 +104,10 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
                                        glm::uvec3 threads_per_mesh_thread_group) override;
   void copy_buffer_to_buffer(rhi::BufferHandle src_buf, size_t src_offset,
                              rhi::BufferHandle dst_buf, size_t dst_offset, size_t size) override;
-  void bind_resource(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
+  void bind_srv(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
+  void bind_srv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
   void bind_uav(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
+  void bind_uav(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
   void bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
 
   EncoderState<EncoderAPI> encoder_state_{};

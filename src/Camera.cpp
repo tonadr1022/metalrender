@@ -67,11 +67,9 @@ bool Camera::update_pos(GLFWwindow* window, float dt) {
   }
 
   velocity += acceleration * dt;
-  velocity *= damping;
-
   velocity = glm::clamp(velocity, -max_velocity, max_velocity);
 
-  pos += velocity * dt;
+  pos += acceleration * max_velocity * dt;
 
   return accelerating || !glm::all(glm::equal(velocity, glm::vec3{0}, glm::epsilon<float>()));
 }

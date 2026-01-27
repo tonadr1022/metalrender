@@ -31,6 +31,7 @@ add_executable(${target_name}
     util/Stats.cpp
     gfx/texture/KtxLoad.cpp
     gfx/rhi/Texture.cpp
+    UI.cpp
 )
 
 

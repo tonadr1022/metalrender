@@ -8,27 +8,13 @@
 #define MESHLET_OCCLUSION_CULL_ENABLED_BIT (1 << 2)
 
 cbuffer Task2PC HLSL_PC_REG {
-  uint globals_buf_idx;
-  uint globals_buf_offset_bytes;
-  uint cull_data_idx;
-  uint cull_data_offset_bytes;
-  uint mesh_data_buf_idx;
-  uint meshlet_buf_idx;
-  uint meshlet_tri_buf_idx;
-  uint meshlet_vertex_buf_idx;
-  uint vertex_buf_idx;
-  uint instance_data_buf_idx;
-  uint mat_buf_idx;
-  uint task_cmd_buf_idx;
-  uint draw_cnt_buf_idx;
-  uint meshlet_vis_buf_idx;
   uint max_draws;
   uint max_meshlets;
   uint pass;
-  uint depth_pyramid_tex_idx;
-  uint out_counts_buf_idx;
   uint flags;
 };
+
+#define MESHLET_VIS_BUF_SLOT 2
 
 #ifdef __HLSL__
 

@@ -4,6 +4,7 @@
 
 // clang-format off
 #include <Metal/Metal.hpp>
+#include "gfx/RendererTypes.hpp"
 #include "gfx/metal/Config.hpp"
 #include "gfx/metal/RootLayout.hpp"
 #include "hlsl/shared_indirect.h"
@@ -99,7 +100,6 @@ void set_buffer(EncoderState<EncoderAPI>& state, const EncoderT& encoder, uint32
         encoder->setVertexBuffer(buffer, offset, bind_point);
       }
       if (stages & EncoderSetBufferStage::Mesh) {
-        LINFO("set mesh buffer");
         encoder->setMeshBuffer(buffer, offset, bind_point);
       }
       if (stages & EncoderSetBufferStage::Object) {
@@ -564,7 +564,7 @@ uint32_t MetalCmdEncoderBase<EncoderAPI>::prepare_indexed_indirect_draws(
 
   encoder_state_.compute_enc->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
 
-  for (size_t i = 0, rem_draw_count = tot_draw_cnt; i < icbs.size();
+  for (int i = 0, rem_draw_count = tot_draw_cnt; i < (int)icbs.size();
        i++, rem_draw_count -= k_max_draws_per_icb) {
     uint32_t draw_cnt = std::min<uint32_t>(k_max_draws_per_icb, rem_draw_count);
     auto* icb = icbs[i];
@@ -829,39 +829,59 @@ void MetalCmdEncoderBase<EncoderAPI>::flush_binds() {
   if (binding_table_dirty_) {
     ResourceTable table = {};
     for (uint32_t i = 0; i < ARRAY_SIZE(binding_table_.SRV); i++) {
-      if (!binding_table_.SRV[i].is_valid()) {
+      if (!generational_handle_u64_is_valid(binding_table_.SRV[i])) {
         continue;
       }
+      // if (!binding_table_.SRV[i].is_valid()) {
+      //   continue;
+      // }
       IRDescriptorTableEntry entry;
-      entry.gpuVA = 0;
-      entry.metadata = 0;
-      auto id = binding_table_.SRV_subresources[i];
-      if (id < 0) {
-        auto* tex = device_->get_mtl_tex(binding_table_.SRV[i]);
+      const auto resource_id = binding_table_.SRV_subresources[i];
+      if (resource_id == DescriptorBindingTable::k_buffer_resource) {
+        const auto* buf = device_->get_mtl_buf(rhi::BufferHandle{binding_table_.SRV[i]});
+        const size_t metadata = buf->length();
+        ASSERT(i - ROOT_CBV_COUNT < ARRAY_SIZE(table.cbvs));
+        entry.gpuVA = buf->gpuAddress() + binding_table_.SRV_offsets[i];
+        entry.textureViewID = 0;
+        entry.metadata = metadata;
+      } else if (resource_id == DescriptorBindingTable::k_tex_resource) {
+        const auto* tex = device_->get_mtl_tex(rhi::TextureHandle{binding_table_.SRV[i]});
+        entry.gpuVA = 0;
         entry.textureViewID = tex->gpuResourceID()._impl;
+        entry.metadata = 0;
       } else {
-        auto* tex_view =
-            device_->get_tex_view(binding_table_.SRV[i], binding_table_.SRV_subresources[i]);
+        const auto* tex_view = device_->get_tex_view(rhi::TextureHandle{binding_table_.SRV[i]},
+                                                     binding_table_.SRV_subresources[i]);
+        entry.gpuVA = 0;
         entry.textureViewID = tex_view->tex->gpuResourceID()._impl;
+        entry.metadata = 0;
       }
       table.srvs[i] = entry;
     }
 
     for (uint32_t i = 0; i < ARRAY_SIZE(binding_table_.UAV); i++) {
-      if (!binding_table_.UAV[i].is_valid()) {
+      if (!generational_handle_u64_is_valid(binding_table_.UAV[i])) {
         continue;
       }
       IRDescriptorTableEntry entry;
-      entry.gpuVA = 0;
-      entry.metadata = 0;
       auto id = binding_table_.UAV_subresources[i];
-      if (id < 0) {
-        auto* tex = device_->get_mtl_tex(binding_table_.UAV[i]);
+      if (id == DescriptorBindingTable::k_buffer_resource) {
+        const auto* buf = device_->get_mtl_buf(rhi::BufferHandle{binding_table_.UAV[i]});
+        const size_t metadata = buf->length();
+        entry.gpuVA = buf->gpuAddress() + binding_table_.UAV_offsets[i];
+        entry.textureViewID = 0;
+        entry.metadata = metadata;
+      } else if (id == DescriptorBindingTable::k_tex_resource) {
+        auto* tex = device_->get_mtl_tex(rhi::TextureHandle{binding_table_.UAV[i]});
+        entry.gpuVA = 0;
         entry.textureViewID = tex->gpuResourceID()._impl;
+        entry.metadata = 0;
       } else {
-        auto* tex_view =
-            device_->get_tex_view(binding_table_.UAV[i], binding_table_.UAV_subresources[i]);
+        auto* tex_view = device_->get_tex_view(rhi::TextureHandle{binding_table_.UAV[i]},
+                                               binding_table_.UAV_subresources[i]);
+        entry.gpuVA = 0;
         entry.textureViewID = tex_view->tex->gpuResourceID()._impl;
+        entry.metadata = 0;
       }
       table.uavs[i] = entry;
     }
@@ -916,10 +936,10 @@ void MetalCmdEncoderBase<EncoderAPI>::flush_binds() {
 }
 
 template <typename EncoderAPI>
-void MetalCmdEncoderBase<EncoderAPI>::bind_resource(rhi::TextureHandle texture, uint32_t slot,
-                                                    int subresource_id) {
+void MetalCmdEncoderBase<EncoderAPI>::bind_srv(rhi::TextureHandle texture, uint32_t slot,
+                                               int subresource_id) {
   ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
-  binding_table_.SRV[slot] = texture;
+  binding_table_.SRV[slot] = texture.to64();
   binding_table_.SRV_subresources[slot] = subresource_id;
   binding_table_dirty_ = true;
 }
@@ -928,7 +948,7 @@ template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::bind_uav(rhi::TextureHandle texture, uint32_t slot,
                                                int subresource_id) {
   ASSERT(slot < ARRAY_SIZE(binding_table_.UAV));
-  binding_table_.UAV[slot] = texture;
+  binding_table_.UAV[slot] = texture.to64();
   binding_table_.UAV_subresources[slot] = subresource_id;
   binding_table_dirty_ = true;
 }
@@ -936,8 +956,29 @@ void MetalCmdEncoderBase<EncoderAPI>::bind_uav(rhi::TextureHandle texture, uint3
 template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::bind_cbv(rhi::BufferHandle buffer, uint32_t slot,
                                                size_t offset_bytes) {
+  ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
   binding_table_.CBV[slot] = buffer;
   binding_table_.CBV_offsets[slot] = offset_bytes;
+  binding_table_dirty_ = true;
+}
+
+template <typename EncoderAPI>
+void MetalCmdEncoderBase<EncoderAPI>::bind_uav(rhi::BufferHandle buffer, uint32_t slot,
+                                               size_t offset_bytes) {
+  ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
+  binding_table_.UAV[slot] = buffer.to64();
+  binding_table_.UAV_subresources[slot] = DescriptorBindingTable::k_buffer_resource;
+  binding_table_.UAV_offsets[slot] = offset_bytes;
+  binding_table_dirty_ = true;
+}
+
+template <typename EncoderAPI>
+void MetalCmdEncoderBase<EncoderAPI>::bind_srv(rhi::BufferHandle buffer, uint32_t slot,
+                                               size_t offset_bytes) {
+  ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
+  binding_table_.SRV[slot] = buffer.to64();
+  binding_table_.SRV_subresources[slot] = DescriptorBindingTable::k_buffer_resource;
+  binding_table_.SRV_offsets[slot] = offset_bytes;
   binding_table_dirty_ = true;
 }
 

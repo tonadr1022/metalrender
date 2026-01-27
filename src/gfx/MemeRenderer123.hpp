@@ -77,6 +77,8 @@ struct DrawBatch {
 
   [[nodiscard]] Stats get_stats() const;
 
+  void recreate_task_cmd_buf(rhi::Device& device, size_t element_count);
+
   DrawBatch(DrawBatchType type, rhi::Device& device, BufferCopyMgr& buffer_copier,
             const CreateInfo& cinfo);
 
@@ -184,6 +186,7 @@ class InstanceDataMgr {
 };
 
 struct IdxOffset {
+  rhi::BufferHandle buf;
   uint idx;
   uint offset_bytes;
 };
@@ -260,7 +263,7 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder test2_pso_;
   rhi::PipelineHandleHolder test_task_pso_;
   rhi::PipelineHandleHolder draw_cull_pso_;
-  rhi::PipelineHandleHolder test_clear_buf_pso_;
+  rhi::PipelineHandleHolder reset_counts_buf_pso_;
   rhi::PipelineHandleHolder depth_reduce_pso_;
   rhi::PipelineHandleHolder shade_pso_;
   rhi::PipelineHandleHolder tex_only_pso_;
@@ -316,12 +319,12 @@ class MemeRenderer123 {
   static constexpr float k_default_fov_deg = 70.0f;
 
   bool culling_paused_{};
+  bool culling_enabled_{true};
   bool meshlet_frustum_culling_enabled_{true};
   bool meshlet_cone_culling_enabled_{true};
   bool meshlet_occlusion_culling_enabled_{true};
   IdxOffset frame_globals_buf_info_;
-  // TODO: fixxxxxx
-  rhi::BufferHandle frame_globals_buf_;
+  size_t drawn_meshlets_{};
   IdxOffset frame_cull_data_buf_info_;
   bool reverse_z_{true};
   bool mesh_shaders_enabled_{true};

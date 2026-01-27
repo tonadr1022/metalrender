@@ -34,17 +34,19 @@ struct DispatchIndirectCmd {
   uint task_groups = (mesh_data.meshlet_count + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
 
   bool visible = true;
-  float3 world_center =
-      rotate_quat(instance_data.scale * mesh_data.center, instance_data.rotation) +
-      instance_data.translation;
-  float radius = mesh_data.radius * instance_data.scale;
-  float4 center = mul(globals.view, float4(world_center, 1.0));
-  visible =
-      visible && (-center.z + radius) > cull_data.z_near && (-center.z - radius) < cull_data.z_far;
-  visible =
-      visible && (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
-  visible =
-      visible && (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
+  if (culling_enabled != 0) {
+    float3 world_center =
+        rotate_quat(instance_data.scale * mesh_data.center, instance_data.rotation) +
+        instance_data.translation;
+    float radius = mesh_data.radius * instance_data.scale;
+    float4 center = mul(globals.view, float4(world_center, 1.0));
+    visible = visible && (-center.z + radius) > cull_data.z_near &&
+              (-center.z - radius) < cull_data.z_far;
+    visible = visible &&
+              (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
+    visible = visible &&
+              (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
+  }
 
   if (visible) {
     uint task_group_base_i;

@@ -6,6 +6,7 @@
 // clang-format on
 
 CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
+StructuredBuffer<M4Material> material_buf : register(t11);
 
 [RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target0 {
 #ifdef DEBUG_MODE
@@ -17,8 +18,7 @@ CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
     return input.color;
   }
 #endif
-  M4Material material =
-      bindless_buffers[mat_buf_idx].Load<M4Material>(input.material_id * sizeof(M4Material));
+  M4Material material = material_buf[input.material_id];
   SamplerState samp = bindless_samplers[LINEAR_SAMPLER_IDX];
   float4 albedo = material.color;
   albedo = float4(1, 1, 1, 1);
@@ -26,7 +26,7 @@ CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
     albedo *= (bindless_textures[material.albedo_tex_idx]).Sample(samp, input.uv);
   }
   if (albedo.a < 0.5) {
-    discard;
+    //    discard;
   }
   return float4(albedo.xyz, 1.0);
 }

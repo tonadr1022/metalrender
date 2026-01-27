@@ -627,6 +627,7 @@ rhi::TextureHandle RenderGraph::get_att_img(RGResourceHandle tex_handle) {
 }
 
 RGResourceHandle RGPass::sample_tex(const std::string& name) {
+  ASSERT(!name.empty());
   rhi::PipelineStage stage{};
   if (type_ == RGPassType::Compute) {
     stage = rhi::PipelineStage_ComputeShader;

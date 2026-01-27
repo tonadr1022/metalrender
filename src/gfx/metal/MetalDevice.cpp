@@ -12,6 +12,7 @@
 
 #include "Window.hpp"
 #include "core/Util.hpp"
+#include "gfx/metal/Config.hpp"
 #include "imgui.h"
 
 #define IR_RUNTIME_METALCPP
@@ -214,7 +215,7 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
-  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = true});
+  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = false});
 }
 
 void MetalDevice::shutdown() {
@@ -713,8 +714,8 @@ MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle in
   if (indirect_buf_id < it->second.icbs.size()) {
     icbs = it->second.icbs[indirect_buf_id];
   } else {
-    for (size_t curr_draw_cnt_offset = 0, rem_draws = draw_cnt; curr_draw_cnt_offset < draw_cnt;
-         curr_draw_cnt_offset += 1000, rem_draws -= 1000) {
+    for (int curr_draw_cnt_offset = 0, rem_draws = draw_cnt; curr_draw_cnt_offset < (int)draw_cnt;
+         curr_draw_cnt_offset += k_max_draws_per_icb, rem_draws -= k_max_draws_per_icb) {
       MTL::IndirectCommandBufferDescriptor* desc =
           MTL::IndirectCommandBufferDescriptor::alloc()->init();
       // TODO: try not to do this at least for mesh shaders
@@ -730,7 +731,7 @@ MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle in
         desc->setMaxFragmentBufferBindCount(3);
       }
       auto* icb = device_->get_device()->newIndirectCommandBuffer(
-          desc, std::min<uint32_t>(1000, rem_draws), MTL::ResourceStorageModeShared);
+          desc, std::min<uint32_t>(k_max_draws_per_icb, rem_draws), MTL::ResourceStorageModeShared);
       if (device_->mtl4_enabled_) {
         icb->retain();
       }

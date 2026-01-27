@@ -7,11 +7,15 @@
 gfx::BackedGPUAllocator::BackedGPUAllocator(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr,
                                             const rhi::BufferDesc& buffer_desc,
                                             size_t bytes_per_element)
-    : backing_buffer_(device.create_buf_h(buffer_desc)),
+    : buffer_desc_(buffer_desc),
       allocator_(buffer_desc.size / bytes_per_element),
       bytes_per_element_(bytes_per_element),
       device_(device),
-      buffer_copy_mgr_(buffer_copy_mgr) {}
+      buffer_copy_mgr_(buffer_copy_mgr) {
+  if (buffer_desc_.size > 0) {
+    backing_buffer_ = device_.create_buf_h(buffer_desc_);
+  }
+}
 
 OffsetAllocator::Allocation gfx::BackedGPUAllocator::allocate(uint32_t element_count,
                                                               bool& resize_occured) {
@@ -23,14 +27,16 @@ OffsetAllocator::Allocation gfx::BackedGPUAllocator::allocate(uint32_t element_c
     const auto new_cap_elements = required_size;
     ALWAYS_ASSERT(allocator_.grow(new_cap_elements - old_cap_elements));
 
-    auto new_buffer_desc = device_.get_buf(backing_buffer_)->desc();
+    auto new_buffer_desc = buffer_desc_;
     new_buffer_desc.size = new_cap_elements * bytes_per_element_;
     auto new_buf_handle = device_.create_buf_h(new_buffer_desc);
-    buffer_copy_mgr_.add_copy({
-        .src_buf = backing_buffer_.handle,
-        .dst_buf = new_buf_handle.handle,
-        .size = old_cap_elements * bytes_per_element_,
-    });
+    if (backing_buffer_.is_valid()) {
+      buffer_copy_mgr_.add_copy({
+          .src_buf = backing_buffer_.handle,
+          .dst_buf = new_buf_handle.handle,
+          .size = old_cap_elements * bytes_per_element_,
+      });
+    }
     backing_buffer_ = std::move(new_buf_handle);
 
     return allocate(element_count, resize_occured);

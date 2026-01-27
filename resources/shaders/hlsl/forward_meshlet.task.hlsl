@@ -18,37 +18,41 @@ groupshared Payload s_Payload;
 groupshared uint s_count;
 
 CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
+CONSTANT_BUFFER(CullData, cull_data, 4);
+StructuredBuffer<Meshlet> meshlet_buf : register(t6);
+StructuredBuffer<InstanceData> instance_data_buf : register(t10);
+StructuredBuffer<TaskCmd> task_cmd_buf : register(t4);
+RWStructuredBuffer<uint3> draw_cnt_buf : register(u0);
+RWStructuredBuffer<uint> meshlet_vis_buf : register(u1);
+RWStructuredBuffer<uint> out_counts_buf : register(u2);
+Texture2D depth_pyramid_tex : register(t3);
 
 [RootSignature(ROOT_SIGNATURE)][NumThreads(K_TASK_TG_SIZE, 1, 1)] void main(
     uint gtid : SV_GroupThreadID, uint dtid : SV_DispatchThreadID, uint gid : SV_GroupID) {
   // pass 1: draw meshlets visible last frame and write to depth buffer
   // pass 2: draw  meshlets not visible last frame that pass the cull test against depth pyramid.
-
   uint task_group_id = gid;
 
   bool visible = false;
   bool draw = false;
   uint meshlet_vis_i = UINT_MAX;
 
-  RWStructuredBuffer<uint> meshlet_vis_buf = bindless_rwbuffers_uint[meshlet_vis_buf_idx];
-  Texture2D depth_pyramid_tex = bindless_textures[depth_pyramid_tex_idx];
   SamplerState samp = bindless_samplers[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
-  CullData cull_data = bindless_buffers[cull_data_idx].Load<CullData>(cull_data_offset_bytes);
 
-  if (task_group_id < bindless_buffers_uint3[draw_cnt_buf_idx][0].x) {
-    TaskCmd task_cmd =
-        bindless_buffers[task_cmd_buf_idx].Load<TaskCmd>(task_group_id * sizeof(TaskCmd));
+  if (task_group_id < draw_cnt_buf[0].x) {
+    TaskCmd task_cmd = task_cmd_buf[task_group_id];
     if (gtid < task_cmd.task_count) {
       visible = true;
 
       uint meshlet_index = task_cmd.task_offset + gtid;
-      Meshlet meshlet =
-          bindless_buffers[meshlet_buf_idx].Load<Meshlet>(meshlet_index * sizeof(Meshlet));
-      InstanceData instance_data = bindless_buffers[instance_data_buf_idx].Load<InstanceData>(
-          task_cmd.instance_id * sizeof(InstanceData));
+      Meshlet meshlet = meshlet_buf[meshlet_index];
+      InstanceData instance_data = instance_data_buf[task_cmd.instance_id];
 
       meshlet_vis_i = instance_data.meshlet_vis_base + gtid + task_cmd.group_base;
-      bool visible_last_frame = meshlet_vis_buf[meshlet_vis_i] != 0;
+      bool visible_last_frame = true;
+      if ((flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0) {
+        visible_last_frame = meshlet_vis_buf[meshlet_vis_i] != 0;
+      }
       bool skip_draw = false;
 
       if (pass == 0 && !visible_last_frame) {
@@ -61,7 +65,6 @@ CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
           rotate_quat(instance_data.scale * meshlet.center_radius.xyz, instance_data.rotation) +
           instance_data.translation;
       float radius = meshlet.center_radius.w * instance_data.scale;
-      //     GlobalData globals = load_globals();
       float3 center = mul(globals.view, float4(world_center, 1.0)).xyz;
       // Ref:
       // https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
@@ -127,7 +130,7 @@ CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
       }
 
       // visible = visible || (cull_data.paused != 0 && visible_last_frame);
-      if (cull_data.paused == 0) {
+      if (cull_data.paused == 0 && (flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0) {
         // Only update visibility when NOT paused
         // visible stays as calculated above
         if (pass != 0 && meshlet_vis_i != UINT_MAX) {
@@ -142,14 +145,14 @@ CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
     }
   }
 
+  uint cnt;
+  InterlockedAdd(out_counts_buf[pass], draw ? 1 : 0, cnt);
+
   if (gtid == 0) {
     s_count = 0;
   }
 
-  RWStructuredBuffer<uint> out_counts_buf = bindless_rwbuffers_uint[out_counts_buf_idx];
-  uint cnt;
-  InterlockedAdd(out_counts_buf[pass], draw ? 1 : 0, cnt);
-
+  // wait for s_count initialization to 0
   GroupMemoryBarrierWithGroupSync();
 
   if (draw) {
@@ -158,6 +161,7 @@ CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
     s_Payload.meshlet_indices[thread_i] = (task_group_id & 0xFFFFFFu) | (gtid << 24);
   }
 
+  // wait for s_Payload writes to finish
   GroupMemoryBarrierWithGroupSync();
 
   uint visible_count = s_count;
