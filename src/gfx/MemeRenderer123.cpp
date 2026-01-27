@@ -162,13 +162,6 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
         .rendering = {.color_formats{draw_img_format}, .depth_format = TextureFormat::D32float},
     });
 
-    auto* tex = device_->get_tex(device_->get_swapchain().get_texture(0));
-    ASSERT(tex);
-    auto format = tex->desc().format;
-    tex_only_pso_ = shader_mgr_.create_graphics_pipeline(
-        {.shaders = {{{"fullscreen_quad", ShaderType::Vertex}, {"tex_only", ShaderType::Fragment}}},
-         .rendering = {.color_formats{format}}});
-
     draw_cull_pso_ = shader_mgr_.create_compute_pipeline({"draw_cull"});
     reset_counts_buf_pso_ = shader_mgr_.create_compute_pipeline({"test_clear_cnt_buf"});
     depth_reduce_pso_ = shader_mgr_.create_compute_pipeline({"depth_reduce/depth_reduce"});
@@ -590,6 +583,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_wind_order(rhi::WindOrder::Clockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, dims);
+
+      auto* swapchain_tex = device_->get_tex(device_->get_swapchain().get_texture(0));
+      ASSERT(swapchain_tex);
+      auto format = swapchain_tex->desc().format;
+      tex_only_pso_ = shader_mgr_.create_graphics_pipeline(
+          {.shaders = {{{"fullscreen_quad", ShaderType::Vertex},
+                        {"tex_only", ShaderType::Fragment}}},
+           .rendering = {.color_formats{format}}});
       enc->bind_pipeline(tex_only_pso_);
 
       uint32_t tex_idx{};

@@ -14,30 +14,21 @@
 CA::MetalLayer *init_metal_window(GLFWwindow *window, MTL::Device *device,
                                   bool transparent_allowed) {
   auto *init_pool = NS::AutoreleasePool::alloc()->init();
-  NSView *ns_view = glfwGetCocoaView(window);
-  NSWindow *ns_window = glfwGetCocoaWindow(window);
-  [ns_view setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+  auto *layer = CA::MetalLayer::layer();
 
-  CAMetalLayer *mtl_layer = [CAMetalLayer layer];
   if (transparent_allowed) {
-    [ns_view setAlphaValue:0.0];
-    [mtl_layer setOpaque:FALSE];
-    [mtl_layer setOpacity:(1.0)];
+    auto *objcLayer = (__bridge CAMetalLayer *)layer;
+    objcLayer.opaque = NO;
+    objcLayer.opacity = 1.0;
+    NSView *ns_view = glfwGetCocoaView(window);
+    ns_view.alphaValue = 0.0;
   }
 
-  NSWindowCollectionBehavior behavior = ns_window.collectionBehavior;
-  behavior |= NSWindowCollectionBehaviorFullScreenPrimary;
-  [ns_window setCollectionBehavior:behavior];
-  mtl_layer.contentsScale = [ns_window backingScaleFactor];
-  mtl_layer.autoresizingMask = kCALayerWidthSizable | kCALayerHeightSizable;
-  mtl_layer.frame = ns_view.bounds;
-  mtl_layer.magnificationFilter = kCAFilterNearest;
-  mtl_layer.minificationFilter = kCAFilterNearest;
-  mtl_layer.device = (__bridge id<MTLDevice>)device;
-  mtl_layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-
-  [ns_view setLayer:mtl_layer];
-  [ns_view setWantsLayer:YES];
+  layer->setDevice(device);
+  NSWindow *ns_window = glfwGetCocoaWindow(window);
+  ns_window.contentView.layer = (__bridge CAMetalLayer *)layer;
+  ns_window.contentView.wantsLayer = YES;
   init_pool->release();
-  return (CA::MetalLayer *)mtl_layer;
+  return layer;
+  // return (CA::MetalLayer *)mtl_layer;
 }

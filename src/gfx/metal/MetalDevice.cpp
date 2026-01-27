@@ -202,16 +202,6 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
   shared_event_ = device_->newSharedEvent();
   test_event_ = get_device()->newEvent();
   ASSERT(metal_layer_);
-  curr_drawable_ = metal_layer_->nextDrawable();
-
-  rhi::TextureDesc swap_img_desc{};
-  auto* tex = curr_drawable_->texture();
-  swap_img_desc.dims = {tex->width(), tex->height(), 1};
-  swap_img_desc.format = mtl::util::convert(tex->pixelFormat());
-  swap_img_desc.mip_levels = 1;
-  swap_img_desc.array_length = 1;
-  swapchain_.get_textures()[frame_idx()] = rhi::TextureHandleHolder{
-      texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
@@ -355,6 +345,7 @@ void MetalDevice::destroy(rhi::TextureHandle handle) {
 
   if (tex->texture() && !tex->is_drawable_tex()) {
     main_res_set_->removeAllocation(tex->texture());
+    main_res_set_->commit();
     tex->texture()->release();
   }
   texture_pool_.destroy(handle);
@@ -567,18 +558,32 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
 }
 
 bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
-  main_res_set_->commit();
   frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
   curr_cmd_list_idx_ = 0;
 
   {
     // wait on shared event
-    if (frame_num_ > info_.frames_in_flight) {
+    if (frame_num_ >= info_.frames_in_flight) {
       auto prev_frame = frame_num_ - info_.frames_in_flight;
       if (!shared_event_->waitUntilSignaledValue(prev_frame, 1000ull * 1000)) {
         LERROR("No signaled value from shared event for previous frame: {}", prev_frame);
       }
     }
+  }
+
+  curr_drawable_ = metal_layer_->nextDrawable();
+  if (!curr_drawable_) {
+    LINFO("no drawable, exiting");
+    exit(1);
+  }
+
+  if (!curr_drawable_) {
+    return false;
+  }
+
+  if (metal_layer_->drawableSize().width != window_dims.x ||
+      metal_layer_->drawableSize().height != window_dims.y) {
+    metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
   }
 
   delete_queues_.flush_deletions(frame_num_);
@@ -589,18 +594,10 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   push_constant_allocator_->reset(frame_idx());
   test_allocator_->reset(frame_idx());
   arg_buf_allocator_->reset(frame_idx());
-  if (frame_num_ > 0) {
-    curr_drawable_ = metal_layer_->nextDrawable();
-  }
-
-  if (!curr_drawable_) {
-    return false;
-  }
-
-  metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
 
   rhi::TextureDesc swap_img_desc{};
   auto* tex = curr_drawable_->texture();
+  ASSERT(tex);
   swap_img_desc.dims = {tex->width(), tex->height(), 1};
   swap_img_desc.format = mtl::util::convert(tex->pixelFormat());
   swap_img_desc.mip_levels = 1;
@@ -627,13 +624,13 @@ void MetalDevice::submit_frame() {
 
     mtl4_resources_->main_cmd_q->commit(&mtl4_resources_->main_cmd_buf, 1);
 
+    mtl4_resources_->main_cmd_q->signalEvent(shared_event_, frame_num_);
     mtl4_resources_->main_cmd_q->signalDrawable(curr_drawable_);
     curr_drawable_->present();
-    mtl4_resources_->main_cmd_q->signalEvent(shared_event_, frame_num_);
   } else {
     auto* end_cb = mtl3_resources_->main_cmd_buf;
-    end_cb->presentDrawable(curr_drawable_);
     end_cb->encodeSignalEvent(shared_event_, frame_num_);
+    end_cb->presentDrawable(curr_drawable_);
     end_cb->commit();
   }
 
