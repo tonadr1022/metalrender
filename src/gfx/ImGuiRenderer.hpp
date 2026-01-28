@@ -1,12 +1,12 @@
 #pragma once
 
+#include "gfx/RenderGraph.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 
 namespace gfx {
 
 struct GPUFrameAllocator3;
-class RGPass;
 class ShaderManager;
 
 class ImGuiRenderer {
@@ -22,7 +22,7 @@ class ImGuiRenderer {
                                              const char* name = "imgui_renderer_buf");
   void return_buffer(rhi::BufferHandleHolder&& handle, size_t frame_in_flight);
   bool has_dirty_textures();
-  void add_dirty_textures_to_pass(gfx::RGPass& pass, bool read_access);
+  void add_dirty_textures_to_pass(RGPass& pass, bool read_access);
 
  private:
   rhi::Device* device_;

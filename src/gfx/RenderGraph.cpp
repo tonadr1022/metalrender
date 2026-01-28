@@ -226,10 +226,10 @@ void convert_rg_access(RGAccess access, rhi::AccessFlags& out_access,
 
 }  // namespace
 
-RGPass::RGPass(std::string name, RenderGraph* rg, uint32_t pass_i, RGPassType type)
+RenderGraph::Pass::Pass(std::string name, RenderGraph* rg, uint32_t pass_i, RGPassType type)
     : rg_(rg), pass_i_(pass_i), name_(std::move(name)), type_(type) {}
 
-RGPass& RenderGraph::add_pass(const std::string& name, RGPassType type) {
+RenderGraph::Pass& RenderGraph::add_pass(const std::string& name, RGPassType type) {
   auto idx = static_cast<uint32_t>(passes_.size());
   passes_.emplace_back(name, this, idx, type);
   return passes_.back();
@@ -267,20 +267,14 @@ void RenderGraph::execute() {
     free_atts_[tex_att_infos_[i]].emplace_back(tex_att_handles_[i]);
   }
   tex_att_infos_.clear();
-
   resource_name_to_handle_.clear();
-  resource_handle_to_name_.clear();
   tex_handle_to_handle_.clear();
-  resource_pass_usages_[0].clear();
-  resource_pass_usages_[1].clear();
   resource_read_name_to_writer_pass_.clear();
   external_name_to_handle_idx_.clear();
   resource_use_name_to_writer_pass_idx_.clear();
   external_buffers_.clear();
   external_textures_.clear();
 }
-
-void RenderGraph::reset() {}
 
 void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   ZoneScoped;
@@ -321,7 +315,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     auto& pass = passes_[pass_i];
     bool sink = false;
     for (const auto& write : pass.get_external_writes()) {
-      if (!external_read_names.contains(write.name)) {
+      if (!external_read_names_.contains(write.name)) {
         sink = true;
         break;
       }
@@ -339,61 +333,42 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     LINFO("\n\n");
   }
 
-  // traverse pass dependencies
-  for (auto& p : pass_dependencies_) {
-    p.clear();
-  }
-  pass_dependencies_.resize(passes_.size());
-  for (uint32_t pass_i : sink_passes_) {
-    intermed_pass_stack_.push_back(pass_i);
-    find_deps_recursive(pass_i, 0);
-  }
-  {
-    // TODO: cache/reserve
-    std::unordered_set<uint32_t> curr_stack_passes;
-    std::unordered_set<uint32_t> visited_passes;
-
-    std::function<void(uint32_t)> dfs = [&](uint32_t pass) {
-      if (curr_stack_passes.contains(pass)) {
-        ASSERT(0 && "Cycle detected");
-      }
-      if (visited_passes.contains(pass)) return;
-
-      curr_stack_passes.insert(pass);
-
-      for (const auto& dep : pass_dependencies_[pass]) {
-        dfs(dep);
-      }
-
-      curr_stack_passes.erase(pass);
-      visited_passes.insert(pass);
-      pass_stack_.push_back(pass);
-    };
-
-    pass_stack_.clear();
-    visited_passes.clear();
-
-    for (uint32_t root : intermed_pass_stack_) {
-      dfs(root);
+  {  // pass ordering
+    for (auto& p : pass_dependencies_) {
+      p.clear();
     }
-  }
-
-  if (verbose) {
-    LINFO("//////////////// Pass Order ////////////////");
-    for (auto pass_i : pass_stack_) {
-      auto& pass = passes_[pass_i];
-      LINFO("[PASS]: {}", pass.get_name());
-      const std::vector<RGPass::NameAndAccess>* arrays[4] = {
-          &pass.get_internal_reads(), &pass.get_internal_writes(), &pass.get_external_reads(),
-          &pass.get_external_writes()};
-      for (auto& arr : arrays) {
-        for (const auto& u : *arr) {
-          LINFO("{:<50}\t{:<50}\t{:<50}", u.name, rhi_access_to_string(u.acc),
-                rhi_pipeline_stage_to_string(u.stage));
+    pass_dependencies_.resize(passes_.size());
+    for (uint32_t pass_i : sink_passes_) {
+      intermed_pass_stack_.push_back(pass_i);
+      find_deps_recursive(pass_i, 0);
+    }
+    static std::unordered_set<uint32_t> curr_stack_passes;
+    static std::unordered_set<uint32_t> visited_passes;
+    curr_stack_passes.clear();
+    visited_passes.clear();
+    curr_stack_passes.reserve(passes_.size());
+    visited_passes.reserve(passes_.size());
+    pass_stack_.clear();
+    for (uint32_t root : intermed_pass_stack_) {
+      dfs(pass_dependencies_, curr_stack_passes, visited_passes, pass_stack_, root);
+    }
+    if (verbose) {
+      LINFO("//////////////// Pass Order ////////////////");
+      for (auto pass_i : pass_stack_) {
+        auto& pass = passes_[pass_i];
+        LINFO("[PASS]: {}", pass.get_name());
+        const std::vector<RenderGraph::Pass::NameAndAccess>* arrays[4] = {
+            &pass.get_internal_reads(), &pass.get_internal_writes(), &pass.get_external_reads(),
+            &pass.get_external_writes()};
+        for (auto& arr : arrays) {
+          for (const auto& u : *arr) {
+            LINFO("{:<50}\t{:<50}\t{:<50}", u.name, rhi_access_to_string(u.acc),
+                  rhi_pipeline_stage_to_string(u.stage));
+          }
         }
       }
+      LINFO("");
     }
-    LINFO("");
   }
 
   // create attachment images
@@ -530,7 +505,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       LINFO(CLR_GREEN "{} Pass" CLR_RESET ": {}", to_string(pass.type()), pass.get_name());
       for (auto& barrier : barriers) {
         LINFO(CLR_PURPLE "RESOURCE: {}" CLR_RESET "",
-              barrier.debug_name.size() ? barrier.debug_name : get_resource_name(barrier.resource));
+              barrier.debug_name.size() ? barrier.debug_name : "no name lol");
         LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "SRC_ACCESS:"),
               rhi_access_to_string(barrier.src_access));
         LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "DST_ACCESS:"),
@@ -735,7 +710,7 @@ void RGPass::sample_external_tex(std::string name) {
 }
 
 void RGPass::sample_external_tex(std::string name, rhi::PipelineStage stage) {
-  rg_->external_read_names.insert(name);
+  rg_->add_external_read_name(name);
   external_reads_.emplace_back(NameAndAccess{
       std::move(name), stage, rhi::AccessFlags_ShaderSampledRead, RGResourceType::ExternalTexture});
 }
@@ -753,7 +728,7 @@ void RGPass::r_external_tex(std::string name) {
 }
 
 void RGPass::r_external_tex(std::string name, rhi::PipelineStage stage) {
-  rg_->external_read_names.insert(name);
+  rg_->add_external_read_name(name);
   external_reads_.emplace_back(NameAndAccess{
       std::move(name), stage, rhi::AccessFlags_ShaderStorageRead, RGResourceType::ExternalTexture});
 }
@@ -888,6 +863,26 @@ void RenderGraph::add_internal_rw_tex_usage(const std::string& name, const std::
                                             RGPass& pass) {
   resource_name_to_handle_.emplace(name, get_resource(input_name, RGResourceType::Texture));
   resource_use_name_to_writer_pass_idx_.emplace(name, pass.get_idx());
+}
+
+void RenderGraph::dfs(const std::vector<std::unordered_set<uint32_t>>& pass_dependencies,
+                      std::unordered_set<uint32_t>& curr_stack_passes,
+                      std::unordered_set<uint32_t>& visited_passes,
+                      std::vector<uint32_t>& pass_stack, uint32_t pass) {
+  if (curr_stack_passes.contains(pass)) {
+    ASSERT(0 && "Cycle detected");
+  }
+  if (visited_passes.contains(pass)) return;
+
+  curr_stack_passes.insert(pass);
+
+  for (const auto& dep : pass_dependencies[pass]) {
+    dfs(pass_dependencies, curr_stack_passes, visited_passes, pass_stack, dep);
+  }
+
+  curr_stack_passes.erase(pass);
+  visited_passes.insert(pass);
+  pass_stack.push_back(pass);
 }
 
 }  // namespace gfx

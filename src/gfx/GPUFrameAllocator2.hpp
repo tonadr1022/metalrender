@@ -60,7 +60,6 @@ struct GPUFrameAllocator3 {
   StagingBuffer create_staging_buffer(uint32_t size);
   PerFrame& curr_frame() { return frames_[frame_idx_]; }
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> buffers;
-  uint32_t offset_{};
   uint32_t frame_idx_{};
   rhi::Device* device_;
   constexpr static uint32_t k_alignment = 16;

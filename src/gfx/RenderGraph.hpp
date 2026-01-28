@@ -1,7 +1,5 @@
 #pragma once
 
-#include <algorithm>
-#include <functional>
 #include <unordered_set>
 
 #include "core/Hash.hpp"
@@ -107,159 +105,139 @@ struct ResourceAndUsage {
 
 enum class RGPassType { None, Compute, Graphics, Transfer };
 
-class RGPass {
- public:
-  RGPass() = default;
-  RGPass(std::string name, RenderGraph* rg, uint32_t pass_i, RGPassType type);
-
-  RGResourceHandle sample_tex(const std::string& name);
-  void sample_external_tex(std::string name);
-  void sample_external_tex(std::string name, rhi::PipelineStage stage);
-  void r_external_tex(std::string name);
-  void r_external_tex(std::string name, rhi::PipelineStage stage);
-  void w_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
-  void w_external_tex_color_output(const std::string& name, rhi::TextureHandle tex_handle);
-  void w_external(const std::string& name, rhi::BufferHandle buf);
-  void w_external(const std::string& name, rhi::BufferHandle buf, rhi::PipelineStage stage);
-  RGResourceHandle r_tex(const std::string& name);
-  RGResourceHandle w_tex(const std::string& name);
-  RGResourceHandle w_color_output(const std::string& name, const AttachmentInfo& att_info);
-  RGResourceHandle rw_color_output(const std::string& name, const std::string& input_name);
-  RGResourceHandle w_depth_output(const std::string& name, const AttachmentInfo& att_info);
-  RGResourceHandle rw_depth_output(const std::string& name, const std::string& input_name);
-  void r_external_buf(std::string name, rhi::PipelineStage stage);
-  void r_external_buf(std::string name);
-  void rw_external_buf(std::string name, const std::string& input_name);
-  void rw_external_buf(std::string name, const std::string& input_name, rhi::PipelineStage stage);
-
-  struct NameAndAccess {
-    std::string name;
-    rhi::PipelineStage stage;
-    rhi::AccessFlags acc;
-    RGResourceType type;
-    uint32_t rw_read_name_i;
-  };
-
-  [[nodiscard]] const std::vector<NameAndAccess>& get_external_reads() const {
-    return external_reads_;
-  }
-  [[nodiscard]] const std::vector<NameAndAccess>& get_external_writes() const {
-    return external_writes_;
-  }
-  [[nodiscard]] const std::vector<NameAndAccess>& get_internal_reads() const {
-    return internal_reads_;
-  }
-  [[nodiscard]] const std::vector<NameAndAccess>& get_internal_writes() const {
-    return internal_writes_;
-  }
-
-  std::vector<NameAndAccess> external_reads_;
-  std::vector<NameAndAccess> external_writes_;
-
-  std::vector<NameAndAccess> internal_reads_;
-  std::vector<NameAndAccess> internal_writes_;
-
-  // [[nodiscard]] const std::vector<ResourceAndUsage>& get_resource_usages() const {
-  // return resource_usages_;
-  // }
-
-  const std::string& get_resource_read_names(const NameAndAccess& resource) {
-    ASSERT(resource.rw_read_name_i != UINT32_MAX);
-    return rw_resource_read_names_[resource.rw_read_name_i];
-  }
-
-  [[nodiscard]] bool has_resource_writes() const {
-    return std::ranges::any_of(resource_usages_, [](const ResourceAndUsage& usage) {
-      return usage.access & rhi::AccessFlags_AnyWrite;
-    });
-  }
-
-  [[nodiscard]] uint32_t get_idx() const { return pass_i_; }
-  void set_ex(auto&& f) { execute_fn_ = f; }
-  [[nodiscard]] const std::string& get_name() const { return name_; }
-  [[nodiscard]] const ExecuteFn& get_execute_fn() const { return execute_fn_; }
-  [[nodiscard]] RGPassType type() const { return type_; }
-
- private:
-  RGResourceHandle read_tex(const std::string& name, RGAccess access);
-  std::vector<ResourceAndUsage> resource_usages_;
-  std::vector<std::string> rw_resource_read_names_;
-  ExecuteFn execute_fn_;
-  RenderGraph* rg_;
-  uint32_t pass_i_{};
-  const std::string name_;
-  RGPassType type_{};
-};
-
+// This render graph has the following features:
+// - auto pass ordering based on resource dependencies
+// - auto attachment image creation
+// - auto barrier placement
+// - external resource integration
+//
+// The following are TODOs
+// - multiple queues
+// - auto buffers
+// - attachment image/buffer history (ie read from previous frame)
+//
+// Misc notes:
+// - not thread safe
+//
 class RenderGraph {
  public:
   void init(rhi::Device* device);
-  void depend_passes(RGPass& pre_pass, RGPass& post_pass, rhi::AccessFlags access,
-                     rhi::PipelineStage stage);
 
   void bake(glm::uvec2 fb_size, bool verbose = false);
 
   void execute();
 
-  RGPass& add_compute_pass(const std::string& name) { return add_pass(name, RGPassType::Compute); }
-  RGPass& add_transfer_pass(const std::string& name) {
-    return add_pass(name, RGPassType::Transfer);
-  }
-  RGPass& add_graphics_pass(const std::string& name) {
-    return add_pass(name, RGPassType::Graphics);
-  }
+  class Pass {
+   public:
+    Pass() = default;
+    Pass(std::string name, RenderGraph* rg, uint32_t pass_i, RGPassType type);
 
-  struct ResourcePassUsages {
-    // TODO: NOOOOOOOOOOOOOOOOOOOOOOO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // PLEAAAAAAAAAASEEEEEEEEEEEEEEEE STOPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
-    // PLEAAAAAAAAAASEEEEEEEEEEEEEEEE
-    std::vector<uint32_t> read_pass_indices;
-    std::vector<uint32_t> write_pass_indices;
-    // TODO: NOOOOOOOOOOOOOOOOOOOOOOO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    // PLEAAAAAAAAAASEEEEEEEEEEEEEEEE STOPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP
-    // PLEAAAAAAAAAASEEEEEEEEEEEEEEEE
+    RGResourceHandle sample_tex(const std::string& name);
+    void sample_external_tex(std::string name);
+    void sample_external_tex(std::string name, rhi::PipelineStage stage);
+    void r_external_tex(std::string name);
+    void r_external_tex(std::string name, rhi::PipelineStage stage);
+    void w_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
+    void w_external_tex_color_output(const std::string& name, rhi::TextureHandle tex_handle);
+    void w_external(const std::string& name, rhi::BufferHandle buf);
+    void w_external(const std::string& name, rhi::BufferHandle buf, rhi::PipelineStage stage);
+    RGResourceHandle r_tex(const std::string& name);
+    RGResourceHandle w_tex(const std::string& name);
+    RGResourceHandle w_color_output(const std::string& name, const AttachmentInfo& att_info);
+    RGResourceHandle rw_color_output(const std::string& name, const std::string& input_name);
+    RGResourceHandle w_depth_output(const std::string& name, const AttachmentInfo& att_info);
+    RGResourceHandle rw_depth_output(const std::string& name, const std::string& input_name);
+    void r_external_buf(std::string name, rhi::PipelineStage stage);
+    void r_external_buf(std::string name);
+    void rw_external_buf(std::string name, const std::string& input_name);
+    void rw_external_buf(std::string name, const std::string& input_name, rhi::PipelineStage stage);
+
+    struct NameAndAccess {
+      std::string name;
+      rhi::PipelineStage stage;
+      rhi::AccessFlags acc;
+      RGResourceType type;
+      uint32_t rw_read_name_i;
+    };
+
+    [[nodiscard]] const std::vector<NameAndAccess>& get_external_reads() const {
+      return external_reads_;
+    }
+    [[nodiscard]] const std::vector<NameAndAccess>& get_external_writes() const {
+      return external_writes_;
+    }
+    [[nodiscard]] const std::vector<NameAndAccess>& get_internal_reads() const {
+      return internal_reads_;
+    }
+    [[nodiscard]] const std::vector<NameAndAccess>& get_internal_writes() const {
+      return internal_writes_;
+    }
+
+    std::vector<NameAndAccess> external_reads_;
+    std::vector<NameAndAccess> external_writes_;
+
+    std::vector<NameAndAccess> internal_reads_;
+    std::vector<NameAndAccess> internal_writes_;
+
+    // [[nodiscard]] const std::vector<ResourceAndUsage>& get_resource_usages() const {
+    // return resource_usages_;
+    // }
+
+    const std::string& get_resource_read_names(const NameAndAccess& resource) {
+      ASSERT(resource.rw_read_name_i != UINT32_MAX);
+      return rw_resource_read_names_[resource.rw_read_name_i];
+    }
+
+    [[nodiscard]] uint32_t get_idx() const { return pass_i_; }
+    void set_ex(auto&& f) { execute_fn_ = f; }
+    [[nodiscard]] const std::string& get_name() const { return name_; }
+    [[nodiscard]] const ExecuteFn& get_execute_fn() const { return execute_fn_; }
+    [[nodiscard]] RGPassType type() const { return type_; }
+
+   private:
+    RGResourceHandle read_tex(const std::string& name, RGAccess access);
+    std::vector<ResourceAndUsage> resource_usages_;
+    std::vector<std::string> rw_resource_read_names_;
+    ExecuteFn execute_fn_;
+    RenderGraph* rg_;
+    uint32_t pass_i_{};
+    const std::string name_;
+    RGPassType type_{};
   };
-  // TODO: NO
-  std::unordered_set<std::string> external_read_names;
 
-  RGResourceHandle add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
-                                 RGAccess access, RGPass& pass);
-  void add_external_write_usage(const std::string& name, rhi::TextureHandle handle, RGPass& pass);
-  void add_external_write_usage(const std::string& name, rhi::BufferHandle handle, RGPass& pass);
-  void add_internal_rw_tex_usage(const std::string& name, const std::string& input_name,
-                                 RGPass& pass);
-  void add_external_rw_buffer_usage(const std::string& name, const std::string& input_name,
-                                    RGPass& pass);
+  Pass& add_compute_pass(const std::string& name) { return add_pass(name, RGPassType::Compute); }
+  Pass& add_transfer_pass(const std::string& name) { return add_pass(name, RGPassType::Transfer); }
+  Pass& add_graphics_pass(const std::string& name) { return add_pass(name, RGPassType::Graphics); }
 
   rhi::TextureHandle get_att_img(RGResourceHandle tex_handle);
-  RGResourceHandle get_resource(const std::string& name, RGResourceType type);
-
-  std::vector<rhi::TextureHandle> external_textures_;
-  std::vector<rhi::BufferHandle> external_buffers_;
 
  private:
-  RGPass& add_pass(const std::string& name, RGPassType type);
+  Pass& add_pass(const std::string& name, RGPassType type);
 
-  struct BufferUsage {
-    rhi::BufferHandle handle;
-    std::vector<std::string> name_stack;
-  };
-
-  void reset();
+  // begin usually called by Pass
+  RGResourceHandle get_resource(const std::string& name, RGResourceType type);
+  RGResourceHandle add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
+                                 RGAccess access, Pass& pass);
+  void add_external_write_usage(const std::string& name, rhi::TextureHandle handle, Pass& pass);
+  void add_external_write_usage(const std::string& name, rhi::BufferHandle handle, Pass& pass);
+  void add_internal_rw_tex_usage(const std::string& name, const std::string& input_name,
+                                 Pass& pass);
+  void add_external_rw_buffer_usage(const std::string& name, const std::string& input_name,
+                                    Pass& pass);
+  void add_external_read_name(const std::string& name) { external_read_names_.insert(name); }
+  // end usually called by Pass
 
   AttachmentInfo* get_tex_att_info(RGResourceHandle handle);
 
   void find_deps_recursive(uint32_t pass_i, uint32_t stack_size);
+  static void dfs(const std::vector<std::unordered_set<uint32_t>>& pass_dependencies,
+                  std::unordered_set<uint32_t>& curr_stack_passes,
+                  std::unordered_set<uint32_t>& visited_passes, std::vector<uint32_t>& pass_stack,
+                  uint32_t pass);
 
-  glm::uvec2 prev_frame_fb_size_{};
+  // glm::uvec2 prev_frame_fb_size_{};
   std::vector<AttachmentInfo> tex_att_infos_;
   std::vector<rhi::TextureHandle> tex_att_handles_;
-  std::vector<ResourcePassUsages> resource_pass_usages_[2];
-  std::string get_resource_name(RGResourceHandle handle) {
-    ASSERT(handle.type != RGResourceType::ExternalTexture);
-    auto it = resource_handle_to_name_.find(handle.to64());
-    return it == resource_handle_to_name_.end() ? "" : it->second;
-  }
 
   struct BarrierInfo {
     RGResourceHandle resource;
@@ -269,13 +247,15 @@ class RenderGraph {
     rhi::AccessFlags dst_access;
     std::string debug_name;
   };
-  std::vector<RGPass> passes_;
+  std::vector<Pass> passes_;
   std::vector<std::vector<BarrierInfo>> pass_barrier_infos_;
   std::vector<std::unordered_set<uint32_t>> pass_dependencies_;
   std::unordered_map<std::string, RGResourceHandle> resource_name_to_handle_;
-  std::unordered_map<uint64_t, std::string> resource_handle_to_name_;
   std::unordered_map<uint64_t, RGResourceHandle> tex_handle_to_handle_;
   std::unordered_map<std::string, uint32_t> resource_read_name_to_writer_pass_;
+  std::unordered_set<std::string> external_read_names_;
+  std::vector<rhi::TextureHandle> external_textures_;
+  std::vector<rhi::BufferHandle> external_buffers_;
 
   std::unordered_map<gfx::AttachmentInfo, std::vector<rhi::TextureHandle>> free_atts_;
   struct AttInfoAndTex {
@@ -295,5 +275,7 @@ class RenderGraph {
   rhi::Device* device_{};
   size_t external_texture_count_{};
 };
+
+using RGPass = RenderGraph::Pass;
 
 }  // namespace gfx

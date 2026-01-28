@@ -5,10 +5,10 @@
 #include <glm/gtc/random.hpp>
 #include <random>
 
+#include "ResourceManager.hpp"
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/MemeRenderer123.hpp"
-#include "gfx/ResourceManager.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "glm/ext/matrix_transform.hpp"
@@ -120,9 +120,9 @@ void App::run() {
   // };
   [[maybe_unused]] auto sponzas = [&]() { load_grid(10, 40.0, sponza_path); };
   // chessboards();
-  sponzas();
+  // sponzas();
   [[maybe_unused]] auto sponza_single = [&]() { load_model(sponza_path, glm::mat4{1}); };
-  // sponza_single();
+  sponza_single();
 
   if (scene == -1) {
     glm::ivec3 iter{};

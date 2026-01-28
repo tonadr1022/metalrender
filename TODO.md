@@ -1,7 +1,6 @@
 # TODOs
 
-- toggleable vsync
-- sponza grid buffer resize bug
+- instead of dirty textures in render graph, transition them to shader read first
 - use fill_buffer() instead of compute for clear_bufs pass
 - actual readback
 - meshlet stats buffer actual readback

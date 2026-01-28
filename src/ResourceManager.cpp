@@ -2,8 +2,8 @@
 
 #include <tracy/Tracy.hpp>
 
-#include "MemeRenderer123.hpp"
 #include "core/EAssert.hpp"
+#include "gfx/MemeRenderer123.hpp"
 
 ModelHandle ResourceManager::load_model(const std::filesystem::path &path,
                                         const glm::mat4 &root_transform) {

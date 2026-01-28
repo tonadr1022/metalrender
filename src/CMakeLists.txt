@@ -4,13 +4,16 @@ add_executable(${target_name}
     main.cpp
     App.cpp
     Camera.cpp
+    ResourceManager.cpp
+
     core/FileUtil.cpp
     core/Util.cpp
     core/StringUtil.cpp
+    Window.cpp
+
     gfx/ModelLoader.cpp
     gfx/MemeRenderer123.cpp
     gfx/ModelInstance.cpp
-    gfx/ResourceManager.cpp
     gfx/ShaderManager.cpp
     gfx/ImGuiRenderer.cpp
     gfx/GPUFrameAllocator.cpp
@@ -20,7 +23,7 @@ add_executable(${target_name}
     gfx/BackedGPUAllocator.cpp
     gfx/renderer/BufferResize.cpp
     platform/apple/AppleWindow.mm # TODO: move this please
-    Window.cpp
+
     # voxels/Chunk.cpp
     # voxels/Mesher.cpp
     # voxels/TerrainGenerator.cpp
