@@ -720,9 +720,8 @@ RGResourceHandle RGPass::w_color_output(const std::string& name, const Attachmen
 
 RGResourceHandle RGPass::rw_color_output(const std::string& name, const std::string& input_name) {
   RGResourceHandle handle = rg_->get_resource(input_name, RGResourceType::Texture);
-  uint32_t rw_read_name_i = rw_resource_read_names_.size();
-  rw_resource_read_names_.emplace_back(input_name);
-  rg_->add_internal_rw_tex_usage(name, input_name, *this);
+  uint32_t rw_read_name_i = add_read_write_resource(input_name);
+  rg_->add_internal_rw_usage(name, handle, *this);
   internal_writes_.emplace_back(
       NameAndAccess{name, rhi::PipelineStage_ColorAttachmentOutput,
                     (rhi::AccessFlags)(rhi::AccessFlags_ColorAttachmentRead |
@@ -733,9 +732,8 @@ RGResourceHandle RGPass::rw_color_output(const std::string& name, const std::str
 
 RGResourceHandle RGPass::rw_depth_output(const std::string& name, const std::string& input_name) {
   RGResourceHandle handle = rg_->get_resource(input_name, RGResourceType::Texture);
-  uint32_t rw_read_name_i = rw_resource_read_names_.size();
-  rw_resource_read_names_.emplace_back(input_name);
-  rg_->add_internal_rw_tex_usage(name, input_name, *this);
+  uint32_t rw_read_name_i = add_read_write_resource(input_name);
+  rg_->add_internal_rw_usage(name, handle, *this);
   internal_writes_.emplace_back(NameAndAccess{
       name,
       (rhi::PipelineStage)(rhi::PipelineStage_EarlyFragmentTests |
@@ -894,8 +892,7 @@ void RGPass::rw_external_buf(std::string name, const std::string& input_name) {
 
 void RGPass::rw_external_buf(std::string name, const std::string& input_name,
                              rhi::PipelineStage stage) {
-  uint32_t rw_read_name_i = rw_resource_read_names_.size();
-  rw_resource_read_names_.emplace_back(input_name);
+  uint32_t rw_read_name_i = add_read_write_resource(input_name);
   rg_->add_external_rw_buffer_usage(name, input_name, *this);
   external_reads_.emplace_back(
       std::move(name), stage,
@@ -906,8 +903,9 @@ void RGPass::rw_external_buf(std::string name, const std::string& input_name,
 void RenderGraph::add_external_rw_buffer_usage(const std::string& name,
                                                const std::string& input_name, RGPass& pass) {
   ASSERT(external_name_to_handle_idx_.contains(input_name));
-  auto idx = external_name_to_handle_idx_.at(input_name);
-  external_name_to_handle_idx_.emplace(name, idx);
+  auto handle = external_name_to_handle_idx_.at(input_name);
+  // TODO: reconsider whether this needs to be separate
+  external_name_to_handle_idx_.emplace(name, handle);
   resource_use_name_to_writer_pass_idx_.emplace(name, pass.get_idx());
 }
 
@@ -919,9 +917,9 @@ RGResourceHandle RenderGraph::get_resource(const std::string& name, RGResourceTy
   return {};
 }
 
-void RenderGraph::add_internal_rw_tex_usage(const std::string& name, const std::string& input_name,
-                                            RGPass& pass) {
-  resource_name_to_handle_.emplace(name, get_resource(input_name, RGResourceType::Texture));
+void RenderGraph::add_internal_rw_usage(const std::string& name, RGResourceHandle handle,
+                                        Pass& pass) {
+  resource_name_to_handle_.emplace(name, handle);
   resource_use_name_to_writer_pass_idx_.emplace(name, pass.get_idx());
 }
 
@@ -972,4 +970,23 @@ void RenderGraph::shutdown() {
   }
   free_bufs_.clear();
 }
+
+RGResourceHandle RenderGraph::Pass::rw_buf(const std::string& name, rhi::PipelineStage stage,
+                                           const std::string& input_name) {
+  auto handle = rg_->get_resource(input_name, RGResourceType::Buffer);
+  uint32_t rw_read_name_i = add_read_write_resource(input_name);
+  rg_->add_internal_rw_usage(name, handle, *this);
+  internal_writes_.emplace_back(NameAndAccess{
+      name, stage,
+      (rhi::AccessFlags)(rhi::AccessFlags_ShaderStorageRead | rhi::AccessFlags_ShaderStorageWrite),
+      RGResourceType::Buffer, rw_read_name_i});
+  return handle;
+}
+
+uint32_t RenderGraph::Pass::add_read_write_resource(const std::string& name) {
+  auto idx = rw_resource_read_names_.size();
+  rw_resource_read_names_.emplace_back(name);
+  return idx;
+}
+
 }  // namespace gfx

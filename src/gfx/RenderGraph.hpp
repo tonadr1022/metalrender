@@ -162,6 +162,8 @@ class RenderGraph {
 
     RGResourceHandle r_buf(const std::string& name, rhi::PipelineStage stage);
     RGResourceHandle w_buf(const std::string& name, rhi::PipelineStage stage, size_t size);
+    RGResourceHandle rw_buf(const std::string& name, rhi::PipelineStage stage,
+                            const std::string& input_name);
 
     struct NameAndAccess {
       std::string name;
@@ -207,6 +209,7 @@ class RenderGraph {
 
    private:
     RGResourceHandle read_tex(const std::string& name, RGAccess access);
+    uint32_t add_read_write_resource(const std::string& name);
     std::vector<ResourceAndUsage> resource_usages_;
     std::vector<std::string> rw_resource_read_names_;
     ExecuteFn execute_fn_;
@@ -233,8 +236,11 @@ class RenderGraph {
   RGResourceHandle add_buf_usage(const std::string& name, const BufferInfo& buf_info, Pass& pass);
   void add_external_write_usage(const std::string& name, rhi::TextureHandle handle, Pass& pass);
   void add_external_write_usage(const std::string& name, rhi::BufferHandle handle, Pass& pass);
-  void add_internal_rw_tex_usage(const std::string& name, const std::string& input_name,
-                                 Pass& pass);
+
+  // void add_internal_rw_tex_usage(const std::string& name, const std::string& input_name,
+  //                                RGResourceType type, Pass& pass);
+  void add_internal_rw_usage(const std::string& name, RGResourceHandle handle, Pass& pass);
+
   void add_external_rw_buffer_usage(const std::string& name, const std::string& input_name,
                                     Pass& pass);
   void add_external_read_name(const std::string& name) { external_read_names_.insert(name); }
