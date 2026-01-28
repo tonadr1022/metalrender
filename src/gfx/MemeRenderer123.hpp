@@ -36,23 +36,6 @@ struct RenderArgs {
   bool draw_imgui;
 };
 
-class ScratchBufferPool {
- public:
-  explicit ScratchBufferPool(rhi::Device* device) : device_(device) {}
-  void reset(size_t frame_idx);
-  rhi::BufferHandle alloc(size_t size);
-
- private:
-  struct PerFrame {
-    std::vector<rhi::BufferHandleHolder> entries;
-    std::vector<rhi::BufferHandleHolder> in_use_entries;
-  };
-  PerFrame frames_[k_max_frames_in_flight];
-  size_t frame_idx_{};
-
-  rhi::Device* device_;
-};
-
 enum class DrawBatchType {
   Static,
 };
@@ -214,8 +197,14 @@ class MemeRenderer123 {
     std::filesystem::path resource_dir;
     std::filesystem::path config_file_path;
   };
-  void init(const CreateInfo& cinfo);
-  void shutdown();
+  explicit MemeRenderer123(const CreateInfo& cinfo);
+  ~MemeRenderer123();
+
+  MemeRenderer123(const MemeRenderer123&) = delete;
+  MemeRenderer123(MemeRenderer123&&) = delete;
+  MemeRenderer123& operator=(const MemeRenderer123&) = delete;
+  MemeRenderer123& operator=(MemeRenderer123&&) = delete;
+
   void render(const RenderArgs& args);
   void on_imgui();
   bool on_key_event(int key, int action, int mods);
@@ -223,7 +212,6 @@ class MemeRenderer123 {
                   ModelInstance& model, ModelGPUHandle& out_handle);
   [[nodiscard]] ModelInstanceGPUHandle add_model_instance(const ModelInstance& model,
                                                           ModelGPUHandle model_gpu_handle);
-  ScratchBufferPool& get_scratch_buffer_pool() { return scratch_buffer_pool_.value(); }
   void free_instance(ModelInstanceGPUHandle handle);
   void free_model(ModelGPUHandle handle);
 
@@ -260,9 +248,9 @@ class MemeRenderer123 {
   };
   Stats stats_;
 
+  std::unique_ptr<gfx::ShaderManager> shader_mgr_;
   rhi::Device* device_{};
   Window* window_{};
-  gfx::ShaderManager shader_mgr_;
   rhi::PipelineHandleHolder test2_pso_;
   rhi::PipelineHandleHolder test_task_pso_;
   rhi::PipelineHandleHolder draw_cull_pso_;
@@ -284,7 +272,6 @@ class MemeRenderer123 {
   size_t curr_frame_idx_{};
   std::filesystem::path resource_dir_;
   std::filesystem::path config_file_path_;
-  std::optional<ScratchBufferPool> scratch_buffer_pool_;
   InstanceDataMgr instance_data_mgr_;
   std::optional<DrawBatch> static_draw_batch_;
 

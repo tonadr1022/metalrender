@@ -1,6 +1,6 @@
 #pragma once
 
-#include "core/Math.hpp"
+#include <glm/mat4x4.hpp>
 
 struct GLFWwindow;
 
@@ -15,8 +15,6 @@ class Camera {
   float pitch{}, yaw{};
   glm::vec3 front{}, right{};
   float max_velocity{5.f};
-  glm::vec3 velocity{};
-  float acceleration_strength{100.0f};
-  float damping{0.9f};
+  float move_speed{10.0f};
   float mouse_sensitivity{.1};
 };

@@ -72,148 +72,6 @@ uint32_t prev_pow2(uint32_t val) {
 
 namespace gfx {
 
-void MemeRenderer123::init(const CreateInfo& cinfo) {
-  ZoneScoped;
-  device_ = cinfo.device;
-  window_ = cinfo.window;
-  resource_dir_ = cinfo.resource_dir;
-  config_file_path_ = cinfo.config_file_path;
-  {
-    const char* key_mesh_shaders_enabled = "mesh_shaders_enabled";
-    std::ifstream file(config_file_path_);
-    if (file.is_open()) {
-      std::string line;
-      while (std::getline(file, line)) {
-        auto kv = core::split_string_at_first(line, '=');
-        if (kv.first == key_mesh_shaders_enabled) {
-          mesh_shaders_enabled_ = kv.second == "1";
-        }
-      }
-    } else {
-      // write the default config.
-      std::ofstream file(config_file_path_);
-      if (file.is_open()) {
-        file << key_mesh_shaders_enabled << '=' << mesh_shaders_enabled_ << '\n';
-      } else {
-        ASSERT(0 && "Failed to open config file for writing");
-        LINFO("Failed to open config file for writing: {}", config_file_path_.string());
-      }
-    }
-  }
-
-  shader_mgr_.init(device_);
-
-  {
-    // TODO: streamline
-    auto desc = rhi::TextureDesc{.format = rhi::TextureFormat::R8G8B8A8Srgb,
-                                 .dims = glm::uvec3{1, 1, 1},
-                                 .mip_levels = 1,
-                                 .array_length = 1,
-                                 .bindless = true};
-    default_white_tex_ = device_->create_tex_h(desc);
-    ALWAYS_ASSERT(device_->get_tex(default_white_tex_)->bindless_idx() == 0);
-    auto* data = reinterpret_cast<uint64_t*>(malloc(sizeof(uint64_t)));
-    *data = 0xFFFFFFFF;
-    // TODO: add a function for this for the love of god!
-    pending_texture_uploads_.push_back(
-        GPUTexUpload{.upload =
-                         TextureUpload{
-                             .data = std::unique_ptr<void, UntypedDeleterFuncPtr>(data, free),
-                             .desc = desc,
-                             .bytes_per_row = 4,
-                             .load_type = CPUTextureLoadType::Malloc,
-
-                         },
-                     .tex = default_white_tex_.handle,
-                     .name = get_next_tex_upload_name()});
-  }
-  {
-    samplers_.emplace_back(device_->create_sampler_h({
-        .min_filter = rhi::FilterMode::Nearest,
-        .mag_filter = rhi::FilterMode::Nearest,
-        .mipmap_mode = rhi::FilterMode::Nearest,
-        .address_mode = rhi::AddressMode::Repeat,
-    }));
-
-    samplers_.emplace_back(device_->create_sampler_h({
-        .min_filter = rhi::FilterMode::Linear,
-        .mag_filter = rhi::FilterMode::Linear,
-        .mipmap_mode = rhi::FilterMode::Linear,
-        .address_mode = rhi::AddressMode::Repeat,
-    }));
-    samplers_.emplace_back(device_->create_sampler_h({
-        .min_filter = rhi::FilterMode::Nearest,
-        .mag_filter = rhi::FilterMode::Nearest,
-        .mipmap_mode = rhi::FilterMode::Nearest,
-        .address_mode = rhi::AddressMode::ClampToEdge,
-    }));
-  }
-
-  {
-    auto draw_img_format = rhi::TextureFormat::R16G16B16A16Sfloat;
-    test2_pso_ = shader_mgr_.create_graphics_pipeline({
-        .shaders = {{{"basic_indirect", ShaderType::Vertex},
-                     {"basic_indirect", ShaderType::Fragment}}},
-        .rendering = {.color_formats{draw_img_format}, .depth_format = TextureFormat::D32float},
-    });
-    test_task_pso_ = shader_mgr_.create_graphics_pipeline({
-        .shaders = {{{"forward_meshlet", ShaderType::Task},
-                     {"forward_meshlet", ShaderType::Mesh},
-                     {"forward_meshlet", ShaderType::Fragment}}},
-        .rendering = {.color_formats{draw_img_format}, .depth_format = TextureFormat::D32float},
-    });
-
-    draw_cull_pso_ = shader_mgr_.create_compute_pipeline({"draw_cull"});
-    reset_counts_buf_pso_ = shader_mgr_.create_compute_pipeline({"test_clear_cnt_buf"});
-    depth_reduce_pso_ = shader_mgr_.create_compute_pipeline({"depth_reduce/depth_reduce"});
-    shade_pso_ = shader_mgr_.create_compute_pipeline({"shade"});
-  }
-
-  uniforms_allocator_.emplace(device_);
-  staging_buffer_allocator_.emplace(device_);
-
-  buffer_copy_mgr_.emplace(device_, staging_buffer_allocator_.value());
-  materials_buf_.emplace(*device_, buffer_copy_mgr_.value(),
-                         rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
-                                         .usage = rhi::BufferUsage_Storage,
-                                         .size = k_max_materials * sizeof(M4Material),
-                                         .bindless = true,
-                                         .name = "all materials buf"},
-                         sizeof(M4Material));
-  instance_data_mgr_.init(100'000, device_, &buffer_copy_mgr_.value(),
-                          device_->get_info().frames_in_flight, mesh_shaders_enabled_);
-  static_draw_batch_.emplace(DrawBatchType::Static, *device_, buffer_copy_mgr_.value(),
-                             DrawBatch::CreateInfo{
-                                 .initial_vertex_capacity = 10'000'000,
-                                 .initial_index_capacity = 10'000'000,
-                                 .initial_meshlet_capacity = 0,
-                                 .initial_mesh_capacity = 1000,
-                                 .initial_meshlet_triangle_capacity = 10'000'000,
-                                 .initial_meshlet_vertex_capacity = 10'000'000,
-                             });
-  meshlet_vis_buf_.emplace(
-      *device_, buffer_copy_mgr_.value(),
-      rhi::BufferDesc{.size = 1'000'000, .bindless = true, .name = "meshlet_vis_buf"},
-      sizeof(uint32_t));
-
-  scratch_buffer_pool_.emplace(device_);
-  imgui_renderer_.emplace(shader_mgr_, device_);
-
-  rg_.init(device_);
-  init_imgui();
-
-  recreate_external_textures();
-
-  for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
-    out_counts_buf_[i] = device_->create_buf_h(rhi::BufferDesc{
-        .storage_mode = rhi::StorageMode::CPUAndGPU,
-        .usage = rhi::BufferUsage_Storage,
-        .size = sizeof(uint32_t) * 2,
-        .name = "out_counts_buf",
-    });
-  }
-}
-
 void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   ZoneScoped;
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
@@ -224,7 +82,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
     return;
   }
 
-  shader_mgr_.replace_dirty_pipelines();
+  shader_mgr_->replace_dirty_pipelines();
 
   indirect_cmd_buf_ids_.clear();
 
@@ -266,49 +124,6 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
 
 uint32_t MemeRenderer123::get_bindless_idx(const rhi::BufferHandleHolder& buf) const {
   return device_->get_buf(buf)->bindless_idx();
-}
-
-rhi::BufferHandle ScratchBufferPool::alloc(size_t size) {
-  auto& entries = frames_[frame_idx_].entries;
-  auto& in_use_entries = frames_[frame_idx_].in_use_entries;
-
-  size_t best_size = SIZE_T_MAX;
-  int best_idx = -1;
-  for (size_t i = 0; i < entries.size(); i++) {
-    auto* buf = device_->get_buf(entries[i]);
-    ASSERT(buf);
-    if (buf->size() < best_size && buf->size() >= size) {
-      best_idx = i;
-      best_size = buf->size();
-    }
-  }
-
-  if (best_idx == -1) {
-    // create new buf
-    in_use_entries.emplace_back(device_->create_buf_h({
-        .storage_mode = rhi::StorageMode::CPUAndGPU,
-        .usage = rhi::BufferUsage_Transfer,
-        .size = std::max<uint32_t>(1024 * 1024, size),
-    }));
-  } else {
-    auto e = std::move(entries[best_idx]);
-    entries.erase(entries.begin() + best_idx);
-    in_use_entries.push_back(std::move(e));
-  }
-  ASSERT(!in_use_entries.empty());
-  return in_use_entries.back().handle;
-}
-
-void ScratchBufferPool::reset(size_t frame_idx) {
-  ZoneScoped;
-  frame_idx_ = frame_idx;
-  auto& entries = frames_[frame_idx_].entries;
-  auto& in_use_entries = frames_[frame_idx_].in_use_entries;
-  entries.reserve(entries.size() + in_use_entries.size());
-  for (auto& e : in_use_entries) {
-    entries.emplace_back(std::move(e));
-  }
-  in_use_entries.clear();
 }
 
 void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
@@ -590,7 +405,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       ASSERT(swapchain_tex);
       auto format = swapchain_tex->desc().format;
       if (!tex_only_pso_.is_valid()) {
-        tex_only_pso_ = shader_mgr_.create_graphics_pipeline(
+        tex_only_pso_ = shader_mgr_->create_graphics_pipeline(
             {.shaders = {{{"fullscreen_quad", ShaderType::Vertex},
                           {"tex_only", ShaderType::Fragment}}},
              .rendering = {.color_formats{format}}});
@@ -906,7 +721,6 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
     instance_transforms.push_back(model.global_transforms[node_i]);
     const auto& transform = model.global_transforms[node_i];
     const auto rot = transform.rotation;
-    // TODO: do this initially?
     instance_datas[i].translation = transform.translation;
     instance_datas[i].rotation = glm::vec4{rot[0], rot[1], rot[2], rot[3]};
     instance_datas[i].scale = transform.scale;
@@ -1126,24 +940,12 @@ void MemeRenderer123::init_imgui() {
   ImGui_ImplGlfw_InitForOther(window_->get_handle(), true);
 }
 
-void MemeRenderer123::shutdown_imgui() {
-  ZoneScoped;
-  ImGui_ImplGlfw_Shutdown();
-  ImGui::DestroyContext();
-}
+void MemeRenderer123::shutdown_imgui() { ZoneScoped; }
 
 void MemeRenderer123::on_imgui() {
   ZoneScoped;
   if (ImGui::TreeNodeEx("Config")) {
     ImGui::Text("mesh shaders enabled: %d", mesh_shaders_enabled_);
-    ImGui::TreePop();
-  }
-  if (ImGui::TreeNodeEx("Window", ImGuiTreeNodeFlags_DefaultOpen)) {
-    auto dims = window_->get_window_size();
-    auto win_dims = window_->get_window_not_framebuffer_size();
-    ImGui::Text("Framebuffer dims: %u %u", dims.x, dims.y);
-    ImGui::Text("Window dims: %u %u", win_dims.x, win_dims.y);
-    ImGui::Text("Fullscreen: %d", window_->get_fullscreen());
     ImGui::TreePop();
   }
   if (ImGui::TreeNodeEx("Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -1280,7 +1082,7 @@ bool MemeRenderer123::on_key_event(int key, int action, int mods) {
 
     if (action == GLFW_PRESS && key == GLFW_KEY_R && mods & GLFW_MOD_CONTROL) {
       LINFO("Recompiling shaders.");
-      shader_mgr_.recompile_shaders();
+      shader_mgr_->recompile_shaders();
       return true;
     }
   }
@@ -1324,7 +1126,14 @@ void MemeRenderer123::recreate_external_textures() {
   recreate_depth_pyramid_tex();
 }
 
-void MemeRenderer123::shutdown() { shader_mgr_.shutdown(); }
+MemeRenderer123::~MemeRenderer123() {
+  shader_mgr_->shutdown();
+
+  {  // imgui
+    ImGui_ImplGlfw_Shutdown();
+    ImGui::DestroyContext();
+  }
+}
 
 TexAndViewHolder::~TexAndViewHolder() {
   for (auto v : views) {
@@ -1354,4 +1163,145 @@ void DrawBatch::ensure_task_cmd_buf_space(rhi::Device& device, size_t element_co
   });
 }
 
+MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
+  ZoneScoped;
+  device_ = cinfo.device;
+  window_ = cinfo.window;
+  resource_dir_ = cinfo.resource_dir;
+  config_file_path_ = cinfo.config_file_path;
+  {
+    const char* key_mesh_shaders_enabled = "mesh_shaders_enabled";
+    std::ifstream file(config_file_path_);
+    if (file.is_open()) {
+      std::string line;
+      while (std::getline(file, line)) {
+        auto kv = core::split_string_at_first(line, '=');
+        if (kv.first == key_mesh_shaders_enabled) {
+          mesh_shaders_enabled_ = kv.second == "1";
+        }
+      }
+    } else {
+      // write the default config.
+      std::ofstream file(config_file_path_);
+      if (file.is_open()) {
+        file << key_mesh_shaders_enabled << '=' << mesh_shaders_enabled_ << '\n';
+      } else {
+        ASSERT(0 && "Failed to open config file for writing");
+        LINFO("Failed to open config file for writing: {}", config_file_path_.string());
+      }
+    }
+  }
+
+  shader_mgr_ = std::make_unique<gfx::ShaderManager>();
+  shader_mgr_->init(device_);
+
+  {
+    // TODO: streamline
+    auto desc = rhi::TextureDesc{.format = rhi::TextureFormat::R8G8B8A8Srgb,
+                                 .dims = glm::uvec3{1, 1, 1},
+                                 .mip_levels = 1,
+                                 .array_length = 1,
+                                 .bindless = true};
+    default_white_tex_ = device_->create_tex_h(desc);
+    ALWAYS_ASSERT(device_->get_tex(default_white_tex_)->bindless_idx() == 0);
+    auto* data = reinterpret_cast<uint64_t*>(malloc(sizeof(uint64_t)));
+    *data = 0xFFFFFFFF;
+    // TODO: add a function for this for the love of god!
+    pending_texture_uploads_.push_back(
+        GPUTexUpload{.upload =
+                         TextureUpload{
+                             .data = std::unique_ptr<void, UntypedDeleterFuncPtr>(data, free),
+                             .desc = desc,
+                             .bytes_per_row = 4,
+                             .load_type = CPUTextureLoadType::Malloc,
+
+                         },
+                     .tex = default_white_tex_.handle,
+                     .name = get_next_tex_upload_name()});
+  }
+  {
+    samplers_.emplace_back(device_->create_sampler_h({
+        .min_filter = rhi::FilterMode::Nearest,
+        .mag_filter = rhi::FilterMode::Nearest,
+        .mipmap_mode = rhi::FilterMode::Nearest,
+        .address_mode = rhi::AddressMode::Repeat,
+    }));
+
+    samplers_.emplace_back(device_->create_sampler_h({
+        .min_filter = rhi::FilterMode::Linear,
+        .mag_filter = rhi::FilterMode::Linear,
+        .mipmap_mode = rhi::FilterMode::Linear,
+        .address_mode = rhi::AddressMode::Repeat,
+    }));
+    samplers_.emplace_back(device_->create_sampler_h({
+        .min_filter = rhi::FilterMode::Nearest,
+        .mag_filter = rhi::FilterMode::Nearest,
+        .mipmap_mode = rhi::FilterMode::Nearest,
+        .address_mode = rhi::AddressMode::ClampToEdge,
+    }));
+  }
+
+  {
+    auto draw_img_format = rhi::TextureFormat::R16G16B16A16Sfloat;
+    test2_pso_ = shader_mgr_->create_graphics_pipeline({
+        .shaders = {{{"basic_indirect", ShaderType::Vertex},
+                     {"basic_indirect", ShaderType::Fragment}}},
+        .rendering = {.color_formats{draw_img_format}, .depth_format = TextureFormat::D32float},
+    });
+    test_task_pso_ = shader_mgr_->create_graphics_pipeline({
+        .shaders = {{{"forward_meshlet", ShaderType::Task},
+                     {"forward_meshlet", ShaderType::Mesh},
+                     {"forward_meshlet", ShaderType::Fragment}}},
+        .rendering = {.color_formats{draw_img_format}, .depth_format = TextureFormat::D32float},
+    });
+
+    draw_cull_pso_ = shader_mgr_->create_compute_pipeline({"draw_cull"});
+    reset_counts_buf_pso_ = shader_mgr_->create_compute_pipeline({"test_clear_cnt_buf"});
+    depth_reduce_pso_ = shader_mgr_->create_compute_pipeline({"depth_reduce/depth_reduce"});
+    shade_pso_ = shader_mgr_->create_compute_pipeline({"shade"});
+  }
+
+  uniforms_allocator_.emplace(device_);
+  staging_buffer_allocator_.emplace(device_);
+
+  buffer_copy_mgr_.emplace(device_, staging_buffer_allocator_.value());
+  materials_buf_.emplace(*device_, buffer_copy_mgr_.value(),
+                         rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
+                                         .usage = rhi::BufferUsage_Storage,
+                                         .size = k_max_materials * sizeof(M4Material),
+                                         .bindless = true,
+                                         .name = "all materials buf"},
+                         sizeof(M4Material));
+  instance_data_mgr_.init(100'000, device_, &buffer_copy_mgr_.value(),
+                          device_->get_info().frames_in_flight, mesh_shaders_enabled_);
+  static_draw_batch_.emplace(DrawBatchType::Static, *device_, buffer_copy_mgr_.value(),
+                             DrawBatch::CreateInfo{
+                                 .initial_vertex_capacity = 10'000'000,
+                                 .initial_index_capacity = 10'000'000,
+                                 .initial_meshlet_capacity = 0,
+                                 .initial_mesh_capacity = 1000,
+                                 .initial_meshlet_triangle_capacity = 10'000'000,
+                                 .initial_meshlet_vertex_capacity = 10'000'000,
+                             });
+  meshlet_vis_buf_.emplace(
+      *device_, buffer_copy_mgr_.value(),
+      rhi::BufferDesc{.size = 1'000'000, .bindless = true, .name = "meshlet_vis_buf"},
+      sizeof(uint32_t));
+
+  imgui_renderer_.emplace(*shader_mgr_, device_);
+
+  rg_.init(device_);
+  init_imgui();
+
+  recreate_external_textures();
+
+  for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
+    out_counts_buf_[i] = device_->create_buf_h(rhi::BufferDesc{
+        .storage_mode = rhi::StorageMode::CPUAndGPU,
+        .usage = rhi::BufferUsage_Storage,
+        .size = sizeof(uint32_t) * 2,
+        .name = "out_counts_buf",
+    });
+  }
+}
 }  // namespace gfx

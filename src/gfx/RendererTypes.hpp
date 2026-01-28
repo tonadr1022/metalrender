@@ -30,3 +30,6 @@ using SamplerHandleHolder = Holder<SamplerHandle, ::rhi::Device>;
 }  // namespace rhi
 
 using UntypedDeleterFuncPtr = void (*)(void*);
+
+struct ModelInstance;
+using ModelHandle = GenerationalHandle<ModelInstance>;

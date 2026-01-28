@@ -8,6 +8,9 @@
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/Device.hpp"
+#include "gfx/MemeRenderer123.hpp"
+#include "gfx/ResourceManager.hpp"
+#include "gfx/Swapchain.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -28,6 +31,20 @@ std::filesystem::path get_resource_dir() {
   return "";
 }
 
+namespace random {
+
+std::random_device rd{};
+std::default_random_engine eng{rd()};
+
+void seed(int seed) { eng.seed(seed); }
+
+float get_float(float min, float max) {
+  std::uniform_real_distribution<float> dist{min, max};
+  return dist(eng);
+}
+
+}  // namespace random
+
 }  // namespace
 
 App::App() {
@@ -44,37 +61,36 @@ App::App() {
   config_path_ = local_resource_dir_ / "config.txt";
 
   load_config();
-  device_ = rhi::create_device(rhi::GfxAPI::Metal);
   window_ = std::make_unique<AppleWindow>();
-  bool transparent_window = true;
   Window::InitInfo win_init_info{
       .key_callback_fn = [this](int key, int action, int mods) { on_key_event(key, action, mods); },
       .cursor_pos_callback_fn = [this](double x_pos,
                                        double y_pos) { on_curse_pos_event(x_pos, y_pos); },
-      .transparent_window = transparent_window,
       .win_dims_x = config_.win_dims.x,
       .win_dims_y = config_.win_dims.y,
       .floating_window = false,
   };
   window_->init(win_init_info);
   window_->set_window_position(config_.win_pos);
+  device_ = rhi::create_device(rhi::GfxAPI::Metal);
   device_->init({
-      .window = window_.get(),
       .shader_lib_dir = resource_dir_ / "shader_out",
       .app_name = "lol",
-      .transparent_window = true,
       .hot_reload_enabled = true,
   });
-
+  [[maybe_unused]] bool success = device_->recreate_swapchain({
+      .window = window_.get(),
+      .vsync = config_.vsync,
+  });
+  ASSERT(success);
   on_hide_mouse_change();
-  renderer_.emplace();
-  ResourceManager::init(ResourceManager::CreateInfo{.renderer = &renderer_.value()});
-  renderer_->init(gfx::MemeRenderer123::CreateInfo{
+  renderer_ = std::make_unique<gfx::MemeRenderer123>(gfx::MemeRenderer123::CreateInfo{
       .device = device_.get(),
       .window = window_.get(),
       .resource_dir = resource_dir_,
       .config_file_path = local_resource_dir_ / "renderer_config.txt",
   });
+  ResourceManager::init(ResourceManager::CreateInfo{.renderer = renderer_.get()});
   // voxel_renderer_ = std::make_unique<vox::Renderer>();
   // voxel_renderer_->init(&renderer_);
   // voxel_world_ = std::make_unique<vox::World>();
@@ -83,23 +99,7 @@ App::App() {
   init_camera();
 }
 
-namespace rando {
-
-namespace {
-
-std::random_device rd{};
-std::default_random_engine eng{rd()};
-
-void seed(int seed) { eng.seed(seed); }
-
-float get_float(float min, float max) {
-  std::uniform_real_distribution<float> dist{min, max};
-  return dist(eng);
-}
-
-}  // namespace
-
-}  // namespace rando
+App::~App() = default;
 
 void App::run() {
   ZoneScoped;
@@ -137,13 +137,13 @@ void App::run() {
     }
     // load_model(config_.paths[1], glm::mat4{1});
   } else if (scene == 1) {
-    rando::seed(10000000);
+    random::seed(10000000);
     size_t count = 300'000;
     float scale = 10;
     float radius = 8000;
 
     for (size_t i = 0; i < count; i++) {
-      auto rand_f = [radius]() { return rando::get_float(-radius, radius); };
+      auto rand_f = [radius]() { return random::get_float(-radius, radius); };
       auto pos = glm::vec3{rand_f(), rand_f(), rand_f()};
       glm::vec3 randomAxis = glm::linearRand(glm::vec3(-1.0f), glm::vec3(1.0f));
       float randomAngle = glm::linearRand(0.0f, glm::two_pi<float>());
@@ -164,7 +164,6 @@ void App::run() {
     // load_model(config_.paths[1], glm::translate(glm::mat4{1}, glm::vec3{0, 1, 0}));
   }
 
-  std::vector<float> frame_times;
   // load_model(config_.paths[0], glm::translate(glm::mat4{1}, glm::vec3{0, 0, 0}));
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
@@ -176,11 +175,6 @@ void App::run() {
     const double curr_time = glfwGetTime();
     auto dt = static_cast<float>(curr_time - last_time);
     last_time = curr_time;
-    frame_times.push_back(dt);
-    if (frame_times.size() > 100) {
-      frame_times.erase(frame_times.begin());
-    }
-    avg_dt_ = std::accumulate(frame_times.begin(), frame_times.end(), 0.f) / frame_times.size();
     camera_.update_pos(window_->get_handle(), dt);
 
     // if (voxel_world_) {
@@ -208,18 +202,7 @@ void App::run() {
     ImGui::EndFrame();
     window_->poll_events();
   }
-
-  // if (voxel_world_) {
-  //   voxel_world_->shutdown();
-  // }
-
-  write_config();
-  write_camera();
-  renderer_->shutdown();
-  renderer_.reset();
-  ResourceManager::shutdown();
-  window_->shutdown();
-  device_->shutdown();
+  shutdown();
 }
 
 void App::on_curse_pos_event(double xpos, double ypos) {
@@ -243,9 +226,6 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
     if (key == GLFW_KEY_ESCAPE) {
       hide_mouse_ = !hide_mouse_;
       on_hide_mouse_change();
-    }
-    if (key == GLFW_KEY_TAB) {
-      device_->set_vsync(!device_->get_vsync());
     }
     if (key == GLFW_KEY_G && mods & GLFW_MOD_ALT) {
       imgui_enabled_ = !imgui_enabled_;
@@ -300,6 +280,8 @@ void App::load_config() {
       f >> config_.clear_color.g;
       f >> config_.clear_color.b;
       f >> config_.clear_color.a;
+    } else if (token == "vsync") {
+      f >> config_.vsync;
     }
   }
 }
@@ -316,6 +298,7 @@ void App::write_config() {
   for (const auto& path : config_.paths) {
     f << path.generic_string() << '\n';
   }
+  f << "vsync " << device_->get_swapchain().desc_.vsync << '\n';
 }
 
 namespace {
@@ -351,46 +334,83 @@ struct ScrollingBuffer {
 void App::on_imgui(float dt) {
   ImPlot::ShowDemoWindow();
   ImGui::Begin("Renderer");
-  ImGui::Text("Avg time %f (ms)", avg_dt_ * 1000.f);
-  static ScrollingBuffer sdata2{1000};
-  static float t = 0;
-  sdata2.AddPoint(t, dt * 1000.f);
-  t += dt;
-  float history = 10.f;
-  static ImPlotAxisFlags flags = 0;
-  auto get_mean = [](std::span<ImVec2> data) {
-    float sum = 0.f;
-    for (auto v : data) sum += v.y;
-    return sum / data.size();
-  };
+  {  // frame times
+    constexpr int num_times = 2000;
+    static ScrollingBuffer frame_times{num_times};
+    static float t = 0;
+    frame_times.AddPoint(t, dt * 1000.f);
+    t += dt;
+    float history = 10;
+    static ImPlotAxisFlags flags = 0;
+    auto get_mean = [](std::span<ImVec2> data) {
+      float sum = 0.f;
+      for (auto v : data) sum += v.y;
+      return sum / data.size();
+    };
 
-  auto std_dev = [](std::span<ImVec2> data, float mean) {
-    float variance_sum = 0.f;
-    for (auto v : data) {
-      float diff = v.y - mean;
-      float variance = diff * diff;
-      variance_sum += variance;
+    auto std_dev = [](std::span<ImVec2> data, float mean) {
+      float variance_sum = 0.f;
+      for (auto v : data) {
+        float diff = v.y - mean;
+        float variance = diff * diff;
+        variance_sum += variance;
+      }
+      return sqrt(variance_sum / data.size());
+    };
+
+    float total = 0.f;
+    int n = std::min(10, frame_times.data.size());
+    for (int i = 0; i < n; i++) {
+      total += frame_times
+                   .data[(frame_times.offset + frame_times.data.size() - 1 - i) %
+                         frame_times.data.size()]
+                   .y;
     }
-    return sqrt(variance_sum / data.size());
-  };
-  auto mean = get_mean(sdata2.data);
-  auto stddev = std_dev(sdata2.data, mean);
-  ImGui::Text("Mean: %.3f ms\nStd Dev: %.3f", mean, stddev);
+    ImGui::Text("Last %u Avg time %f (ms)", n, total / n);
+    if (ImGui::TreeNode("Frame Times")) {
+      auto mean = get_mean(frame_times.data);
+      auto stddev = std_dev(frame_times.data, mean);
+      float min_val = std::numeric_limits<float>::max();
+      float max_val = std::numeric_limits<float>::lowest();
+      for (auto& v : frame_times.data) {
+        min_val = std::min(min_val, v.y);
+        max_val = std::max(max_val, v.y);
+      }
+      ImGui::Text("Mean: %.3f ms\nStd Dev: %.3f", mean, stddev);
 
-  if (ImPlot::BeginPlot("Frame times", ImVec2(-1, ImGui::GetTextLineHeight() * 10))) {
-    ImPlot::SetupAxes(nullptr, nullptr, flags, flags);
-    ImPlot::SetupAxisLimits(ImAxis_X1, t - history, t, ImGuiCond_Always);
-    ImPlot::SetupAxisLimits(ImAxis_Y1, 5, 15);
-    ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
-    ImPlot::PlotLine("Mouse Y", &sdata2.data[0].x, &sdata2.data[0].y, sdata2.data.size(), 0,
-                     sdata2.offset, 2 * sizeof(float));
-    ImPlot::EndPlot();
+      if (ImPlot::BeginPlot("Frame times", ImVec2(-1, ImGui::GetTextLineHeight() * 30))) {
+        ImPlot::SetupAxes(nullptr, nullptr, flags, flags);
+        ImPlot::SetupAxisLimits(ImAxis_X1, t - history, t, ImGuiCond_Always);
+        ImPlot::SetupAxisLimits(ImAxis_Y1, 0, 30);
+        ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+        ImPlot::PlotLine("Mouse Y", &frame_times.data[0].x, &frame_times.data[0].y,
+                         frame_times.data.size(), 0, frame_times.offset, 2 * sizeof(float));
+        ImPlot::EndPlot();
+      }
+      ImGui::TreePop();
+    }
+  }
+
+  if (ImGui::TreeNodeEx("Window", ImGuiTreeNodeFlags_DefaultOpen)) {
+    auto dims = window_->get_window_size();
+    auto win_dims = window_->get_window_not_framebuffer_size();
+    ImGui::Text("Framebuffer dims: %u %u", dims.x, dims.y);
+    ImGui::Text("Window dims: %u %u", win_dims.x, win_dims.y);
+    ImGui::Text("Fullscreen: %d", window_->get_fullscreen());
+
+    bool vsync = device_->get_swapchain().desc_.vsync;
+    if (ImGui::Checkbox("VSync", &vsync)) {
+      auto desc = device_->get_swapchain().desc_;
+      desc.vsync = vsync;
+      device_->recreate_swapchain(desc);
+    }
+    ImGui::TreePop();
   }
 
   renderer_->on_imgui();
   if (ImGui::TreeNodeEx("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::DragFloat3("Position", &camera_.pos.x, 0.1f);
-    ImGui::DragFloat("Acceleration Strength", &camera_.acceleration_strength, 0.1f, 0.1f, 1000.f);
+    ImGui::DragFloat("Move Speed", &camera_.move_speed, 0.1f, 0.1f, 1000.f);
     ImGui::DragFloat("Mouse Sensitivity", &camera_.mouse_sensitivity, 0.01f, 0.01f, 1.f);
     ImGui::TreePop();
   }
@@ -414,15 +434,41 @@ void App::init_camera() {
   if (!f.is_open()) {
     return;
   }
-  f >> camera_.pos.x >> camera_.pos.y >> camera_.pos.z;
-  f >> camera_.pitch >> camera_.yaw;
-  f >> camera_.acceleration_strength >> camera_.max_velocity;
+  int version;
+  f >> version;
+  if (version != k_camera_config_version) {
+    camera_ = {};
+  } else {
+    std::string token;
+    while (f >> token) {
+      if (token == "pos") {
+        f >> camera_.pos.x >> camera_.pos.y >> camera_.pos.z;
+      } else if (token == "pitch_yaw") {
+        f >> camera_.pitch >> camera_.yaw;
+      } else if (token == "move_speed") {
+        f >> camera_.move_speed;
+      }
+    }
+  }
   camera_.calc_vectors();
 }
 
 void App::write_camera() {
   std::ofstream f(camera_path_);
-  f << camera_.pos.x << ' ' << camera_.pos.y << ' ' << camera_.pos.z << '\n';
-  f << camera_.pitch << ' ' << camera_.yaw << '\n';
-  f << camera_.acceleration_strength << ' ' << camera_.max_velocity << '\n';
+  f << k_camera_config_version << '\n';
+  f << "pos " << camera_.pos.x << ' ' << camera_.pos.y << ' ' << camera_.pos.z << '\n';
+  f << "pitch_yaw " << camera_.pitch << ' ' << camera_.yaw << '\n';
+  f << "move_speed " << camera_.move_speed << '\n';
+}
+
+void App::shutdown() {
+  // if (voxel_world_) {
+  //   voxel_world_->shutdown();
+  // }
+  write_config();
+  write_camera();
+  renderer_.reset();
+  ResourceManager::shutdown();
+  window_->shutdown();
+  device_->shutdown();
 }

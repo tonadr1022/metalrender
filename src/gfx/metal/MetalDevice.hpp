@@ -18,9 +18,6 @@
 #include "hlsl/shader_constants.h"
 
 class Window;
-namespace CA {
-class MetalLayer;
-}
 
 namespace rhi {
 
@@ -33,7 +30,6 @@ class AutoreleasePool;
 }
 
 namespace CA {
-class MetalLayer;
 class MetalDrawable;
 }  // namespace CA
 
@@ -58,9 +54,7 @@ class MetalDevice : public rhi::Device {
   void shutdown() override;
   void init(const InitInfo& init_info, const MetalDeviceInitInfo& metal_init_info);
   void init(const InitInfo& init_info) override;
-  void set_vsync(bool vsync) override;
   void on_imgui() override;
-  bool get_vsync() const override;
   [[nodiscard]] void* get_native_device() const override { return device_; }
 
   [[nodiscard]] MTL::Device* get_device() const { return device_; }
@@ -116,6 +110,7 @@ class MetalDevice : public rhi::Device {
 
   rhi::Swapchain& get_swapchain() override { return swapchain_; }
   const rhi::Swapchain& get_swapchain() const override { return swapchain_; }
+  bool recreate_swapchain(const rhi::SwapchainDesc& desc) override;
 
   void init_bindless();
 
@@ -171,7 +166,6 @@ class MetalDevice : public rhi::Device {
   size_t frame_num_{};
 
   MTL::Device* device_{};
-  CA::MetalLayer* metal_layer_{};
   CA::MetalDrawable* curr_drawable_{};
   NS::AutoreleasePool* frame_ar_pool_{};
   MTL::ResidencySet* main_res_set_{};
@@ -309,6 +303,3 @@ class MetalDevice : public rhi::Device {
 };
 
 struct GLFWwindow;
-
-CA::MetalLayer* init_metal_window(GLFWwindow* window, MTL::Device* device,
-                                  bool transparent_allowed);

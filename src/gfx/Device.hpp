@@ -13,6 +13,7 @@ class Texture;
 
 namespace rhi {
 
+struct SwapchainDesc;
 struct GraphicsPipelineCreateInfo;
 struct ComputePipelineCreateInfo;
 struct ShaderCreateInfo;
@@ -28,11 +29,9 @@ class Device {
     size_t frames_in_flight;
   };
   struct InitInfo {
-    Window* window;
     std::filesystem::path shader_lib_dir;
     std::string app_name;
     bool validation_layers_enabled{true};
-    bool transparent_window{true};
     size_t frames_in_flight{2};
     bool hot_reload_enabled{false};
   };
@@ -40,9 +39,6 @@ class Device {
   virtual void init(const InitInfo& init_info) = 0;
   [[nodiscard]] virtual void* get_native_device() const = 0;
   virtual void shutdown() = 0;
-
-  virtual void set_vsync(bool vsync) = 0;
-  [[nodiscard]] virtual bool get_vsync() const = 0;
 
   // resource CRUD
   virtual BufferHandle create_buf(const rhi::BufferDesc& desc) = 0;
@@ -104,6 +100,7 @@ class Device {
   virtual void destroy(SamplerHandle handle) = 0;
 
   virtual rhi::Swapchain& get_swapchain() = 0;
+  virtual bool recreate_swapchain(const SwapchainDesc& desc) = 0;
 
   virtual void on_imgui() {}
   [[nodiscard]] virtual const rhi::Swapchain& get_swapchain() const = 0;

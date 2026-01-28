@@ -12,3 +12,9 @@ class AppleWindow final : public Window {
   [[nodiscard]] bool get_fullscreen() const override;
   bool fullscreen_{};
 };
+
+namespace CA {
+class MetalLayer;
+}
+
+void set_layer_for_window(GLFWwindow* window, CA::MetalLayer* layer);

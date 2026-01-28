@@ -18,7 +18,6 @@ class Window {
   struct InitInfo {
     KeyCallbackFn key_callback_fn;
     CursorPosCallbackFn cursor_pos_callback_fn;
-    bool transparent_window{true};
     int win_dims_x{1280};
     int win_dims_y{720};
     bool floating_window{false};

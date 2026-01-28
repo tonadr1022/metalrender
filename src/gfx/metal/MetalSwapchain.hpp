@@ -3,6 +3,9 @@
 #include "gfx/Config.hpp"
 #include "gfx/Swapchain.hpp"
 
+namespace CA {
+class MetalLayer;
+}
 class MetalSwapchain : public rhi::Swapchain {
  public:
   using SwapchainTextures = std::array<rhi::TextureHandleHolder, k_max_frames_in_flight>;
@@ -13,6 +16,6 @@ class MetalSwapchain : public rhi::Swapchain {
     return textures_[frame_index].handle;
   }
 
- private:
   SwapchainTextures textures_{};
+  CA::MetalLayer* metal_layer_{nullptr};
 };

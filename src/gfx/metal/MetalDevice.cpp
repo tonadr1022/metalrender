@@ -14,6 +14,7 @@
 #include "core/Util.hpp"
 #include "gfx/metal/Config.hpp"
 #include "imgui.h"
+#include "platform/apple/AppleWindow.hpp"
 #include "util/Timer.hpp"
 
 #define IR_RUNTIME_METALCPP
@@ -151,18 +152,18 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
   shader_lib_dir_ /= "metal";
   hot_reload_enabled_ = init_info.hot_reload_enabled;
 
-  auto* win = dynamic_cast<Window*>(init_info.window);
-  if (!win) {
-    LERROR("invalid window pointer");
-    return;
-  }
   device_ = MTL::CreateSystemDefaultDevice();
-  metal_layer_ =
-      init_metal_window(init_info.window->get_handle(), device_, init_info.transparent_window);
-  ALWAYS_ASSERT(metal_layer_);
 
-  // TODO: parameterize
-  info_.frames_in_flight = 2;
+  info_.frames_in_flight = init_info.frames_in_flight;
+  if (init_info.frames_in_flight > k_max_frames_in_flight) {
+    LERROR("Requested frames in flight ({}) exceeds max supported ({}), clamping.",
+           init_info.frames_in_flight, k_max_frames_in_flight);
+    info_.frames_in_flight = k_max_frames_in_flight;
+  } else if (init_info.frames_in_flight < k_min_frames_in_flight) {
+    LERROR("Requested frames in flight ({}) less than minimum ({}), clamping.",
+           init_info.frames_in_flight, k_min_frames_in_flight);
+    info_.frames_in_flight = k_min_frames_in_flight;
+  }
 
   main_res_set_ = make_residency_set();
 
@@ -202,7 +203,6 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 
   shared_event_ = device_->newSharedEvent();
   test_event_ = get_device()->newEvent();
-  ASSERT(metal_layer_);
   // counters
   // {
   //   auto* sets = device_->counterSets();
@@ -582,15 +582,13 @@ MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path, 
 
 rhi::CmdEncoder* MetalDevice::begin_command_list() {
   if (mtl4_enabled_) {
-    if (curr_cmd_list_idx_ < mtl4_resources_->cmd_lists_.size()) {
-      auto* ret = mtl4_resources_->cmd_lists_[curr_cmd_list_idx_].get();
-      curr_cmd_list_idx_++;
-      return ret;
+    if (curr_cmd_list_idx_ == mtl4_resources_->cmd_lists_.size()) {
+      mtl4_resources_->cmd_lists_.emplace_back(
+          std::make_unique<MetalCmdEncoderBase<Metal4EncoderAPI>>());
     }
-    mtl4_resources_->cmd_lists_.emplace_back(
-        std::make_unique<MetalCmdEncoderBase<Metal4EncoderAPI>>());
+    auto* cmd_list = mtl4_resources_->cmd_lists_[curr_cmd_list_idx_].get();
     curr_cmd_list_idx_++;
-    mtl4_resources_->cmd_lists_.back()->reset(this, mtl4_resources_->main_cmd_buf);
+    cmd_list->reset(this, mtl4_resources_->main_cmd_buf);
     return mtl4_resources_->cmd_lists_.back().get();
   }
 
@@ -622,7 +620,7 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   }
   {
     ZoneScopedN("nextDrawable");
-    curr_drawable_ = metal_layer_->nextDrawable();
+    curr_drawable_ = swapchain_.metal_layer_->nextDrawable();
   }
   if (!curr_drawable_) {
     LINFO("no drawable, exiting");
@@ -633,9 +631,9 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
     return false;
   }
 
-  if (metal_layer_->drawableSize().width != window_dims.x ||
-      metal_layer_->drawableSize().height != window_dims.y) {
-    metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
+  if (swapchain_.metal_layer_->drawableSize().width != window_dims.x ||
+      swapchain_.metal_layer_->drawableSize().height != window_dims.y) {
+    swapchain_.metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
   }
 
   delete_queues_.flush_deletions(frame_num_);
@@ -807,12 +805,6 @@ MTL::ComputePipelineState* MetalDevice::compile_mtl_compute_pipeline(
   return pso;
   return {};
 }
-
-void MetalDevice::set_vsync(bool vsync) {
-  [(CAMetalLayer*)metal_layer_ setDisplaySyncEnabled:vsync];
-}
-
-bool MetalDevice::get_vsync() const { return [(CAMetalLayer*)metal_layer_ displaySyncEnabled]; }
 
 MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle indirect_buf_handle,
                                                             uint32_t draw_cnt) {
@@ -1235,3 +1227,26 @@ MetalTexture::TexView* MetalDevice::get_tex_view(rhi::TextureHandle handle, int 
 //   }
 //   return buf;
 // }
+
+bool MetalDevice::recreate_swapchain(const rhi::SwapchainDesc& desc) {
+  if (!swapchain_.metal_layer_) {
+    swapchain_.metal_layer_ = CA::MetalLayer::layer();
+
+    {  // transparency
+      auto* objcLayer = (__bridge CAMetalLayer*)swapchain_.metal_layer_;
+      objcLayer.opaque = NO;
+      objcLayer.opacity = 1.0;
+    }
+
+    swapchain_.metal_layer_->setDevice(device_);
+    swapchain_.metal_layer_->setDisplaySyncEnabled(desc.vsync);
+    swapchain_.metal_layer_->setMaximumDrawableCount(3);
+    set_layer_for_window(desc.window->get_handle(), swapchain_.metal_layer_);
+  } else {
+    if (swapchain_.desc_.vsync != desc.vsync) {
+      swapchain_.metal_layer_->setDisplaySyncEnabled(desc.vsync);
+    }
+  }
+  swapchain_.desc_ = desc;
+  return true;
+}

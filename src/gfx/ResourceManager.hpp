@@ -12,9 +12,6 @@ namespace gfx {
 class MemeRenderer123;
 }
 
-struct ModelInstance;
-using ModelHandle = GenerationalHandle<ModelInstance>;
-
 class ResourceManager {
  public:
   struct CreateInfo {

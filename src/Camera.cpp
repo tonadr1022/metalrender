@@ -50,28 +50,25 @@ bool Camera::update_pos(GLFWwindow* window, float dt) {
   }
 
   if (get_key(GLFW_KEY_B)) {
-    acceleration_strength *= 1.1f;
+    move_speed *= 1.1f;
     max_velocity *= 1.1f;
   }
   if (get_key(GLFW_KEY_V)) {
-    acceleration_strength /= 1.1f;
+    move_speed /= 1.1f;
     max_velocity /= 1.1f;
   }
 
   if (accelerating) {
     if (glm::length(acceleration) > 0.0001f) {
-      acceleration = glm::normalize(acceleration) * acceleration_strength;
+      acceleration = glm::normalize(acceleration) * move_speed;
     } else {
       acceleration = glm::vec3(0.0f);
     }
   }
 
-  velocity += acceleration * dt;
-  velocity = glm::clamp(velocity, -max_velocity, max_velocity);
-
   pos += acceleration * max_velocity * dt;
 
-  return accelerating || !glm::all(glm::equal(velocity, glm::vec3{0}, glm::epsilon<float>()));
+  return accelerating;
 }
 
 bool Camera::process_mouse(glm::vec2 offset) {

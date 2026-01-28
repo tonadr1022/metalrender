@@ -13,9 +13,7 @@ void Window::init(InitInfo& init_info) {
     exit(1);
   }
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  if (init_info.transparent_window) {
-    glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
-  }
+  glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
   if (init_info.floating_window) {
     glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
   }
