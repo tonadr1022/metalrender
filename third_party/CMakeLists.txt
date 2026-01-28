@@ -43,15 +43,17 @@ add_subdirectory(FastNoise2)
 add_library(bs_thread_pool INTERFACE)
 target_include_directories(bs_thread_pool INTERFACE thread-pool/include)
 
-add_library(lib_imgui STATIC
-    imgui/imgui.cpp
-    imgui/imgui_demo.cpp
-    imgui/imgui_draw.cpp
-    imgui/imgui_widgets.cpp
-    imgui/imgui_tables.cpp
-    imgui/misc/cpp/imgui_stdlib.cpp
-    imgui/backends/imgui_impl_glfw.cpp
+set(IMGUI_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/imgui)
+add_library(imgui STATIC
+    ${IMGUI_SOURCE_DIR}/imgui.cpp
+    ${IMGUI_SOURCE_DIR}/imgui_demo.cpp
+    ${IMGUI_SOURCE_DIR}/imgui_draw.cpp
+    ${IMGUI_SOURCE_DIR}/imgui_widgets.cpp
+    ${IMGUI_SOURCE_DIR}/imgui_tables.cpp
+    ${IMGUI_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
+    ${IMGUI_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
 )
+target_include_directories(imgui PUBLIC ${IMGUI_SOURCE_DIR})
 
 set(IMPLOT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/implot)
 set(IMPLOT_SOURCE
@@ -59,28 +61,28 @@ set(IMPLOT_SOURCE
     ${IMPLOT_SOURCE_DIR}/implot_demo.cpp
     ${IMPLOT_SOURCE_DIR}/implot_items.cpp
 )
-add_library(lib_implot STATIC ${IMPLOT_SOURCE})
-target_include_directories(lib_implot PUBLIC ${IMPLOT_SOURCE_DIR})
-target_link_libraries(lib_implot PUBLIC lib_imgui)
+add_library(implot STATIC ${IMPLOT_SOURCE})
+target_include_directories(implot PUBLIC ${IMPLOT_SOURCE_DIR})
+target_link_libraries(implot PUBLIC imgui)
 
 if (BUILD_VULKAN)
-    target_sources(lib_imgui PRIVATE
+    target_sources(imgui PRIVATE
         imgui/backends/imgui_impl_vulkan.cpp
     )
-    target_include_directories(lib_imgui PUBLIC
+    target_include_directories(imgui PUBLIC
         ${Vulkan_INCLUDE_DIRS}
     )
 
-    target_compile_definitions(lib_imgui PUBLIC IMGUI_IMPL_VULKAN_NO_PROTOTYPES)
-    target_link_libraries(lib_imgui PRIVATE volk::volk)
+    target_compile_definitions(imgui PUBLIC IMGUI_IMPL_VULKAN_NO_PROTOTYPES)
+    target_link_libraries(imgui PRIVATE volk::volk)
 endif()
 
-target_link_libraries(lib_imgui PUBLIC glfw )
+target_link_libraries(imgui PUBLIC glfw)
 
 
 add_subdirectory(OffsetAllocator)
 
-target_include_directories(lib_imgui PUBLIC
+target_include_directories(imgui PUBLIC
     imgui
     imgui/misc/cpp
     imgui/backends)

@@ -2,7 +2,7 @@
 
 #include <filesystem>
 
-#include "GFXTypes.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 namespace rhi {}  // namespace rhi
 

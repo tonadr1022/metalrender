@@ -6,7 +6,7 @@
 #include <unordered_set>
 #include <vector>
 
-#include "gfx/Pipeline.hpp"
+#include "gfx/rhi/Pipeline.hpp"
 
 namespace rhi {
 struct GraphicsPipelineCreateInfo;

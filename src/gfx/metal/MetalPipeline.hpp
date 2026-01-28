@@ -3,7 +3,7 @@
 #include <Metal/MTLComputePipeline.hpp>
 #include <Metal/MTLRenderPipeline.hpp>
 
-#include "gfx/Pipeline.hpp"
+#include "gfx/rhi/Pipeline.hpp"
 
 struct MetalPipeline final : rhi::Pipeline {
   MetalPipeline(MTL::RenderPipelineState* render_pso, MTL::ComputePipelineState* compute_pso)

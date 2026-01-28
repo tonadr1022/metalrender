@@ -9,7 +9,6 @@ add_executable(${target_name}
     core/StringUtil.cpp
     gfx/ModelLoader.cpp
     gfx/MemeRenderer123.cpp
-    gfx/Pipeline.cpp
     gfx/ModelInstance.cpp
     gfx/ResourceManager.cpp
     gfx/ShaderManager.cpp
@@ -32,6 +31,7 @@ add_executable(${target_name}
     gfx/texture/KtxLoad.cpp
     UI.cpp
 
+    gfx/rhi/Pipeline.cpp
     gfx/rhi/Texture.cpp
     gfx/rhi/Device.cpp
 
@@ -87,8 +87,7 @@ target_link_libraries(${target_name} PRIVATE
     stb_image
     meshoptimizer
     Tracy::TracyClient
-    lib_imgui
-    lib_implot
+    implot
     METAL_CPP
     offsetAllocator
     FastNoise

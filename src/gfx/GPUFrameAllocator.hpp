@@ -1,8 +1,8 @@
 #pragma once
 
 #include "core/BitUtil.hpp"
-#include "gfx/Config.hpp"
 #include "gfx/rhi/Buffer.hpp"
+#include "gfx/rhi/Config.hpp"
 
 class GPUFrameAllocator;
 namespace rhi {
@@ -52,6 +52,7 @@ template <typename ElementT>
 rhi::Buffer* PerFrameBuffer<ElementT>::get_buf() const {
   return allocator_.get_buffer();
 }
+
 template <typename ElementT>
 void PerFrameBuffer<ElementT>::fill(const ElementT& data) {
   for (size_t i = 0; i < element_count_; i++) {

@@ -22,11 +22,11 @@
 
 #include "MetalUtil.hpp"
 #include "core/EAssert.hpp"
-#include "gfx/Pipeline.hpp"
 #include "gfx/metal/MetalCmdEncoder.hpp"
 #include "gfx/metal/MetalPipeline.hpp"
 #include "gfx/metal/MetalUtil.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
+#include "gfx/rhi/Pipeline.hpp"
 
 namespace {
 MTL::BlendFactor convert(rhi::BlendFactor factor) {

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "gfx/Config.hpp"
-#include "gfx/Swapchain.hpp"
+#include "gfx/rhi/Config.hpp"
+#include "gfx/rhi/Swapchain.hpp"
 
 namespace CA {
 class MetalLayer;
