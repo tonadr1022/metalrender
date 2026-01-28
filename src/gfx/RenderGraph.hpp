@@ -28,6 +28,10 @@ struct AttachmentInfo {
   }
 };
 
+struct BufferInfo {
+  size_t size;
+};
+
 }  // namespace gfx
 
 namespace std {
@@ -38,6 +42,14 @@ struct hash<gfx::AttachmentInfo> {
     auto h = std::make_tuple((uint32_t)att_info.size_class, att_info.array_layers,
                              att_info.mip_levels, att_info.dims.x, att_info.dims.y,
                              (uint32_t)att_info.format, att_info.is_swapchain_tex);
+    return util::hash::tuple_hash<decltype(h)>{}(h);
+  }
+};
+
+template <>
+struct hash<gfx::BufferInfo> {
+  size_t operator()(const gfx::BufferInfo& att_info) const {
+    auto h = std::make_tuple(att_info.size);
     return util::hash::tuple_hash<decltype(h)>{}(h);
   }
 };
@@ -91,10 +103,6 @@ enum RGAccess : uint16_t {
 void convert_rg_access(RGAccess access, rhi::AccessFlagsBits& out_access,
                        rhi::PipelineStageBits& out_stages);
 
-struct BufferInfo {
-  size_t size;
-};
-
 struct ResourceAndUsage {
   std::string name;
   RGResourceHandle handle;
@@ -139,8 +147,8 @@ class RenderGraph {
     void r_external_tex(std::string name, rhi::PipelineStage stage);
     void w_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
     void w_external_tex_color_output(const std::string& name, rhi::TextureHandle tex_handle);
-    void w_external(const std::string& name, rhi::BufferHandle buf);
-    void w_external(const std::string& name, rhi::BufferHandle buf, rhi::PipelineStage stage);
+    void w_external_buf(const std::string& name, rhi::BufferHandle buf);
+    void w_external_buf(const std::string& name, rhi::BufferHandle buf, rhi::PipelineStage stage);
     RGResourceHandle r_tex(const std::string& name);
     RGResourceHandle w_tex(const std::string& name);
     RGResourceHandle w_color_output(const std::string& name, const AttachmentInfo& att_info);
@@ -151,6 +159,9 @@ class RenderGraph {
     void r_external_buf(std::string name);
     void rw_external_buf(std::string name, const std::string& input_name);
     void rw_external_buf(std::string name, const std::string& input_name, rhi::PipelineStage stage);
+
+    RGResourceHandle r_buf(std::string name, rhi::PipelineStage stage);
+    RGResourceHandle w_buf(std::string name, rhi::PipelineStage stage, size_t size);
 
     struct NameAndAccess {
       std::string name;
@@ -210,6 +221,7 @@ class RenderGraph {
   Pass& add_graphics_pass(const std::string& name) { return add_pass(name, RGPassType::Graphics); }
 
   rhi::TextureHandle get_att_img(RGResourceHandle tex_handle);
+  rhi::BufferHandle get_buf(RGResourceHandle buf_handle);
 
  private:
   Pass& add_pass(const std::string& name, RGPassType type);
@@ -218,6 +230,7 @@ class RenderGraph {
   RGResourceHandle get_resource(const std::string& name, RGResourceType type);
   RGResourceHandle add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                  RGAccess access, Pass& pass);
+  RGResourceHandle add_buf_usage(const std::string& name, const BufferInfo& buf_info, Pass& pass);
   void add_external_write_usage(const std::string& name, rhi::TextureHandle handle, Pass& pass);
   void add_external_write_usage(const std::string& name, rhi::BufferHandle handle, Pass& pass);
   void add_internal_rw_tex_usage(const std::string& name, const std::string& input_name,
@@ -237,7 +250,9 @@ class RenderGraph {
 
   // glm::uvec2 prev_frame_fb_size_{};
   std::vector<AttachmentInfo> tex_att_infos_;
+  std::vector<BufferInfo> buffer_infos_;
   std::vector<rhi::TextureHandle> tex_att_handles_;
+  std::vector<rhi::BufferHandle> buffer_handles_;
 
   struct BarrierInfo {
     RGResourceHandle resource;
@@ -258,9 +273,15 @@ class RenderGraph {
   std::vector<rhi::BufferHandle> external_buffers_;
 
   std::unordered_map<gfx::AttachmentInfo, std::vector<rhi::TextureHandle>> free_atts_;
+  std::unordered_map<gfx::BufferInfo, std::vector<rhi::BufferHandle>> free_bufs_;
   struct AttInfoAndTex {
     AttachmentInfo att_info;
     rhi::TextureHandleHolder tex_handle;
+  };
+
+  struct BufferInfoAndHandle {
+    BufferInfo buf_info;
+    rhi::BufferHandle buf_handle;
   };
 
   std::vector<uint32_t> sink_passes_;

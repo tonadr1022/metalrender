@@ -6,6 +6,7 @@
 
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
+#include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Texture.hpp"
@@ -266,6 +267,9 @@ void RenderGraph::execute() {
   for (size_t i = 0; i < tex_att_infos_.size(); i++) {
     free_atts_[tex_att_infos_[i]].emplace_back(tex_att_handles_[i]);
   }
+  for (size_t i = 0; i < buffer_infos_.size(); i++) {
+    free_bufs_[buffer_infos_[i]].emplace_back(buffer_handles_[i]);
+  }
   tex_att_infos_.clear();
   resource_name_to_handle_.clear();
   tex_handle_to_handle_.clear();
@@ -371,47 +375,73 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     }
   }
 
-  // create attachment images
-  tex_att_handles_.clear();
-  for (const auto& att_info : tex_att_infos_) {
-    if (att_info.is_swapchain_tex) {
-      ASSERT(0);
-      continue;
-    }
-    auto get_att_dims = [&att_info, &fb_size]() {
-      if (att_info.size_class == SizeClass::Swapchain) {
-        return fb_size;
+  {
+    // create attachment images
+    tex_att_handles_.clear();
+    for (const auto& att_info : tex_att_infos_) {
+      if (att_info.is_swapchain_tex) {
+        ASSERT(0);
+        continue;
       }
-      return att_info.dims;
-    };
+      auto get_att_dims = [&att_info, &fb_size]() {
+        if (att_info.size_class == SizeClass::Swapchain) {
+          return fb_size;
+        }
+        return att_info.dims;
+      };
 
-    rhi::TextureHandle actual_att_handle{};
-    auto free_att_it = free_atts_.find(att_info);
-    if (free_att_it != free_atts_.end()) {
-      auto& texture_handles = free_att_it->second;
-      if (!texture_handles.empty()) {
-        actual_att_handle = texture_handles.back();
-        texture_handles.pop_back();
+      rhi::TextureHandle actual_att_handle{};
+      auto free_att_it = free_atts_.find(att_info);
+      if (free_att_it != free_atts_.end()) {
+        auto& texture_handles = free_att_it->second;
+        if (!texture_handles.empty()) {
+          actual_att_handle = texture_handles.back();
+          texture_handles.pop_back();
+        }
       }
-    }
 
-    if (!actual_att_handle.is_valid()) {
-      auto dims = get_att_dims();
-      auto att_tx_handle = device_->create_tex(rhi::TextureDesc{
-          .format = att_info.format,
-          .usage = is_depth_format(att_info.format) ? rhi::TextureUsageColorAttachment
-                                                    : rhi::TextureUsageDepthStencilAttachment,
-          .dims = glm::uvec3{dims.x, dims.y, 1},
-          .mip_levels = att_info.mip_levels,
-          .array_length = att_info.array_layers,
-          .bindless = true,
-          .name = "render_graph_tex_att"});
-      actual_att_handle = att_tx_handle;
-    }
+      if (!actual_att_handle.is_valid()) {
+        auto dims = get_att_dims();
+        auto att_tx_handle = device_->create_tex(rhi::TextureDesc{
+            .format = att_info.format,
+            .usage = is_depth_format(att_info.format) ? rhi::TextureUsageColorAttachment
+                                                      : rhi::TextureUsageDepthStencilAttachment,
+            .dims = glm::uvec3{dims.x, dims.y, 1},
+            .mip_levels = att_info.mip_levels,
+            .array_length = att_info.array_layers,
+            .bindless = true,
+            .name = "render_graph_tex_att"});
+        actual_att_handle = att_tx_handle;
+      }
 
-    tex_att_handles_.emplace_back(actual_att_handle);
+      tex_att_handles_.emplace_back(actual_att_handle);
+    }
+    ASSERT(tex_att_handles_.size() == tex_att_infos_.size());
   }
-  ASSERT(tex_att_handles_.size() == tex_att_infos_.size());
+  {  // create buffers
+    buffer_handles_.clear();
+    for (const auto& binfo : buffer_infos_) {
+      rhi::BufferHandle actual_buf_handle{};
+      auto free_buf_it = free_bufs_.find(binfo);
+      if (free_buf_it != free_bufs_.end()) {
+        auto& buffer_handles = free_buf_it->second;
+        if (!buffer_handles.empty()) {
+          actual_buf_handle = buffer_handles.back();
+          buffer_handles.pop_back();
+        }
+      }
+      if (!actual_buf_handle.is_valid()) {
+        auto buf_handle = device_->create_buf(rhi::BufferDesc{
+            .storage_mode = rhi::StorageMode::GPUOnly,
+            .usage = (rhi::BufferUsage)(rhi::BufferUsage_Storage | rhi::BufferUsage_Transfer),
+            .size = binfo.size,
+            .name = "render_graph_buffer",
+        });
+        actual_buf_handle = buf_handle;
+      }
+      buffer_handles_.emplace_back(actual_buf_handle);
+    }
+  }
 
   struct ResourceState {
     rhi::AccessFlags access;
@@ -531,12 +561,23 @@ void RenderGraph::init(rhi::Device* device) {
 
 RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                             RGAccess, RGPass& pass) {
-  auto resource_handle_it = resource_name_to_handle_.find(name);
-  ALWAYS_ASSERT(resource_handle_it == resource_name_to_handle_.end());
+  ASSERT(!resource_name_to_handle_.contains(name));
   RGResourceHandle handle{};
   ASSERT((att_info.is_swapchain_tex || att_info.format != rhi::TextureFormat::Undefined));
   handle = {.idx = static_cast<uint32_t>(tex_att_infos_.size()), .type = RGResourceType::Texture};
   tex_att_infos_.emplace_back(att_info);
+  resource_use_name_to_writer_pass_idx_.emplace(name, pass.get_idx());
+  resource_name_to_handle_.emplace(name, handle);
+  return handle;
+}
+
+RGResourceHandle RenderGraph::add_buf_usage(const std::string& name, const BufferInfo& buf_info,
+                                            Pass& pass) {
+  ASSERT(!resource_name_to_handle_.contains(name));
+  RGResourceHandle handle{};
+  handle = {.idx = static_cast<uint32_t>(buffer_infos_.size()), .type = RGResourceType::Buffer};
+  buffer_infos_.emplace_back(buf_info);
+  // TODO: consolidate
   resource_use_name_to_writer_pass_idx_.emplace(name, pass.get_idx());
   resource_name_to_handle_.emplace(name, handle);
   return handle;
@@ -598,7 +639,14 @@ const char* to_string(RGResourceType type) {
 
 rhi::TextureHandle RenderGraph::get_att_img(RGResourceHandle tex_handle) {
   ASSERT(tex_handle.idx < tex_att_handles_.size());
+  ASSERT(tex_handle.type == RGResourceType::Texture);
   return tex_att_handles_[tex_handle.idx];
+}
+
+rhi::BufferHandle RenderGraph::get_buf(RGResourceHandle buf_handle) {
+  ASSERT(buf_handle.idx < buffer_handles_.size());
+  ASSERT(buf_handle.type == RGResourceType::Buffer);
+  return buffer_handles_[buf_handle.idx];
 }
 
 RGResourceHandle RGPass::sample_tex(const std::string& name) {
@@ -776,7 +824,7 @@ void RGPass::w_external_tex(const std::string& name, rhi::TextureHandle tex_hand
   external_writes_.emplace_back(name, stage, access, RGResourceType::ExternalTexture);
 }
 
-void RGPass::w_external(const std::string& name, rhi::BufferHandle buf) {
+void RGPass::w_external_buf(const std::string& name, rhi::BufferHandle buf) {
   rhi::PipelineStage stage{};
   if (type_ == RGPassType::Compute) {
     stage = rhi::PipelineStage_ComputeShader;
@@ -787,10 +835,11 @@ void RGPass::w_external(const std::string& name, rhi::BufferHandle buf) {
   } else {
     ASSERT(0);
   }
-  w_external(name, buf, stage);
+  w_external_buf(name, buf, stage);
 }
 
-void RGPass::w_external(const std::string& name, rhi::BufferHandle buf, rhi::PipelineStage stage) {
+void RGPass::w_external_buf(const std::string& name, rhi::BufferHandle buf,
+                            rhi::PipelineStage stage) {
   rhi::AccessFlags access{};
   rg_->add_external_write_usage(name, buf, *this);
   if (type_ == RGPassType::Compute || type_ == RGPassType::Graphics) {
@@ -883,6 +932,18 @@ void RenderGraph::dfs(const std::vector<std::unordered_set<uint32_t>>& pass_depe
   curr_stack_passes.erase(pass);
   visited_passes.insert(pass);
   pass_stack.push_back(pass);
+}
+
+RGResourceHandle RenderGraph::Pass::w_buf(std::string name, rhi::PipelineStage stage, size_t size) {
+  internal_writes_.emplace_back(NameAndAccess{
+      std::move(name), stage, rhi::AccessFlags_ShaderStorageWrite, RGResourceType::Buffer});
+  return rg_->add_buf_usage(name, {.size = size}, *this);
+}
+
+RGResourceHandle RenderGraph::Pass::r_buf(std::string name, rhi::PipelineStage stage) {
+  internal_reads_.emplace_back(NameAndAccess{
+      std::move(name), stage, rhi::AccessFlags_ShaderStorageRead, RGResourceType::Buffer});
+  return rg_->get_resource(name, RGResourceType::Buffer);
 }
 
 }  // namespace gfx

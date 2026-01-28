@@ -80,6 +80,7 @@ enum BufferUsage : uint8_t {
   BufferUsage_Vertex = 1 << 2,
   BufferUsage_Index = 1 << 3,
   BufferUsage_Uniform = 1 << 4,
+  // TODO: transder dst/src
   BufferUsage_Transfer = 1 << 5,
 };
 

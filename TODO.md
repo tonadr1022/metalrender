@@ -1,5 +1,6 @@
 # TODOs
 
+- either all const ref or all std::move strings in RenderGraph
 - instead of dirty textures in render graph, transition them to shader read first
 - use fill_buffer() instead of compute for clear_bufs pass
 - actual readback

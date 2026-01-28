@@ -129,7 +129,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   {
     if (instance_data_mgr_.has_pending_frees(curr_frame_idx_)) {
       auto& p = rg_.add_transfer_pass("free_instance_data");
-      p.w_external("instance_data_buf", instance_data_mgr_.get_instance_data_buf());
+      p.w_external_buf("instance_data_buf", instance_data_mgr_.get_instance_data_buf());
       p.set_ex([this](rhi::CmdEncoder* enc) {
         instance_data_mgr_.flush_pending_frees(curr_frame_idx_, enc);
       });
@@ -139,8 +139,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   if (mesh_shaders_enabled_) {
     if (!culling_paused_) {
       auto& clear_bufs_pass = rg_.add_compute_pass("clear_bufs");
-      clear_bufs_pass.w_external("out_draw_count_buf1",
-                                 static_draw_batch_->out_draw_count_buf_.handle);
+      clear_bufs_pass.w_external_buf("out_draw_count_buf1",
+                                     static_draw_batch_->out_draw_count_buf_.handle);
       clear_bufs_pass.set_ex([this](rhi::CmdEncoder* enc) {
         enc->bind_pipeline(reset_counts_buf_pso_);
         uint32_t pc =
@@ -158,10 +158,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     if (!culling_paused_) {
       prep_meshlets_pass.rw_external_buf(output_buf_name, "out_draw_count_buf1");
     } else {
-      prep_meshlets_pass.w_external(output_buf_name,
-                                    static_draw_batch_->out_draw_count_buf_.handle);
+      prep_meshlets_pass.w_external_buf(output_buf_name,
+                                        static_draw_batch_->out_draw_count_buf_.handle);
     }
-    prep_meshlets_pass.w_external("task_cmd_buf", static_draw_batch_->task_cmd_buf_.handle);
+    prep_meshlets_pass.w_external_buf("task_cmd_buf", static_draw_batch_->task_cmd_buf_.handle);
     prep_meshlets_pass.set_ex([this](rhi::CmdEncoder* enc) {
       enc->bind_pipeline(draw_cull_pso_);
       if (!culling_paused_) {
@@ -186,7 +186,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     });
   } else {
     auto& prepare_indirect_pass = rg_.add_compute_pass("prepare_indirect");
-    prepare_indirect_pass.w_external("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf());
+    prepare_indirect_pass.w_external_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf());
     prepare_indirect_pass.set_ex([this, &args](rhi::CmdEncoder* enc) {
       BasicIndirectPC pc{
           .vp = get_proj_matrix() * args.view_mat,
@@ -206,7 +206,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   std::string final_depth_pyramid_name;
   {
     auto& p = rg_.add_transfer_pass("clear_out_counts_buf");
-    p.w_external("out_counts_buf", out_counts_buf_[curr_frame_idx_].handle);
+    p.w_external_buf("out_counts_buf", out_counts_buf_[curr_frame_idx_].handle);
     p.set_ex([this](rhi::CmdEncoder* enc) {
       enc->fill_buffer(out_counts_buf_[curr_frame_idx_].handle, 0, sizeof(uint32_t) * 2, 0);
     });
@@ -232,8 +232,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         p.sample_external_tex(final_depth_pyramid_name, rhi::PipelineStage_TaskShader);
         p.rw_external_buf("meshlet_vis_buf2", "meshlet_vis_buf", rhi::PipelineStage_TaskShader);
       } else {
-        p.w_external("meshlet_vis_buf", meshlet_vis_buf_->get_buffer_handle(),
-                     rhi::PipelineStage_TaskShader);
+        p.w_external_buf("meshlet_vis_buf", meshlet_vis_buf_->get_buffer_handle(),
+                         rhi::PipelineStage_TaskShader);
       }
     } else {
       p.r_external_buf("indirect_buffer", rhi::PipelineStage_DrawIndirect);
