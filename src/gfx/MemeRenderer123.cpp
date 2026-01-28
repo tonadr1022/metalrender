@@ -39,6 +39,7 @@
 #include "hlsl/shared_tex_only.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
+#include "implot.h"
 #include "ktx.h"
 
 using rhi::PipelineStage;
@@ -399,9 +400,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   {
     // read back meshlet out counts buf
     // TODO: improve
-    auto* contents =
-        static_cast<uint32_t*>(device_->get_buf(out_counts_buf_[curr_frame_idx_])->contents());
-    drawn_meshlets_ = contents[0] + contents[1];
+    // auto* contents =
+    //     static_cast<uint32_t*>(device_->get_buf(out_counts_buf_[curr_frame_idx_])->contents());
+    // drawn_meshlets_ = contents[0] + contents[1];
   }
 
   const char* last_gbuffer_a_name = "gbuffer_a";
@@ -587,10 +588,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       auto* swapchain_tex = device_->get_tex(device_->get_swapchain().get_texture(0));
       ASSERT(swapchain_tex);
       auto format = swapchain_tex->desc().format;
-      tex_only_pso_ = shader_mgr_.create_graphics_pipeline(
-          {.shaders = {{{"fullscreen_quad", ShaderType::Vertex},
-                        {"tex_only", ShaderType::Fragment}}},
-           .rendering = {.color_formats{format}}});
+      if (!tex_only_pso_.is_valid()) {
+        tex_only_pso_ = shader_mgr_.create_graphics_pipeline(
+            {.shaders = {{{"fullscreen_quad", ShaderType::Vertex},
+                          {"tex_only", ShaderType::Fragment}}},
+             .rendering = {.color_formats{format}}});
+      }
       enc->bind_pipeline(tex_only_pso_);
 
       uint32_t tex_idx{};
@@ -1099,6 +1102,7 @@ void MemeRenderer123::init_imgui() {
   ZoneScoped;
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
+  ImPlot::CreateContext();
 
   ImGuiIO& io = ImGui::GetIO();
   auto path = (resource_dir_ / "fonts" / "Comic_Sans_MS.ttf");

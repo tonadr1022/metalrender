@@ -3,6 +3,7 @@
 #include <sys/wait.h>
 
 // clang-format off
+#include <Metal/MTLComputeCommandEncoder.hpp>
 #include <Metal/Metal.hpp>
 #include "gfx/RendererTypes.hpp"
 #include "gfx/metal/Config.hpp"
@@ -238,7 +239,31 @@ void MetalCmdEncoderBase<EncoderAPI>::end_encoding() {
 
 template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::start_compute_encoder() {
-  EncoderAPI::start_compute_encoder(encoder_state_);
+  if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
+    auto& state = encoder_state_;
+    EncoderAPI::end_render_encoder(state.render_enc);
+    if (!state.compute_enc) {
+      state.compute_enc = state.cmd_buf->computeCommandEncoder();
+      state.compute_enc->setArgumentTable(state.arg_table);
+    }
+  } else {
+    auto& state = encoder_state_;
+    EncoderAPI::end_render_encoder(state.render_enc);
+    EncoderAPI::end_blit_encoder(state.blit_enc);
+    if (!state.compute_enc) {
+      MTL::ComputePassDescriptor* desc = MTL::ComputePassDescriptor::alloc()->init();
+      desc->setDispatchType(MTL::DispatchTypeConcurrent);
+      MTL::ComputePassSampleBufferAttachmentDescriptor* desc_samp_buf_att =
+          MTL::ComputePassSampleBufferAttachmentDescriptor::alloc()->init();
+      // desc_samp_buf_att->setSampleBuffer(device_->get_curr_counter_buf());
+      // desc_samp_buf_att->setStartOfEncoderSampleIndex(device_->curr_counter_buf_idx_++);
+      // desc_samp_buf_att->setEndOfEncoderSampleIndex(device_->curr_counter_buf_idx_++);
+      desc->sampleBufferAttachments()->setObject(desc_samp_buf_att, 0);
+      state.compute_enc = state.cmd_buf->computeCommandEncoder(desc);
+      desc->release();
+    }
+  }
+
   if (!curr_debug_name_.empty()) {
     encoder_state_.compute_enc->setLabel(mtl::util::string(curr_debug_name_));
   }
@@ -324,11 +349,29 @@ void Metal3EncoderAPI::end_render_encoder(RenderEnc& enc) {
     enc = nullptr;
   }
 }
+
 void Metal3EncoderAPI::start_compute_encoder(EncoderState& state) {
+  ASSERT(0);
   end_blit_encoder(state.blit_enc);
   end_render_encoder(state.render_enc);
   if (!state.compute_enc) {
+    // MTL::ComputePassDescriptor* desc = MTL::ComputePassDescriptor::alloc()->init();
+    // desc->setDispatchType(MTL::DispatchTypeConcurrent);
+    // MTL::ComputePassSampleBufferAttachmentDescriptor* desc_samp_buf_att =
+    //     MTL::ComputePassSampleBufferAttachmentDescriptor::alloc()->init();
+    // desc_samp_buf_att->setSampleBuffer(state.cmd_buf->sampleBuffer());
+    // desc_samp_buf_att->setStartOfEncoderSampleIndex(0);
+    // desc_samp_buf_att->setEndOfEncoderSampleIndex(1);
+    // desc->sampleBufferAttachments()->setObject(desc_samp_buf_att, 0);
+    // desc->release();
+    // state.compute_enc = state.cmd_buf->computeCommandEncoder(desc);
     state.compute_enc = state.cmd_buf->computeCommandEncoder(MTL::DispatchTypeConcurrent);
+    // if constexpr (std::is_same_v<EncoderAPI, Metal3EncoderAPI>) {
+    //   encoder_state_.blit_enc->sampleCountersInBuffer(
+    //       device_->test_counter_buf_[device_->frame_idx()], device_->curr_counter_buf_idx_++,
+    //       false);
+    //   LINFO("blit start");
+    // }
   }
 }
 

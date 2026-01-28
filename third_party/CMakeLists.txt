@@ -53,6 +53,16 @@ add_library(lib_imgui STATIC
     imgui/backends/imgui_impl_glfw.cpp
 )
 
+set(IMPLOT_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/implot)
+set(IMPLOT_SOURCE
+    ${IMPLOT_SOURCE_DIR}/implot.cpp
+    ${IMPLOT_SOURCE_DIR}/implot_demo.cpp
+    ${IMPLOT_SOURCE_DIR}/implot_items.cpp
+)
+add_library(lib_implot STATIC ${IMPLOT_SOURCE})
+target_include_directories(lib_implot PUBLIC ${IMPLOT_SOURCE_DIR})
+target_link_libraries(lib_implot PUBLIC lib_imgui)
+
 if (BUILD_VULKAN)
     target_sources(lib_imgui PRIVATE
         imgui/backends/imgui_impl_vulkan.cpp

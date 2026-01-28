@@ -52,7 +52,10 @@ void Window::init(InitInfo& init_info) {
 }
 
 void Window::shutdown() { glfwTerminate(); }
-void Window::poll_events() { glfwPollEvents(); }
+void Window::poll_events() {
+  ZoneScoped;
+  glfwPollEvents();
+}
 
 bool Window::should_close() const { return glfwWindowShouldClose(window_); }
 

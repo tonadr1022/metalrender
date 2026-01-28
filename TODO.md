@@ -1,6 +1,7 @@
 # TODOs
 
-- investigate performance vs Apple's bistro render demo
+- toggleable vsync
+- sponza grid buffer resize bug
 - use fill_buffer() instead of compute for clear_bufs pass
 - actual readback
 - meshlet stats buffer actual readback

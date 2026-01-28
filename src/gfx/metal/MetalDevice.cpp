@@ -14,6 +14,7 @@
 #include "core/Util.hpp"
 #include "gfx/metal/Config.hpp"
 #include "imgui.h"
+#include "util/Timer.hpp"
 
 #define IR_RUNTIME_METALCPP
 #include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
@@ -202,6 +203,54 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
   shared_event_ = device_->newSharedEvent();
   test_event_ = get_device()->newEvent();
   ASSERT(metal_layer_);
+  // counters
+  // {
+  //   auto* sets = device_->counterSets();
+  //   MTL::CounterSet* timestamp_set{};
+  //   for (size_t i = 0; i < sets->count(); i++) {
+  //     auto* cs = (MTL::CounterSet*)sets->object(i);
+  //     if (cs->name()->isEqualToString(MTL::CommonCounterSetTimestamp)) {
+  //       timestamp_set = cs;
+  //       break;
+  //     }
+  //   }
+  //   if (!timestamp_set) {
+  //     LINFO("Metal device does not support timestamp counters, exiting (TODO don't exit).");
+  //     exit(1);
+  //   }
+  //   timestamp_set_ = timestamp_set;
+  //   bool has_gpu_timestamp_counter = false;
+  //   for (size_t i = 0; i < timestamp_set->counters()->count(); i++) {
+  //     auto* counter = (MTL::Counter*)timestamp_set->counters()->object(i);
+  //     if (counter->name()->isEqualToString(MTL::CommonCounterTimestamp)) {
+  //       has_gpu_timestamp_counter = true;
+  //       break;
+  //     }
+  //   }
+  //   if (!has_gpu_timestamp_counter) {
+  //     LINFO("Metal device does not support GPU timestamp counters, exiting (TODO don't exit).");
+  //     exit(1);
+  //   }
+  //
+  //   curr_counter_buf_ = make_counter_sample_buf();
+  //
+  //   // TODO: refactor
+  //   const char* boundary_names[] = {"atStageBoundary", "atDrawBoundary", "atBlitBoundary",
+  //                                   "atDispatchBoundary", "atTileDispatchBoundary"};
+  //   const MTL::CounterSamplingPoint boundary_points[] = {
+  //       MTL::CounterSamplingPointAtStageBoundary,
+  //       MTL::CounterSamplingPointAtDrawBoundary,
+  //       MTL::CounterSamplingPointAtBlitBoundary,
+  //       MTL::CounterSamplingPointAtDispatchBoundary,
+  //       MTL::CounterSamplingPointAtTileDispatchBoundary,
+  //   };
+  //   for (size_t i = 0; i < ARRAY_SIZE(boundary_points); i++) {
+  //     const auto* boundary = boundary_names[i];
+  //     if (device_->supportsCounterSampling(boundary_points[i])) {
+  //       LINFO("supports counter sampling at {}", boundary);
+  //     }
+  //   }
+  // }
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
@@ -560,6 +609,7 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
 bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
   curr_cmd_list_idx_ = 0;
+  // curr_counter_buf_idx_ = 0;
 
   {
     // wait on shared event
@@ -570,8 +620,14 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
       }
     }
   }
-
-  curr_drawable_ = metal_layer_->nextDrawable();
+  {
+    ZoneScopedN("nextDrawable");
+    Timer timer;
+    curr_drawable_ = metal_layer_->nextDrawable();
+    if (timer.ElapsedMS() > 10.f) {
+      LINFO("skip {}", timer.ElapsedMS());
+    }
+  }
   if (!curr_drawable_) {
     LINFO("no drawable, exiting");
     exit(1);
@@ -626,12 +682,76 @@ void MetalDevice::submit_frame() {
 
     mtl4_resources_->main_cmd_q->signalEvent(shared_event_, frame_num_);
     mtl4_resources_->main_cmd_q->signalDrawable(curr_drawable_);
-    curr_drawable_->present();
+    {
+      ZoneScopedN("present");
+      curr_drawable_->present();
+    }
   } else {
     auto* end_cb = mtl3_resources_->main_cmd_buf;
+    // auto count = curr_counter_buf_idx_;
+    // if (false) {
+    //   // Temp debug counter buffer stuff
+    //   ASSERT(curr_counter_buf_ != nullptr);
+    //   waiting_counter_bufs_.emplace_back(curr_counter_buf_);
+    //   auto* buf = curr_counter_buf_;
+    //   if (free_counter_bufs_.size() > 0) {
+    //     curr_counter_buf_ = free_counter_bufs_.front();
+    //     free_counter_bufs_.erase(free_counter_bufs_.begin());
+    //   } else {
+    //     curr_counter_buf_ = make_counter_sample_buf();
+    //   }
+    //   auto frame_num = frame_num_;
+    //   MTL::HandlerFunction completion_handler = [this, count, buf,
+    //   frame_num](MTL::CommandBuffer*) {
+    //     ASSERT(count % 2 == 0);
+    //     NS::Data* result = buf->resolveCounterRange(NS::Range::Make(0, count));
+    //     auto* timestamps = (MTL::CounterResultTimestamp*)result->mutableBytes();
+    //     // LINFO("TIMESTAMPS FOR FRAME: {}", frame_num);
+    //     for (size_t i = 0; i < count / 2; i++) {
+    //       // LINFO("GPU Timestamp[{}]: {} us", i,
+    //       //       (timestamps[i * 2 + 1].timestamp - timestamps[i * 2].timestamp) / 1000);
+    //     }
+    //     waiting_counter_bufs_.erase(
+    //         std::remove_if(
+    //             waiting_counter_bufs_.begin(), waiting_counter_bufs_.end(),
+    //             [buf](MTL::CounterSampleBuffer* sample_buf) -> bool { return sample_buf == buf;
+    //             }),
+    //         waiting_counter_bufs_.end());
+    //     free_counter_bufs_.emplace_back(buf);
+    //   };
+    //   end_cb->addCompletedHandler(completion_handler);
+    // }
+
+    if (!mtl3_resources_->present_event_) {
+      mtl3_resources_->present_event_ = get_device()->newEvent();
+    }
+
+    auto* present_cb = mtl3_resources_->main_cmd_q->commandBuffer();
+    end_cb->encodeSignalEvent(mtl3_resources_->present_event_,
+                              mtl3_resources_->present_event_last_value_);
     end_cb->encodeSignalEvent(shared_event_, frame_num_);
-    end_cb->presentDrawable(curr_drawable_);
     end_cb->commit();
+    present_cb->encodeWait(mtl3_resources_->present_event_,
+                           mtl3_resources_->present_event_last_value_);
+    mtl3_resources_->present_event_last_value_++;
+    {
+      ZoneScopedN("present");
+      present_cb->presentDrawable(curr_drawable_);
+    }
+    {
+      ZoneScopedN("commit");
+      present_cb->commit();
+    }
+
+    // end_cb->encodeSignalEvent(shared_event_, frame_num_);
+    // {
+    //   ZoneScopedN("present");
+    //   end_cb->presentDrawable(curr_drawable_);
+    // }
+    // {
+    //   ZoneScopedN("commit");
+    //   end_cb->commit();
+    // }
   }
 
   frame_num_++;
@@ -1102,3 +1222,20 @@ MetalTexture::TexView* MetalDevice::get_tex_view(rhi::TextureHandle handle, int 
   ASSERT((subresource_id >= 0 && (size_t)subresource_id < tex->tex_views.size()));
   return &tex->tex_views[subresource_id];
 }
+
+// MTL::CounterSampleBuffer* MetalDevice::make_counter_sample_buf() const {
+//   auto* desc = MTL::CounterSampleBufferDescriptor::alloc()->init();
+//   desc->setCounterSet(timestamp_set_);
+//   desc->setLabel(mtl::util::string("gpu_timestamp_counter_buffer"));
+//   desc->setStorageMode(MTL::StorageModeShared);
+//   desc->setSampleCount(1000);
+//   NS::Error* err{};
+//   auto* buf = device_->newCounterSampleBuffer(desc, &err);
+//   desc->release();
+//   if (err) {
+//     LINFO("Failed to create counter sample buffer: {}",
+//           mtl::util::string(err->localizedDescription()));
+//     exit(1);
+//   }
+//   return buf;
+// }

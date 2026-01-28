@@ -11,6 +11,7 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
+#include "implot.h"
 #include "platform/apple/AppleWindow.hpp"
 #include "tracy/Tracy.hpp"
 
@@ -103,25 +104,25 @@ float get_float(float min, float max) {
 void App::run() {
   ZoneScoped;
   int scene = 0;
-  // auto load_grid = [&](int radius, float dist, const std::string& path, float scale = 1.0f) {
-  //   glm::ivec3 iter{};
-  //   glm::ivec3 dims{radius, 1, radius};
-  //   for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
-  //     for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
-  //       glm::vec3 pos = glm::vec3{iter} * dist;
-  //       load_model(path, glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
-  //     }
-  //   }
-  // };
+  auto load_grid = [&](int radius, float dist, const std::string& path, float scale = 1.0f) {
+    glm::ivec3 iter{};
+    glm::ivec3 dims{radius, 1, radius};
+    for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
+      for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
+        glm::vec3 pos = glm::vec3{iter} * dist;
+        load_model(path, glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
+      }
+    }
+  };
   const char* sponza_path = "Models/Sponza/glTF_ktx2/Sponza.gltf";
   // [[maybe_unused]] auto chessboards = [&]() {
   //   load_grid(4, 1.0, "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf", 10);
   // };
-  // [[maybe_unused]] auto sponzas = [&]() { load_grid(10, 40.0, sponza_path); };
+  [[maybe_unused]] auto sponzas = [&]() { load_grid(10, 40.0, sponza_path); };
   // chessboards();
-  // sponzas();
+  sponzas();
   [[maybe_unused]] auto sponza_single = [&]() { load_model(sponza_path, glm::mat4{1}); };
-  sponza_single();
+  // sponza_single();
 
   if (scene == -1) {
     glm::ivec3 iter{};
@@ -168,7 +169,6 @@ void App::run() {
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
     ZoneScopedN("main loop");
-    window_->poll_events();
 
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -206,6 +206,7 @@ void App::run() {
     renderer_->render(args);
 
     ImGui::EndFrame();
+    window_->poll_events();
   }
 
   // if (voxel_world_) {
@@ -317,9 +318,75 @@ void App::write_config() {
   }
 }
 
-void App::on_imgui(float) {
+namespace {
+
+// ref implot_demo.cpp
+struct ScrollingBuffer {
+  int max_size;
+  int offset;
+  ImVector<ImVec2> data;
+  explicit ScrollingBuffer(int max_size = 2000) {
+    this->max_size = max_size;
+    offset = 0;
+    data.reserve(max_size);
+  }
+  void AddPoint(float x, float y) {
+    if (data.size() < max_size) {
+      data.push_back(ImVec2(x, y));
+    } else {
+      data[offset] = ImVec2(x, y);
+      offset = (offset + 1) % max_size;
+    }
+  }
+  void Erase() {
+    if (data.size() > 0) {
+      data.shrink(0);
+      offset = 0;
+    }
+  }
+};
+
+}  // namespace
+
+void App::on_imgui(float dt) {
+  ImPlot::ShowDemoWindow();
   ImGui::Begin("Renderer");
   ImGui::Text("Avg time %f (ms)", avg_dt_ * 1000.f);
+  static ScrollingBuffer sdata2{1000};
+  static float t = 0;
+  sdata2.AddPoint(t, dt * 1000.f);
+  t += dt;
+  float history = 10.f;
+  static ImPlotAxisFlags flags = 0;
+  auto get_mean = [](std::span<ImVec2> data) {
+    float sum = 0.f;
+    for (auto v : data) sum += v.y;
+    return sum / data.size();
+  };
+
+  auto std_dev = [](std::span<ImVec2> data, float mean) {
+    float variance_sum = 0.f;
+    for (auto v : data) {
+      float diff = v.y - mean;
+      float variance = diff * diff;
+      variance_sum += variance;
+    }
+    return sqrt(variance_sum / data.size());
+  };
+  auto mean = get_mean(sdata2.data);
+  auto stddev = std_dev(sdata2.data, mean);
+  ImGui::Text("Mean: %.3f ms\nStd Dev: %.3f", mean, stddev);
+
+  if (ImPlot::BeginPlot("Frame times", ImVec2(-1, ImGui::GetTextLineHeight() * 10))) {
+    ImPlot::SetupAxes(nullptr, nullptr, flags, flags);
+    ImPlot::SetupAxisLimits(ImAxis_X1, t - history, t, ImGuiCond_Always);
+    ImPlot::SetupAxisLimits(ImAxis_Y1, 5, 15);
+    ImPlot::SetNextFillStyle(IMPLOT_AUTO_COL, 0.5f);
+    ImPlot::PlotLine("Mouse Y", &sdata2.data[0].x, &sdata2.data[0].y, sdata2.data.size(), 0,
+                     sdata2.offset, 2 * sizeof(float));
+    ImPlot::EndPlot();
+  }
+
   renderer_->on_imgui();
   if (ImGui::TreeNodeEx("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::DragFloat3("Position", &camera_.pos.x, 0.1f);

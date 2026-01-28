@@ -85,6 +85,7 @@ target_link_libraries(${target_name} PRIVATE
     meshoptimizer
     Tracy::TracyClient
     lib_imgui
+    lib_implot
     METAL_CPP
     offsetAllocator
     FastNoise

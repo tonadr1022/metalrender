@@ -158,6 +158,9 @@ class MetalDevice : public rhi::Device {
     MTL::CommandBuffer* main_cmd_buf{};
     MTL::CommandQueue* main_cmd_q{};
     std::vector<std::unique_ptr<Metal3CmdEncoder>> cmd_lists_;
+
+    MTL::Event* present_event_{};
+    size_t present_event_last_value_{};
   };
   std::optional<MTL3_Resources> mtl3_resources_;
 
@@ -178,6 +181,14 @@ class MetalDevice : public rhi::Device {
  public:  // TODO: fix
   size_t curr_event_val_{};
   MTL::Event* test_event_{};
+  // MTL::CounterSampleBuffer* test_counter_buf_[k_max_frames_in_flight];
+  // MTL::CounterSampleBuffer* curr_counter_buf_{};
+  // std::vector<MTL::CounterSampleBuffer*> free_counter_bufs_;
+  // std::vector<MTL::CounterSampleBuffer*> waiting_counter_bufs_;
+  // MTL::CounterSampleBuffer* get_curr_counter_buf() const { return curr_counter_buf_; }
+  // MTL::CounterSet* timestamp_set_{};
+  // MTL::CounterSampleBuffer* make_counter_sample_buf() const;
+  // size_t curr_counter_buf_idx_{};
 
   // rhi::BufferHandleHolder top_level_arg_buf_;
   struct GPUFrameAllocator {

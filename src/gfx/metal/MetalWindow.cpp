@@ -25,6 +25,9 @@ CA::MetalLayer *init_metal_window(GLFWwindow *window, MTL::Device *device,
   }
 
   layer->setDevice(device);
+  // TODO:  toggleable
+  layer->setDisplaySyncEnabled(true);
+  layer->setMaximumDrawableCount(3);
   NSWindow *ns_window = glfwGetCocoaWindow(window);
   ns_window.contentView.layer = (__bridge CAMetalLayer *)layer;
   ns_window.contentView.wantsLayer = YES;

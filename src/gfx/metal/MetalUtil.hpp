@@ -23,6 +23,12 @@ inline const char *get_err_string(NS::Error *err) {
 
 inline NS::String *string(const char *v) { return NS::String::string(v, NS::ASCIIStringEncoding); }
 inline NS::String *string(const std::string &v) { return string(v.c_str()); }
+inline std::string string(NS::String *str) {
+  if (!str) {
+    return "";
+  }
+  return str->cString(NS::ASCIIStringEncoding);
+}
 
 MTL::TextureUsage convert(rhi::TextureUsage usage);
 MTL::ResourceOptions convert(rhi::StorageMode mode);
