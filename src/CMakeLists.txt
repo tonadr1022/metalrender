@@ -17,6 +17,7 @@ add_executable(${target_name}
     gfx/GPUFrameAllocator.cpp
     gfx/GPUFrameAllocator2.cpp
     gfx/Device.cpp
+    gfx/DrawBatch.cpp
     gfx/RenderGraph.cpp
     gfx/BackedGPUAllocator.cpp
     gfx/renderer/BufferResize.cpp
