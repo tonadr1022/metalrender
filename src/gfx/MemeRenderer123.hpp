@@ -77,7 +77,7 @@ struct DrawBatch {
 
   [[nodiscard]] Stats get_stats() const;
 
-  void recreate_task_cmd_buf(rhi::Device& device, size_t element_count);
+  void ensure_task_cmd_buf_space(rhi::Device& device, size_t element_count);
 
   DrawBatch(DrawBatchType type, rhi::Device& device, BufferCopyMgr& buffer_copier,
             const CreateInfo& cinfo);
@@ -121,6 +121,7 @@ struct DrawBatch {
   rhi::BufferHandleHolder task_cmd_buf_;
   rhi::BufferHandleHolder out_draw_count_buf_;
   const DrawBatchType type;
+  uint32_t task_cmd_count{};
 };
 
 struct ModelGPUResources {
@@ -135,6 +136,7 @@ struct ModelGPUResources {
     uint32_t vertices;
     uint32_t instance_vertices;
     uint32_t instance_meshlets;
+    uint32_t task_cmd_count;
   };
   Totals totals{};
 };
@@ -142,6 +144,7 @@ struct ModelGPUResources {
 struct ModelInstanceGPUResources {
   OffsetAllocator::Allocation instance_data_gpu_alloc;
   OffsetAllocator::Allocation meshlet_vis_buf_alloc;
+  ModelGPUHandle model_resources_handle;
 };
 
 class InstanceDataMgr {

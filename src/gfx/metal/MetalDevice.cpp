@@ -622,11 +622,7 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   }
   {
     ZoneScopedN("nextDrawable");
-    Timer timer;
     curr_drawable_ = metal_layer_->nextDrawable();
-    if (timer.ElapsedMS() > 10.f) {
-      LINFO("skip {}", timer.ElapsedMS());
-    }
   }
   if (!curr_drawable_) {
     LINFO("no drawable, exiting");

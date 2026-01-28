@@ -88,7 +88,8 @@ target_include_directories(lib_imgui PUBLIC
 set(MESHOPT_INSTALL OFF)
 add_subdirectory(meshoptimizer)
 
-option(TRACY_ENABLE "Enable Tracy profiler" OFF)
+option(TRACY_STATIC "Build Tracy as a static library" ON)
+option(TRACY_ENABLE "Enable Tracy profiler" ON)
 option(TRACY_ONLY_IPV4 "IPv4 only" ON)
 
 if (MSVC)

@@ -4,7 +4,6 @@
 
 #include "MemeRenderer123.hpp"
 #include "core/EAssert.hpp"
-#include "core/Logger.hpp"
 
 ModelHandle ResourceManager::load_model(const std::filesystem::path &path,
                                         const glm::mat4 &root_transform) {

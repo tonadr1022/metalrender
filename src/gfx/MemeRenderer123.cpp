@@ -184,16 +184,17 @@ void MemeRenderer123::init(const CreateInfo& cinfo) {
                           device_->get_info().frames_in_flight, mesh_shaders_enabled_);
   static_draw_batch_.emplace(DrawBatchType::Static, *device_, buffer_copy_mgr_.value(),
                              DrawBatch::CreateInfo{
-                                 .initial_vertex_capacity = 0,
-                                 .initial_index_capacity = 1000,
-                                 .initial_meshlet_capacity = 1000,
+                                 .initial_vertex_capacity = 10'000'000,
+                                 .initial_index_capacity = 10'000'000,
+                                 .initial_meshlet_capacity = 0,
                                  .initial_mesh_capacity = 1000,
-                                 .initial_meshlet_triangle_capacity = 1000,
-                                 .initial_meshlet_vertex_capacity = 1000,
+                                 .initial_meshlet_triangle_capacity = 10'000'000,
+                                 .initial_meshlet_vertex_capacity = 10'000'000,
                              });
   meshlet_vis_buf_.emplace(
       *device_, buffer_copy_mgr_.value(),
-      rhi::BufferDesc{.size = 1000, .bindless = true, .name = "meshlet_vis_buf"}, sizeof(uint32_t));
+      rhi::BufferDesc{.size = 1'000'000, .bindless = true, .name = "meshlet_vis_buf"},
+      sizeof(uint32_t));
 
   scratch_buffer_pool_.emplace(device_);
   imgui_renderer_.emplace(shader_mgr_, device_);
@@ -743,6 +744,7 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
 
   uint32_t total_instance_vertices{};
   uint32_t total_instance_meshlets{};
+  uint32_t task_cmd_count{};
   {
     uint32_t curr_meshlet_vis_buf_i{};
     for (size_t node = 0; node < model.nodes.size(); node++) {
@@ -760,6 +762,7 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
           result.meshlet_process_result.meshlet_datas[mesh_id].meshlets.size();
       total_instance_vertices += result.meshes[mesh_id].vertex_count;
       total_instance_meshlets += result.meshes[mesh_id].meshlet_count;
+      task_cmd_count += align_divide_up(result.meshes[mesh_id].meshlet_count, K_TASK_TG_SIZE);
     }
   }
 
@@ -776,6 +779,7 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
               .vertices = static_cast<uint32_t>(result.vertices.size()),
               .instance_vertices = total_instance_vertices,
               .instance_meshlets = total_instance_meshlets,
+              .task_cmd_count = task_cmd_count,
           },
   });
   return true;
@@ -806,10 +810,6 @@ DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType
   }
 
   const auto meshlet_alloc = draw_batch->meshlet_buf.allocate(meshlets.tot_meshlet_count, resized);
-  // TODO: use in-render-graph buffer
-  if (resized) {
-    draw_batch->recreate_task_cmd_buf(*device_, draw_batch->meshlet_buf.get_allocator().capacity());
-  }
   const auto meshlet_vertices_alloc =
       draw_batch->meshlet_vertices_buf.allocate(meshlets.tot_meshlet_verts_count, resized);
   const auto meshlet_triangles_alloc =
@@ -928,6 +928,8 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
       });
     }
   }
+  static_draw_batch_->task_cmd_count += model_resources->totals.task_cmd_count;
+  static_draw_batch_->ensure_task_cmd_buf_space(*device_, static_draw_batch_->task_cmd_count);
 
   stats_.total_instances += instance_datas.size();
   buffer_copy_mgr_->copy_to_buffer(instance_datas.data(),
@@ -940,9 +942,11 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
         instance_data_mgr_.get_draw_cmd_buf(),
         instance_data_gpu_alloc.offset * sizeof(IndexedIndirectDrawCmd));
   }
-  return model_instance_gpu_resource_pool_.alloc(
-      ModelInstanceGPUResources{.instance_data_gpu_alloc = instance_data_gpu_alloc,
-                                .meshlet_vis_buf_alloc = meshlet_vis_buf_alloc});
+  return model_instance_gpu_resource_pool_.alloc(ModelInstanceGPUResources{
+      .instance_data_gpu_alloc = instance_data_gpu_alloc,
+      .meshlet_vis_buf_alloc = meshlet_vis_buf_alloc,
+      .model_resources_handle = model_gpu_handle,
+  });
 }
 
 void MemeRenderer123::free_instance(ModelInstanceGPUHandle handle) {
@@ -956,6 +960,8 @@ void MemeRenderer123::free_instance(ModelInstanceGPUHandle handle) {
     meshlet_vis_buf_->free(gpu_resources->meshlet_vis_buf_alloc);
   }
   model_instance_gpu_resource_pool_.destroy(handle);
+  auto* model_resources = model_gpu_resource_pool_.get(gpu_resources->model_resources_handle);
+  static_draw_batch_->task_cmd_count -= model_resources->totals.task_cmd_count;
 }
 
 void MemeRenderer123::free_model(ModelGPUHandle handle) {
@@ -1020,7 +1026,6 @@ DrawBatch::DrawBatch(DrawBatchType type, rhi::Device& device, BufferCopyMgr& buf
                            },
                            sizeof(uint32_t)),
       type(type) {
-  recreate_task_cmd_buf(device, cinfo.initial_meshlet_capacity);
   out_draw_count_buf_ = device.create_buf_h({
       .storage_mode = rhi::StorageMode::GPUOnly,
       .usage = rhi::BufferUsage_Storage,
@@ -1334,7 +1339,10 @@ TexAndViewHolder::~TexAndViewHolder() {
               .empty();
 }
 
-void DrawBatch::recreate_task_cmd_buf(rhi::Device& device, size_t element_count) {
+void DrawBatch::ensure_task_cmd_buf_space(rhi::Device& device, size_t element_count) {
+  if (element_count == 0) {
+    return;
+  }
   auto required_size = element_count * sizeof(TaskCmd);
   if (task_cmd_buf_.is_valid() && device.get_buf(task_cmd_buf_)->desc().size >= required_size) {
     return;
