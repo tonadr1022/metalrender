@@ -1,8 +1,8 @@
 #include "BufferResize.hpp"
 
-#include "gfx/Buffer.hpp"
-#include "gfx/Device.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
+#include "gfx/rhi/Buffer.hpp"
+#include "gfx/rhi/Device.hpp"
 
 void gfx::BufferCopyMgr::copy_to_buffer(const void* src_data, size_t src_size,
                                         rhi::BufferHandle dst_buffer, size_t dst_offset) {

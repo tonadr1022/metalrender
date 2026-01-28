@@ -16,9 +16,9 @@
 #include <Metal/MTLCommandEncoder.hpp>
 
 #include "core/EAssert.hpp"
-#include "gfx/GFXTypes.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "gfx/metal/MetalUtil.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 template <typename API>
 typename API::RPDesc* create_render_pass(

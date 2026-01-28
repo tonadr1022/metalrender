@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gfx/RendererTypes.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 class Window;
 

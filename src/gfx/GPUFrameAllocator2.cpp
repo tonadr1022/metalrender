@@ -2,8 +2,8 @@
 
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
-#include "gfx/Buffer.hpp"
-#include "gfx/Device.hpp"
+#include "gfx/rhi/Buffer.hpp"
+#include "gfx/rhi/Device.hpp"
 
 namespace gfx {
 

@@ -5,8 +5,7 @@
 #include <unordered_set>
 
 #include "core/Hash.hpp"
-#include "gfx/CmdEncoder.hpp"
-#include "gfx/RendererTypes.hpp"
+#include "gfx/rhi/CmdEncoder.hpp"
 
 namespace gfx {
 

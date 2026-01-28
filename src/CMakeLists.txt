@@ -16,7 +16,6 @@ add_executable(${target_name}
     gfx/ImGuiRenderer.cpp
     gfx/GPUFrameAllocator.cpp
     gfx/GPUFrameAllocator2.cpp
-    gfx/Device.cpp
     gfx/DrawBatch.cpp
     gfx/RenderGraph.cpp
     gfx/BackedGPUAllocator.cpp
@@ -31,8 +30,11 @@ add_executable(${target_name}
     # voxels/VoxelWorld.cpp
     util/Stats.cpp
     gfx/texture/KtxLoad.cpp
-    gfx/rhi/Texture.cpp
     UI.cpp
+
+    gfx/rhi/Texture.cpp
+    gfx/rhi/Device.cpp
+
 )
 
 

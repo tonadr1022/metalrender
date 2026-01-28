@@ -2,8 +2,8 @@
 
 #include <filesystem>
 
-#include "RendererTypes.hpp"
-#include "gfx/Sampler.hpp"
+#include "GFXTypes.hpp"
+#include "Sampler.hpp"
 
 class Window;
 

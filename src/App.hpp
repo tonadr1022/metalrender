@@ -7,6 +7,10 @@
 namespace gfx {
 class MemeRenderer123;
 }
+
+namespace rhi {
+class Device;
+}
 class Window;
 
 struct App {

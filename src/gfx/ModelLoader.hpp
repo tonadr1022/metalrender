@@ -4,9 +4,9 @@
 #include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 
-#include "GFXTypes.hpp"
 #include "ModelInstance.hpp"
 #include "RendererTypes.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 #include "hlsl/default_vertex.h"
 
 namespace MTL {

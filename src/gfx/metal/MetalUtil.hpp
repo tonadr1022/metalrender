@@ -7,7 +7,7 @@
 #include "Metal/MTLPixelFormat.hpp"
 #include "Metal/MTLResource.hpp"
 #include "Metal/MTLTexture.hpp"
-#include "gfx/GFXTypes.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 namespace NS {
 class Error;

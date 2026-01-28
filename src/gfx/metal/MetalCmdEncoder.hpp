@@ -4,9 +4,9 @@
 #include <Metal/MTLGPUAddress.hpp>
 
 #include "core/Util.hpp"
-#include "gfx/CmdEncoder.hpp"
 #include "gfx/metal/MetalCmdEncoderICBMgr.hpp"
 #include "gfx/metal/RootLayout.hpp"
+#include "gfx/rhi/CmdEncoder.hpp"
 
 class MetalDevice;
 

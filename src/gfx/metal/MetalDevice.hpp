@@ -11,10 +11,10 @@
 #include "core/Handle.hpp"
 #include "core/Pool.hpp"
 #include "gfx/Config.hpp"
-#include "gfx/Device.hpp"
 #include "gfx/metal/MetalCmdEncoder.hpp"
 #include "gfx/metal/MetalSampler.hpp"
 #include "gfx/metal/MetalSwapchain.hpp"
+#include "gfx/rhi/Device.hpp"
 #include "hlsl/shader_constants.h"
 
 class Window;

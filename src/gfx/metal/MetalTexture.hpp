@@ -2,7 +2,7 @@
 
 #include <Metal/MTLTexture.hpp>
 
-#include "gfx/Texture.hpp"
+#include "gfx/rhi/Texture.hpp"
 
 class MetalTexture : public rhi::Texture {
  public:

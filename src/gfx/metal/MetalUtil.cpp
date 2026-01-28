@@ -4,7 +4,7 @@
 #include <cassert>
 
 #include "core/Logger.hpp"
-#include "gfx/GFXTypes.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 namespace mtl::util {
 

@@ -2,7 +2,7 @@
 
 #include <filesystem>
 
-#include "gfx/GFXTypes.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 struct ktxTexture2;
 

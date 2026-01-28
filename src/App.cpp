@@ -7,10 +7,10 @@
 
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
-#include "gfx/Device.hpp"
 #include "gfx/MemeRenderer123.hpp"
 #include "gfx/ResourceManager.hpp"
 #include "gfx/Swapchain.hpp"
+#include "gfx/rhi/Device.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"

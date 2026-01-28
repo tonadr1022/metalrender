@@ -1,6 +1,6 @@
 #pragma once
 
-#include "gfx/Sampler.hpp"
+#include "gfx/rhi/Sampler.hpp"
 
 namespace MTL {
 

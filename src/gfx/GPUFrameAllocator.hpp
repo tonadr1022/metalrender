@@ -1,8 +1,8 @@
 #pragma once
 
 #include "core/BitUtil.hpp"
-#include "gfx/Buffer.hpp"
 #include "gfx/Config.hpp"
+#include "gfx/rhi/Buffer.hpp"
 
 class GPUFrameAllocator;
 namespace rhi {

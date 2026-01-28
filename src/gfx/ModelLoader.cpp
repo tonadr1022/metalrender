@@ -10,7 +10,7 @@
 #include "core/Logger.hpp"
 #include "core/ThreadPool.hpp"
 #include "core/Util.hpp"
-#include "gfx/GFXTypes.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 #include "hlsl/shader_constants.h"
 #include "texture/KtxLoad.hpp"
 #include "texture/VkFormatEnum.hpp"

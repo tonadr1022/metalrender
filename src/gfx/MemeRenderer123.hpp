@@ -7,9 +7,7 @@
 #include "core/Math.hpp"  // IWYU pragma: keep
 #include "gfx/BackedGPUAllocator.hpp"
 #include "gfx/Config.hpp"
-#include "gfx/Device.hpp"
 #include "gfx/DrawBatch.hpp"
-#include "gfx/GFXTypes.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/ModelInstance.hpp"
 #include "gfx/ModelLoader.hpp"
@@ -17,6 +15,8 @@
 #include "gfx/RendererTypes.hpp"
 #include "gfx/ShaderManager.hpp"
 #include "gfx/renderer/BufferResize.hpp"
+#include "gfx/rhi/Device.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 #include "hlsl/shared_globals.h"
 #include "hlsl/shared_instance_data.h"
 #include "offsetAllocator.hpp"

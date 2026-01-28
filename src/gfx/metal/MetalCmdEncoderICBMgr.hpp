@@ -3,7 +3,7 @@
 #include <span>
 #include <vector>
 
-#include "gfx/RendererTypes.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 class MetalDevice;
 

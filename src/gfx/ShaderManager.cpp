@@ -9,11 +9,11 @@
 #include <tracy/Tracy.hpp>
 #include <vector>
 
-#include "Device.hpp"
 #include "core/EAssert.hpp"
 #include "core/Hash.hpp"
 #include "core/Logger.hpp"
 #include "gfx/Pipeline.hpp"
+#include "gfx/rhi/Device.hpp"
 
 namespace fs = std::filesystem;
 

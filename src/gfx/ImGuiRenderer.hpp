@@ -1,7 +1,7 @@
 #pragma once
 
 #include "gfx/Config.hpp"
-#include "gfx/Device.hpp"
+#include "gfx/rhi/Device.hpp"
 
 namespace gfx {
 

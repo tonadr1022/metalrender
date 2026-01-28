@@ -6,9 +6,9 @@
 
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
-#include "gfx/CmdEncoder.hpp"
-#include "gfx/Device.hpp"
-#include "gfx/Texture.hpp"
+#include "gfx/rhi/CmdEncoder.hpp"
+#include "gfx/rhi/Device.hpp"
+#include "gfx/rhi/Texture.hpp"
 
 namespace gfx {
 

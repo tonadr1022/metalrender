@@ -1,7 +1,6 @@
 #pragma once
 
-#include "gfx/GFXTypes.hpp"
-#include "gfx/RendererTypes.hpp"  // IWYU pragma: keep
+#include "GFXTypes.hpp"
 
 namespace rhi {
 

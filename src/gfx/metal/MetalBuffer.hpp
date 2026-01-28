@@ -1,7 +1,7 @@
 #pragma once
 
-#include "gfx/Buffer.hpp"
-#include "gfx/GFXTypes.hpp"
+#include "gfx/rhi/Buffer.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 namespace MTL {
 class Buffer;
