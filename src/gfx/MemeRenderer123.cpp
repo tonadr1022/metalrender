@@ -34,6 +34,7 @@
 #include "hlsl/shared_globals.h"
 #include "hlsl/shared_indirect.h"
 #include "hlsl/shared_mesh_data.h"
+#include "hlsl/shared_task_cmd.h"
 #include "hlsl/shared_tex_only.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -161,16 +162,19 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       prep_meshlets_pass.w_external_buf(output_buf_name,
                                         static_draw_batch_->out_draw_count_buf_.handle);
     }
-    prep_meshlets_pass.w_external_buf("task_cmd_buf", static_draw_batch_->task_cmd_buf_.handle);
-    prep_meshlets_pass.set_ex([this](rhi::CmdEncoder* enc) {
+    auto task_cmd_buf_rg_handle =
+        prep_meshlets_pass.w_buf("task_cmd_buf", rhi::PipelineStage_ComputeShader,
+                                 static_draw_batch_->task_cmd_count * sizeof(TaskCmd));
+    prep_meshlets_pass.set_ex([this, task_cmd_buf_rg_handle](rhi::CmdEncoder* enc) {
       enc->bind_pipeline(draw_cull_pso_);
+      auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handle);
       if (!culling_paused_) {
         DrawCullPC pc{
             .globals_buf_idx = frame_globals_buf_info_.idx,
             .globals_buf_offset_bytes = frame_globals_buf_info_.offset_bytes,
             .cull_data_idx = frame_cull_data_buf_info_.idx,
             .cull_data_offset_bytes = frame_cull_data_buf_info_.offset_bytes,
-            .task_cmd_buf_idx = device_->get_buf(static_draw_batch_->task_cmd_buf_)->bindless_idx(),
+            .task_cmd_buf_idx = device_->get_buf(task_cmd_buf_handle)->bindless_idx(),
             .draw_cnt_buf_idx =
                 device_->get_buf(static_draw_batch_->out_draw_count_buf_)->bindless_idx(),
             .instance_data_buf_idx =
@@ -224,10 +228,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   auto add_draw_pass = [&args, this, &final_depth_pyramid_name, &last_gbuffer_a_name,
                         &last_depth_name](bool late, const char* name) {
     auto& p = rg_.add_graphics_pass(name);
+    RGResourceHandle task_cmd_buf_rg_handle;
     if (mesh_shaders_enabled_) {
       p.r_external_buf("out_draw_count_buf2", rhi::PipelineStage_TaskShader);
-      p.r_external_buf("task_cmd_buf", (PipelineStage)(rhi::PipelineStage_MeshShader |
-                                                       rhi::PipelineStage_TaskShader));
+      task_cmd_buf_rg_handle =
+          p.r_buf("task_cmd_buf",
+                  (PipelineStage)(rhi::PipelineStage_MeshShader | rhi::PipelineStage_TaskShader));
       if (late) {
         p.sample_external_tex(final_depth_pyramid_name, rhi::PipelineStage_TaskShader);
         p.rw_external_buf("meshlet_vis_buf2", "meshlet_vis_buf", rhi::PipelineStage_TaskShader);
@@ -255,7 +261,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       rg_depth_handle = p.w_depth_output(last_depth_name, {.format = rhi::TextureFormat::D32float});
     }
 
-    p.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, &args, late](rhi::CmdEncoder* enc) {
+    p.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, &args, late,
+              task_cmd_buf_rg_handle](rhi::CmdEncoder* enc) {
       ZoneScopedN("Execute gbuffer pass");
       auto depth_handle = rg_.get_att_img(rg_depth_handle);
       ASSERT(depth_handle.is_valid());
@@ -289,7 +296,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         if (late) {
           enc->bind_srv(depth_pyramid_tex_.handle, 3);
         }
-        enc->bind_srv(static_draw_batch_->task_cmd_buf_.handle, 4);
+        auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handle);
+        enc->bind_srv(task_cmd_buf_handle, 4);
         enc->bind_srv(static_draw_batch_->mesh_buf.get_buffer_handle(), 5);
         enc->bind_srv(static_draw_batch_->meshlet_buf.get_buffer_handle(), 6);
         enc->bind_srv(static_draw_batch_->meshlet_triangles_buf.get_buffer_handle(), 7);
@@ -741,7 +749,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
     }
   }
   static_draw_batch_->task_cmd_count += model_resources->totals.task_cmd_count;
-  static_draw_batch_->ensure_task_cmd_buf_space(*device_, static_draw_batch_->task_cmd_count);
+  // static_draw_batch_->ensure_task_cmd_buf_space(*device_, static_draw_batch_->task_cmd_count);
 
   stats_.total_instances += instance_datas.size();
   buffer_copy_mgr_->copy_to_buffer(instance_datas.data(),
@@ -1058,6 +1066,7 @@ void MemeRenderer123::recreate_external_textures() {
 
 MemeRenderer123::~MemeRenderer123() {
   shader_mgr_->shutdown();
+  rg_.shutdown();
 
   {  // imgui
     ImGui_ImplGlfw_Shutdown();

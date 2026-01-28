@@ -6,7 +6,6 @@
 
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
-#include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Texture.hpp"
@@ -241,11 +240,11 @@ void RenderGraph::execute() {
   for (auto pass_i : pass_stack_) {
     rhi::CmdEncoder* enc = device_->begin_command_list();
     for (auto& barrier : pass_barrier_infos_[pass_i]) {
-      // TODO: barrier for external buffers
-      ASSERT(barrier.resource.type != RGResourceType::Buffer);
-      if (barrier.resource.type == RGResourceType::Buffer) {
-        enc->barrier({}, barrier.src_stage, barrier.src_access, barrier.dst_stage,
-                     barrier.dst_access);
+      if (barrier.resource.type == RGResourceType::Buffer ||
+          barrier.resource.type == RGResourceType::ExternalBuffer) {
+        // enc->barrier({}, barrier.src_stage, barrier.src_access, barrier.dst_stage,
+        //              barrier.dst_access);
+        enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
       } else {
         enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
       }
@@ -271,6 +270,7 @@ void RenderGraph::execute() {
     free_bufs_[buffer_infos_[i]].emplace_back(buffer_handles_[i]);
   }
   tex_att_infos_.clear();
+  buffer_infos_.clear();
   resource_name_to_handle_.clear();
   tex_handle_to_handle_.clear();
   resource_read_name_to_writer_pass_.clear();
@@ -428,6 +428,9 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
         if (!buffer_handles.empty()) {
           actual_buf_handle = buffer_handles.back();
           buffer_handles.pop_back();
+          if (buffer_handles.empty()) {
+            free_bufs_.erase(free_buf_it);
+          }
         }
       }
       if (!actual_buf_handle.is_valid()) {
@@ -442,6 +445,13 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       buffer_handles_.emplace_back(actual_buf_handle);
     }
   }
+  // enqueue delete unused free buffers
+  for (auto& [binfo, handles] : free_bufs_) {
+    for (const auto& handle : handles) {
+      device_->destroy(handle);
+    }
+  }
+  free_bufs_.clear();
 
   struct ResourceState {
     rhi::AccessFlags access;
@@ -451,7 +461,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   static std::vector<ResourceState> states[4];
   for (auto& state : states) state.clear();
   states[(int)RGResourceType::Texture].resize(tex_att_infos_.size());
-  states[(int)RGResourceType::Buffer].resize(0);
+  states[(int)RGResourceType::Buffer].resize(buffer_infos_.size());
   states[(int)RGResourceType::ExternalTexture].resize(external_textures_.size());
   states[(int)RGResourceType::ExternalBuffer].resize(external_buffers_.size());
 
@@ -562,11 +572,12 @@ void RenderGraph::init(rhi::Device* device) {
 RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                             RGAccess, RGPass& pass) {
   ASSERT(!resource_name_to_handle_.contains(name));
-  RGResourceHandle handle{};
   ASSERT((att_info.is_swapchain_tex || att_info.format != rhi::TextureFormat::Undefined));
-  handle = {.idx = static_cast<uint32_t>(tex_att_infos_.size()), .type = RGResourceType::Texture};
-  tex_att_infos_.emplace_back(att_info);
   resource_use_name_to_writer_pass_idx_.emplace(name, pass.get_idx());
+
+  RGResourceHandle handle = {.idx = static_cast<uint32_t>(tex_att_infos_.size()),
+                             .type = RGResourceType::Texture};
+  tex_att_infos_.emplace_back(att_info);
   resource_name_to_handle_.emplace(name, handle);
   return handle;
 }
@@ -574,11 +585,11 @@ RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, const Attac
 RGResourceHandle RenderGraph::add_buf_usage(const std::string& name, const BufferInfo& buf_info,
                                             Pass& pass) {
   ASSERT(!resource_name_to_handle_.contains(name));
-  RGResourceHandle handle{};
-  handle = {.idx = static_cast<uint32_t>(buffer_infos_.size()), .type = RGResourceType::Buffer};
-  buffer_infos_.emplace_back(buf_info);
-  // TODO: consolidate
   resource_use_name_to_writer_pass_idx_.emplace(name, pass.get_idx());
+
+  RGResourceHandle handle = {.idx = static_cast<uint32_t>(buffer_infos_.size()),
+                             .type = RGResourceType::Buffer};
+  buffer_infos_.emplace_back(buf_info);
   resource_name_to_handle_.emplace(name, handle);
   return handle;
 }
@@ -901,7 +912,7 @@ void RenderGraph::add_external_rw_buffer_usage(const std::string& name,
 }
 
 RGResourceHandle RenderGraph::get_resource(const std::string& name, RGResourceType type) {
-  if (type == RGResourceType::Texture) {
+  if (type == RGResourceType::Texture || type == RGResourceType::Buffer) {
     return resource_name_to_handle_.at(name);
   }
   ALWAYS_ASSERT(0);
@@ -934,16 +945,31 @@ void RenderGraph::dfs(const std::vector<std::unordered_set<uint32_t>>& pass_depe
   pass_stack.push_back(pass);
 }
 
-RGResourceHandle RenderGraph::Pass::w_buf(std::string name, rhi::PipelineStage stage, size_t size) {
-  internal_writes_.emplace_back(NameAndAccess{
-      std::move(name), stage, rhi::AccessFlags_ShaderStorageWrite, RGResourceType::Buffer});
+RGResourceHandle RenderGraph::Pass::w_buf(const std::string& name, rhi::PipelineStage stage,
+                                          size_t size) {
+  internal_writes_.emplace_back(
+      NameAndAccess{name, stage, rhi::AccessFlags_ShaderStorageWrite, RGResourceType::Buffer});
   return rg_->add_buf_usage(name, {.size = size}, *this);
 }
 
-RGResourceHandle RenderGraph::Pass::r_buf(std::string name, rhi::PipelineStage stage) {
-  internal_reads_.emplace_back(NameAndAccess{
-      std::move(name), stage, rhi::AccessFlags_ShaderStorageRead, RGResourceType::Buffer});
+RGResourceHandle RenderGraph::Pass::r_buf(const std::string& name, rhi::PipelineStage stage) {
+  internal_reads_.emplace_back(
+      NameAndAccess{name, stage, rhi::AccessFlags_ShaderStorageRead, RGResourceType::Buffer});
   return rg_->get_resource(name, RGResourceType::Buffer);
 }
 
+void RenderGraph::shutdown() {
+  for (auto& [att_info, handles] : free_atts_) {
+    for (const auto& handle : handles) {
+      device_->destroy(handle);
+    }
+  }
+  free_atts_.clear();
+  for (auto& [binfo, handles] : free_bufs_) {
+    for (const auto& handle : handles) {
+      device_->destroy(handle);
+    }
+  }
+  free_bufs_.clear();
+}
 }  // namespace gfx

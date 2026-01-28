@@ -118,6 +118,17 @@ struct BlockPool {
   BlockPool(const BlockPool& other) = delete;
   BlockPool(BlockPool&& other) = delete;
 
+  void iterate_entries(auto&& f) {
+    std::unique_lock lock(mtx_);
+    for (size_t i = 0; i < num_blocks(); i++) {
+      for (const auto& entry : get_block_entries(i)) {
+        if (entry.live_) {
+          f(entry.object);
+        }
+      }
+    }
+  }
+
   void clear() {
     std::unique_lock lock(mtx_);
     all_entries_.clear();

@@ -30,6 +30,7 @@ struct AttachmentInfo {
 
 struct BufferInfo {
   size_t size;
+  bool operator==(const BufferInfo& other) const { return size == other.size; }
 };
 
 }  // namespace gfx
@@ -130,10 +131,9 @@ enum class RGPassType { None, Compute, Graphics, Transfer };
 class RenderGraph {
  public:
   void init(rhi::Device* device);
-
   void bake(glm::uvec2 fb_size, bool verbose = false);
-
   void execute();
+  void shutdown();
 
   class Pass {
    public:
@@ -160,8 +160,8 @@ class RenderGraph {
     void rw_external_buf(std::string name, const std::string& input_name);
     void rw_external_buf(std::string name, const std::string& input_name, rhi::PipelineStage stage);
 
-    RGResourceHandle r_buf(std::string name, rhi::PipelineStage stage);
-    RGResourceHandle w_buf(std::string name, rhi::PipelineStage stage, size_t size);
+    RGResourceHandle r_buf(const std::string& name, rhi::PipelineStage stage);
+    RGResourceHandle w_buf(const std::string& name, rhi::PipelineStage stage, size_t size);
 
     struct NameAndAccess {
       std::string name;
@@ -274,10 +274,6 @@ class RenderGraph {
 
   std::unordered_map<gfx::AttachmentInfo, std::vector<rhi::TextureHandle>> free_atts_;
   std::unordered_map<gfx::BufferInfo, std::vector<rhi::BufferHandle>> free_bufs_;
-  struct AttInfoAndTex {
-    AttachmentInfo att_info;
-    rhi::TextureHandleHolder tex_handle;
-  };
 
   struct BufferInfoAndHandle {
     BufferInfo buf_info;

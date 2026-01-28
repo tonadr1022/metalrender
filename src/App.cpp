@@ -238,6 +238,10 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
         ResourceManager::get().free_model(models_[0]);
         models_.erase(models_.begin());
       }
+    } else if (key == GLFW_KEY_L && mods & GLFW_MOD_CONTROL) {
+      static float h = 40.f;
+      load_model(config_.paths[1], glm::translate(glm::mat4{1}, glm::vec3{0, h, 0}));
+      h += 40.f;
     }
   }
 

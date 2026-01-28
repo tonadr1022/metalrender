@@ -38,7 +38,7 @@ struct DrawBatch {
 
   [[nodiscard]] Stats get_stats() const;
 
-  void ensure_task_cmd_buf_space(rhi::Device& device, size_t element_count);
+  // void ensure_task_cmd_buf_space(rhi::Device& device, size_t element_count);
 
   DrawBatch(DrawBatchType type, rhi::Device& device, BufferCopyMgr& buffer_copier,
             const CreateInfo& cinfo);
@@ -79,7 +79,7 @@ struct DrawBatch {
   BackedGPUAllocator mesh_buf;
   BackedGPUAllocator meshlet_triangles_buf;
   BackedGPUAllocator meshlet_vertices_buf;
-  rhi::BufferHandleHolder task_cmd_buf_;
+  // rhi::BufferHandleHolder task_cmd_buf_;
   rhi::BufferHandleHolder out_draw_count_buf_;
   const DrawBatchType type;
   uint32_t task_cmd_count{};

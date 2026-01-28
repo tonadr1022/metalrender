@@ -277,16 +277,20 @@ void MetalDevice::shutdown() {
 
   delete_queues_.flush_deletions(SIZE_T_MAX);
 
-  device_->release();
-  for (size_t i = 0; i < buffer_pool_.num_blocks(); i++) {
-    for (const auto& entry : buffer_pool_.get_block_entries(i)) {
-      if (entry.live_) {
-        LWARN("leaked buffer {}, SIZE {}",
-              entry.object.desc().name ? entry.object.desc().name : "unnamed_buffer",
-              entry.object.desc().size);
-      }
+  buffer_pool_.iterate_entries([](const MetalBuffer& entry) {
+    LWARN("leaked buffer {}, SIZE {}", entry.desc().name ? entry.desc().name : "unnamed_buffer",
+          entry.desc().size);
+  });
+
+  texture_pool_.iterate_entries([](const MetalTexture& entry) {
+    if (!entry.is_drawable_tex()) {
+      LWARN("leaked texture {}, SIZE {}x{}x{}, FORMAT {}",
+            entry.desc().name ? entry.desc().name : "unnamed_texture", entry.desc().dims.x,
+            entry.desc().dims.y, entry.desc().dims.z, (int)entry.desc().format);
     }
-  }
+  });
+
+  device_->release();
 }
 
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
@@ -952,13 +956,8 @@ void MetalDevice::write_bindless_resource_descriptor(uint32_t bindless_idx, MTL:
 }
 
 void MetalDevice::get_all_buffers(std::vector<rhi::Buffer*>& out_buffers) {
-  for (size_t block = 0; block < buffer_pool_.num_blocks(); block++) {
-    for (auto& e : buffer_pool_.get_block_entries(block)) {
-      if (e.live_) {
-        out_buffers.emplace_back(&e.object);
-      }
-    }
-  }
+  buffer_pool_.iterate_entries(
+      [&out_buffers](const MetalBuffer& entry) { out_buffers.emplace_back((rhi::Buffer*)&entry); });
 }
 
 bool MetalDevice::replace_pipeline(rhi::PipelineHandle handle,

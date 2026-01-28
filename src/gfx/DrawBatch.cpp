@@ -74,19 +74,19 @@ DrawBatch::Stats DrawBatch::get_stats() const {
   };
 }
 
-void DrawBatch::ensure_task_cmd_buf_space(rhi::Device& device, size_t element_count) {
-  if (element_count == 0) {
-    return;
-  }
-  auto required_size = element_count * sizeof(TaskCmd);
-  if (task_cmd_buf_.is_valid() && device.get_buf(task_cmd_buf_)->desc().size >= required_size) {
-    return;
-  }
-  task_cmd_buf_ = device.create_buf_h({
-      .storage_mode = rhi::StorageMode::GPUOnly,
-      .size = required_size,
-      .name = "task_cmd_buf",
-  });
-}
+// void DrawBatch::ensure_task_cmd_buf_space(rhi::Device&, size_t) {
+// if (element_count == 0) {
+//   return;
+// }
+// auto required_size = element_count * sizeof(TaskCmd);
+// if (task_cmd_buf_.is_valid() && device.get_buf(task_cmd_buf_)->desc().size >= required_size) {
+//   return;
+// }
+// task_cmd_buf_ = device.create_buf_h({
+//     .storage_mode = rhi::StorageMode::GPUOnly,
+//     .size = required_size,
+//     .name = "task_cmd_buf",
+// });
+// }
 
 }  // namespace gfx
