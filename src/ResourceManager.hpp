@@ -67,4 +67,5 @@ class ResourceManager {
   inline static ResourceManager *instance_{};
   size_t tot_models_loaded_{0};
   size_t tot_instances_loaded_{0};
+  bool should_release_unused_models_{};
 };

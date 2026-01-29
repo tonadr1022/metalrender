@@ -15,7 +15,8 @@ struct alignas(256) GlobalData {
   float4x4 view;
   float4x4 proj;
   uint render_mode;
-  uint _padding[3];
+  uint frame_num;
+  uint _padding[2];
   float4 camera_pos;
 };
 

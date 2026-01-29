@@ -240,14 +240,15 @@ void RenderGraph::execute() {
   for (auto pass_i : pass_stack_) {
     rhi::CmdEncoder* enc = device_->begin_command_list();
     for (auto& barrier : pass_barrier_infos_[pass_i]) {
-      if (barrier.resource.type == RGResourceType::Buffer ||
-          barrier.resource.type == RGResourceType::ExternalBuffer) {
-        // enc->barrier({}, barrier.src_stage, barrier.src_access, barrier.dst_stage,
-        //              barrier.dst_access);
-        enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
-      } else {
-        enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
-      }
+      enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
+      // if (barrier.resource.type == RGResourceType::Buffer ||
+      //     barrier.resource.type == RGResourceType::ExternalBuffer) {
+      //   // enc->barrier({}, barrier.src_stage, barrier.src_access, barrier.dst_stage,
+      //   //              barrier.dst_access);
+      // } else {
+      //   enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage,
+      //   barrier.dst_access);
+      // }
     }
 
     auto& pass = passes_[pass_i];
@@ -504,6 +505,11 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     for (const auto& write_use : pass.get_external_writes()) {
       auto rg_resource_handle = RGResourceHandle{
           .idx = external_name_to_handle_idx_.at(write_use.name), .type = write_use.type};
+      // if (write_use.name == "out_counts_buf3") {
+      //   LINFO("write {} {} state stage: {}, state access: {}", pass.get_name(), write_use.name,
+      //         rhi_pipeline_stage_to_string(write_use.stage),
+      //         rhi_access_to_string(write_use.acc));
+      // }
       auto& resource_state = get_resource_state(rg_resource_handle);
       resource_state.access = flag_or(resource_state.access, write_use.acc);
       resource_state.stage = flag_or(resource_state.stage, write_use.stage);
@@ -513,13 +519,11 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       auto rg_resource_handle = resource_name_to_handle_.at(write_use.name);
       auto& resource_state = get_resource_state(rg_resource_handle);
       if (write_use.acc & rhi::AccessFlags_AnyWrite) {
-        // add barrier
-        const auto& state = get_resource_state(rg_resource_handle);
         barriers.emplace_back(BarrierInfo{
             .resource = rg_resource_handle,
-            .src_stage = state.stage,
+            .src_stage = resource_state.stage,
             .dst_stage = write_use.stage,
-            .src_access = state.access,
+            .src_access = resource_state.access,
             .dst_access = write_use.acc,
             .debug_name = write_use.name,
         });
@@ -531,15 +535,19 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     for (const auto& read_use : pass.get_external_reads()) {
       auto rg_resource_handle = RGResourceHandle{
           .idx = external_name_to_handle_idx_.at(read_use.name), .type = read_use.type};
-      const auto& state = get_resource_state(rg_resource_handle);
+      auto& resource_state = get_resource_state(rg_resource_handle);
       barriers.emplace_back(BarrierInfo{
           .resource = rg_resource_handle,
-          .src_stage = state.stage,
+          .src_stage = resource_state.stage,
           .dst_stage = read_use.stage,
-          .src_access = state.access,
+          .src_access = resource_state.access,
           .dst_access = read_use.acc,
           .debug_name = read_use.name,
       });
+      if (read_use.acc & rhi::AccessFlags_AnyWrite) {
+        resource_state.access = flag_or(resource_state.access, read_use.acc);
+        resource_state.stage = flag_or(resource_state.stage, read_use.stage);
+      }
     }
     for (const auto& read_use : pass.get_internal_reads()) {
       auto rg_resource_handle = resource_name_to_handle_.at(read_use.name);
@@ -872,8 +880,8 @@ void RGPass::r_external_buf(std::string name) {
     stage = rhi::PipelineStage_ComputeShader;
   } else if (type_ == RGPassType::Graphics) {
     stage = rhi::PipelineStage_AllGraphics;
-  } else {
-    ASSERT(0);
+  } else if (type_ == RGPassType::Transfer) {
+    stage = rhi::PipelineStage_AllTransfer;
   }
   r_external_buf(std::move(name), stage);
 }

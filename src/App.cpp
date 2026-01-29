@@ -6,7 +6,6 @@
 #include <random>
 
 #include "ResourceManager.hpp"
-#include "UI.hpp"
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/MemeRenderer123.hpp"
@@ -99,6 +98,10 @@ App::App() {
   // voxel_world_->init(voxel_renderer_.get(), &renderer_, resource_dir_);
   camera_.pos.x = -5;
   init_camera();
+
+  load_scene_presets();
+  random::seed(10000000);
+  run_preset_scene(0);
 }
 
 App::~App() = default;
@@ -106,78 +109,7 @@ App::~App() = default;
 void App::run() {
   ZoneScoped;
   int scene = 0;
-  [[maybe_unused]] auto load_grid2 = [&](glm::ivec3 radius, float dist, const std::string& path,
-                                         float scale = 1.0f) {
-    glm::ivec3 iter{};
-    glm::ivec3 dims{radius};
-    for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
-      for (iter.y = -dims.y; iter.y <= dims.y; iter.y++) {
-        for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
-          glm::vec3 pos = glm::vec3{iter} * dist;
-          load_model(path, glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
-        }
-      }
-    }
-  };
-  [[maybe_unused]] auto load_grid = [&](int radius, float dist, const std::string& path,
-                                        float scale = 1.0f) {
-    glm::ivec3 iter{};
-    glm::ivec3 dims{radius, 1, radius};
-    for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
-      for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
-        glm::vec3 pos = glm::vec3{iter} * dist;
-        load_model(path, glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
-      }
-    }
-  };
-  const char* sponza_path = "Models/Sponza/glTF_ktx2/Sponza.gltf";
-  // [[maybe_unused]] auto chessboards = [&]() {
-  //   load_grid(4, 1.0, "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf", 10);
-  // };
-  [[maybe_unused]] auto sponzas = [&]() { load_grid(2, 40.0, sponza_path); };
-  // chessboards();
-  sponzas();
-  [[maybe_unused]] auto sponza_single = [&]() { load_model(sponza_path, glm::mat4{1}); };
-  // sponza_single();
-
   if (scene == -1) {
-    glm::ivec3 iter{};
-    int n = 4;
-    glm::ivec3 dims{n, 1, n};
-    float dist = 1.0;
-    for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
-      for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
-        glm::vec3 pos = glm::vec3{iter} * dist;
-        load_model(config_.paths[1], glm::translate(glm::mat4{1}, pos));
-      }
-    }
-    // load_model(config_.paths[1], glm::mat4{1});
-  } else if (scene == 1) {
-    random::seed(10000000);
-    size_t count = 300'000;
-    float scale = 10;
-    float radius = 8000;
-
-    for (size_t i = 0; i < count; i++) {
-      auto rand_f = [radius]() { return random::get_float(-radius, radius); };
-      auto pos = glm::vec3{rand_f(), rand_f(), rand_f()};
-      glm::vec3 randomAxis = glm::linearRand(glm::vec3(-1.0f), glm::vec3(1.0f));
-      float randomAngle = glm::linearRand(0.0f, glm::two_pi<float>());
-      auto rot = glm::angleAxis(randomAngle, glm::normalize(randomAxis));
-      load_model(config_.paths[2], glm::translate(glm::mat4{1}, pos) * glm::mat4_cast(rot) *
-                                       glm::scale(glm::mat4{1}, glm::vec3{scale}));
-    }
-  } else if (scene == 2) {
-    glm::vec3 positions[] = {glm::vec3{0, 0, 0}, glm::vec3{-10, 0, 0}};
-    float scales[] = {3, 1};
-    for (size_t i = 0; i < ARRAY_SIZE(scales); i++) {
-      auto p = positions[i];
-      load_model(config_.paths[0],
-                 glm::translate(glm::mat4{1}, p) * glm::scale(glm::mat4{1}, glm::vec3{scales[i]}));
-    }
-  } else if (scene == 3) {
-    load_model(config_.paths[1], glm::scale(glm::mat4{1}, glm::vec3{1}));
-    // load_model(config_.paths[1], glm::translate(glm::mat4{1}, glm::vec3{0, 1, 0}));
   }
 
   int prev_win_x{}, prev_win_y{};
@@ -187,6 +119,10 @@ void App::run() {
   while (!window_->should_close()) {
     ZoneScopedN("main loop");
     window_->poll_events();
+
+    ImGui_ImplGlfw_NewFrame();
+    ImGui::NewFrame();
+
     int new_win_x{}, new_win_y{};
     glfwGetWindowSize(window_->get_handle(), &new_win_x, &new_win_y);
     if (new_win_x != prev_win_x || new_win_y != prev_win_y) {
@@ -201,9 +137,6 @@ void App::run() {
       prev_win_y = new_win_y;
     }
 
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
     const double curr_time = glfwGetTime();
     auto dt = static_cast<float>(curr_time - last_time);
     last_time = curr_time;
@@ -217,20 +150,25 @@ void App::run() {
     //   ResourceManager::get().get_model(model)->update_transforms();
     // }
 
-    if (imgui_enabled_) {
-      on_imgui(dt);
-    }
-
-    ImGui::Render();
-
     const gfx::RenderArgs args{
         .view_mat = camera_.get_view_mat(),
         .camera_pos = camera_.pos,
         .clear_color = config_.clear_color,
         .draw_imgui = imgui_enabled_,
     };
+
+    if (!renderer_->begin_frame()) {
+      goto end_loop;
+    }
+
+    if (imgui_enabled_) {
+      on_imgui(dt);
+    }
+    ImGui::Render();
+
     renderer_->render(args);
 
+  end_loop:
     ImGui::EndFrame();
   }
   shutdown();
@@ -254,6 +192,15 @@ void App::on_curse_pos_event(double xpos, double ypos) {
 void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
   const auto is_press = action == GLFW_PRESS;
   if (is_press) {
+    if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9 && mods & GLFW_MOD_SUPER) {
+      int idx = key - GLFW_KEY_0;
+      if (idx < (int)scene_presets_.size()) {
+        clear_all_models();
+        camera_ = scene_presets_[idx].cam;
+        scene_presets_[idx].load_fn();
+      }
+    }
+
     if (key == GLFW_KEY_ESCAPE) {
       hide_mouse_ = !hide_mouse_;
       on_hide_mouse_change();
@@ -446,12 +393,23 @@ void App::on_imgui(float dt) {
   if (ImGui::TreeNodeEx("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::DragFloat3("Position", &camera_.pos.x, 0.1f);
     ImGui::DragFloat("Move Speed", &camera_.move_speed, 0.1f, 0.1f, 1000.f);
+    ImGui::Text("Pitch: %.1f Yaw: %.1f", camera_.pitch, camera_.yaw);
     ImGui::DragFloat("Mouse Sensitivity", &camera_.mouse_sensitivity, 0.01f, 0.01f, 1.f);
     ImGui::TreePop();
   }
   if (ImGui::TreeNode("Scene")) {
     ImGui::Text("Loaded Models: %zu", ResourceManager::get().get_tot_models_loaded());
     ImGui::Text("Total Instances: %zu", ResourceManager::get().get_tot_instances_loaded());
+    ImGui::TreePop();
+  }
+  if (ImGui::TreeNode("Load Scene")) {
+    for (const auto& preset : scene_presets_) {
+      if (ImGui::Button(preset.name.c_str())) {
+        camera_ = preset.cam;
+        clear_all_models();
+        preset.load_fn();
+      }
+    }
     ImGui::TreePop();
   }
   ImGui::ColorEdit4("Clear Color", &config_.clear_color.r, ImGuiColorEditFlags_Float);
@@ -511,4 +469,81 @@ void App::shutdown() {
   ResourceManager::shutdown();
   window_->shutdown();
   device_->shutdown();
+}
+
+void App::load_grid(glm::ivec3 radius, float dist, const std::string& path, float scale) {
+  glm::ivec3 iter{};
+  glm::ivec3 dims{radius};
+  for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
+    for (iter.y = -dims.y; iter.y <= dims.y; iter.y++) {
+      for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
+        glm::vec3 pos = glm::vec3{iter} * dist;
+        load_model(path, glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
+      }
+    }
+  }
+};
+
+void App::load_grid(int radius, float dist, const std::string& path, float scale) {
+  glm::ivec3 iter{};
+  glm::ivec3 dims{radius, 1, radius};
+  for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
+    for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
+      glm::vec3 pos = glm::vec3{iter} * dist;
+      load_model(path, glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
+    }
+  }
+};
+
+void App::clear_all_models() {
+  for (auto& m : models_) {
+    ResourceManager::get().free_model(m);
+  }
+  models_.clear();
+}
+
+void App::load_scene_presets() {
+  constexpr const char* sponza_path = "Models/Sponza/glTF_ktx2/Sponza.gltf";
+  constexpr const char* chessboard_path = "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf";
+  constexpr const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
+  constexpr const char* cube_path = "Models/Cube/glTF/Cube.gltf";
+  scene_presets_.clear();
+  scene_presets_.reserve(10);
+  scene_presets_.emplace_back([&, this]() { load_model(sponza_path); }, "sponza",
+                              Camera{.pos = {-6, 2.5, 0}, .move_speed = 2.0f});
+  scene_presets_.emplace_back(
+      [&, this]() { load_grid(glm::ivec3{2, 1, 2}, 40.0, sponza_path); }, "sponza grid",
+      Camera{.pos = {100, 100, -100}, .pitch = -40, .yaw = 145, .move_speed = 15.f});
+  scene_presets_.emplace_back(
+      [&, this]() { load_model(chessboard_path); }, "chessboard",
+      Camera{.pos = {0.4, 0.4, 0.4}, .pitch = -30, .yaw = -130, .move_speed = .25f});
+  scene_presets_.emplace_back(
+      [&, this]() { load_grid(glm::ivec3{4, 0, 4}, 1.0, chessboard_path, 10.0); },
+      "chessboard grid", Camera{.pos = {-30, 10, -20}, .pitch = -25, .yaw = 40, .move_speed = 2.f});
+  scene_presets_.emplace_back([&, this]() { load_model(suzanne_path); }, "suzanne",
+                              Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});
+  scene_presets_.emplace_back([&, this]() { load_random_of_model(3000, 30.f, 1000, suzanne_path); },
+                              "random suzannes",
+                              Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});
+  scene_presets_.emplace_back([&, this]() { load_random_of_model(50'000, 10.f, 3000, cube_path); },
+                              "random cubes",
+                              Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});
+}
+void App::run_preset_scene(int idx) {
+  auto& preset = scene_presets_[idx];
+  clear_all_models();
+  camera_ = preset.cam;
+  preset.load_fn();
+}
+
+void App::load_random_of_model(size_t count, float scale, float radius, const std::string& path) {
+  for (size_t i = 0; i < count; i++) {
+    auto rand_f = [radius]() { return random::get_float(-radius, radius); };
+    auto pos = glm::vec3{rand_f(), rand_f(), rand_f()};
+    glm::vec3 randomAxis = glm::linearRand(glm::vec3(-1.0f), glm::vec3(1.0f));
+    float randomAngle = glm::linearRand(0.0f, glm::two_pi<float>());
+    auto rot = glm::angleAxis(randomAngle, glm::normalize(randomAxis));
+    load_model(path, glm::translate(glm::mat4{1}, pos) * glm::mat4_cast(rot) *
+                         glm::scale(glm::mat4{1}, glm::vec3{scale}));
+  }
 }

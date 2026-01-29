@@ -3,6 +3,7 @@
 #include <tracy/Tracy.hpp>
 
 #include "core/EAssert.hpp"
+#include "core/Logger.hpp"
 #include "gfx/MemeRenderer123.hpp"
 
 ModelHandle ResourceManager::load_model(const std::filesystem::path &path,
@@ -55,8 +56,9 @@ void ResourceManager::free_model(ModelHandle handle) {
   auto &entry = it->second;
   entry.use_count--;
   renderer_->free_instance(model->instance_gpu_handle);
+  tot_instances_loaded_--;
 
-  if (entry.use_count == 0) {
+  if (entry.use_count == 0 && should_release_unused_models_) {
     renderer_->free_model(entry.gpu_resource_handle);
     model_cache_.erase(it);
   }

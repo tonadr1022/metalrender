@@ -71,6 +71,7 @@ class InstanceDataMgr {
     mesh_shaders_enabled_ = mesh_shaders_enabled;
     allocate_buffers(initial_element_cap);
   }
+  [[nodiscard]] bool has_draws() const { return curr_element_count_ > 0; }
   OffsetAllocator::Allocation allocate(size_t element_count);
 
   [[nodiscard]] size_t allocation_size(OffsetAllocator::Allocation alloc) const {
@@ -136,6 +137,7 @@ class MemeRenderer123 {
   MemeRenderer123& operator=(MemeRenderer123&&) = delete;
 
   void render(const RenderArgs& args);
+  bool begin_frame();
   void on_imgui();
   bool on_key_event(int key, int action, int mods);
   bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
@@ -200,6 +202,15 @@ class MemeRenderer123 {
 
   size_t frame_num_{};
   size_t curr_frame_idx_{};
+  size_t prev_frame_idx() const {
+    return curr_frame_idx_ == 0 ? device_->get_info().frames_in_flight - 1 : curr_frame_idx_ - 1;
+  }
+  size_t get_frames_ago_idx(size_t frames_ago) const {
+    if (curr_frame_idx_ >= frames_ago) {
+      return curr_frame_idx_ - frames_ago;
+    }
+    return device_->get_info().frames_in_flight + curr_frame_idx_ - frames_ago;
+  }
   std::filesystem::path resource_dir_;
   std::filesystem::path config_file_path_;
   InstanceDataMgr instance_data_mgr_;
@@ -243,7 +254,6 @@ class MemeRenderer123 {
   bool meshlet_cone_culling_enabled_{true};
   bool meshlet_occlusion_culling_enabled_{true};
   IdxOffset frame_globals_buf_info_;
-  size_t drawn_meshlets_{};
   IdxOffset frame_cull_data_buf_info_;
   bool reverse_z_{true};
   bool mesh_shaders_enabled_{true};
@@ -257,7 +267,12 @@ class MemeRenderer123 {
     Count = DEBUG_RENDER_MODE_COUNT,
   };
   DebugRenderMode debug_render_mode_{DebugRenderMode::None};
+  struct MeshletDrawStats {
+    uint32_t meshlets_drawn_early;
+    uint32_t meshlets_drawn_late;
+  };
   rhi::BufferHandleHolder out_counts_buf_[k_max_frames_in_flight];
+  rhi::BufferHandleHolder out_counts_buf_readback_[k_max_frames_in_flight];
   bool rg_verbose_{};
 };
 

@@ -87,6 +87,22 @@ MTL::PrimitiveType convert(rhi::PrimitiveTopology top) {
   }
 }
 
+MTL::ResourceOptions convert_resource_storage_mode(rhi::StorageMode mode) {
+  using namespace rhi;
+  switch (mode) {
+    case StorageMode::CPUAndGPU:
+    case StorageMode::Default:
+      return MTL::ResourceStorageModeShared;
+    case StorageMode::GPUOnly:
+      return MTL::ResourceStorageModePrivate;
+    default:
+      ASSERT(0 && "invalid storage mode");
+      return MTL::ResourceStorageModePrivate;
+  }
+  ASSERT(0 && "unreachable");
+  return MTL::ResourceStorageModePrivate;
+}
+
 MTL::StorageMode convert_storage_mode(rhi::StorageMode mode) {
   using namespace rhi;
   switch (mode) {

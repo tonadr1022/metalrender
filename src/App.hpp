@@ -31,9 +31,23 @@ struct App {
   void load_config();
   void write_config();
   void on_imgui(float dt);
-  void load_model(const std::string &path, const glm::mat4 &transform);
+  void load_model(const std::string &path, const glm::mat4 &transform = glm::mat4{1});
   void init_camera();
   void write_camera();
+
+  void load_grid(glm::ivec3 radius, float dist, const std::string &path, float scale = 1.0f);
+  void load_random_of_model(size_t count, float scale, float radius, const std::string &path);
+  void load_scene_presets();
+  void run_preset_scene(int idx);
+
+  void load_grid(int radius, float dist, const std::string &path, float scale = 1.0f);
+  void clear_all_models();
+  struct ScenePreset {
+    std::function<void()> load_fn;
+    std::string name;
+    Camera cam;
+  };
+  std::vector<ScenePreset> scene_presets_;
 
   struct Config {
     std::vector<std::filesystem::path> paths;

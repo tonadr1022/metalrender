@@ -356,6 +356,7 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
     usage |= MTL::TextureUsagePixelFormatView;
   }
   texture_desc->setUsage(usage);
+  texture_desc->setResourceOptions(mtl::util::convert_resource_storage_mode(desc.storage_mode));
   auto* tex = device_->newTexture(texture_desc);
   ALWAYS_ASSERT(tex);
   if (mtl4_enabled_) {
@@ -618,7 +619,7 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
       auto prev_frame = frame_num_ - info_.frames_in_flight;
       if (!shared_event_->waitUntilSignaledValue(prev_frame, 2000)) {
         LERROR("No signaled value from shared event for previous frame: {}", prev_frame);
-        exit(1);
+        return false;
       }
     }
   }

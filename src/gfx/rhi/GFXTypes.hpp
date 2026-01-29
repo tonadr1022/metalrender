@@ -81,7 +81,9 @@ enum BufferUsage : uint8_t {
   BufferUsage_Index = 1 << 3,
   BufferUsage_Uniform = 1 << 4,
   // TODO: transder dst/src
-  BufferUsage_Transfer = 1 << 5,
+  BufferUsage_TransferDst = 1 << 5,
+  BufferUsage_TransferSrc = 1 << 6,
+  BufferUsage_Transfer = BufferUsage_TransferDst | BufferUsage_TransferSrc,
 };
 
 struct BufferDesc {
