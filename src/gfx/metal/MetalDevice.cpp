@@ -253,7 +253,7 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
-  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = false});
+  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = true});
 }
 
 void MetalDevice::shutdown() {
@@ -616,8 +616,9 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
     // wait on shared event
     if (frame_num_ >= info_.frames_in_flight) {
       auto prev_frame = frame_num_ - info_.frames_in_flight;
-      if (!shared_event_->waitUntilSignaledValue(prev_frame, 1000ull * 1000)) {
+      if (!shared_event_->waitUntilSignaledValue(prev_frame, 2000)) {
         LERROR("No signaled value from shared event for previous frame: {}", prev_frame);
+        exit(1);
       }
     }
   }
@@ -672,7 +673,6 @@ void MetalDevice::submit_frame() {
   if (mtl4_enabled_) {
     mtl4_resources_->main_cmd_buf->endCommandBuffer();
 
-    // wait until drawable ready
     mtl4_resources_->main_cmd_q->wait(curr_drawable_);
 
     mtl4_resources_->main_cmd_q->commit(&mtl4_resources_->main_cmd_buf, 1);
@@ -1239,6 +1239,7 @@ bool MetalDevice::recreate_swapchain(const rhi::SwapchainDesc& desc) {
     swapchain_.metal_layer_->setDevice(device_);
     swapchain_.metal_layer_->setDisplaySyncEnabled(desc.vsync);
     swapchain_.metal_layer_->setMaximumDrawableCount(3);
+    swapchain_.metal_layer_->setDrawableSize(CGSizeMake(desc.width, desc.height));
     set_layer_for_window(desc.window->get_handle(), swapchain_.metal_layer_);
   } else {
     if (swapchain_.desc_.vsync != desc.vsync) {

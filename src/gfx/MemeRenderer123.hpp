@@ -212,7 +212,6 @@ class MemeRenderer123 {
   gfx::RenderGraph rg_;
 
   std::optional<BackedGPUAllocator> meshlet_vis_buf_;
-  bool meshlet_vis_buf_dirty_{};
 
   std::optional<ImGuiRenderer> imgui_renderer_;
 

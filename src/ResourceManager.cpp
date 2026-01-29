@@ -17,6 +17,7 @@ ModelHandle ResourceManager::load_model(const std::filesystem::path &path,
     if (!renderer_->load_model(path.string(), root_transform, model, gpu_handle)) {
       return {};
     }
+    tot_models_loaded_++;
     auto result = model_cache_.emplace(path_hash, ModelCacheEntry{.model = std::move(model),
                                                                   .gpu_resource_handle = gpu_handle,
                                                                   .use_count = 0});
@@ -41,6 +42,7 @@ ModelHandle ResourceManager::load_model(const std::filesystem::path &path,
         std::max<size_t>(model_instance_pool_.size(), model_to_resource_cache_key_.size() * 2));
   }
   model_to_resource_cache_key_[handle.get_idx()] = path_hash;
+  tot_instances_loaded_++;
 
   return handle;
 }

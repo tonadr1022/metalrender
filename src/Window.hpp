@@ -15,9 +15,11 @@ class Window {
  public:
   using KeyCallbackFn = std::function<void(int key, int action, int mods)>;
   using CursorPosCallbackFn = std::function<void(double x_pos, double y_pos)>;
+  using FramebufferResizeCallbackFn = std::function<void(int width, int height)>;
   struct InitInfo {
     KeyCallbackFn key_callback_fn;
     CursorPosCallbackFn cursor_pos_callback_fn;
+    FramebufferResizeCallbackFn framebuffer_resize_callback_fn;
     int win_dims_x{1280};
     int win_dims_y{720};
     bool floating_window{false};
@@ -40,5 +42,6 @@ class Window {
  protected:
   KeyCallbackFn key_callback_fn_;
   CursorPosCallbackFn cursor_pos_callback_fn_;
+  FramebufferResizeCallbackFn framebuffer_resize_callback_fn_;
   GLFWwindow* window_{};
 };

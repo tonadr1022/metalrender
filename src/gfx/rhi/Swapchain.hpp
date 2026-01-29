@@ -9,6 +9,8 @@ namespace rhi {
 struct SwapchainDesc {
   Window* window;
   bool vsync;
+  uint32_t width;
+  uint32_t height;
 };
 
 class Swapchain {

@@ -10,6 +10,7 @@ void gfx::BufferCopyMgr::copy_to_buffer(const void* src_data, size_t src_size,
   // and enqueue staging -> dst buffer copy.
   auto* buf = device_->get_buf(dst_buffer);
   if (buf->is_cpu_visible()) {
+    ASSERT(dst_offset + src_size <= buf->desc().size);
     memcpy((uint8_t*)buf->contents() + dst_offset, src_data, src_size);
   } else {
     auto upload_buf = staging_buffer_allocator_.alloc(src_size);

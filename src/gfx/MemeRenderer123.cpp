@@ -94,7 +94,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_verbose_ = i++ == -1;
+  rg_verbose_ = i++ == -2;
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
   if (!buffer_copy_mgr_->get_copies().empty()) {
@@ -140,12 +140,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   if (mesh_shaders_enabled_) {
     if (!culling_paused_) {
       auto& clear_bufs_pass = rg_.add_compute_pass("clear_bufs");
-      clear_bufs_pass.w_external_buf("out_draw_count_buf1",
-                                     static_draw_batch_->out_draw_count_buf_.handle);
-      clear_bufs_pass.set_ex([this](rhi::CmdEncoder* enc) {
+      auto out_draw_count_buf_rg_handle = clear_bufs_pass.w_buf(
+          "out_draw_count_buf1", rhi::PipelineStage_ComputeShader, sizeof(uint32_t) * 3, true);
+      clear_bufs_pass.set_ex([this, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
         enc->bind_pipeline(reset_counts_buf_pso_);
-        uint32_t pc =
-            device_->get_buf(static_draw_batch_->out_draw_count_buf_.handle)->bindless_idx();
+        uint32_t pc = device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx();
         enc->push_constants(&pc, sizeof(pc));
         enc->dispatch_compute(glm::uvec3{1, 1, 1}, glm::uvec3{1, 1, 1});
       });
@@ -156,16 +155,19 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       prep_meshlets_pass.r_external_buf("instance_data_buf");
     }
     const char* output_buf_name = "out_draw_count_buf2";
+    RGResourceHandle out_draw_count_buf_rg_handle;
     if (!culling_paused_) {
-      prep_meshlets_pass.rw_external_buf(output_buf_name, "out_draw_count_buf1");
+      out_draw_count_buf_rg_handle = prep_meshlets_pass.rw_buf(
+          output_buf_name, rhi::PipelineStage_ComputeShader, "out_draw_count_buf1");
     } else {
-      prep_meshlets_pass.w_external_buf(output_buf_name,
-                                        static_draw_batch_->out_draw_count_buf_.handle);
+      out_draw_count_buf_rg_handle = prep_meshlets_pass.w_buf(
+          output_buf_name, rhi::PipelineStage_ComputeShader, sizeof(uint32_t) * 3);
     }
     auto task_cmd_buf_rg_handle =
         prep_meshlets_pass.w_buf("task_cmd_buf", rhi::PipelineStage_ComputeShader,
                                  static_draw_batch_->task_cmd_count * sizeof(TaskCmd));
-    prep_meshlets_pass.set_ex([this, task_cmd_buf_rg_handle](rhi::CmdEncoder* enc) {
+    prep_meshlets_pass.set_ex([this, task_cmd_buf_rg_handle,
+                               out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
       enc->bind_pipeline(draw_cull_pso_);
       auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handle);
       if (!culling_paused_) {
@@ -176,7 +178,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
             .cull_data_offset_bytes = frame_cull_data_buf_info_.offset_bytes,
             .task_cmd_buf_idx = device_->get_buf(task_cmd_buf_handle)->bindless_idx(),
             .draw_cnt_buf_idx =
-                device_->get_buf(static_draw_batch_->out_draw_count_buf_)->bindless_idx(),
+                device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx(),
             .instance_data_buf_idx =
                 device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
             .mesh_data_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
@@ -229,8 +231,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                         &last_depth_name](bool late, const char* name) {
     auto& p = rg_.add_graphics_pass(name);
     RGResourceHandle task_cmd_buf_rg_handle;
+    RGResourceHandle out_draw_count_buf_rg_handle{};
     if (mesh_shaders_enabled_) {
-      p.r_external_buf("out_draw_count_buf2", rhi::PipelineStage_TaskShader);
+      out_draw_count_buf_rg_handle = p.r_buf("out_draw_count_buf2", rhi::PipelineStage_TaskShader);
       task_cmd_buf_rg_handle =
           p.r_buf("task_cmd_buf",
                   (PipelineStage)(rhi::PipelineStage_MeshShader | rhi::PipelineStage_TaskShader));
@@ -261,8 +264,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       rg_depth_handle = p.w_depth_output(last_depth_name, {.format = rhi::TextureFormat::D32float});
     }
 
-    p.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, &args, late,
-              task_cmd_buf_rg_handle](rhi::CmdEncoder* enc) {
+    p.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, &args, late, task_cmd_buf_rg_handle,
+              out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
       ZoneScopedN("Execute gbuffer pass");
       auto depth_handle = rg_.get_att_img(rg_depth_handle);
       ASSERT(depth_handle.is_valid());
@@ -290,7 +293,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         };
         static_assert(sizeof(Task2PC) <= 80);
 
-        enc->bind_uav(static_draw_batch_->out_draw_count_buf_.handle, 0);
+        auto out_draw_count_buf_handle = rg_.get_buf(out_draw_count_buf_rg_handle);
+        enc->bind_uav(out_draw_count_buf_handle, 0);
         enc->bind_uav(meshlet_vis_buf_->get_buffer_handle(), 1);
         enc->bind_uav(out_counts_buf_[curr_frame_idx_].handle, 2);
         if (late) {
@@ -319,8 +323,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           pc.flags |= MESHLET_OCCLUSION_CULL_ENABLED_BIT;
         }
         enc->push_constants(&pc, sizeof(pc));
-        enc->draw_mesh_threadgroups_indirect(static_draw_batch_->out_draw_count_buf_.handle, 0,
-                                             {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+        enc->draw_mesh_threadgroups_indirect(out_draw_count_buf_handle, 0, {K_TASK_TG_SIZE, 1, 1},
+                                             {K_MESH_TG_SIZE, 1, 1});
       } else {
         enc->bind_pipeline(test2_pso_);
         ASSERT(indirect_cmd_buf_ids_.size());
@@ -436,7 +440,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
 
       if (args.draw_imgui) {
-        imgui_renderer_->render(enc, window_->get_window_size(), curr_frame_idx_);
+        imgui_renderer_->render(enc, swapchain_tex->desc().dims, curr_frame_idx_);
       }
       enc->end_rendering();
     });
@@ -700,7 +704,6 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   auto& instance_id_to_node = model_resources->instance_id_to_node;
   std::vector<TRS> instance_transforms;
   instance_transforms.reserve(model_instance_datas.size());
-  // TODO: no allocs
   std::vector<InstanceData> instance_datas = {model_instance_datas.begin(),
                                               model_instance_datas.end()};
   std::vector<IndexedIndirectDrawCmd> cmds;
@@ -719,7 +722,6 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
     bool resized{};
     meshlet_vis_buf_alloc =
         meshlet_vis_buf_->allocate(model_resources->totals.instance_meshlets, resized);
-    meshlet_vis_buf_dirty_ = true;
   }
 
   for (size_t i = 0; i < instance_datas.size(); i++) {
@@ -749,7 +751,6 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
     }
   }
   static_draw_batch_->task_cmd_count += model_resources->totals.task_cmd_count;
-  // static_draw_batch_->ensure_task_cmd_buf_space(*device_, static_draw_batch_->task_cmd_count);
 
   stats_.total_instances += instance_datas.size();
   buffer_copy_mgr_->copy_to_buffer(instance_datas.data(),
@@ -1202,15 +1203,14 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
                              DrawBatch::CreateInfo{
                                  .initial_vertex_capacity = 10'000'000,
                                  .initial_index_capacity = 10'000'000,
-                                 .initial_meshlet_capacity = 0,
-                                 .initial_mesh_capacity = 1000,
+                                 .initial_meshlet_capacity = 1'000'000,
+                                 .initial_mesh_capacity = 100'000,
                                  .initial_meshlet_triangle_capacity = 10'000'000,
                                  .initial_meshlet_vertex_capacity = 10'000'000,
                              });
-  meshlet_vis_buf_.emplace(
-      *device_, buffer_copy_mgr_.value(),
-      rhi::BufferDesc{.size = 1'000'000, .bindless = true, .name = "meshlet_vis_buf"},
-      sizeof(uint32_t));
+  meshlet_vis_buf_.emplace(*device_, buffer_copy_mgr_.value(),
+                           rhi::BufferDesc{.size = 1'000'000, .name = "meshlet_vis_buf"},
+                           sizeof(uint32_t));
 
   imgui_renderer_.emplace(*shader_mgr_, device_);
 

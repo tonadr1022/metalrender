@@ -2,7 +2,6 @@
 
 #include "hlsl/default_vertex.h"
 #include "hlsl/shared_mesh_data.h"
-#include "hlsl/shared_task_cmd.h"
 
 namespace gfx {
 
@@ -56,12 +55,12 @@ DrawBatch::DrawBatch(DrawBatchType type, rhi::Device& device, BufferCopyMgr& buf
                            },
                            sizeof(uint32_t)),
       type(type) {
-  out_draw_count_buf_ = device.create_buf_h({
-      .storage_mode = rhi::StorageMode::GPUOnly,
-      .usage = rhi::BufferUsage_Storage,
-      .size = sizeof(uint32_t) * 3,
-      .name = "out_draw_count_buf",
-  });
+  // out_draw_count_buf_ = device.create_buf_h({
+  //     .storage_mode = rhi::StorageMode::GPUOnly,
+  //     .usage = rhi::BufferUsage_Storage,
+  //     .size = sizeof(uint32_t) * 3,
+  //     .name = "out_draw_count_buf",
+  // });
 }
 
 DrawBatch::Stats DrawBatch::get_stats() const {

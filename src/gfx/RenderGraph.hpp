@@ -30,7 +30,10 @@ struct AttachmentInfo {
 
 struct BufferInfo {
   size_t size;
-  bool operator==(const BufferInfo& other) const { return size == other.size; }
+  bool defer_reuse;
+  bool operator==(const BufferInfo& other) const {
+    return size == other.size && defer_reuse == other.defer_reuse;
+  }
 };
 
 }  // namespace gfx
@@ -152,8 +155,8 @@ class RenderGraph {
     RGResourceHandle r_tex(const std::string& name);
     RGResourceHandle w_tex(const std::string& name);
     RGResourceHandle w_color_output(const std::string& name, const AttachmentInfo& att_info);
-    RGResourceHandle rw_color_output(const std::string& name, const std::string& input_name);
     RGResourceHandle w_depth_output(const std::string& name, const AttachmentInfo& att_info);
+    RGResourceHandle rw_color_output(const std::string& name, const std::string& input_name);
     RGResourceHandle rw_depth_output(const std::string& name, const std::string& input_name);
     void r_external_buf(std::string name, rhi::PipelineStage stage);
     void r_external_buf(std::string name);
@@ -161,7 +164,9 @@ class RenderGraph {
     void rw_external_buf(std::string name, const std::string& input_name, rhi::PipelineStage stage);
 
     RGResourceHandle r_buf(const std::string& name, rhi::PipelineStage stage);
-    RGResourceHandle w_buf(const std::string& name, rhi::PipelineStage stage, size_t size);
+    /// @param defer_reuse defer reuse by one frame
+    RGResourceHandle w_buf(const std::string& name, rhi::PipelineStage stage, size_t size,
+                           bool defer_reuse = false);
     RGResourceHandle rw_buf(const std::string& name, rhi::PipelineStage stage,
                             const std::string& input_name);
 
@@ -209,6 +214,8 @@ class RenderGraph {
 
    private:
     RGResourceHandle read_tex(const std::string& name, RGAccess access);
+    RGResourceHandle rw_tex(const std::string& name, const std::string& input_name,
+                            rhi::PipelineStage stage, rhi::AccessFlags access);
     uint32_t add_read_write_resource(const std::string& name);
     std::vector<ResourceAndUsage> resource_usages_;
     std::vector<std::string> rw_resource_read_names_;
@@ -259,6 +266,7 @@ class RenderGraph {
   std::vector<BufferInfo> buffer_infos_;
   std::vector<rhi::TextureHandle> tex_att_handles_;
   std::vector<rhi::BufferHandle> buffer_handles_;
+  std::vector<rhi::BufferHandle> history_buffer_handles_;
 
   struct BarrierInfo {
     RGResourceHandle resource;
@@ -280,6 +288,7 @@ class RenderGraph {
 
   std::unordered_map<gfx::AttachmentInfo, std::vector<rhi::TextureHandle>> free_atts_;
   std::unordered_map<gfx::BufferInfo, std::vector<rhi::BufferHandle>> free_bufs_;
+  std::unordered_map<gfx::BufferInfo, std::vector<rhi::BufferHandle>> history_free_bufs_;
 
   struct BufferInfoAndHandle {
     BufferInfo buf_info;

@@ -266,8 +266,20 @@ void RenderGraph::execute() {
   for (size_t i = 0; i < tex_att_infos_.size(); i++) {
     free_atts_[tex_att_infos_[i]].emplace_back(tex_att_handles_[i]);
   }
+  // history bufs are now gtg
+  for (auto& [info, bufs] : history_free_bufs_) {
+    for (auto& buf : bufs) {
+      free_bufs_[info].emplace_back(buf);
+    }
+  }
+  history_free_bufs_.clear();
+
   for (size_t i = 0; i < buffer_infos_.size(); i++) {
-    free_bufs_[buffer_infos_[i]].emplace_back(buffer_handles_[i]);
+    if (history_buffer_handles_[i].is_valid()) {
+      history_free_bufs_[buffer_infos_[i]].emplace_back(history_buffer_handles_[i]);
+    } else {
+      free_bufs_[buffer_infos_[i]].emplace_back(buffer_handles_[i]);
+    }
   }
   tex_att_infos_.clear();
   buffer_infos_.clear();
@@ -420,6 +432,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   }
   {  // create buffers
     buffer_handles_.clear();
+    history_buffer_handles_.clear();
     for (const auto& binfo : buffer_infos_) {
       rhi::BufferHandle actual_buf_handle{};
       auto free_buf_it = free_bufs_.find(binfo);
@@ -443,6 +456,11 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
         actual_buf_handle = buf_handle;
       }
       buffer_handles_.emplace_back(actual_buf_handle);
+      if (binfo.defer_reuse) {
+        history_buffer_handles_.emplace_back(actual_buf_handle);
+      } else {
+        history_buffer_handles_.emplace_back();
+      }
     }
   }
   // enqueue delete unused free buffers
@@ -719,28 +737,17 @@ RGResourceHandle RGPass::w_color_output(const std::string& name, const Attachmen
 }
 
 RGResourceHandle RGPass::rw_color_output(const std::string& name, const std::string& input_name) {
-  RGResourceHandle handle = rg_->get_resource(input_name, RGResourceType::Texture);
-  uint32_t rw_read_name_i = add_read_write_resource(input_name);
-  rg_->add_internal_rw_usage(name, handle, *this);
-  internal_writes_.emplace_back(
-      NameAndAccess{name, rhi::PipelineStage_ColorAttachmentOutput,
-                    (rhi::AccessFlags)(rhi::AccessFlags_ColorAttachmentRead |
-                                       rhi::AccessFlags_ColorAttachmentWrite),
-                    RGResourceType::Texture, rw_read_name_i});
-  return handle;
+  return rw_tex(name, input_name, rhi::PipelineStage_ColorAttachmentOutput,
+                (rhi::AccessFlags)(rhi::AccessFlags_ColorAttachmentRead |
+                                   rhi::AccessFlags_ColorAttachmentWrite));
 }
 
 RGResourceHandle RGPass::rw_depth_output(const std::string& name, const std::string& input_name) {
-  RGResourceHandle handle = rg_->get_resource(input_name, RGResourceType::Texture);
-  uint32_t rw_read_name_i = add_read_write_resource(input_name);
-  rg_->add_internal_rw_usage(name, handle, *this);
-  internal_writes_.emplace_back(NameAndAccess{
-      name,
+  return rw_tex(
+      name, input_name,
       (rhi::PipelineStage)(rhi::PipelineStage_EarlyFragmentTests |
                            rhi::PipelineStage_LateFragmentTests),
-      (rhi::AccessFlags)(rhi::AccessFlags_DepthStencilRead | rhi::AccessFlags_DepthStencilWrite),
-      RGResourceType::Texture, rw_read_name_i});
-  return handle;
+      (rhi::AccessFlags)(rhi::AccessFlags_DepthStencilRead | rhi::AccessFlags_DepthStencilWrite));
 }
 
 RGResourceHandle RGPass::w_depth_output(const std::string& name, const AttachmentInfo& att_info) {
@@ -944,10 +951,10 @@ void RenderGraph::dfs(const std::vector<std::unordered_set<uint32_t>>& pass_depe
 }
 
 RGResourceHandle RenderGraph::Pass::w_buf(const std::string& name, rhi::PipelineStage stage,
-                                          size_t size) {
+                                          size_t size, bool defer_reuse) {
   internal_writes_.emplace_back(
       NameAndAccess{name, stage, rhi::AccessFlags_ShaderStorageWrite, RGResourceType::Buffer});
-  return rg_->add_buf_usage(name, {.size = size}, *this);
+  return rg_->add_buf_usage(name, {.size = size, .defer_reuse = defer_reuse}, *this);
 }
 
 RGResourceHandle RenderGraph::Pass::r_buf(const std::string& name, rhi::PipelineStage stage) {
@@ -976,10 +983,12 @@ RGResourceHandle RenderGraph::Pass::rw_buf(const std::string& name, rhi::Pipelin
   auto handle = rg_->get_resource(input_name, RGResourceType::Buffer);
   uint32_t rw_read_name_i = add_read_write_resource(input_name);
   rg_->add_internal_rw_usage(name, handle, *this);
-  internal_writes_.emplace_back(NameAndAccess{
+  auto name_access = NameAndAccess{
       name, stage,
       (rhi::AccessFlags)(rhi::AccessFlags_ShaderStorageRead | rhi::AccessFlags_ShaderStorageWrite),
-      RGResourceType::Buffer, rw_read_name_i});
+      RGResourceType::Buffer, rw_read_name_i};
+  internal_writes_.emplace_back(name_access);
+  internal_reads_.emplace_back(name_access);
   return handle;
 }
 
@@ -987,6 +996,17 @@ uint32_t RenderGraph::Pass::add_read_write_resource(const std::string& name) {
   auto idx = rw_resource_read_names_.size();
   rw_resource_read_names_.emplace_back(name);
   return idx;
+}
+
+RGResourceHandle RenderGraph::Pass::rw_tex(const std::string& name, const std::string& input_name,
+                                           rhi::PipelineStage stage, rhi::AccessFlags access) {
+  RGResourceHandle handle = rg_->get_resource(input_name, RGResourceType::Texture);
+  uint32_t rw_read_name_i = add_read_write_resource(input_name);
+  rg_->add_internal_rw_usage(name, handle, *this);
+  auto name_access = NameAndAccess{name, stage, access, RGResourceType::Texture, rw_read_name_i};
+  internal_writes_.emplace_back(name_access);
+  internal_reads_.emplace_back(name_access);
+  return handle;
 }
 
 }  // namespace gfx

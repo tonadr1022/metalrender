@@ -35,6 +35,9 @@ class ResourceManager {
     return *instance_;
   }
 
+  [[nodiscard]] size_t get_tot_models_loaded() const { return tot_models_loaded_; }
+  [[nodiscard]] size_t get_tot_instances_loaded() const { return tot_instances_loaded_; }
+
   ModelInstance *get_model(ModelHandle handle) {
     auto *entry = model_instance_pool_.get(handle);
     return entry ? &entry->instance : nullptr;
@@ -44,6 +47,7 @@ class ResourceManager {
                          const glm::mat4 &root_transform = glm::mat4{1});
   void free_model(ModelHandle handle);
 
+ private:
   struct ModelCacheEntry {
     ModelInstance model;
     ModelGPUHandle gpu_resource_handle;
@@ -61,4 +65,6 @@ class ResourceManager {
 
   gfx::MemeRenderer123 *renderer_{};
   inline static ResourceManager *instance_{};
+  size_t tot_models_loaded_{0};
+  size_t tot_instances_loaded_{0};
 };

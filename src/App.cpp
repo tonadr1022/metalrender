@@ -76,6 +76,7 @@ App::App() {
   device_->init({
       .shader_lib_dir = resource_dir_ / "shader_out",
       .app_name = "lol",
+      .frames_in_flight = 3,
       .hot_reload_enabled = true,
   });
   [[maybe_unused]] bool success = device_->recreate_swapchain({
@@ -104,7 +105,21 @@ App::~App() = default;
 void App::run() {
   ZoneScoped;
   int scene = 0;
-  auto load_grid = [&](int radius, float dist, const std::string& path, float scale = 1.0f) {
+  [[maybe_unused]] auto load_grid2 = [&](glm::ivec3 radius, float dist, const std::string& path,
+                                         float scale = 1.0f) {
+    glm::ivec3 iter{};
+    glm::ivec3 dims{radius};
+    for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
+      for (iter.y = -dims.y; iter.y <= dims.y; iter.y++) {
+        for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
+          glm::vec3 pos = glm::vec3{iter} * dist;
+          load_model(path, glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
+        }
+      }
+    }
+  };
+  [[maybe_unused]] auto load_grid = [&](int radius, float dist, const std::string& path,
+                                        float scale = 1.0f) {
     glm::ivec3 iter{};
     glm::ivec3 dims{radius, 1, radius};
     for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
@@ -120,9 +135,9 @@ void App::run() {
   // };
   [[maybe_unused]] auto sponzas = [&]() { load_grid(10, 40.0, sponza_path); };
   // chessboards();
-  // sponzas();
+  sponzas();
   [[maybe_unused]] auto sponza_single = [&]() { load_model(sponza_path, glm::mat4{1}); };
-  sponza_single();
+  // sponza_single();
 
   if (scene == -1) {
     glm::ivec3 iter{};
@@ -164,10 +179,26 @@ void App::run() {
     // load_model(config_.paths[1], glm::translate(glm::mat4{1}, glm::vec3{0, 1, 0}));
   }
 
+  int prev_win_x{}, prev_win_y{};
+  glfwGetWindowSize(window_->get_handle(), &prev_win_x, &prev_win_y);
   // load_model(config_.paths[0], glm::translate(glm::mat4{1}, glm::vec3{0, 0, 0}));
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
     ZoneScopedN("main loop");
+    window_->poll_events();
+    int new_win_x{}, new_win_y{};
+    glfwGetWindowSize(window_->get_handle(), &new_win_x, &new_win_y);
+    if (new_win_x != prev_win_x || new_win_y != prev_win_y) {
+      prev_win_x = new_win_x;
+      prev_win_y = new_win_y;
+      auto desc = device_->get_swapchain().desc_;
+      desc.window = window_.get();
+      desc.width = new_win_x;
+      desc.height = new_win_y;
+      device_->recreate_swapchain(desc);
+      prev_win_x = new_win_x;
+      prev_win_y = new_win_y;
+    }
 
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
@@ -200,7 +231,6 @@ void App::run() {
     renderer_->render(args);
 
     ImGui::EndFrame();
-    window_->poll_events();
   }
   shutdown();
 }
@@ -416,6 +446,11 @@ void App::on_imgui(float dt) {
     ImGui::DragFloat3("Position", &camera_.pos.x, 0.1f);
     ImGui::DragFloat("Move Speed", &camera_.move_speed, 0.1f, 0.1f, 1000.f);
     ImGui::DragFloat("Mouse Sensitivity", &camera_.mouse_sensitivity, 0.01f, 0.01f, 1.f);
+    ImGui::TreePop();
+  }
+  if (ImGui::TreeNode("Scene")) {
+    ImGui::Text("Loaded Models: %zu", ResourceManager::get().get_tot_models_loaded());
+    ImGui::Text("Total Instances: %zu", ResourceManager::get().get_tot_instances_loaded());
     ImGui::TreePop();
   }
   ImGui::ColorEdit4("Clear Color", &config_.clear_color.r, ImGuiColorEditFlags_Float);

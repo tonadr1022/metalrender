@@ -8,6 +8,7 @@ void Window::init(InitInfo& init_info) {
   ZoneScoped;
   this->key_callback_fn_ = std::move(init_info.key_callback_fn);
   this->cursor_pos_callback_fn_ = std::move(init_info.cursor_pos_callback_fn);
+  this->framebuffer_resize_callback_fn_ = std::move(init_info.framebuffer_resize_callback_fn);
   if (!glfwInit()) {
     LCRITICAL("Failed to initialize glfw");
     exit(1);
@@ -41,11 +42,21 @@ void Window::init(InitInfo& init_info) {
   glfwSetKeyCallback(window_, [](GLFWwindow* window, int key, [[maybe_unused]] int scancode,
                                  int action, int mods) {
     auto* win = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
-    win->key_callback_fn_(key, action, mods);
+    if (win->key_callback_fn_) {
+      win->key_callback_fn_(key, action, mods);
+    }
+  });
+  glfwSetFramebufferSizeCallback(window_, [](GLFWwindow* window, int width, int height) {
+    auto* win = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
+    if (win->framebuffer_resize_callback_fn_) {
+      win->framebuffer_resize_callback_fn_(width, height);
+    }
   });
   glfwSetCursorPosCallback(window_, [](GLFWwindow* window, double xpos, double ypos) {
     auto* win = reinterpret_cast<Window*>(glfwGetWindowUserPointer(window));
-    win->cursor_pos_callback_fn_(xpos, ypos);
+    if (win->cursor_pos_callback_fn_) {
+      win->cursor_pos_callback_fn_(xpos, ypos);
+    }
   });
 }
 

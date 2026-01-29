@@ -80,7 +80,7 @@ struct DrawBatch {
   BackedGPUAllocator meshlet_triangles_buf;
   BackedGPUAllocator meshlet_vertices_buf;
   // rhi::BufferHandleHolder task_cmd_buf_;
-  rhi::BufferHandleHolder out_draw_count_buf_;
+  // rhi::BufferHandleHolder out_draw_count_buf_;
   const DrawBatchType type;
   uint32_t task_cmd_count{};
 };
