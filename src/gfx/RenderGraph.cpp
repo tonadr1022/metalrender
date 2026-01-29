@@ -964,18 +964,17 @@ RGResourceHandle RenderGraph::Pass::r_buf(const std::string& name, rhi::Pipeline
 }
 
 void RenderGraph::shutdown() {
-  for (auto& [att_info, handles] : free_atts_) {
-    for (const auto& handle : handles) {
-      device_->destroy(handle);
+  auto destroy = [this](auto& resource_map) {
+    for (auto& [att_info, handles] : resource_map) {
+      for (const auto& handle : handles) {
+        device_->destroy(handle);
+      }
     }
-  }
-  free_atts_.clear();
-  for (auto& [binfo, handles] : free_bufs_) {
-    for (const auto& handle : handles) {
-      device_->destroy(handle);
-    }
-  }
-  free_bufs_.clear();
+    resource_map.clear();
+  };
+  destroy(free_bufs_);
+  destroy(free_atts_);
+  destroy(history_free_bufs_);
 }
 
 RGResourceHandle RenderGraph::Pass::rw_buf(const std::string& name, rhi::PipelineStage stage,

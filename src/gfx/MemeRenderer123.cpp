@@ -805,14 +805,16 @@ OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
     allocator_->grow(allocator_->capacity());
     ASSERT(new_capacity <= allocator_->capacity());
     auto old_instance_data_buf = std::move(instance_data_buf_);
-    auto old_draw_cmd_buf = std::move(draw_cmd_buf_);
     allocate_buffers(new_capacity);
     buffer_copy_mgr_->copy_to_buffer(device_->get_buf(old_instance_data_buf)->contents(),
                                      old_capacity * sizeof(InstanceData), instance_data_buf_.handle,
                                      0);
+    if (!mesh_shaders_enabled_) {
+    auto old_draw_cmd_buf = std::move(draw_cmd_buf_);
     buffer_copy_mgr_->copy_to_buffer(device_->get_buf(old_draw_cmd_buf)->contents(),
                                      old_capacity * sizeof(IndexedIndirectDrawCmd),
                                      draw_cmd_buf_.handle, 0);
+    }
     return allocate(element_count);
   }
   curr_element_count_ += element_count;

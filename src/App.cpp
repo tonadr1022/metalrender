@@ -6,6 +6,7 @@
 #include <random>
 
 #include "ResourceManager.hpp"
+#include "UI.hpp"
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/MemeRenderer123.hpp"
@@ -133,7 +134,7 @@ void App::run() {
   // [[maybe_unused]] auto chessboards = [&]() {
   //   load_grid(4, 1.0, "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf", 10);
   // };
-  [[maybe_unused]] auto sponzas = [&]() { load_grid(10, 40.0, sponza_path); };
+  [[maybe_unused]] auto sponzas = [&]() { load_grid(2, 40.0, sponza_path); };
   // chessboards();
   sponzas();
   [[maybe_unused]] auto sponza_single = [&]() { load_model(sponza_path, glm::mat4{1}); };
