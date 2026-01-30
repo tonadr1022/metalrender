@@ -16,6 +16,7 @@
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
+#include "gfx/metal/MetalDevice.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -143,7 +144,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       auto out_draw_count_buf_rg_handle = clear_bufs_pass.w_buf(
           "out_draw_count_buf1", rhi::PipelineStage_ComputeShader, sizeof(uint32_t) * 3);
       clear_bufs_pass.set_ex([this, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
-        // enc->write_timestamp(get_query_pool(), 0);
         enc->bind_pipeline(reset_counts_buf_pso_);
         uint32_t pc = device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx();
         enc->push_constants(&pc, sizeof(pc));
@@ -425,25 +425,21 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         debug_render_mode_ == DebugRenderMode::DepthReduceMips) {
       p.sample_external_tex(final_depth_pyramid_name);
     }
-    p.w_external_tex_color_output("output_result_tex",
-                                  device_->get_swapchain().get_texture(curr_frame_idx_));
+    p.w_swapchain_tex(&device_->get_swapchain());
     p.set_ex([this, gbuffer_a_rg_handle, &args](rhi::CmdEncoder* enc) {
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
       auto dims = gbuffer_a_tex->desc().dims;
-      enc->begin_rendering({RenderingAttachmentInfo::color_att(
-          device_->get_swapchain().get_texture(curr_frame_idx_), rhi::LoadOp::DontCare)});
+      device_->begin_swapchain_rendering(&device_->get_swapchain(), enc);
       enc->set_wind_order(rhi::WindOrder::Clockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, dims);
 
-      auto* swapchain_tex = device_->get_tex(device_->get_swapchain().get_texture(0));
-      ASSERT(swapchain_tex);
-      auto format = swapchain_tex->desc().format;
       if (!tex_only_pso_.is_valid()) {
+        // TODO: JIT shader compile for the current render pass's render pass info
         tex_only_pso_ = shader_mgr_->create_graphics_pipeline(
             {.shaders = {{{"fullscreen_quad", ShaderType::Vertex},
                           {"tex_only", ShaderType::Fragment}}},
-             .rendering = {.color_formats{format}}});
+             .rendering = {.color_formats = {rhi::TextureFormat::B8G8R8A8Unorm}}});
       }
       enc->bind_pipeline(tex_only_pso_);
 
@@ -465,12 +461,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
 
       if (args.draw_imgui) {
-        imgui_renderer_->render(enc, swapchain_tex->desc().dims, curr_frame_idx_);
+        // TODO: dims is wrong, need drawable dims
+        imgui_renderer_->render(enc, dims, curr_frame_idx_);
       }
-      // enc->write_timestamp(get_query_pool(), 1);
       enc->end_rendering();
-      // enc->query_resolve(get_query_pool(), 0, k_query_count,
-      //                    query_resolve_bufs_[curr_frame_idx_].handle, 0);
     });
   }
 }
@@ -1284,27 +1278,7 @@ bool MemeRenderer123::begin_frame() {
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
   uniforms_allocator_->reset(curr_frame_idx_);
   staging_buffer_allocator_->reset(curr_frame_idx_);
-  bool success = device_->begin_frame(window_->get_window_size());
-  if (!success) {
-    return success;
-  }
-
-  if (frame_num_ > device_->get_info().frames_in_flight) {
-    // auto* timestamps =
-    //     (uint64_t*)device_->get_buf(query_resolve_bufs_[curr_frame_idx_].handle)->contents();
-    // device_->resolve_query_data(query_pools_[curr_frame_idx_].handle, 0, k_query_count,
-    // timestamps);
-    // LINFO("{} {}", timestamps[0], timestamps[1]);
-    // if (timestamps[1] > timestamps[0]) {
-    //   auto delta_ticks = timestamps[1] - timestamps[0];
-    //   auto timestamp_seconds_per_tick = device_->get_info().timestamp_period;
-    //   auto seconds = delta_ticks * timestamp_seconds_per_tick;
-    //   gpu_frame_time_last_ms_ = seconds * 1000;
-    // } else {
-    //   LINFO("missed: {}", timestamps[0] - timestamps[1]);
-    // }
-  }
-  return success;
+  return device_->begin_frame(window_->get_window_size());
 }
 
 }  // namespace gfx

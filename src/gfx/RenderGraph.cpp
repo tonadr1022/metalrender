@@ -332,10 +332,14 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   for (size_t pass_i = 0; pass_i < passes_.size(); pass_i++) {
     auto& pass = passes_[pass_i];
     bool sink = false;
-    for (const auto& write : pass.get_external_writes()) {
-      if (!external_read_names_.contains(write.name)) {
-        sink = true;
-        break;
+    if (pass.swapchain_write_) {
+      sink = true;
+    } else {
+      for (const auto& write : pass.get_external_writes()) {
+        if (!external_read_names_.contains(write.name)) {
+          sink = true;
+          break;
+        }
       }
     }
     if (sink) {
@@ -628,6 +632,7 @@ AttachmentInfo* RenderGraph::get_tex_att_info(RGResourceHandle handle) {
 }
 
 void RenderGraph::find_deps_recursive(uint32_t pass_i, uint32_t stack_size) {
+  // TODO: rid of stack size
   if (stack_size > passes_.size() * 100) {
     ALWAYS_ASSERT(0 && "RenderGraph: Cycle");
   }
@@ -826,6 +831,7 @@ void RenderGraph::add_external_write_usage(const std::string& name, rhi::BufferH
 
 void RGPass::w_external_tex_color_output(const std::string& name, rhi::TextureHandle tex_handle) {
   ASSERT(type_ == RGPassType::Graphics);
+  // ASSERT(tex_handle.is_valid());
   rg_->add_external_write_usage(name, tex_handle, *this);
   external_writes_.emplace_back(name, rhi::PipelineStage_ColorAttachmentOutput,
                                 rhi::AccessFlags_ColorAttachmentWrite,

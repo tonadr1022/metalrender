@@ -52,6 +52,7 @@ ln -s $HOME/gltf_sample_assets/models/gltf ./resources/models/gltf
 - [DirectX-Graphics-Samples](https://github.com/microsoft/DirectX-Graphics-Samples)
 - [The Maister's Render Graph Deep Dive](https://themaister.net/blog/2017/08/15/render-graphs-and-vulkan-a-deep-dive/)
 - [My previous Vulkan renderer VkRender2](https://github.com/tonadr1022/vkrender2)
+- [WickedEngine](https://wickedengine.net/)
 
 ## Third Party Libraries
 

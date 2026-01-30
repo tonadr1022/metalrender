@@ -2,10 +2,12 @@
 
 #include <Metal/MTLCommandEncoder.hpp>
 #include <Metal/MTLGPUAddress.hpp>
+#include <QuartzCore/CAMetalDrawable.hpp>
 
 #include "gfx/metal/MetalCmdEncoderICBMgr.hpp"
 #include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
+#include "gfx/rhi/Queue.hpp"
 
 class MetalDevice;
 
@@ -127,6 +129,8 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   bool vertex_id_base_dirty_{false};
   int64_t push_debug_group_stack_size_{};
   bool done_{false};
+  rhi::QueueType queue_;
+  std::vector<NS::SharedPtr<CA::MetalDrawable>> presents_;
 
  private:
   void reset(MetalDevice* device, EncoderAPI::CommandBuffer cmd_buf);

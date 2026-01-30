@@ -16,6 +16,7 @@
 #include "gfx/metal/MetalSwapchain.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
+#include "gfx/rhi/Queue.hpp"
 #include "hlsl/shader_constants.h"
 
 class Window;
@@ -53,7 +54,7 @@ class MetalDevice : public rhi::Device {
   using rhi::Device::get_pipeline;
   using rhi::Device::get_tex;
   void shutdown() override;
-  void init(const InitInfo& init_info, const MetalDeviceInitInfo& metal_init_info);
+  bool init(const InitInfo& init_info, const MetalDeviceInitInfo& metal_init_info);
   void init(const InitInfo& init_info) override;
   void on_imgui() override;
   [[nodiscard]] void* get_native_device() const override { return device_; }
@@ -104,6 +105,7 @@ class MetalDevice : public rhi::Device {
 
   void use_bindless_buffer(MTL::RenderCommandEncoder* enc);
   rhi::CmdEncoder* begin_command_list() override;
+  void end_command_list(rhi::CmdEncoder* cmd_enc);
   // TODO: is there a better spot for setting window dims, ie on event
   bool begin_frame(glm::uvec2 window_dims) override;
 
@@ -113,6 +115,7 @@ class MetalDevice : public rhi::Device {
   rhi::Swapchain& get_swapchain() override { return swapchain_; }
   const rhi::Swapchain& get_swapchain() const override { return swapchain_; }
   bool recreate_swapchain(const rhi::SwapchainDesc& desc) override;
+  void begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc) override;
 
   void get_all_buffers(std::vector<rhi::Buffer*>& out_buffers) override;
 
@@ -148,11 +151,46 @@ class MetalDevice : public rhi::Device {
   BlockPool<rhi::QueryPoolHandle, MetalQueryPool> querypool_pool_{16, 1, true};
   Info info_{};
   std::filesystem::path metal_shader_dir_;
+  struct Semaphore {
+    NS::SharedPtr<MTL::SharedEvent> event;
+    size_t value;
+  };
+
+  struct Queue {
+    NS::SharedPtr<MTL4::CommandQueue> queue;
+    std::vector<MTL4::CommandBuffer*> submit_cmd_bufs;
+
+    void signal(const Semaphore& sem) const {
+      if (is_valid()) {
+        queue->signalEvent(sem.event.get(), sem.value);
+      }
+    }
+
+    void wait(const Semaphore& sem) const {
+      if (is_valid()) {
+        queue->wait(sem.event.get(), sem.value);
+      }
+    }
+
+    void submit() {
+      if (is_valid() && !submit_cmd_bufs.empty()) {
+        queue->commit(submit_cmd_bufs.data(), submit_cmd_bufs.size());
+        submit_cmd_bufs.clear();
+      }
+    }
+    [[nodiscard]] bool is_valid() const { return queue.get() != nullptr; }
+  };
+
+  Queue queues_[(int)rhi::QueueType::Count];
+  Queue& get_queue(rhi::QueueType type) { return queues_[(int)type]; }
+  NS::SharedPtr<MTL::SharedEvent> frame_fences_[(int)rhi::QueueType::Count]
+                                               [k_max_frames_in_flight]{};
+  size_t frame_fence_values_[k_max_frames_in_flight];
+
   struct MTL4_Resources {
     MTL4::Compiler* shader_compiler{};
     std::array<MTL4::CommandAllocator*, k_max_frames_in_flight> cmd_allocators{};
-    MTL4::CommandBuffer* main_cmd_buf{};
-    MTL4::CommandQueue* main_cmd_q{};
+    // MTL4::CommandQueue* main_cmd_q{};
     std::vector<std::unique_ptr<Metal4CmdEncoder>> cmd_lists_;
     struct EncoderResources {
       std::array<NS::SharedPtr<MTL4::CommandAllocator>, k_max_frames_in_flight> cmd_allocators;
@@ -179,25 +217,11 @@ class MetalDevice : public rhi::Device {
   size_t frame_num_{};
 
   MTL::Device* device_{};
-  CA::MetalDrawable* curr_drawable_{};
   NS::AutoreleasePool* frame_ar_pool_{};
   MTL::ResidencySet* main_res_set_{};
 
   MetalPSOs psos_;
 
- public:  // TODO: fix
-  size_t curr_event_val_{};
-  MTL::Event* test_event_{};
-  // MTL::CounterSampleBuffer* test_counter_buf_[k_max_frames_in_flight];
-  // MTL::CounterSampleBuffer* curr_counter_buf_{};
-  // std::vector<MTL::CounterSampleBuffer*> free_counter_bufs_;
-  // std::vector<MTL::CounterSampleBuffer*> waiting_counter_bufs_;
-  // MTL::CounterSampleBuffer* get_curr_counter_buf() const { return curr_counter_buf_; }
-  // MTL::CounterSet* timestamp_set_{};
-  // MTL::CounterSampleBuffer* make_counter_sample_buf() const;
-  // size_t curr_counter_buf_idx_{};
-
-  // rhi::BufferHandleHolder top_level_arg_buf_;
   struct GPUFrameAllocator {
     struct Alloc {
       MTL::Buffer* buf;
@@ -220,10 +244,8 @@ class MetalDevice : public rhi::Device {
     MetalDevice* device_;
   };
 
- private:
   bool mtl4_enabled_{};
   std::filesystem::path shader_lib_dir_;
-  MTL::SharedEvent* shared_event_;
 
   // TODO: no public members pls
   // public to other implementation classes
@@ -248,8 +270,6 @@ class MetalDevice : public rhi::Device {
 
   MTL::Library* create_or_get_lib(const std::filesystem::path& path, bool replace = false);
   std::unordered_map<std::string, MTL::Library*> path_to_lib_;
-
-  MTL::ResidencySet* make_residency_set();
 
   class ICB_Mgr {
    public:
@@ -284,7 +304,6 @@ class MetalDevice : public rhi::Device {
     size_t total_buffer_space_allocated;
   };
   RequestedAllocationSizes req_alloc_sizes_{};
-  bool hot_reload_enabled_{true};
 
   // TODO: move
   MTL::Stages compute_enc_flush_stages_{};
@@ -304,7 +323,7 @@ class MetalDevice : public rhi::Device {
       HandleT handle;
       size_t valid_to_delete_frame_num;
     };
-    void enqueue_deletion(rhi::BufferHandle handle, size_t curr_frame_num, size_t frames_in_flight);
+    void enqueue_deletion(rhi::BufferHandle handle, size_t curr_frame_num);
     void flush_deletions(size_t curr_frame_num);
 
    private:

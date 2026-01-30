@@ -1,11 +1,15 @@
 #pragma once
 
+#include <Metal/Metal.hpp>
+
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 
 namespace CA {
 class MetalLayer;
-}
+class MetalDrawable;
+}  // namespace CA
+
 class MetalSwapchain : public rhi::Swapchain {
  public:
   using SwapchainTextures = std::array<rhi::TextureHandleHolder, k_max_frames_in_flight>;
@@ -18,4 +22,6 @@ class MetalSwapchain : public rhi::Swapchain {
 
   SwapchainTextures textures_{};
   CA::MetalLayer* metal_layer_{nullptr};
+  NS::SharedPtr<CA::MetalDrawable> drawable_;
+  // NS::SharedPtr<
 };

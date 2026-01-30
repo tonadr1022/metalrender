@@ -5,6 +5,10 @@
 #include "core/Hash.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 
+namespace rhi {
+class Swapchain;
+}
+
 namespace gfx {
 
 enum class SizeClass : uint8_t { Swapchain, Custom };
@@ -150,6 +154,7 @@ class RenderGraph {
     void r_external_tex(std::string name, rhi::PipelineStage stage);
     void w_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
     void w_external_tex_color_output(const std::string& name, rhi::TextureHandle tex_handle);
+    void w_swapchain_tex(rhi::Swapchain* swapchain) { swapchain_write_ = swapchain; }
     void w_external_buf(const std::string& name, rhi::BufferHandle buf);
     void w_external_buf(const std::string& name, rhi::BufferHandle buf, rhi::PipelineStage stage);
     RGResourceHandle r_tex(const std::string& name);
@@ -191,6 +196,7 @@ class RenderGraph {
       return internal_writes_;
     }
 
+    rhi::Swapchain* swapchain_write_{nullptr};
     std::vector<NameAndAccess> external_reads_;
     std::vector<NameAndAccess> external_writes_;
 

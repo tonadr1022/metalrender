@@ -258,6 +258,7 @@ void MetalCmdEncoderBase<EncoderAPI>::end_encoding() {
   if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
     encoder_state_.cmd_buf->endCommandBuffer();
   }
+  device_->end_command_list(this);
 }
 
 template <typename EncoderAPI>
@@ -818,13 +819,6 @@ void MetalCmdEncoderBase<EncoderAPI>::fill_buffer(rhi::BufferHandle handle, uint
   start_blit_equivalent_encoder();
   if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
     encoder_state_.compute_enc->fillBuffer(buf, NS::Range::Make(offset_bytes, size), value);
-    barrier(rhi::PipelineStage_AllCommands,
-            (rhi::AccessFlags)(rhi::AccessFlags_AnyWrite | rhi::AccessFlags_AnyRead),
-            rhi::PipelineStage_AllCommands,
-            (rhi::AccessFlags)(rhi::AccessFlags_AnyWrite | rhi::AccessFlags_AnyRead));
-    flush_barriers();
-    EncoderAPI::end_compute_encoder(encoder_state_.compute_enc);
-
   } else {
     encoder_state_.blit_enc->fillBuffer(buf, NS::Range::Make(offset_bytes, size), value);
   }

@@ -36,7 +36,6 @@ class Device {
     std::string app_name;
     bool validation_layers_enabled{true};
     size_t frames_in_flight{2};
-    bool hot_reload_enabled{false};
   };
   virtual ~Device() = default;
   virtual void init(const InitInfo& init_info) = 0;
@@ -109,10 +108,14 @@ class Device {
 
   virtual rhi::Swapchain& get_swapchain() = 0;
   virtual bool recreate_swapchain(const SwapchainDesc& desc) = 0;
+  virtual void begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc) = 0;
 
   virtual void resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t start_query,
                                   uint32_t query_count, std::span<uint64_t> out_timestamps) = 0;
   virtual void on_imgui() {}
+
+  [[nodiscard]] size_t frames_in_flight() const { return get_info().frames_in_flight; }
+
   [[nodiscard]] virtual const rhi::Swapchain& get_swapchain() const = 0;
 };
 

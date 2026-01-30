@@ -77,7 +77,6 @@ App::App() {
       .shader_lib_dir = resource_dir_ / "shader_out",
       .app_name = "lol",
       .frames_in_flight = 3,
-      .hot_reload_enabled = true,
   });
   [[maybe_unused]] bool success = device_->recreate_swapchain({
       .window = window_.get(),

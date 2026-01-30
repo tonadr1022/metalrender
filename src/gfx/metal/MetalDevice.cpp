@@ -4,6 +4,8 @@
 
 #include <Foundation/NSSharedPtr.hpp>
 
+#include "gfx/rhi/Queue.hpp"
+
 #define NS_PRIVATE_IMPLEMENTATION
 #include <Foundation/NSData.hpp>
 #include <Foundation/NSObject.hpp>
@@ -146,29 +148,30 @@ MTL::SamplerMipFilter convert_mip_filter(rhi::FilterMode m) {
 
 }  // namespace
 
-void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& metal_init_info) {
+bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& metal_init_info) {
   ZoneScoped;
   // TODO: actually check for mtl4 support
   mtl4_enabled_ = metal_init_info.prefer_mtl4;
   shader_lib_dir_ = init_info.shader_lib_dir;
   shader_lib_dir_ /= "metal";
-  hot_reload_enabled_ = init_info.hot_reload_enabled;
 
   device_ = MTL::CreateSystemDefaultDevice();
 
-  info_.frames_in_flight = init_info.frames_in_flight;
+  info_.frames_in_flight = std::clamp<size_t>(init_info.frames_in_flight, k_min_frames_in_flight,
+                                              k_max_frames_in_flight);
   info_.timestamp_period = 1.f / device_->queryTimestampFrequency();
-  if (init_info.frames_in_flight > k_max_frames_in_flight) {
-    LERROR("Requested frames in flight ({}) exceeds max supported ({}), clamping.",
-           init_info.frames_in_flight, k_max_frames_in_flight);
-    info_.frames_in_flight = k_max_frames_in_flight;
-  } else if (init_info.frames_in_flight < k_min_frames_in_flight) {
-    LERROR("Requested frames in flight ({}) less than minimum ({}), clamping.",
-           init_info.frames_in_flight, k_min_frames_in_flight);
-    info_.frames_in_flight = k_min_frames_in_flight;
-  }
 
-  main_res_set_ = make_residency_set();
+  {  // residency set
+    auto desc = NS::TransferPtr(MTL::ResidencySetDescriptor::alloc()->init());
+    desc->setLabel(mtl::util::string("main residency set"));
+    NS::Error* err{};
+    main_res_set_ = device_->newResidencySet(desc.get(), &err);
+    if (err) {
+      LERROR("Failed to create residency set");
+      return false;
+    }
+    main_res_set_->requestResidency();
+  }
 
   if (mtl4_enabled_) {
     mtl4_resources_.emplace(MTL4_Resources{});
@@ -178,82 +181,48 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
       mtl4_resources_->shader_compiler = device_->newCompiler(compiler_desc, &err);
       compiler_desc->release();
     }
-    for (size_t i = 0; i < info_.frames_in_flight; i++) {
+    for (size_t i = 0; i < frames_in_flight(); i++) {
       mtl4_resources_->cmd_allocators[i] = device_->newCommandAllocator();
     }
-    mtl4_resources_->main_cmd_q = device_->newMTL4CommandQueue();
-    mtl4_resources_->main_cmd_q->addResidencySet(main_res_set_);
-    mtl4_resources_->main_cmd_buf = device_->newCommandBuffer();
-    mtl4_resources_->cmd_lists_.reserve(10);
+    auto init_queue = [this](Queue& queue) {
+      queue.queue = NS::TransferPtr(device_->newMTL4CommandQueue());
+      queue.queue->addResidencySet(main_res_set_);
+    };
+    init_queue(get_queue(rhi::QueueType::Graphics));
+
+    mtl4_resources_->cmd_lists_.reserve(20);
   } else {
     mtl3_resources_.emplace(MTL3_Resources{});
     mtl3_resources_->main_cmd_q = device_->newCommandQueue();
-    mtl3_resources_->cmd_lists_.reserve(10);
+    mtl3_resources_->cmd_lists_.reserve(20);
   }
 
-  push_constant_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
-  test_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
-  arg_buf_allocator_.emplace(1024ul * 1024, this, info_.frames_in_flight);
+  push_constant_allocator_.emplace(1024ul * 1024, this, frames_in_flight());
+  test_allocator_.emplace(1024ul * 1024, this, frames_in_flight());
+  arg_buf_allocator_.emplace(1024ul * 1024, this, frames_in_flight());
 
   init_bindless();
-
-  main_res_set_->requestResidency();
 
   psos_.dispatch_indirect_pso =
       compile_mtl_compute_pipeline(shader_lib_dir_ / "dispatch_indirect.metallib");
   psos_.dispatch_mesh_pso =
       compile_mtl_compute_pipeline(shader_lib_dir_ / "dispatch_mesh.metallib");
 
-  shared_event_ = device_->newSharedEvent();
-  test_event_ = get_device()->newEvent();
-  // counters
-  // {
-  //   auto* sets = device_->counterSets();
-  //   MTL::CounterSet* timestamp_set{};
-  //   for (size_t i = 0; i < sets->count(); i++) {
-  //     auto* cs = (MTL::CounterSet*)sets->object(i);
-  //     if (cs->name()->isEqualToString(MTL::CommonCounterSetTimestamp)) {
-  //       timestamp_set = cs;
-  //       break;
-  //     }
-  //   }
-  //   if (!timestamp_set) {
-  //     LINFO("Metal device does not support timestamp counters, exiting (TODO don't exit).");
-  //     exit(1);
-  //   }
-  //   timestamp_set_ = timestamp_set;
-  //   bool has_gpu_timestamp_counter = false;
-  //   for (size_t i = 0; i < timestamp_set->counters()->count(); i++) {
-  //     auto* counter = (MTL::Counter*)timestamp_set->counters()->object(i);
-  //     if (counter->name()->isEqualToString(MTL::CommonCounterTimestamp)) {
-  //       has_gpu_timestamp_counter = true;
-  //       break;
-  //     }
-  //   }
-  //   if (!has_gpu_timestamp_counter) {
-  //     LINFO("Metal device does not support GPU timestamp counters, exiting (TODO don't exit).");
-  //     exit(1);
-  //   }
-  //
-  //   curr_counter_buf_ = make_counter_sample_buf();
-  //
-  //   // TODO: refactor
-  //   const char* boundary_names[] = {"atStageBoundary", "atDrawBoundary", "atBlitBoundary",
-  //                                   "atDispatchBoundary", "atTileDispatchBoundary"};
-  //   const MTL::CounterSamplingPoint boundary_points[] = {
-  //       MTL::CounterSamplingPointAtStageBoundary,
-  //       MTL::CounterSamplingPointAtDrawBoundary,
-  //       MTL::CounterSamplingPointAtBlitBoundary,
-  //       MTL::CounterSamplingPointAtDispatchBoundary,
-  //       MTL::CounterSamplingPointAtTileDispatchBoundary,
-  //   };
-  //   for (size_t i = 0; i < ARRAY_SIZE(boundary_points); i++) {
-  //     const auto* boundary = boundary_names[i];
-  //     if (device_->supportsCounterSampling(boundary_points[i])) {
-  //       LINFO("supports counter sampling at {}", boundary);
-  //     }
-  //   }
-  // }
+  {  // frame fences
+    for (size_t queue_i = 0; queue_i < (size_t)rhi::QueueType::Count; queue_i++) {
+      if (!queues_[queue_i].is_valid()) {
+        continue;
+      }
+      for (size_t frame_i = 0; frame_i < frames_in_flight(); frame_i++) {
+        frame_fences_[queue_i][frame_i] = NS::TransferPtr(device_->newSharedEvent());
+      }
+    }
+
+    for (size_t frame_i = 0; frame_i < frames_in_flight(); frame_i++) {
+      frame_fence_values_[frame_i] = 0;
+    }
+  }
+  return true;
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
@@ -268,8 +237,7 @@ void MetalDevice::shutdown() {
   test_allocator_.reset();
 
   if (mtl4_enabled_) {
-    mtl4_resources_->main_cmd_q->release();
-    for (size_t i = 0; i < info_.frames_in_flight; i++) {
+    for (size_t i = 0; i < frames_in_flight(); i++) {
       mtl4_resources_->cmd_allocators[i]->release();
     }
     mtl4_resources_->shader_compiler->release();
@@ -382,7 +350,7 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
 }
 
 void MetalDevice::destroy(rhi::BufferHandle handle) {
-  delete_queues_.enqueue_deletion(handle, frame_num_, info_.frames_in_flight);
+  delete_queues_.enqueue_deletion(handle, frame_num_);
 }
 
 void MetalDevice::destroy(rhi::TextureHandle handle) {
@@ -432,17 +400,6 @@ void MetalDevice::destroy(rhi::QueryPoolHandle handle) {
   if (p) {
     p->heap_->release();
   }
-}
-
-MTL::ResidencySet* MetalDevice::make_residency_set() {
-  MTL::ResidencySetDescriptor* desc = MTL::ResidencySetDescriptor::alloc()->init();
-  desc->setLabel(mtl::util::string("main residency set"));
-  NS::Error* err{};
-  MTL::ResidencySet* set = device_->newResidencySet(desc, &err);
-  if (err) {
-    LERROR("Failed to create residency set");
-  }
-  return set;
 }
 
 namespace {
@@ -565,8 +522,8 @@ MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path, 
   if (it != path_to_lib_.end()) {
     return it->second;
   }
-  // read file to buffer to bypass caching for hot reload
-  if (hot_reload_enabled_) {
+  constexpr bool allow_cache = false;
+  if (!allow_cache) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     std::streamsize size = file.tellg();
     file.seekg(0, std::ios::beg);
@@ -616,6 +573,8 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
     curr_cmd_list_idx_++;
     cmd_list->reset(this, res.cmd_buf.get());
     cmd_list->done_ = false;
+    cmd_list->presents_.clear();
+    cmd_list->queue_ = rhi::QueueType::Graphics;
     return mtl4_resources_->cmd_lists_[curr_cmd_list_idx_ - 1].get();
   }
 
@@ -631,33 +590,24 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
   return ret;
 }
 
+void MetalDevice::end_command_list(rhi::CmdEncoder* cmd_enc) {
+  ASSERT(mtl4_enabled_);
+  auto* cmd = (Metal4CmdEncoder*)cmd_enc;
+  get_queue(rhi::QueueType::Graphics).submit_cmd_bufs.push_back(cmd->encoder_state_.cmd_buf);
+}
+
 bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
   curr_cmd_list_idx_ = 0;
   // curr_counter_buf_idx_ = 0;
 
-  {
-    if (frame_num_ >= info_.frames_in_flight) {
-      auto prev_frame = frame_num_ - info_.frames_in_flight;
-      if (!shared_event_->waitUntilSignaledValue(prev_frame, 2000)) {
-        LERROR("No signaled value from shared event for previous frame: {}", prev_frame);
-        return false;
-      }
-    }
-  }
-  {
-    ZoneScopedN("nextDrawable");
-    curr_drawable_ = swapchain_.metal_layer_->nextDrawable();
-  }
-  if (!curr_drawable_) {
-    LINFO("no drawable, exiting");
-    exit(1);
-  }
-
-  if (!curr_drawable_) {
-    return false;
-  }
-
+  // {
+  //   curr_drawable_ = swapchain_.metal_layer_->nextDrawable();
+  //   while (!curr_drawable_) {
+  //     ZoneScopedN("nextDrawable");
+  //     curr_drawable_ = swapchain_.metal_layer_->nextDrawable();
+  //   }
+  // }
   if (swapchain_.metal_layer_->drawableSize().width != window_dims.x ||
       swapchain_.metal_layer_->drawableSize().height != window_dims.y) {
     swapchain_.metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
@@ -672,15 +622,15 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   test_allocator_->reset(frame_idx());
   arg_buf_allocator_->reset(frame_idx());
 
-  rhi::TextureDesc swap_img_desc{};
-  auto* tex = curr_drawable_->texture();
-  ASSERT(tex);
-  swap_img_desc.dims = {tex->width(), tex->height(), 1};
-  swap_img_desc.format = mtl::util::convert(tex->pixelFormat());
-  swap_img_desc.mip_levels = 1;
-  swap_img_desc.array_length = 1;
-  swapchain_.get_textures()[frame_idx()] = rhi::TextureHandleHolder{
-      texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
+  // rhi::TextureDesc swap_img_desc{};
+  // auto* tex = curr_drawable_->texture();
+  // ASSERT(tex);
+  // swap_img_desc.dims = {tex->width(), tex->height(), 1};
+  // swap_img_desc.format = mtl::util::convert(tex->pixelFormat());
+  // swap_img_desc.mip_levels = 1;
+  // swap_img_desc.array_length = 1;
+  // swapchain_.get_textures()[frame_idx()] = rhi::TextureHandleHolder{
+  //     texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
 
   if (mtl4_enabled_) {
     // mtl4_resources_->main_cmd_buf->beginCommandBuffer(mtl4_resources_->cmd_allocators[frame_idx()]);
@@ -694,95 +644,57 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
 void MetalDevice::submit_frame() {
   ZoneScoped;
   if (mtl4_enabled_) {
-    mtl4_resources_->main_cmd_q->wait(curr_drawable_);
-    static std::vector<MTL4::CommandBuffer*> bufs;
-    bufs.clear();
-    bufs.reserve(curr_cmd_list_idx_);
+    // wait for presents to be ready
     for (size_t cmd_list_i = 0; cmd_list_i < curr_cmd_list_idx_; cmd_list_i++) {
-      auto* cmd_list = mtl4_resources_->cmd_lists_[cmd_list_i].get();
-      ASSERT(cmd_list->done_);
-      bufs.emplace_back(mtl4_resources_->cmd_list_res_[cmd_list_i].cmd_buf.get());
-    }
-    mtl4_resources_->main_cmd_q->commit(bufs.data(), bufs.size());
-    // mtl4_resources_->main_cmd_buf->endCommandBuffer();
-
-    // mtl4_resources_->main_cmd_q->commit(&mtl4_resources_->main_cmd_buf, 1);
-
-    mtl4_resources_->main_cmd_q->signalEvent(shared_event_, frame_num_);
-    mtl4_resources_->main_cmd_q->signalDrawable(curr_drawable_);
-    {
-      ZoneScopedN("present");
-      curr_drawable_->present();
-    }
-  } else {
-    auto* end_cb = mtl3_resources_->main_cmd_buf;
-    // auto count = curr_counter_buf_idx_;
-    // if (false) {
-    //   // Temp debug counter buffer stuff
-    //   ASSERT(curr_counter_buf_ != nullptr);
-    //   waiting_counter_bufs_.emplace_back(curr_counter_buf_);
-    //   auto* buf = curr_counter_buf_;
-    //   if (free_counter_bufs_.size() > 0) {
-    //     curr_counter_buf_ = free_counter_bufs_.front();
-    //     free_counter_bufs_.erase(free_counter_bufs_.begin());
-    //   } else {
-    //     curr_counter_buf_ = make_counter_sample_buf();
-    //   }
-    //   auto frame_num = frame_num_;
-    //   MTL::HandlerFunction completion_handler = [this, count, buf,
-    //   frame_num](MTL::CommandBuffer*) {
-    //     ASSERT(count % 2 == 0);
-    //     NS::Data* result = buf->resolveCounterRange(NS::Range::Make(0, count));
-    //     auto* timestamps = (MTL::CounterResultTimestamp*)result->mutableBytes();
-    //     // LINFO("TIMESTAMPS FOR FRAME: {}", frame_num);
-    //     for (size_t i = 0; i < count / 2; i++) {
-    //       // LINFO("GPU Timestamp[{}]: {} us", i,
-    //       //       (timestamps[i * 2 + 1].timestamp - timestamps[i * 2].timestamp) / 1000);
-    //     }
-    //     waiting_counter_bufs_.erase(
-    //         std::remove_if(
-    //             waiting_counter_bufs_.begin(), waiting_counter_bufs_.end(),
-    //             [buf](MTL::CounterSampleBuffer* sample_buf) -> bool { return sample_buf == buf;
-    //             }),
-    //         waiting_counter_bufs_.end());
-    //     free_counter_bufs_.emplace_back(buf);
-    //   };
-    //   end_cb->addCompletedHandler(completion_handler);
-    // }
-
-    if (!mtl3_resources_->present_event_) {
-      mtl3_resources_->present_event_ = get_device()->newEvent();
+      auto* list = mtl4_resources_->cmd_lists_[cmd_list_i].get();
+      for (auto& present : list->presents_) {
+        for (auto& queue : queues_) {
+          queue.queue->wait(present.get());
+        }
+      }
     }
 
-    auto* present_cb = mtl3_resources_->main_cmd_q->commandBuffer();
-    end_cb->encodeSignalEvent(mtl3_resources_->present_event_,
-                              mtl3_resources_->present_event_last_value_);
-    end_cb->encodeSignalEvent(shared_event_, frame_num_);
-    end_cb->commit();
-    present_cb->encodeWait(mtl3_resources_->present_event_,
-                           mtl3_resources_->present_event_last_value_);
-    mtl3_resources_->present_event_last_value_++;
-    {
-      ZoneScopedN("present");
-      present_cb->presentDrawable(curr_drawable_);
-    }
-    {
-      ZoneScopedN("commit");
-      present_cb->commit();
+    for (auto& queue : queues_) {
+      queue.submit();
     }
 
-    // end_cb->encodeSignalEvent(shared_event_, frame_num_);
-    // {
-    //   ZoneScopedN("present");
-    //   end_cb->presentDrawable(curr_drawable_);
-    // }
-    // {
-    //   ZoneScopedN("commit");
-    //   end_cb->commit();
-    // }
+    // signal completion of queues post-commit
+    frame_fence_values_[frame_idx()]++;
+    for (size_t queue_type = 0; queue_type < (size_t)rhi::QueueType::Count; queue_type++) {
+      auto& queue = queues_[queue_type];
+      if (!queue.is_valid()) {
+        continue;
+      }
+      queue.submit();
+      queue.queue->signalEvent(frame_fences_[queue_type][frame_idx()].get(),
+                               frame_fence_values_[frame_idx()]);
+    }
+
+    // presents
+    for (size_t cmd_list_i = 0; cmd_list_i < curr_cmd_list_idx_; cmd_list_i++) {
+      auto* list = mtl4_resources_->cmd_lists_[cmd_list_i].get();
+      for (auto& present : list->presents_) {
+        auto& queue = get_queue(list->queue_);
+        queue.queue->signalDrawable(present.get());
+        present->present();
+      }
+    }
   }
 
   frame_num_++;
+
+  {
+    // wait for N-frames--in-flight-ago frame to complete
+    for (size_t queue_type = 0; queue_type < (size_t)rhi::QueueType::Count; queue_type++) {
+      if (queues_[queue_type].is_valid()) {
+        auto& fence = frame_fences_[queue_type][frame_idx()];
+        if (!fence->waitUntilSignaledValue(frame_fence_values_[frame_idx()], ~0ULL)) {
+          LERROR("No signaled value from shared event for frame: {}, queue: {}", frame_idx(),
+                 to_string((rhi::QueueType)queue_type));
+        }
+      }
+    }
+  }
 
   frame_ar_pool_->release();
 }
@@ -1188,9 +1100,9 @@ void MetalDevice::DeleteQueues::flush_deletions(size_t curr_frame_num) {
   }
 }
 
-void MetalDevice::DeleteQueues::enqueue_deletion(rhi::BufferHandle handle, size_t curr_frame_num,
-                                                 size_t frames_in_flight) {
-  to_delete_buffers.push(Entry<rhi::BufferHandle>{handle, curr_frame_num + frames_in_flight});
+void MetalDevice::DeleteQueues::enqueue_deletion(rhi::BufferHandle handle, size_t curr_frame_num) {
+  to_delete_buffers.push(
+      Entry<rhi::BufferHandle>{handle, curr_frame_num + device_->frames_in_flight()});
 }
 
 void MetalDevice::destroy_actual(rhi::BufferHandle handle) {
@@ -1323,4 +1235,27 @@ void MetalDevice::resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t s
   ASSERT(data);
   ASSERT(out_timestamps.size_bytes() >= resolved_query_data->length());
   memcpy(out_timestamps.data(), data, resolved_query_data->length());
+}
+
+void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc) {
+  ASSERT(mtl4_enabled_);
+  auto* enc = (Metal4CmdEncoder*)cmd_enc;
+  auto* swap = (MetalSwapchain*)swapchain;
+  CA::MetalDrawable* drawable = swap->metal_layer_->nextDrawable();
+  while (!drawable) {
+    drawable = swap->metal_layer_->nextDrawable();
+  }
+  swapchain_.drawable_ = NS::TransferPtr(drawable->retain());
+
+  enc->presents_.emplace_back(swapchain_.drawable_);
+  rhi::TextureDesc swap_img_desc{};
+  auto* tex = drawable->texture();
+  swap_img_desc.dims = {tex->width(), tex->height(), 1};
+  swap_img_desc.format = mtl::util::convert(tex->pixelFormat());
+  swap_img_desc.mip_levels = 1;
+  swap_img_desc.array_length = 1;
+  auto tex_handle = texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true);
+  enc->begin_rendering(
+      {rhi::RenderingAttachmentInfo::color_att(tex_handle, rhi::LoadOp::DontCare)});
+  texture_pool_.destroy(tex_handle);
 }
