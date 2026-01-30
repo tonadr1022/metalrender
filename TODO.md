@@ -1,6 +1,7 @@
 # TODOs
 
-- pass a nice pre-allocated array of all the resource handles to each render graph execute func
+- sometimes the end timestamp is less than start timestamp. This is ridiculous.
+- too much stuff is in device begin/end frame. should be exposed at lower level.
 - either all const ref or all std::move strings in RenderGraph
 - instead of dirty textures in render graph, transition them to shader read first
 - actual readback

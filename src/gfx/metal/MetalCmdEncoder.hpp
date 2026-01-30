@@ -3,7 +3,6 @@
 #include <Metal/MTLCommandEncoder.hpp>
 #include <Metal/MTLGPUAddress.hpp>
 
-#include "core/Util.hpp"
 #include "gfx/metal/MetalCmdEncoderICBMgr.hpp"
 #include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
@@ -109,6 +108,7 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   void bind_uav(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
   void bind_uav(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
   void bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
+  void write_timestamp(rhi::QueryPoolHandle query_pool, uint32_t query_index) override;
 
   EncoderState<EncoderAPI> encoder_state_{};
   MetalDevice* device_{};

@@ -2,6 +2,7 @@
 
 #include <QuartzCore/QuartzCore.h>
 
+#define NS_PRIVATE_IMPLEMENTATION
 #include <Foundation/NSData.hpp>
 #include <Foundation/NSObject.hpp>
 #include <Metal/MTLRenderPipeline.hpp>
@@ -154,6 +155,7 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
   device_ = MTL::CreateSystemDefaultDevice();
 
   info_.frames_in_flight = init_info.frames_in_flight;
+  info_.timestamp_period = 1.f / device_->queryTimestampFrequency();
   if (init_info.frames_in_flight > k_max_frames_in_flight) {
     LERROR("Requested frames in flight ({}) exceeds max supported ({}), clamping.",
            init_info.frames_in_flight, k_max_frames_in_flight);
@@ -423,6 +425,13 @@ void MetalDevice::destroy(rhi::SamplerHandle handle) {
   }
 }
 
+void MetalDevice::destroy(rhi::QueryPoolHandle handle) {
+  auto* p = querypool_pool_.get(handle);
+  if (p) {
+    p->heap_->release();
+  }
+}
+
 MTL::ResidencySet* MetalDevice::make_residency_set() {
   MTL::ResidencySetDescriptor* desc = MTL::ResidencySetDescriptor::alloc()->init();
   desc->setLabel(mtl::util::string("main residency set"));
@@ -614,7 +623,6 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   // curr_counter_buf_idx_ = 0;
 
   {
-    // wait on shared event
     if (frame_num_ >= info_.frames_in_flight) {
       auto prev_frame = frame_num_ - info_.frames_in_flight;
       if (!shared_event_->waitUntilSignaledValue(prev_frame, 2000)) {
@@ -1249,4 +1257,51 @@ bool MetalDevice::recreate_swapchain(const rhi::SwapchainDesc& desc) {
   }
   swapchain_.desc_ = desc;
   return true;
+}
+
+rhi::QueryPoolHandle MetalDevice::create_query_pool(const rhi::QueryPoolDesc& desc) {
+  auto* heap_desc = MTL4::CounterHeapDescriptor::alloc()->init();
+  heap_desc->setCount(desc.count);
+  heap_desc->setType(MTL4::CounterHeapTypeTimestamp);
+  NS::Error* err{};
+  MTL4::CounterHeap* pool = device_->newCounterHeap(heap_desc, &err);
+  if (!desc.name.empty()) {
+    pool->setLabel(mtl::util::string(desc.name));
+  }
+  rhi::QueryPoolHandle handle{};
+  if (!err) {
+    handle = querypool_pool_.alloc(pool);
+  } else {
+    mtl::util::print_err(err);
+  }
+  heap_desc->release();
+  return handle;
+}
+
+rhi::QueryPool* MetalDevice::get_query_pool(const rhi::QueryPoolHandle& handle) {
+  return querypool_pool_.get(handle);
+}
+
+void MetalDevice::resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t start_query,
+                                     uint32_t query_count, std::span<uint64_t> out_timestamps) {
+  ASSERT(mtl4_enabled_);
+  if (!mtl4_enabled_) {
+    LERROR("resolve_query_data requires Metal 4");
+    return;
+  }
+  auto* pool = (MetalQueryPool*)get_query_pool(query_pool);
+  ASSERT(pool);
+  NS::Data* resolved_query_data =
+      pool->heap_->resolveCounterRange(NS::Range::Make(start_query, query_count));
+  ASSERT(resolved_query_data);
+  ASSERT(resolved_query_data->length() == out_timestamps.size_bytes());
+  // objc runtime directly to call -bytes(), since NS::Data binding only has mutableBytes().
+  const void* data = ((const void* (*)(id, SEL))objc_msgSend)((__bridge id)resolved_query_data,
+                                                              sel_registerName("bytes"));
+  // ticks per second
+  // device_->queryTimestampFrequency();
+  // LINFO("FREQQQQQQQQQQ: {}", device_->queryTimestampFrequency());
+  ASSERT(data);
+  ASSERT(out_timestamps.size_bytes() >= resolved_query_data->length());
+  memcpy(out_timestamps.data(), data, resolved_query_data->length());
 }

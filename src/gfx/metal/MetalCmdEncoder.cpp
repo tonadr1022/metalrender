@@ -1025,5 +1025,25 @@ void MetalCmdEncoderBase<EncoderAPI>::bind_srv(rhi::BufferHandle buffer, uint32_
   binding_table_dirty_ = true;
 }
 
+template <typename EncoderAPI>
+void MetalCmdEncoderBase<EncoderAPI>::write_timestamp(rhi::QueryPoolHandle query_pool,
+                                                      uint32_t query_index) {
+  if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
+    auto* pool = (MetalQueryPool*)device_->get_query_pool(query_pool);
+    if (encoder_state_.compute_enc) {
+      encoder_state_.compute_enc->writeTimestamp(MTL4::TimestampGranularityPrecise, pool->heap_,
+                                                 query_index);
+    } else if (encoder_state_.render_enc) {
+      ASSERT(0 && "cannot write timestamp while render encoder is running");
+      // encoder_state_.render_enc->writeTimestamp(MTL4::TimestampGranularityPrecise, pool->heap_,
+      //                                           query_index);
+    } else {
+      encoder_state_.cmd_buf->writeTimestampIntoHeap(pool->heap_, query_index);
+    }
+  } else {
+    LWARN("query pools not supported in Metal3");
+  }
+}
+
 template class MetalCmdEncoderBase<Metal3EncoderAPI>;
 template class MetalCmdEncoderBase<Metal4EncoderAPI>;

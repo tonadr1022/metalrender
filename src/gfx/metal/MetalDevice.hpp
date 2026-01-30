@@ -11,6 +11,7 @@
 #include "core/Handle.hpp"
 #include "core/Pool.hpp"
 #include "gfx/metal/MetalCmdEncoder.hpp"
+#include "gfx/metal/MetalQueryPool.hpp"
 #include "gfx/metal/MetalSampler.hpp"
 #include "gfx/metal/MetalSwapchain.hpp"
 #include "gfx/rhi/Config.hpp"
@@ -83,6 +84,7 @@ class MetalDevice : public rhi::Device {
   void destroy(rhi::TextureHandle handle) override;
   void destroy(rhi::PipelineHandle handle) override;
   void destroy(rhi::SamplerHandle handle) override;
+  void destroy(rhi::QueryPoolHandle handle) override;
 
   rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) override;
@@ -112,11 +114,13 @@ class MetalDevice : public rhi::Device {
   const rhi::Swapchain& get_swapchain() const override { return swapchain_; }
   bool recreate_swapchain(const rhi::SwapchainDesc& desc) override;
 
-  void init_bindless();
-
   void get_all_buffers(std::vector<rhi::Buffer*>& out_buffers) override;
 
   void set_name(rhi::BufferHandle handle, const char* name) override;
+
+  // result is in nano seconds
+  void resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t start_query,
+                          uint32_t query_count, std::span<uint64_t> out_timestamps) override;
 
   struct MetalPSOs {
     MTL::ComputePipelineState* dispatch_indirect_pso{};
@@ -124,8 +128,11 @@ class MetalDevice : public rhi::Device {
   };
 
   const MetalPSOs& get_psos() const { return psos_; }
+  rhi::QueryPoolHandle create_query_pool(const rhi::QueryPoolDesc& desc) override;
+  rhi::QueryPool* get_query_pool(const rhi::QueryPoolHandle& handle);
 
  private:
+  void init_bindless();
   MTL::ComputePipelineState* compile_mtl_compute_pipeline(const std::filesystem::path& path,
                                                           const char* entry_point = "comp_main",
                                                           bool replace = false);
@@ -138,6 +145,7 @@ class MetalDevice : public rhi::Device {
   BlockPool<rhi::TextureHandle, MetalTexture> texture_pool_{128, 1, true};
   BlockPool<rhi::PipelineHandle, MetalPipeline> pipeline_pool_{20, 1, true};
   BlockPool<rhi::SamplerHandle, MetalSampler> sampler_pool_{16, 1, true};
+  BlockPool<rhi::QueryPoolHandle, MetalQueryPool> querypool_pool_{16, 1, true};
   Info info_{};
   std::filesystem::path metal_shader_dir_;
   struct MTL4_Resources {

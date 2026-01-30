@@ -11,15 +11,19 @@ class Device;
 class Texture;
 class Pipeline;
 class Sampler;
+class QueryPool;
 
-using BufferHandle = GenerationalHandle<Buffer>;
-using BufferHandleHolder = Holder<BufferHandle, ::rhi::Device>;
-using TextureHandle = GenerationalHandle<::rhi::Texture>;
-using TextureHandleHolder = Holder<TextureHandle, ::rhi::Device>;
-using PipelineHandle = GenerationalHandle<Pipeline>;
-using PipelineHandleHolder = Holder<PipelineHandle, ::rhi::Device>;
-using SamplerHandle = GenerationalHandle<Sampler>;
-using SamplerHandleHolder = Holder<SamplerHandle, ::rhi::Device>;
+#define MAKE_HANDLE(name)                        \
+  using name##Handle = GenerationalHandle<name>; \
+  using name##HandleHolder = Holder<name##Handle, ::rhi::Device>
+
+MAKE_HANDLE(Texture);
+MAKE_HANDLE(Buffer);
+MAKE_HANDLE(Pipeline);
+MAKE_HANDLE(Sampler);
+MAKE_HANDLE(QueryPool);
+
+#undef MAKE_HANDLE
 
 constexpr uint32_t k_invalid_bindless_idx = UINT32_MAX;
 

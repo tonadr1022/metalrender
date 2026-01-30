@@ -20,6 +20,7 @@
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Pipeline.hpp"
+#include "gfx/rhi/QueryPool.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
 #include "hlsl/default_vertex.h"
@@ -90,6 +91,11 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   rg_verbose_ = i++ == 2;
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
+  {
+    auto* enc = device_->begin_command_list();
+    enc->write_timestamp(get_query_pool(), 0);
+    enc->end_encoding();
+  }
   if (!buffer_copy_mgr_->get_copies().empty()) {
     auto* enc = device_->begin_command_list();
     for (const auto& copy : buffer_copy_mgr_->get_copies()) {
@@ -108,6 +114,11 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
 
   rg_.execute();
+  {
+    auto* enc = device_->begin_command_list();
+    enc->write_timestamp(get_query_pool(), 1);
+    enc->end_encoding();
+  }
 
   device_->submit_frame();
 
@@ -914,6 +925,7 @@ void MemeRenderer123::on_imgui() {
     ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
                 stats_.total_instance_vertices, stats_.total_instances);
     ImGui::Text("Total total instance meshlets: %d", stats_.total_instance_meshlets);
+    ImGui::Text("GPU Frame Time MS %.3f", gpu_frame_time_last_ms_);
 
     MeshletDrawStats stats{};
     constexpr int frames_ago = 2;
@@ -1257,13 +1269,31 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
         .name = "out_counts_buf_readback",
     });
   }
+  for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
+    query_pools_[i] = device_->create_query_pool_h(
+        rhi::QueryPoolDesc{.count = k_query_count, .name = "my_query_pool_" + std::to_string(i)});
+  }
 }
 
 bool MemeRenderer123::begin_frame() {
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
   uniforms_allocator_->reset(curr_frame_idx_);
   staging_buffer_allocator_->reset(curr_frame_idx_);
-  return device_->begin_frame(window_->get_window_size());
+  bool success = device_->begin_frame(window_->get_window_size());
+  if (!success) {
+    return success;
+  }
+
+  if (frame_num_ > device_->get_info().frames_in_flight) {
+    device_->resolve_query_data(query_pools_[curr_frame_idx_].handle, 0, k_query_count, timestamps);
+    auto delta_ticks = timestamps[1] - timestamps[0];
+    if (timestamps[1] > timestamps[0]) {
+      auto timestamp_seconds_per_tick = device_->get_info().timestamp_period;
+      auto seconds = delta_ticks * timestamp_seconds_per_tick;
+      gpu_frame_time_last_ms_ = seconds * 1000;
+    }
+  }
+  return success;
 }
 
 }  // namespace gfx

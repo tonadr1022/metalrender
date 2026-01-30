@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <span>
 
 #include "GFXTypes.hpp"
 #include "Sampler.hpp"
@@ -17,6 +18,7 @@ struct SwapchainDesc;
 struct GraphicsPipelineCreateInfo;
 struct ComputePipelineCreateInfo;
 struct ShaderCreateInfo;
+struct QueryPoolDesc;
 class Device;
 class CmdEncoder;
 class Swapchain;
@@ -27,6 +29,7 @@ class Device {
  public:
   struct Info {
     size_t frames_in_flight;
+    float timestamp_period;
   };
   struct InitInfo {
     std::filesystem::path shader_lib_dir;
@@ -53,6 +56,10 @@ class Device {
   virtual TextureViewHandle create_tex_view(rhi::TextureHandle handle, uint32_t base_mip_level,
                                             uint32_t level_count, uint32_t base_array_layer,
                                             uint32_t layer_count) = 0;
+  virtual QueryPoolHandle create_query_pool(const QueryPoolDesc& desc) = 0;
+  QueryPoolHandleHolder create_query_pool_h(const QueryPoolDesc& desc) {
+    return QueryPoolHandleHolder{create_query_pool(desc), this};
+  }
   virtual void destroy_tex_view(rhi::TextureHandle tex_handle, int tex_view_handle) = 0;
   virtual uint32_t get_tex_view_bindless_idx(rhi::TextureHandle handle, int subresource_id) = 0;
   virtual Texture* get_tex(TextureHandle handle) = 0;
@@ -66,6 +73,7 @@ class Device {
   virtual rhi::Pipeline* get_pipeline(rhi::PipelineHandle handle) = 0;
   virtual void destroy(BufferHandle handle) = 0;
   virtual void destroy(PipelineHandle handle) = 0;
+  virtual void destroy(rhi::QueryPoolHandle handle) = 0;
   virtual rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) = 0;
   virtual bool replace_pipeline(rhi::PipelineHandle handle,
@@ -102,6 +110,8 @@ class Device {
   virtual rhi::Swapchain& get_swapchain() = 0;
   virtual bool recreate_swapchain(const SwapchainDesc& desc) = 0;
 
+  virtual void resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t start_query,
+                                  uint32_t query_count, std::span<uint64_t> out_timestamps) = 0;
   virtual void on_imgui() {}
   [[nodiscard]] virtual const rhi::Swapchain& get_swapchain() const = 0;
 };
