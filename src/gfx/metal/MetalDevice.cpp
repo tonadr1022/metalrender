@@ -2,6 +2,8 @@
 
 #include <QuartzCore/QuartzCore.h>
 
+#include <Foundation/NSSharedPtr.hpp>
+
 #define NS_PRIVATE_IMPLEMENTATION
 #include <Foundation/NSData.hpp>
 #include <Foundation/NSObject.hpp>
@@ -598,11 +600,23 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
     if (curr_cmd_list_idx_ == mtl4_resources_->cmd_lists_.size()) {
       mtl4_resources_->cmd_lists_.emplace_back(
           std::make_unique<MetalCmdEncoderBase<Metal4EncoderAPI>>());
+      mtl4_resources_->cmd_list_res_.emplace_back();
     }
+    ASSERT(curr_cmd_list_idx_ < mtl4_resources_->cmd_lists_.size());
     auto* cmd_list = mtl4_resources_->cmd_lists_[curr_cmd_list_idx_].get();
+    ASSERT(curr_cmd_list_idx_ < mtl4_resources_->cmd_list_res_.size());
+    auto& res = mtl4_resources_->cmd_list_res_[curr_cmd_list_idx_];
+    if (!res.cmd_allocators[frame_idx()]) {
+      res.cmd_allocators[frame_idx()] = NS::TransferPtr(device_->newCommandAllocator());
+    }
+    if (!res.cmd_buf) {
+      res.cmd_buf = NS::TransferPtr(device_->newCommandBuffer());
+    }
+    res.cmd_buf->beginCommandBuffer(res.cmd_allocators[frame_idx()].get());
     curr_cmd_list_idx_++;
-    cmd_list->reset(this, mtl4_resources_->main_cmd_buf);
-    return mtl4_resources_->cmd_lists_.back().get();
+    cmd_list->reset(this, res.cmd_buf.get());
+    cmd_list->done_ = false;
+    return mtl4_resources_->cmd_lists_[curr_cmd_list_idx_ - 1].get();
   }
 
   // MTL3 path
@@ -669,7 +683,7 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
       texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
 
   if (mtl4_enabled_) {
-    mtl4_resources_->main_cmd_buf->beginCommandBuffer(mtl4_resources_->cmd_allocators[frame_idx()]);
+    // mtl4_resources_->main_cmd_buf->beginCommandBuffer(mtl4_resources_->cmd_allocators[frame_idx()]);
   } else {
     mtl3_resources_->main_cmd_buf = mtl3_resources_->main_cmd_q->commandBuffer();
     mtl3_resources_->main_cmd_buf->useResidencySet(main_res_set_);
@@ -680,11 +694,19 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
 void MetalDevice::submit_frame() {
   ZoneScoped;
   if (mtl4_enabled_) {
-    mtl4_resources_->main_cmd_buf->endCommandBuffer();
-
     mtl4_resources_->main_cmd_q->wait(curr_drawable_);
+    static std::vector<MTL4::CommandBuffer*> bufs;
+    bufs.clear();
+    bufs.reserve(curr_cmd_list_idx_);
+    for (size_t cmd_list_i = 0; cmd_list_i < curr_cmd_list_idx_; cmd_list_i++) {
+      auto* cmd_list = mtl4_resources_->cmd_lists_[cmd_list_i].get();
+      ASSERT(cmd_list->done_);
+      bufs.emplace_back(mtl4_resources_->cmd_list_res_[cmd_list_i].cmd_buf.get());
+    }
+    mtl4_resources_->main_cmd_q->commit(bufs.data(), bufs.size());
+    // mtl4_resources_->main_cmd_buf->endCommandBuffer();
 
-    mtl4_resources_->main_cmd_q->commit(&mtl4_resources_->main_cmd_buf, 1);
+    // mtl4_resources_->main_cmd_q->commit(&mtl4_resources_->main_cmd_buf, 1);
 
     mtl4_resources_->main_cmd_q->signalEvent(shared_event_, frame_num_);
     mtl4_resources_->main_cmd_q->signalDrawable(curr_drawable_);
@@ -1293,6 +1315,7 @@ void MetalDevice::resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t s
   ASSERT(pool);
   NS::Data* resolved_query_data =
       pool->heap_->resolveCounterRange(NS::Range::Make(start_query, query_count));
+  pool->heap_->invalidateCounterRange(NS::Range::Make(start_query, query_count));
   ASSERT(resolved_query_data);
   ASSERT(resolved_query_data->length() == out_timestamps.size_bytes());
   // objc runtime directly to call -bytes(), since NS::Data binding only has mutableBytes().

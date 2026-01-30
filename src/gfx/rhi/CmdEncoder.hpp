@@ -39,6 +39,7 @@ class CmdEncoder {
   CmdEncoder() = default;
   virtual ~CmdEncoder() = default;
   virtual void end_encoding() = 0;
+  virtual void set_label(const std::string& label) = 0;
   virtual void set_viewport(glm::uvec2 min, glm::uvec2 extent) = 0;
   virtual void set_scissor(glm::uvec2 min, glm::uvec2 extent) = 0;
 
@@ -89,7 +90,11 @@ class CmdEncoder {
   virtual void bind_uav(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) = 0;
 
   virtual void bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) = 0;
+
   virtual void write_timestamp(rhi::QueryPoolHandle query_pool, uint32_t query_index) = 0;
+  virtual void query_resolve(rhi::QueryPoolHandle query_pool, uint32_t start_query,
+                             uint32_t query_count, rhi::BufferHandle dst_buffer,
+                             size_t dst_offset) = 0;
 };
 
 }  // namespace rhi

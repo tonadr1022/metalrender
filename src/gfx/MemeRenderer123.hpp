@@ -271,6 +271,7 @@ class MemeRenderer123 {
     uint32_t meshlets_drawn_early;
     uint32_t meshlets_drawn_late;
   };
+  // constexpr static int k_num_query_pools = 5;
   rhi::QueryPoolHandleHolder query_pools_[k_max_frames_in_flight];
   rhi::QueryPoolHandle get_query_pool() { return query_pools_[curr_frame_idx_].handle; }
   constexpr static int k_query_count = 10;
@@ -279,6 +280,7 @@ class MemeRenderer123 {
   rhi::BufferHandleHolder out_counts_buf_[k_max_frames_in_flight];
   rhi::BufferHandleHolder out_counts_buf_readback_[k_max_frames_in_flight];
   bool rg_verbose_{};
+  // rhi::BufferHandleHolder query_resolve_bufs_[k_max_frames_in_flight];
 };
 
 }  // namespace gfx

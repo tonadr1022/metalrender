@@ -56,6 +56,7 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   MetalCmdEncoderBase& operator=(const MetalCmdEncoderBase&) = delete;
   MetalCmdEncoderBase& operator=(MetalCmdEncoderBase&&) = delete;
 
+  void set_label(const std::string& label) override;
   void set_debug_name(const char* name) override;
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
   void end_rendering() override;
@@ -108,7 +109,10 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   void bind_uav(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
   void bind_uav(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
   void bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
+
   void write_timestamp(rhi::QueryPoolHandle query_pool, uint32_t query_index) override;
+  void query_resolve(rhi::QueryPoolHandle query_pool, uint32_t start_query, uint32_t query_count,
+                     rhi::BufferHandle dst_buffer, size_t dst_offset) override;
 
   EncoderState<EncoderAPI> encoder_state_{};
   MetalDevice* device_{};
@@ -122,6 +126,7 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   bool draw_id_dirty_{false};
   bool vertex_id_base_dirty_{false};
   int64_t push_debug_group_stack_size_{};
+  bool done_{false};
 
  private:
   void reset(MetalDevice* device, EncoderAPI::CommandBuffer cmd_buf);

@@ -528,6 +528,8 @@ void App::load_scene_presets() {
   scene_presets_.emplace_back([&, this]() { load_random_of_model(50'000, 10.f, 3000, cube_path); },
                               "random cubes",
                               Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});
+  scene_presets_.emplace_back([this]() { load_model("/Users/tony/models/Bistro_Godot_opt.glb"); },
+                              "bistro");
 }
 void App::run_preset_scene(int idx) {
   auto& preset = scene_presets_[idx];

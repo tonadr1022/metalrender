@@ -5,7 +5,6 @@
 // clang-format off
 #include <Metal/MTLComputeCommandEncoder.hpp>
 #include <Metal/Metal.hpp>
-#include "gfx/RendererTypes.hpp"
 #include "gfx/metal/Config.hpp"
 #include "gfx/metal/RootLayout.hpp"
 #include "hlsl/shared_indirect.h"
@@ -76,6 +75,23 @@ namespace {
 template <typename EncoderAPI, typename EncoderT>
 void barrier_after_queue_stages(EncoderT& encoder, size_t src_stages, size_t dst_stages) {
   if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
+    // TODO: Finer grained LMAO
+    MTL4::VisibilityOptions visibility_options = MTL4::VisibilityOptionNone;
+    encoder->barrierAfterStages(MTL::StageAll, MTL::StageAll, visibility_options);
+    // encoder->barrierAfterQueueStages(src_stages, dst_stages, MTL4::VisibilityOptionDevice);
+    if constexpr (std::is_same_v<EncoderT, MTL4::ComputeCommandEncoder*>) {
+      encoder->barrierAfterStages(MTL::StageAll, MTL::StageAll, visibility_options);
+      encoder->barrierAfterEncoderStages(
+          MTL::StageDispatch | MTL::StageBlit | MTL::StageAccelerationStructure,
+          MTL::StageDispatch | MTL::StageBlit | MTL::StageAccelerationStructure,
+          visibility_options);
+    } else if constexpr (std::is_same_v<EncoderT, MTL4::RenderCommandEncoder*>) {
+      encoder->barrierAfterStages(MTL::StageAll, MTL::StageAll, visibility_options);
+      encoder->barrierAfterEncoderStages(
+          MTL::StageVertex | MTL::StageObject | MTL::StageMesh | MTL::StageFragment,
+          MTL::StageVertex | MTL::StageObject | MTL::StageMesh | MTL::StageFragment,
+          visibility_options);
+    }
     encoder->barrierAfterQueueStages(src_stages, dst_stages, MTL4::VisibilityOptionDevice);
   } else {
     encoder->barrierAfterQueueStages(src_stages, dst_stages);
@@ -181,10 +197,12 @@ template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::reset(MetalDevice* device,
                                             EncoderAPI::CommandBuffer cmd_buf) {
   device_ = device;
+  ASSERT(cmd_buf);
   // TODO: refactor
   cmd_icb_mgr_.init(device_);
-  encoder_state_ = {};
-  ASSERT(cmd_buf);
+  encoder_state_.compute_enc = nullptr;
+  encoder_state_.render_enc = nullptr;
+  encoder_state_.blit_enc = nullptr;
   encoder_state_.cmd_buf = cmd_buf;
   root_layout_ = {};
   binding_table_ = {};
@@ -235,6 +253,11 @@ void MetalCmdEncoderBase<EncoderAPI>::end_encoding() {
   EncoderAPI::end_compute_encoder(encoder_state_.compute_enc);
   EncoderAPI::end_render_encoder(encoder_state_.render_enc);
   EncoderAPI::end_blit_encoder(encoder_state_.blit_enc);
+  ASSERT(!done_);
+  done_ = true;
+  if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
+    encoder_state_.cmd_buf->endCommandBuffer();
+  }
 }
 
 template <typename EncoderAPI>
@@ -1045,5 +1068,29 @@ void MetalCmdEncoderBase<EncoderAPI>::write_timestamp(rhi::QueryPoolHandle query
   }
 }
 
+template <typename EncoderAPI>
+void MetalCmdEncoderBase<EncoderAPI>::set_label(const std::string& label) {
+  if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
+    encoder_state_.cmd_buf->setLabel(mtl::util::string(label.c_str()));
+  }
+}
+
+template <typename EncoderAPI>
+void MetalCmdEncoderBase<EncoderAPI>::query_resolve(rhi::QueryPoolHandle query_pool,
+                                                    uint32_t start_query, uint32_t query_count,
+                                                    rhi::BufferHandle dst_buffer,
+                                                    size_t dst_offset) {
+  if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
+    auto* pool = (MetalQueryPool*)device_->get_query_pool(query_pool);
+    auto* buf = device_->get_mtl_buf(dst_buffer);
+    auto range =
+        MTL4::BufferRange::Make(buf->gpuAddress() + dst_offset, query_count * sizeof(uint64_t));
+    ASSERT(buf->length() >= dst_offset + query_count * sizeof(uint64_t));
+    encoder_state_.cmd_buf->resolveCounterHeap(
+        pool->heap_, NS::Range::Make(start_query, query_count), range, nullptr, nullptr);
+  } else {
+    LWARN("query pools not supported in Metal3");
+  }
+}
 template class MetalCmdEncoderBase<Metal3EncoderAPI>;
 template class MetalCmdEncoderBase<Metal4EncoderAPI>;

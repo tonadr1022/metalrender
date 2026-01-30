@@ -154,6 +154,11 @@ class MetalDevice : public rhi::Device {
     MTL4::CommandBuffer* main_cmd_buf{};
     MTL4::CommandQueue* main_cmd_q{};
     std::vector<std::unique_ptr<Metal4CmdEncoder>> cmd_lists_;
+    struct EncoderResources {
+      std::array<NS::SharedPtr<MTL4::CommandAllocator>, k_max_frames_in_flight> cmd_allocators;
+      NS::SharedPtr<MTL4::CommandBuffer> cmd_buf;
+    };
+    std::vector<EncoderResources> cmd_list_res_;
   };
   std::optional<MTL4_Resources> mtl4_resources_;
 

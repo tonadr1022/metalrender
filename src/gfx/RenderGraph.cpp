@@ -237,8 +237,9 @@ RenderGraph::Pass& RenderGraph::add_pass(const std::string& name, RGPassType typ
 
 void RenderGraph::execute() {
   ZoneScoped;
+  rhi::CmdEncoder* enc = device_->begin_command_list();
   for (auto pass_i : pass_stack_) {
-    rhi::CmdEncoder* enc = device_->begin_command_list();
+    // enc->set_label(passes_[pass_i].get_name());
     for (auto& barrier : pass_barrier_infos_[pass_i]) {
       enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
       // if (barrier.resource.type == RGResourceType::Buffer ||
@@ -254,8 +255,8 @@ void RenderGraph::execute() {
     auto& pass = passes_[pass_i];
     enc->set_debug_name(pass.get_name().c_str());
     pass.get_execute_fn()(enc);
-    enc->end_encoding();
   }
+  enc->end_encoding();
   {
     passes_.clear();
     for (auto& b : pass_barrier_infos_) {
