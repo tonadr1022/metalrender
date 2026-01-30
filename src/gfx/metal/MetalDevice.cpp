@@ -1315,15 +1315,11 @@ void MetalDevice::resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t s
   ASSERT(pool);
   NS::Data* resolved_query_data =
       pool->heap_->resolveCounterRange(NS::Range::Make(start_query, query_count));
-  pool->heap_->invalidateCounterRange(NS::Range::Make(start_query, query_count));
   ASSERT(resolved_query_data);
   ASSERT(resolved_query_data->length() == out_timestamps.size_bytes());
   // objc runtime directly to call -bytes(), since NS::Data binding only has mutableBytes().
   const void* data = ((const void* (*)(id, SEL))objc_msgSend)((__bridge id)resolved_query_data,
                                                               sel_registerName("bytes"));
-  // ticks per second
-  // device_->queryTimestampFrequency();
-  // LINFO("FREQQQQQQQQQQ: {}", device_->queryTimestampFrequency());
   ASSERT(data);
   ASSERT(out_timestamps.size_bytes() >= resolved_query_data->length());
   memcpy(out_timestamps.data(), data, resolved_query_data->length());

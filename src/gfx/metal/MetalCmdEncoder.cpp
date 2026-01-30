@@ -818,6 +818,13 @@ void MetalCmdEncoderBase<EncoderAPI>::fill_buffer(rhi::BufferHandle handle, uint
   start_blit_equivalent_encoder();
   if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
     encoder_state_.compute_enc->fillBuffer(buf, NS::Range::Make(offset_bytes, size), value);
+    barrier(rhi::PipelineStage_AllCommands,
+            (rhi::AccessFlags)(rhi::AccessFlags_AnyWrite | rhi::AccessFlags_AnyRead),
+            rhi::PipelineStage_AllCommands,
+            (rhi::AccessFlags)(rhi::AccessFlags_AnyWrite | rhi::AccessFlags_AnyRead));
+    flush_barriers();
+    EncoderAPI::end_compute_encoder(encoder_state_.compute_enc);
+
   } else {
     encoder_state_.blit_enc->fillBuffer(buf, NS::Range::Make(offset_bytes, size), value);
   }
@@ -1057,9 +1064,8 @@ void MetalCmdEncoderBase<EncoderAPI>::write_timestamp(rhi::QueryPoolHandle query
       encoder_state_.compute_enc->writeTimestamp(MTL4::TimestampGranularityPrecise, pool->heap_,
                                                  query_index);
     } else if (encoder_state_.render_enc) {
-      ASSERT(0 && "cannot write timestamp while render encoder is running");
-      // encoder_state_.render_enc->writeTimestamp(MTL4::TimestampGranularityPrecise, pool->heap_,
-      //                                           query_index);
+      encoder_state_.render_enc->writeTimestamp(MTL4::TimestampGranularityPrecise,
+                                                MTL::RenderStageFragment, pool->heap_, query_index);
     } else {
       encoder_state_.cmd_buf->writeTimestampIntoHeap(pool->heap_, query_index);
     }

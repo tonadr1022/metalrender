@@ -143,7 +143,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       auto out_draw_count_buf_rg_handle = clear_bufs_pass.w_buf(
           "out_draw_count_buf1", rhi::PipelineStage_ComputeShader, sizeof(uint32_t) * 3);
       clear_bufs_pass.set_ex([this, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
-        enc->write_timestamp(get_query_pool(), 0);
+        // enc->write_timestamp(get_query_pool(), 0);
         enc->bind_pipeline(reset_counts_buf_pso_);
         uint32_t pc = device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx();
         enc->push_constants(&pc, sizeof(pc));
@@ -467,8 +467,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       if (args.draw_imgui) {
         imgui_renderer_->render(enc, swapchain_tex->desc().dims, curr_frame_idx_);
       }
+      // enc->write_timestamp(get_query_pool(), 1);
       enc->end_rendering();
-      enc->write_timestamp(get_query_pool(), 1);
+      // enc->query_resolve(get_query_pool(), 0, k_query_count,
+      //                    query_resolve_bufs_[curr_frame_idx_].handle, 0);
     });
   }
 }
@@ -1270,11 +1272,11 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
   for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
     query_pools_[i] = device_->create_query_pool_h(
         rhi::QueryPoolDesc{.count = k_query_count, .name = "my_query_pool_" + std::to_string(i)});
-    // query_resolve_bufs_[i] = device_->create_buf_h(rhi::BufferDesc{
-    //     .storage_mode = rhi::StorageMode::CPUAndGPU,
-    //     .size = sizeof(uint64_t) * k_query_count,
-    //     .name = "query_resolve_buf",
-    // });
+    query_resolve_bufs_[i] = device_->create_buf_h(rhi::BufferDesc{
+        .storage_mode = rhi::StorageMode::CPUAndGPU,
+        .size = sizeof(uint64_t) * k_query_count,
+        .name = "query_resolve_buf",
+    });
   }
 }
 
@@ -1288,29 +1290,18 @@ bool MemeRenderer123::begin_frame() {
   }
 
   if (frame_num_ > device_->get_info().frames_in_flight) {
-    uint64_t old_timestamps[k_query_count]{};
-    for (size_t i = 0; i < k_query_count; i++) {
-      old_timestamps[i] = timestamps[i];
-    }
-    device_->resolve_query_data(query_pools_[curr_frame_idx_].handle, 0, k_query_count, timestamps);
-    auto delta_ticks = timestamps[1] - timestamps[0];
-    LINFO("FRAME: {}", frame_num_);
-    LINFO("old: {} {}", old_timestamps[0], old_timestamps[1]);
-    LINFO("new: {} {}", timestamps[0], timestamps[1]);
-    if (timestamps[1] > timestamps[0]) {
-      auto timestamp_seconds_per_tick = device_->get_info().timestamp_period;
-      auto seconds = delta_ticks * timestamp_seconds_per_tick;
-      gpu_frame_time_last_ms_ = seconds * 1000;
-    } else {
-      LINFO("missed: {}", timestamps[0] - timestamps[1]);
-    }
-    // {
-    //   auto* resolve_buf =
-    //       (uint64_t*)device_->get_buf(query_resolve_bufs_[curr_frame_idx_])->contents();
-    //   LINFO("b");
-    //   LINFO("{} {}", resolve_buf[0], resolve_buf[1]);
-    //   LINFO("{} {}", timestamps[0], timestamps[1]);
-    //   LINFO("////////");
+    // auto* timestamps =
+    //     (uint64_t*)device_->get_buf(query_resolve_bufs_[curr_frame_idx_].handle)->contents();
+    // device_->resolve_query_data(query_pools_[curr_frame_idx_].handle, 0, k_query_count,
+    // timestamps);
+    // LINFO("{} {}", timestamps[0], timestamps[1]);
+    // if (timestamps[1] > timestamps[0]) {
+    //   auto delta_ticks = timestamps[1] - timestamps[0];
+    //   auto timestamp_seconds_per_tick = device_->get_info().timestamp_period;
+    //   auto seconds = delta_ticks * timestamp_seconds_per_tick;
+    //   gpu_frame_time_last_ms_ = seconds * 1000;
+    // } else {
+    //   LINFO("missed: {}", timestamps[0] - timestamps[1]);
     // }
   }
   return success;
