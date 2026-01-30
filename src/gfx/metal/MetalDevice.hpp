@@ -296,6 +296,21 @@ class MetalDevice : public rhi::Device {
 
   void destroy_actual(rhi::BufferHandle handle);
 
+  struct Semaphore {
+    NS::SharedPtr<MTL::SharedEvent> event;
+    uint64_t value;
+  };
+
+  struct SemaphorePool {
+    Semaphore acquire();
+    void release(Semaphore&& semaphore) { free_semaphores.push_back(std::move(semaphore)); }
+    std::vector<Semaphore> free_semaphores;
+    MTL::Device* device_{};
+  };
+
+  NS::SharedPtr<MTL::SharedEvent> frame_fences_[k_max_frames_in_flight];
+  size_t frame_fence_values_[k_max_frames_in_flight]{};
+
  private:
   struct DeleteQueues {
     explicit DeleteQueues(MetalDevice* device) : device_(device) {}

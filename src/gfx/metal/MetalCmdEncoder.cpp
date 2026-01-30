@@ -3,6 +3,7 @@
 #include <sys/wait.h>
 
 // clang-format off
+#include <Metal/MTL4Counters.hpp>
 #include <Metal/MTLComputeCommandEncoder.hpp>
 #include <Metal/Metal.hpp>
 #include "gfx/metal/Config.hpp"
@@ -250,6 +251,7 @@ void MetalCmdEncoderBase<EncoderAPI>::flush_barriers() {
 
 template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::end_encoding() {
+  flush_barriers();
   EncoderAPI::end_compute_encoder(encoder_state_.compute_enc);
   EncoderAPI::end_render_encoder(encoder_state_.render_enc);
   EncoderAPI::end_blit_encoder(encoder_state_.blit_enc);
@@ -1051,16 +1053,28 @@ void MetalCmdEncoderBase<EncoderAPI>::bind_srv(rhi::BufferHandle buffer, uint32_
 template <typename EncoderAPI>
 void MetalCmdEncoderBase<EncoderAPI>::write_timestamp(rhi::QueryPoolHandle query_pool,
                                                       uint32_t query_index) {
+  // LINFO("writing timestamp {}", query_index);
   if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
     auto* pool = (MetalQueryPool*)device_->get_query_pool(query_pool);
+    constexpr MTL4::TimestampGranularity granularity = MTL4::TimestampGranularityPrecise;
     if (encoder_state_.compute_enc) {
-      encoder_state_.compute_enc->writeTimestamp(MTL4::TimestampGranularityPrecise, pool->heap_,
-                                                 query_index);
+      ASSERT(query_index == 0);
+      encoder_state_.compute_enc->writeTimestamp(granularity, pool->heap_, query_index);
+      encoder_state_.compute_enc->barrierAfterStages(MTL::StageAll, MTL::StageAll,
+                                                     MTL4::VisibilityOptionDevice);
     } else if (encoder_state_.render_enc) {
-      ASSERT(0 && "cannot write timestamp while render encoder is running");
-      // encoder_state_.render_enc->writeTimestamp(MTL4::TimestampGranularityPrecise, pool->heap_,
-      //                                           query_index);
+      ASSERT(query_index == 1);
+      encoder_state_.render_enc->writeTimestamp(granularity, MTL::RenderStageVertex, pool->heap_,
+                                                query_index);
+      encoder_state_.render_enc->barrierAfterStages(MTL::StageAll, MTL::StageAll,
+                                                    MTL4::VisibilityOptionDevice);
+      if (!tmp_fences_[device_->frame_idx()]) {
+        tmp_fences_[device_->frame_idx()] = device_->get_device()->newFence();
+      }
+      encoder_state_.render_enc->updateFence(tmp_fences_[device_->frame_idx()],
+                                             MTL::StageVertex | MTL::StageFragment);
     } else {
+      ASSERT(0 && "not using this right now");
       encoder_state_.cmd_buf->writeTimestampIntoHeap(pool->heap_, query_index);
     }
   } else {
@@ -1083,11 +1097,14 @@ void MetalCmdEncoderBase<EncoderAPI>::query_resolve(rhi::QueryPoolHandle query_p
   if constexpr (std::is_same_v<EncoderAPI, Metal4EncoderAPI>) {
     auto* pool = (MetalQueryPool*)device_->get_query_pool(query_pool);
     auto* buf = device_->get_mtl_buf(dst_buffer);
+    ASSERT(device_->get_device()->sizeOfCounterHeapEntry(MTL4::CounterHeapTypeTimestamp) ==
+           sizeof(uint64_t));
     auto range =
         MTL4::BufferRange::Make(buf->gpuAddress() + dst_offset, query_count * sizeof(uint64_t));
     ASSERT(buf->length() >= dst_offset + query_count * sizeof(uint64_t));
-    encoder_state_.cmd_buf->resolveCounterHeap(
-        pool->heap_, NS::Range::Make(start_query, query_count), range, nullptr, nullptr);
+    encoder_state_.cmd_buf->resolveCounterHeap(pool->heap_,
+                                               NS::Range::Make(start_query, query_count), range,
+                                               tmp_fences_[device_->frame_idx()], nullptr);
   } else {
     LWARN("query pools not supported in Metal3");
   }

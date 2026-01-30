@@ -205,6 +205,10 @@ void MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
       compile_mtl_compute_pipeline(shader_lib_dir_ / "dispatch_mesh.metallib");
 
   shared_event_ = device_->newSharedEvent();
+  for (size_t i = 0; i < get_info().frames_in_flight; i++) {
+    frame_fences_[i] = NS::TransferPtr(device_->newSharedEvent());
+    frame_fence_values_[i] = 0;
+  }
   test_event_ = get_device()->newEvent();
   // counters
   // {
@@ -614,9 +618,12 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
     }
     res.cmd_buf->beginCommandBuffer(res.cmd_allocators[frame_idx()].get());
     curr_cmd_list_idx_++;
+    ASSERT(!cmd_list->encoder_state_.blit_enc);
+    ASSERT(!cmd_list->encoder_state_.compute_enc);
+    ASSERT(!cmd_list->encoder_state_.render_enc);
     cmd_list->reset(this, res.cmd_buf.get());
     cmd_list->done_ = false;
-    return mtl4_resources_->cmd_lists_[curr_cmd_list_idx_ - 1].get();
+    return cmd_list;
   }
 
   // MTL3 path
@@ -636,15 +643,6 @@ bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
   curr_cmd_list_idx_ = 0;
   // curr_counter_buf_idx_ = 0;
 
-  {
-    if (frame_num_ >= info_.frames_in_flight) {
-      auto prev_frame = frame_num_ - info_.frames_in_flight;
-      if (!shared_event_->waitUntilSignaledValue(prev_frame, 2000)) {
-        LERROR("No signaled value from shared event for previous frame: {}", prev_frame);
-        return false;
-      }
-    }
-  }
   {
     ZoneScopedN("nextDrawable");
     curr_drawable_ = swapchain_.metal_layer_->nextDrawable();
@@ -695,6 +693,8 @@ void MetalDevice::submit_frame() {
   ZoneScoped;
   if (mtl4_enabled_) {
     mtl4_resources_->main_cmd_q->wait(curr_drawable_);
+
+    // submit command buffers
     static std::vector<MTL4::CommandBuffer*> bufs;
     bufs.clear();
     bufs.reserve(curr_cmd_list_idx_);
@@ -704,11 +704,13 @@ void MetalDevice::submit_frame() {
       bufs.emplace_back(mtl4_resources_->cmd_list_res_[cmd_list_i].cmd_buf.get());
     }
     mtl4_resources_->main_cmd_q->commit(bufs.data(), bufs.size());
-    // mtl4_resources_->main_cmd_buf->endCommandBuffer();
 
-    // mtl4_resources_->main_cmd_q->commit(&mtl4_resources_->main_cmd_buf, 1);
-
+    auto* fence = frame_fences_[frame_idx()].get();
+    auto& val = frame_fence_values_[frame_idx()];
+    val++;
+    mtl4_resources_->main_cmd_q->signalEvent(fence, val);
     mtl4_resources_->main_cmd_q->signalEvent(shared_event_, frame_num_);
+
     mtl4_resources_->main_cmd_q->signalDrawable(curr_drawable_);
     {
       ZoneScopedN("present");
@@ -757,7 +759,8 @@ void MetalDevice::submit_frame() {
     auto* present_cb = mtl3_resources_->main_cmd_q->commandBuffer();
     end_cb->encodeSignalEvent(mtl3_resources_->present_event_,
                               mtl3_resources_->present_event_last_value_);
-    end_cb->encodeSignalEvent(shared_event_, frame_num_);
+    ASSERT(0 && "refactor fences pls");
+    // end_cb->encodeSignalEvent(shared_event_, frame_num_);
     end_cb->commit();
     present_cb->encodeWait(mtl3_resources_->present_event_,
                            mtl3_resources_->present_event_last_value_);
@@ -784,6 +787,21 @@ void MetalDevice::submit_frame() {
 
   frame_num_++;
 
+  {
+    auto i = frame_idx();
+    auto* fence = frame_fences_[i].get();
+    auto val = frame_fence_values_[i];
+    if (!fence->waitUntilSignaledValue(val, ~0ULL)) {
+      LERROR("No signaled value from shared event for previous frame idx: {}, val: {}", frame_idx(),
+             val);
+    }
+  }
+  {
+    if (!shared_event_->waitUntilSignaledValue(frame_num_ - 1, ~0ULL)) {
+      LERROR("No signaled value from shared event for previous frame idx: {}, val: {}", frame_idx(),
+             frame_num_ - 1);
+    }
+  }
   frame_ar_pool_->release();
 }
 
@@ -1315,16 +1333,21 @@ void MetalDevice::resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t s
   ASSERT(pool);
   NS::Data* resolved_query_data =
       pool->heap_->resolveCounterRange(NS::Range::Make(start_query, query_count));
-  pool->heap_->invalidateCounterRange(NS::Range::Make(start_query, query_count));
   ASSERT(resolved_query_data);
   ASSERT(resolved_query_data->length() == out_timestamps.size_bytes());
   // objc runtime directly to call -bytes(), since NS::Data binding only has mutableBytes().
   const void* data = ((const void* (*)(id, SEL))objc_msgSend)((__bridge id)resolved_query_data,
                                                               sel_registerName("bytes"));
-  // ticks per second
-  // device_->queryTimestampFrequency();
-  // LINFO("FREQQQQQQQQQQ: {}", device_->queryTimestampFrequency());
   ASSERT(data);
   ASSERT(out_timestamps.size_bytes() >= resolved_query_data->length());
   memcpy(out_timestamps.data(), data, resolved_query_data->length());
+}
+
+MetalDevice::Semaphore MetalDevice::SemaphorePool::acquire() {
+  if (!free_semaphores.empty()) {
+    Semaphore sem = free_semaphores.back();
+    free_semaphores.pop_back();
+    return sem;
+  }
+  return Semaphore{NS::TransferPtr(device_->newSharedEvent()), 0};
 }

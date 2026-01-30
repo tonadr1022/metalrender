@@ -7,7 +7,6 @@
 
 #include "ResourceManager.hpp"
 #include "core/Logger.hpp"
-#include "core/Util.hpp"
 #include "gfx/MemeRenderer123.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"

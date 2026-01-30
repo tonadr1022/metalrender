@@ -16,6 +16,7 @@
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
+#include "gfx/metal/MetalDevice.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -88,11 +89,13 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_verbose_ = i++ == 2;
+  rg_verbose_ = i++ == -2;
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
   {
-    // auto* enc = device_->begin_command_list();
+    auto* enc = device_->begin_command_list();
+    // enc->write_timestamp(get_query_pool(), next_query_ts_i());
+    enc->end_encoding();
   }
   if (!buffer_copy_mgr_->get_copies().empty()) {
     auto* enc = device_->begin_command_list();
@@ -112,9 +115,12 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
 
   rg_.execute();
-  // {
-  //   // auto* enc = device_->begin_command_list();
-  // }
+
+  {
+    auto* enc = device_->begin_command_list();
+    enc->set_label("resolve");
+    enc->end_encoding();
+  }
 
   device_->submit_frame();
 
@@ -143,11 +149,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       auto out_draw_count_buf_rg_handle = clear_bufs_pass.w_buf(
           "out_draw_count_buf1", rhi::PipelineStage_ComputeShader, sizeof(uint32_t) * 3);
       clear_bufs_pass.set_ex([this, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
-        enc->write_timestamp(get_query_pool(), 0);
         enc->bind_pipeline(reset_counts_buf_pso_);
         uint32_t pc = device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx();
         enc->push_constants(&pc, sizeof(pc));
         enc->dispatch_compute(glm::uvec3{1, 1, 1}, glm::uvec3{1, 1, 1});
+        enc->write_timestamp(get_query_pool(), next_query_ts_i());
       });
     }
 
@@ -467,8 +473,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       if (args.draw_imgui) {
         imgui_renderer_->render(enc, swapchain_tex->desc().dims, curr_frame_idx_);
       }
+      enc->write_timestamp(get_query_pool(), next_query_ts_i());
       enc->end_rendering();
-      enc->write_timestamp(get_query_pool(), 1);
+      enc->query_resolve(get_query_pool(), 0, k_query_count,
+                         query_resolve_bufs_[query_heap_idx_].handle, 0);
     });
   }
 }
@@ -1267,51 +1275,65 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
         .name = "out_counts_buf_readback",
     });
   }
-  for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
+
+  for (size_t i = 0; i < k_query_heap_count; i++) {
     query_pools_[i] = device_->create_query_pool_h(
         rhi::QueryPoolDesc{.count = k_query_count, .name = "my_query_pool_" + std::to_string(i)});
-    // query_resolve_bufs_[i] = device_->create_buf_h(rhi::BufferDesc{
-    //     .storage_mode = rhi::StorageMode::CPUAndGPU,
-    //     .size = sizeof(uint64_t) * k_query_count,
-    //     .name = "query_resolve_buf",
-    // });
+    query_resolve_bufs_[i] = device_->create_buf_h(rhi::BufferDesc{
+        .storage_mode = rhi::StorageMode::CPUAndGPU,
+        .size = sizeof(uint64_t) * k_query_count,
+        .name = "query_resolve_buf",
+    });
   }
 }
 
 bool MemeRenderer123::begin_frame() {
-  curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
-  uniforms_allocator_->reset(curr_frame_idx_);
-  staging_buffer_allocator_->reset(curr_frame_idx_);
   bool success = device_->begin_frame(window_->get_window_size());
   if (!success) {
     return success;
   }
+  curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
+  uniforms_allocator_->reset(curr_frame_idx_);
+  staging_buffer_allocator_->reset(curr_frame_idx_);
+  query_heap_idx_ = frame_num_ % device_->get_info().frames_in_flight;
+  /*
+  *
+ What's happening:
+ in the same command buffer:
+  - write timestamp into query heap via compute encoder.
+  - write timestamp into query heap via render encoder.
+  - barrierAfterStages
+  - signal fence after Fragment stage of render encoder.
+  - resolve query into MTL::ResourceStorageModeShared buffer.
+  - after waiting for SharedEvent for this frame (3 frames later), read the CPU accessible buffer.
+  - ~30% of the time, the second timestamp write isn't written, ie, it's the stale timestamp from
+ 6 frames ago.
 
-  if (frame_num_ > device_->get_info().frames_in_flight) {
-    uint64_t old_timestamps[k_query_count]{};
-    for (size_t i = 0; i < k_query_count; i++) {
-      old_timestamps[i] = timestamps[i];
-    }
-    device_->resolve_query_data(query_pools_[curr_frame_idx_].handle, 0, k_query_count, timestamps);
-    auto delta_ticks = timestamps[1] - timestamps[0];
-    LINFO("FRAME: {}", frame_num_);
-    LINFO("old: {} {}", old_timestamps[0], old_timestamps[1]);
-    LINFO("new: {} {}", timestamps[0], timestamps[1]);
+  I'm unsure of what to do here. It's not a buffer/pool reuse problem. I think the problem is that
+ the resolve happens before the timestamp write is visible, but I have both a barrier and a fence. I
+ only read from the destination resolve buffer 3 frames later.
+      */
+
+  // the resolve buffer from the last time this frame index was used is ready to be read.
+  // (Frame N-3)
+  if (frame_num_ > 10) {
+    // static std::vector<uint64_t> timestamps(k_query_count);
+    // timestamps.clear();
+    // timestamps.resize(k_query_count);
+    // device_->resolve_query_data(get_query_pool(), 0, k_query_count, timestamps);
+    auto* timestamps =
+        (uint64_t*)device_->get_buf(query_resolve_bufs_[query_heap_idx_])->contents();
+    LINFO("timestamps: {} {}, query heap idx {}", timestamps[0], timestamps[1], query_heap_idx_);
     if (timestamps[1] > timestamps[0]) {
+      auto delta_ticks = timestamps[1] - timestamps[0];
       auto timestamp_seconds_per_tick = device_->get_info().timestamp_period;
       auto seconds = delta_ticks * timestamp_seconds_per_tick;
       gpu_frame_time_last_ms_ = seconds * 1000;
+      // LINFO("hit: {} ms", gpu_frame_time_last_ms_);
     } else {
       LINFO("missed: {}", timestamps[0] - timestamps[1]);
     }
-    // {
-    //   auto* resolve_buf =
-    //       (uint64_t*)device_->get_buf(query_resolve_bufs_[curr_frame_idx_])->contents();
-    //   LINFO("b");
-    //   LINFO("{} {}", resolve_buf[0], resolve_buf[1]);
-    //   LINFO("{} {}", timestamps[0], timestamps[1]);
-    //   LINFO("////////");
-    // }
+    query_timestamp_indices_[query_heap_idx_] = 0;
   }
   return success;
 }

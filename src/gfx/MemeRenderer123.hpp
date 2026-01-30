@@ -271,16 +271,19 @@ class MemeRenderer123 {
     uint32_t meshlets_drawn_early;
     uint32_t meshlets_drawn_late;
   };
-  // constexpr static int k_num_query_pools = 5;
-  rhi::QueryPoolHandleHolder query_pools_[k_max_frames_in_flight];
-  rhi::QueryPoolHandle get_query_pool() { return query_pools_[curr_frame_idx_].handle; }
+  constexpr static int k_query_heap_count = 3;
+  rhi::QueryPoolHandleHolder query_pools_[k_query_heap_count];
+  rhi::BufferHandleHolder query_resolve_bufs_[k_query_heap_count];
+  int query_timestamp_indices_[k_query_heap_count]{};
+  size_t next_query_ts_i() { return query_timestamp_indices_[query_heap_idx_]++; }
+  rhi::QueryPoolHandle get_query_pool() { return query_pools_[query_heap_idx_].handle; }
   constexpr static int k_query_count = 10;
-  uint64_t timestamps[k_query_count];
+  // uint64_t timestamps[k_query_count];
+  uint32_t query_heap_idx_{};
   float gpu_frame_time_last_ms_{};
   rhi::BufferHandleHolder out_counts_buf_[k_max_frames_in_flight];
   rhi::BufferHandleHolder out_counts_buf_readback_[k_max_frames_in_flight];
   bool rg_verbose_{};
-  // rhi::BufferHandleHolder query_resolve_bufs_[k_max_frames_in_flight];
 };
 
 }  // namespace gfx

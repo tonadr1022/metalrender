@@ -6,6 +6,7 @@
 #include "gfx/metal/MetalCmdEncoderICBMgr.hpp"
 #include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
+#include "gfx/rhi/Config.hpp"
 
 class MetalDevice;
 
@@ -127,6 +128,7 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   bool vertex_id_base_dirty_{false};
   int64_t push_debug_group_stack_size_{};
   bool done_{false};
+  MTL::Fence* tmp_fences_[k_max_frames_in_flight]{};
 
  private:
   void reset(MetalDevice* device, EncoderAPI::CommandBuffer cmd_buf);
