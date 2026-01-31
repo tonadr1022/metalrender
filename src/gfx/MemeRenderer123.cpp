@@ -1086,6 +1086,7 @@ MemeRenderer123::~MemeRenderer123() {
   rg_.shutdown();
 
   {  // imgui
+    imgui_renderer_->shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
   }

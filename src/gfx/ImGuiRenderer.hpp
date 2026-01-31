@@ -4,11 +4,14 @@
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 
+struct ImTextureData;
+
 namespace gfx {
 
 struct GPUFrameAllocator3;
 class ShaderManager;
 
+// custom ImGui backend. Probably not fully conformant but oh well it works.
 class ImGuiRenderer {
  public:
   explicit ImGuiRenderer(ShaderManager& shader_mgr, rhi::Device* device);
@@ -23,6 +26,8 @@ class ImGuiRenderer {
   void return_buffer(rhi::BufferHandleHolder&& handle, size_t frame_in_flight);
   bool has_dirty_textures();
   void add_dirty_textures_to_pass(RGPass& pass, bool read_access);
+  void shutdown();
+  void destroy_texture(ImTextureData* im_tex_id);
 
  private:
   rhi::Device* device_;

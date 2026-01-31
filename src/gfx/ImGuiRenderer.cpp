@@ -208,11 +208,7 @@ void ImGuiRenderer::flush_pending_texture_uploads(rhi::CmdEncoder* enc,
           }
           im_tex->SetStatus(ImTextureStatus_OK);
         } else if (im_tex->Status == ImTextureStatus_WantDestroy && im_tex->UnusedFrames > 0) {
-          auto id = rhi::TextureHandle{im_tex->GetTexID()};
-          device_->destroy(id);
-          im_tex->SetTexID(ImTextureID_Invalid);
-          im_tex->SetStatus(ImTextureStatus_Destroyed);
-          im_tex->BackendUserData = nullptr;
+          destroy_texture(im_tex);
         }
       }
     }
@@ -264,4 +260,20 @@ void ImGuiRenderer::add_dirty_textures_to_pass(gfx::RGPass& pass, bool read_acce
     }
   }
 }
+void ImGuiRenderer::shutdown() {
+  for (auto* tex : ImGui::GetPlatformIO().Textures) {
+    if (tex->RefCount == 1) {
+      destroy_texture(tex);
+    }
+  }
+}
+
+void ImGuiRenderer::destroy_texture(ImTextureData* im_tex) {
+  auto id = rhi::TextureHandle{im_tex->GetTexID()};
+  device_->destroy(id);
+  im_tex->SetTexID(ImTextureID_Invalid);
+  im_tex->SetStatus(ImTextureStatus_Destroyed);
+  im_tex->BackendUserData = nullptr;
+}
+
 }  // namespace gfx
