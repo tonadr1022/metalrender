@@ -598,7 +598,7 @@ void MetalDevice::end_command_list(rhi::CmdEncoder* cmd_enc) {
   get_queue(rhi::QueueType::Graphics).submit_cmd_bufs.push_back(cmd->encoder_state_.cmd_buf);
 }
 
-bool MetalDevice::begin_frame(glm::uvec2) {
+bool MetalDevice::begin_frame() {
   frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
   curr_cmd_list_idx_ = 0;
 
@@ -856,7 +856,7 @@ rhi::TextureViewHandle MetalDevice::create_tex_view(rhi::TextureHandle handle,
   return subresource_id;
 }
 
-void MetalDevice::destroy_tex_view(rhi::TextureHandle handle, int subresource_id) {
+void MetalDevice::destroy(rhi::TextureHandle handle, int subresource_id) {
   auto* tex = reinterpret_cast<MetalTexture*>(get_tex(handle));
   ASSERT((subresource_id >= 0 && subresource_id < (int)tex->tex_views.size()));
   auto& tv = tex->tex_views[subresource_id];
@@ -1232,6 +1232,7 @@ bool MetalDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapch
     if (swap.desc_.vsync != desc.vsync) {
       swap.metal_layer_->setDisplaySyncEnabled(desc.vsync);
     }
+    swap.metal_layer_->setDrawableSize(CGSizeMake(desc.width, desc.height));
   }
   swap.desc_ = desc;
   return true;

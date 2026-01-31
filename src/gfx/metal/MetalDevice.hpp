@@ -69,7 +69,7 @@ class MetalDevice : public rhi::Device {
   rhi::TextureViewHandle create_tex_view(rhi::TextureHandle handle, uint32_t base_mip_level,
                                          uint32_t level_count, uint32_t base_array_layer,
                                          uint32_t layer_count) override;
-  void destroy_tex_view(rhi::TextureHandle handle, int subresource_id) override;
+  void destroy(rhi::TextureHandle handle, int subresource_id) override;
   uint32_t get_tex_view_bindless_idx(rhi::TextureHandle handle, int subresource_id) override;
   MetalTexture::TexView* get_tex_view(rhi::TextureHandle handle, int subresource_id);
   rhi::Texture* get_tex(rhi::TextureHandle handle) override { return texture_pool_.get(handle); }
@@ -110,7 +110,7 @@ class MetalDevice : public rhi::Device {
   rhi::CmdEncoder* begin_command_list() override;
   void end_command_list(rhi::CmdEncoder* cmd_enc);
   // TODO: is there a better spot for setting window dims, ie on event
-  bool begin_frame(glm::uvec2 window_dims) override;
+  bool begin_frame() override;
 
   [[nodiscard]] size_t frame_num() const { return frame_num_; }
   [[nodiscard]] size_t frame_idx() const { return frame_num_ % info_.frames_in_flight; }

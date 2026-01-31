@@ -455,8 +455,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
 
       if (args.draw_imgui) {
-        // TODO: dims is wrong, need drawable dims
-        imgui_renderer_->render(enc, dims, curr_frame_idx_);
+        imgui_renderer_->render(enc, {swapchain_->desc_.width, swapchain_->desc_.height},
+                                curr_frame_idx_);
       }
       enc->end_rendering();
     });
@@ -1068,7 +1068,7 @@ void MemeRenderer123::recreate_depth_pyramid_tex() {
     }
   }
   for (auto& v : depth_pyramid_tex_.views) {
-    device_->destroy_tex_view(depth_pyramid_tex_.handle, v);
+    device_->destroy(depth_pyramid_tex_.handle, v);
   }
   depth_pyramid_tex_.views.clear();
   depth_pyramid_tex_ = TexAndViewHolder{device_->create_tex_h(rhi::TextureDesc{
@@ -1102,7 +1102,7 @@ MemeRenderer123::~MemeRenderer123() {
 
 TexAndViewHolder::~TexAndViewHolder() {
   for (auto v : views) {
-    context->destroy_tex_view(handle, v);
+    context->destroy(handle, v);
   }
   views.clear();
 }
@@ -1273,7 +1273,7 @@ bool MemeRenderer123::begin_frame() {
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
   uniforms_allocator_->reset(curr_frame_idx_);
   staging_buffer_allocator_->reset(curr_frame_idx_);
-  return device_->begin_frame(window_->get_window_size());
+  return device_->begin_frame();
 }
 
 }  // namespace gfx

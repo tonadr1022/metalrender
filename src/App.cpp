@@ -113,9 +113,7 @@ void App::run() {
   if (scene == -1) {
   }
 
-  int prev_win_x{}, prev_win_y{};
-  glfwGetWindowSize(window_->get_handle(), &prev_win_x, &prev_win_y);
-  // load_model(config_.paths[0], glm::translate(glm::mat4{1}, glm::vec3{0, 0, 0}));
+  auto prev_win_size = window_->get_window_size();
   double last_time = glfwGetTime();
   while (!window_->should_close()) {
     ZoneScopedN("main loop");
@@ -124,17 +122,15 @@ void App::run() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    int new_win_x{}, new_win_y{};
-    glfwGetWindowSize(window_->get_handle(), &new_win_x, &new_win_y);
-    if (new_win_x != prev_win_x || new_win_y != prev_win_y) {
-      prev_win_x = new_win_x;
-      prev_win_y = new_win_y;
-      // desc.window = window_.get();
-      // desc.width = new_win_x;
-      // desc.height = new_win_y;
-      // device_->recreate_swapchain(desc);
-      prev_win_x = new_win_x;
-      prev_win_y = new_win_y;
+    auto new_win_size = window_->get_window_size();
+    if (prev_win_size != new_win_size) {
+      auto* swapchain = device_->get_swapchain(swapchain_);
+      auto desc = swapchain->desc_;
+      ASSERT(desc.window == window_.get());
+      desc.width = new_win_size.x;
+      desc.height = new_win_size.y;
+      device_->recreate_swapchain(desc, swapchain);
+      prev_win_size = new_win_size;
     }
 
     const double curr_time = glfwGetTime();
