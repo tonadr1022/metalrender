@@ -420,7 +420,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       p.sample_external_tex(final_depth_pyramid_name);
     }
     p.w_swapchain_tex(swapchain_);
-    p.set_ex([this, gbuffer_a_rg_handle, &args](rhi::CmdEncoder* enc) {
+    p.set_ex([this, gbuffer_a_rg_handle](rhi::CmdEncoder* enc) {
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
       auto dims = gbuffer_a_tex->desc().dims;
       device_->begin_swapchain_rendering(swapchain_, enc);
@@ -446,7 +446,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->push_constants(&pc, sizeof(pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
 
-      if (args.draw_imgui) {
+      if (imgui_enabled_) {
         imgui_renderer_->render(enc, {swapchain_->desc_.width, swapchain_->desc_.height},
                                 curr_frame_idx_);
       }

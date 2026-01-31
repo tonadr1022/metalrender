@@ -119,8 +119,10 @@ void App::run() {
     ZoneScopedN("main loop");
     window_->poll_events();
 
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
+    if (imgui_enabled_) {
+      ImGui_ImplGlfw_NewFrame();
+      ImGui::NewFrame();
+    }
 
     auto new_win_size = window_->get_window_size();
     if (prev_win_size != new_win_size) {
@@ -146,19 +148,19 @@ void App::run() {
     //   ResourceManager::get().get_model(model)->update_transforms();
     // }
 
-    const gfx::RenderArgs args{
+    if (imgui_enabled_) {
+      on_imgui(dt);
+      ImGui::Render();
+    }
+
+    renderer_->render({
         .view_mat = camera_.get_view_mat(),
         .camera_pos = camera_.pos,
         .clear_color = config_.clear_color,
-        .draw_imgui = imgui_enabled_,
-    };
-
+    });
     if (imgui_enabled_) {
-      on_imgui(dt);
+      ImGui::EndFrame();
     }
-    ImGui::Render();
-    renderer_->render(args);
-    ImGui::EndFrame();
   }
   shutdown();
 }
@@ -196,6 +198,7 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
     }
     if (key == GLFW_KEY_G && mods & GLFW_MOD_ALT) {
       imgui_enabled_ = !imgui_enabled_;
+      renderer_->set_imgui_enabled(imgui_enabled_);
     }
     if (key == GLFW_KEY_C && mods & GLFW_MOD_CONTROL && mods & GLFW_MOD_SHIFT) {
       camera_ = {};

@@ -30,13 +30,6 @@ class CmdEncoder;
 
 namespace gfx {
 
-struct RenderArgs {
-  glm::mat4 view_mat;
-  glm::vec3 camera_pos;
-  glm::vec4 clear_color;
-  bool draw_imgui;
-};
-
 struct ModelGPUResources {
   OffsetAllocator::Allocation material_alloc;
   GeometryBatch::Alloc static_draw_batch_alloc;
@@ -150,6 +143,12 @@ class MemeRenderer123 {
   MemeRenderer123& operator=(const MemeRenderer123&) = delete;
   MemeRenderer123& operator=(MemeRenderer123&&) = delete;
 
+  struct RenderArgs {
+    glm::mat4 view_mat;
+    glm::vec3 camera_pos;
+    glm::vec4 clear_color;
+    // bool draw_imgui;
+  };
   void render(const RenderArgs& args);
   void on_imgui();
   bool on_key_event(int key, int action, int mods);
@@ -160,6 +159,7 @@ class MemeRenderer123 {
   void free_instance(ModelInstanceGPUHandle handle);
   void free_model(ModelGPUHandle handle);
   bool mesh_shaders_enabled() const { return mesh_shaders_enabled_; }
+  void set_imgui_enabled(bool enabled) { imgui_enabled_ = enabled; }
 
  private:
   void init_imgui();
@@ -264,6 +264,7 @@ class MemeRenderer123 {
   IdxOffset frame_cull_data_buf_info_;
   bool reverse_z_{true};
   bool mesh_shaders_enabled_{true};
+  bool imgui_enabled_{true};
 
   enum class DebugRenderMode {
     None = DEBUG_RENDER_MODE_NONE,
