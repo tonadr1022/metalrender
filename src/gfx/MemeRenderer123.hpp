@@ -56,19 +56,19 @@ struct ModelGPUResources {
 
 class MemeRenderer123;
 
-class InstanceDataMgr {
+class InstanceMgr {
  public:
-  InstanceDataMgr(const InstanceDataMgr&) = delete;
-  InstanceDataMgr(InstanceDataMgr&&) = delete;
-  InstanceDataMgr& operator=(const InstanceDataMgr&) = delete;
-  InstanceDataMgr& operator=(InstanceDataMgr&&) = delete;
+  InstanceMgr(const InstanceMgr&) = delete;
+  InstanceMgr(InstanceMgr&&) = delete;
+  InstanceMgr& operator=(const InstanceMgr&) = delete;
+  InstanceMgr& operator=(InstanceMgr&&) = delete;
   struct Alloc {
     OffsetAllocator::Allocation instance_data_alloc;
     OffsetAllocator::Allocation meshlet_vis_alloc;
   };
 
-  InstanceDataMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr, uint32_t frames_in_flight,
-                  MemeRenderer123& renderer);
+  InstanceMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr, uint32_t frames_in_flight,
+              MemeRenderer123& renderer);
   [[nodiscard]] bool has_draws() const { return curr_element_count_ > 0; }
   Alloc allocate(uint32_t element_count, uint32_t meshlet_instance_count);
 
@@ -110,7 +110,7 @@ class InstanceDataMgr {
 };
 
 struct ModelInstanceGPUResources {
-  InstanceDataMgr::Alloc instance_data_gpu_alloc;
+  InstanceMgr::Alloc instance_data_gpu_alloc;
   ModelGPUHandle model_resources_handle;
 };
 
@@ -225,7 +225,7 @@ class MemeRenderer123 {
   std::filesystem::path resource_dir_;
   std::filesystem::path config_file_path_;
 
-  InstanceDataMgr instance_data_mgr_;
+  InstanceMgr static_instance_mgr_;
   GeometryBatch static_draw_batch_;
 
   BlockPool<ModelGPUHandle, ModelGPUResources> model_gpu_resource_pool_{20, 1, true};
