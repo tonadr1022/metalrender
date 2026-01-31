@@ -107,9 +107,7 @@ class Device {
   virtual void destroy(SamplerHandle handle) = 0;
   virtual void destroy(SwapchainHandle handle) = 0;
 
-  virtual bool begin_frame() = 0;
-  virtual void cmd_list_wait_for(CmdEncoder* cmd_enc1, CmdEncoder* cmd_enc2) = 0;
-
+  virtual void cmd_encoder_wait_for(rhi::CmdEncoder* cmd_enc, rhi::CmdEncoder* wait_for) = 0;
   virtual CmdEncoder* begin_command_list() = 0;
   virtual void submit_frame() = 0;
 
@@ -117,10 +115,10 @@ class Device {
   virtual void begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc) = 0;
   virtual void resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t start_query,
                                   uint32_t query_count, std::span<uint64_t> out_timestamps) = 0;
-  virtual void on_imgui() {}
 
   [[nodiscard]] virtual const Info& get_info() const = 0;
   [[nodiscard]] size_t frames_in_flight() const { return get_info().frames_in_flight; }
+  virtual void on_imgui() {}
 };
 
 enum class GfxAPI { Vulkan, Metal };

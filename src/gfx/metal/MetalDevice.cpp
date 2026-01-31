@@ -598,38 +598,6 @@ void MetalDevice::end_command_list(rhi::CmdEncoder* cmd_enc) {
   get_queue(rhi::QueueType::Graphics).submit_cmd_bufs.push_back(cmd->encoder_state_.cmd_buf);
 }
 
-bool MetalDevice::begin_frame() {
-  frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
-  curr_cmd_list_idx_ = 0;
-
-  delete_queues_.flush_deletions(frame_num_);
-
-  icb_mgr_draw_indexed_.reset_for_frame();
-  icb_mgr_draw_mesh_threadgroups_.reset_for_frame();
-
-  push_constant_allocator_->reset(frame_idx());
-  test_allocator_->reset(frame_idx());
-  arg_buf_allocator_->reset(frame_idx());
-
-  // rhi::TextureDesc swap_img_desc{};
-  // auto* tex = curr_drawable_->texture();
-  // ASSERT(tex);
-  // swap_img_desc.dims = {tex->width(), tex->height(), 1};
-  // swap_img_desc.format = mtl::util::convert(tex->pixelFormat());
-  // swap_img_desc.mip_levels = 1;
-  // swap_img_desc.array_length = 1;
-  // swapchain_.get_textures()[frame_idx()] = rhi::TextureHandleHolder{
-  //     texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
-
-  if (mtl4_enabled_) {
-    // mtl4_resources_->main_cmd_buf->beginCommandBuffer(mtl4_resources_->cmd_allocators[frame_idx()]);
-  } else {
-    mtl3_resources_->main_cmd_buf = mtl3_resources_->main_cmd_q->commandBuffer();
-    mtl3_resources_->main_cmd_buf->useResidencySet(main_res_set_);
-  }
-  return true;
-}
-
 void MetalDevice::submit_frame() {
   ZoneScoped;
   if (mtl4_enabled_) {
@@ -686,6 +654,17 @@ void MetalDevice::submit_frame() {
   }
 
   frame_ar_pool_->release();
+  frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
+  curr_cmd_list_idx_ = 0;
+
+  delete_queues_.flush_deletions(frame_num_);
+
+  icb_mgr_draw_indexed_.reset_for_frame();
+  icb_mgr_draw_mesh_threadgroups_.reset_for_frame();
+
+  push_constant_allocator_->reset(frame_idx());
+  test_allocator_->reset(frame_idx());
+  arg_buf_allocator_->reset(frame_idx());
 }
 
 void MetalDevice::init_bindless() {
@@ -1117,7 +1096,7 @@ void MetalDevice::destroy_actual(rhi::BufferHandle handle) {
 
 // Ensures cmd_enc2 executes after cmd_enc1.
 // No-op when both encoders are recorded into the same command buffer.
-void MetalDevice::cmd_list_wait_for(rhi::CmdEncoder*, rhi::CmdEncoder*) {
+void MetalDevice::cmd_encoder_wait_for(rhi::CmdEncoder*, rhi::CmdEncoder*) {
   if (mtl4_enabled_) {
     // } else {
     // auto* mtl_cmd_enc1 = static_cast<Metal3CmdEncoder*>(cmd_enc1);
@@ -1179,11 +1158,6 @@ void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdE
   ASSERT(mtl4_enabled_);
   auto* enc = (Metal4CmdEncoder*)cmd_enc;
   auto* swap = (MetalSwapchain*)swapchain;
-
-  // if (swapchain_.metal_layer_->drawableSize().width != window_dims.x ||
-  //     swapchain_.metal_layer_->drawableSize().height != window_dims.y) {
-  //   swapchain_.metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
-  // }
   CA::MetalDrawable* drawable = swap->metal_layer_->nextDrawable();
   while (!drawable) {
     drawable = swap->metal_layer_->nextDrawable();

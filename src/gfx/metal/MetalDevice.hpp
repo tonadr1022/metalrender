@@ -63,7 +63,7 @@ class MetalDevice : public rhi::Device {
 
   rhi::BufferHandle create_buf(const rhi::BufferDesc& desc) override;
   rhi::Buffer* get_buf(rhi::BufferHandle handle) override { return buffer_pool_.get(handle); }
-  void cmd_list_wait_for(rhi::CmdEncoder* cmd_enc1, rhi::CmdEncoder* cmd_enc2) override;
+  void cmd_encoder_wait_for(rhi::CmdEncoder* cmd_enc, rhi::CmdEncoder* wait_for) override;
 
   rhi::TextureHandle create_tex(const rhi::TextureDesc& desc) override;
   rhi::TextureViewHandle create_tex_view(rhi::TextureHandle handle, uint32_t base_mip_level,
@@ -109,8 +109,6 @@ class MetalDevice : public rhi::Device {
   void use_bindless_buffer(MTL::RenderCommandEncoder* enc);
   rhi::CmdEncoder* begin_command_list() override;
   void end_command_list(rhi::CmdEncoder* cmd_enc);
-  // TODO: is there a better spot for setting window dims, ie on event
-  bool begin_frame() override;
 
   [[nodiscard]] size_t frame_num() const { return frame_num_; }
   [[nodiscard]] size_t frame_idx() const { return frame_num_ % info_.frames_in_flight; }

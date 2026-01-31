@@ -282,7 +282,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           RenderingAttachmentInfo::depth_stencil_att(
               depth_handle, load_op, {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
       });
-
       enc->set_depth_stencil_state(reverse_z_ ? rhi::CompareOp::Greater : rhi::CompareOp::Less,
                                    true);
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
@@ -1193,6 +1192,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
   }
 
   {
+    // TODO: move rendering info out, should be inferred from active render pass.
     auto draw_img_format = rhi::TextureFormat::R16G16B16A16Sfloat;
     test2_pso_ = shader_mgr_->create_graphics_pipeline({
         .shaders = {{{"basic_indirect", ShaderType::Vertex},
@@ -1273,7 +1273,7 @@ bool MemeRenderer123::begin_frame() {
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
   uniforms_allocator_->reset(curr_frame_idx_);
   staging_buffer_allocator_->reset(curr_frame_idx_);
-  return device_->begin_frame();
+  return true;
 }
 
 }  // namespace gfx

@@ -15,6 +15,14 @@ struct ShaderCreateInfo {
   std::string entry_point{"main"};
 };
 
+struct RenderTargetInfo {
+  std::array<TextureFormat, 5> color_formats{TextureFormat::Undefined, TextureFormat::Undefined,
+                                             TextureFormat::Undefined, TextureFormat::Undefined,
+                                             TextureFormat::Undefined};
+  TextureFormat depth_format{TextureFormat::Undefined};
+  TextureFormat stencil_format{TextureFormat::Undefined};
+};
+
 struct GraphicsPipelineCreateInfo {
   struct Rasterization {
     bool depth_clamp{false};
@@ -63,14 +71,6 @@ struct GraphicsPipelineCreateInfo {
     uint32_t reference{};
   };
 
-  struct RenderingInfo {
-    std::array<TextureFormat, 5> color_formats{TextureFormat::Undefined, TextureFormat::Undefined,
-                                               TextureFormat::Undefined, TextureFormat::Undefined,
-                                               TextureFormat::Undefined};
-    TextureFormat depth_format{TextureFormat::Undefined};
-    TextureFormat stencil_format{TextureFormat::Undefined};
-  };
-
   struct DepthStencil {
     StencilOpState stencil_front{};
     StencilOpState stencil_back{};
@@ -86,7 +86,7 @@ struct GraphicsPipelineCreateInfo {
   std::array<ShaderCreateInfo, 3> shaders{};
 
   PrimitiveTopology topology{PrimitiveTopology::TriangleList};
-  RenderingInfo rendering{};
+  RenderTargetInfo rendering{};
   Rasterization rasterization{};
   Blend blend{};
   Multisample multisample{};
