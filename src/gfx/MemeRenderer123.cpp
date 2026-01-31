@@ -48,7 +48,6 @@ namespace {
 
 using rhi::RenderingAttachmentInfo;
 using rhi::ShaderType;
-using rhi::TextureFormat;
 
 glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
   // clang-format off
@@ -75,6 +74,9 @@ namespace gfx {
 
 void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   ZoneScoped;
+  curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
+  uniforms_allocator_.reset(curr_frame_idx_);
+  staging_buffer_allocator_.reset(curr_frame_idx_);
 
   shader_mgr_->replace_dirty_pipelines();
 
@@ -92,14 +94,14 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   rg_verbose_ = i++ == -2;
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
-  if (!buffer_copy_mgr_->get_copies().empty()) {
+  if (!buffer_copy_mgr_.get_copies().empty()) {
     auto* enc = device_->begin_cmd_encoder();
-    for (const auto& copy : buffer_copy_mgr_->get_copies()) {
+    for (const auto& copy : buffer_copy_mgr_.get_copies()) {
       enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
                                  copy.size);
     }
     enc->end_encoding();
-    buffer_copy_mgr_->clear_copies();
+    buffer_copy_mgr_.clear_copies();
   }
 
   // flush textures
@@ -159,10 +161,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           output_buf_name, rhi::PipelineStage_ComputeShader, sizeof(uint32_t) * 3);
     }
     RGResourceHandle task_cmd_buf_rg_handle{};
-    if (static_draw_batch_->get_stats().vertex_count > 0) {
+    if (static_draw_batch_.get_stats().vertex_count > 0) {
       task_cmd_buf_rg_handle =
           prep_meshlets_pass.w_buf("task_cmd_buf", rhi::PipelineStage_ComputeShader,
-                                   static_draw_batch_->task_cmd_count * sizeof(TaskCmd));
+                                   static_draw_batch_.task_cmd_count * sizeof(TaskCmd));
     }
     prep_meshlets_pass.set_ex([this, task_cmd_buf_rg_handle,
                                out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
@@ -182,7 +184,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                 device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx(),
             .instance_data_buf_idx =
                 device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
-            .mesh_data_buf_idx = static_draw_batch_->mesh_buf.get_buffer()->bindless_idx(),
+            .mesh_data_buf_idx = static_draw_batch_.mesh_buf.get_buffer()->bindless_idx(),
             .max_draws = all_model_data_.max_objects,
             .culling_enabled = culling_enabled_,
         };
@@ -197,7 +199,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     prepare_indirect_pass.set_ex([this, &args](rhi::CmdEncoder* enc) {
       BasicIndirectPC pc{
           .vp = get_proj_matrix() * args.view_mat,
-          .vert_buf_idx = static_draw_batch_->vertex_buf.get_buffer()->bindless_idx(),
+          .vert_buf_idx = static_draw_batch_.vertex_buf.get_buffer()->bindless_idx(),
           .instance_data_buf_idx =
               device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
           .mat_buf_idx = materials_buf_->get_buffer()->bindless_idx(),
@@ -205,7 +207,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
       indirect_cmd_buf_ids_.emplace_back(enc->prepare_indexed_indirect_draws(
           instance_data_mgr_.get_draw_cmd_buf(), 0, all_model_data_.max_objects,
-          static_draw_batch_->index_buf.get_buffer_handle(), 0, &pc, sizeof(pc),
+          static_draw_batch_.index_buf.get_buffer_handle(), 0, &pc, sizeof(pc),
           sizeof(DefaultVertex)));
     });
   }
@@ -307,11 +309,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         }
         auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handle);
         enc->bind_srv(task_cmd_buf_handle, 4);
-        enc->bind_srv(static_draw_batch_->mesh_buf.get_buffer_handle(), 5);
-        enc->bind_srv(static_draw_batch_->meshlet_buf.get_buffer_handle(), 6);
-        enc->bind_srv(static_draw_batch_->meshlet_triangles_buf.get_buffer_handle(), 7);
-        enc->bind_srv(static_draw_batch_->meshlet_vertices_buf.get_buffer_handle(), 8);
-        enc->bind_srv(static_draw_batch_->vertex_buf.get_buffer_handle(), 9);
+        enc->bind_srv(static_draw_batch_.mesh_buf.get_buffer_handle(), 5);
+        enc->bind_srv(static_draw_batch_.meshlet_buf.get_buffer_handle(), 6);
+        enc->bind_srv(static_draw_batch_.meshlet_triangles_buf.get_buffer_handle(), 7);
+        enc->bind_srv(static_draw_batch_.meshlet_vertices_buf.get_buffer_handle(), 8);
+        enc->bind_srv(static_draw_batch_.vertex_buf.get_buffer_handle(), 9);
         enc->bind_srv(instance_data_mgr_.get_instance_data_buf(), 10);
         enc->bind_srv(materials_buf_->get_buffer_handle(), 11);
         enc->bind_cbv(frame_globals_buf_info_.buf, GLOBALS_SLOT,
@@ -456,7 +458,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
 void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
   ZoneScoped;
-  imgui_renderer_->flush_pending_texture_uploads(enc, staging_buffer_allocator_.value());
+  imgui_renderer_->flush_pending_texture_uploads(enc, staging_buffer_allocator_);
 
   for (const auto& upload : pending_texture_uploads_) {
     const auto& tex_upload = upload.upload;
@@ -479,7 +481,7 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
         total_img_size += image_size;
       }
 
-      auto upload_buf = staging_buffer_allocator_->alloc(total_img_size);
+      auto upload_buf = staging_buffer_allocator_.alloc(total_img_size);
       ASSERT(upload_buf.buf.is_valid());
 
       size_t curr_dst_offset = 0;
@@ -505,7 +507,7 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
       size_t bytes_per_row = align_up(src_bytes_per_row, 256);
       // TODO: staging buffer pool
       size_t total_size = bytes_per_row * tex->desc().dims.y;
-      auto upload_buf = staging_buffer_allocator_->alloc(total_size);
+      auto upload_buf = staging_buffer_allocator_.alloc(total_size);
       size_t dst_offset = 0;
       size_t src_offset = 0;
       for (size_t row = 0; row < tex->desc().dims.y; row++) {
@@ -557,17 +559,18 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
       mats.push_back(M4Material{.albedo_tex_idx = img_upload_bindless_indices[m.albedo_tex],
                                 .color = glm::vec4{m.albedo_factors}});
     }
-    buffer_copy_mgr_->copy_to_buffer(mats.data(), mats.size() * sizeof(M4Material),
-                                     materials_buf_->get_buffer_handle(),
-                                     material_alloc.offset * sizeof(M4Material));
+    buffer_copy_mgr_.copy_to_buffer(mats.data(), mats.size() * sizeof(M4Material),
+                                    materials_buf_->get_buffer_handle(),
+                                    material_alloc.offset * sizeof(M4Material));
     if (resized) {
       LINFO("materials resized");
       ASSERT(0);
     }
   }
 
-  auto draw_batch_alloc = upload_geometry(DrawBatchType::Static, result.vertices, result.indices,
-                                          result.meshlet_process_result, result.meshes);
+  auto draw_batch_alloc =
+      upload_geometry(GeometryBatchType::Static, result.vertices, result.indices,
+                      result.meshlet_process_result, result.meshes);
 
   std::vector<InstanceData> base_instance_datas;
   std::vector<uint32_t> instance_id_to_node;
@@ -617,36 +620,35 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
   return true;
 }
 
-DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType type,
-                                                  const std::vector<DefaultVertex>& vertices,
-                                                  const std::vector<rhi::DefaultIndexT>& indices,
-                                                  const MeshletProcessResult& meshlets,
-                                                  std::span<Mesh> meshes) {
+GeometryBatch::Alloc MemeRenderer123::upload_geometry(
+    [[maybe_unused]] GeometryBatchType type, const std::vector<DefaultVertex>& vertices,
+    const std::vector<rhi::DefaultIndexT>& indices, const MeshletProcessResult& meshlets,
+    std::span<Mesh> meshes) {
   ZoneScoped;
   auto& draw_batch = static_draw_batch_;
   ASSERT(!vertices.empty());
   ASSERT(!meshlets.meshlet_datas.empty());
 
   bool resized{};
-  const auto vertex_alloc = draw_batch->vertex_buf.allocate(vertices.size(), resized);
-  buffer_copy_mgr_->copy_to_buffer(vertices.data(), vertices.size() * sizeof(DefaultVertex),
-                                   draw_batch->vertex_buf.get_buffer_handle(),
-                                   vertex_alloc.offset * sizeof(DefaultVertex));
+  const auto vertex_alloc = draw_batch.vertex_buf.allocate(vertices.size(), resized);
+  buffer_copy_mgr_.copy_to_buffer(vertices.data(), vertices.size() * sizeof(DefaultVertex),
+                                  draw_batch.vertex_buf.get_buffer_handle(),
+                                  vertex_alloc.offset * sizeof(DefaultVertex));
 
   OffsetAllocator::Allocation index_alloc{};
   if (!indices.empty()) {
-    index_alloc = draw_batch->index_buf.allocate(indices.size(), resized);
-    buffer_copy_mgr_->copy_to_buffer(indices.data(), indices.size() * sizeof(rhi::DefaultIndexT),
-                                     draw_batch->index_buf.get_buffer_handle(),
-                                     index_alloc.offset * sizeof(rhi::DefaultIndexT));
+    index_alloc = draw_batch.index_buf.allocate(indices.size(), resized);
+    buffer_copy_mgr_.copy_to_buffer(indices.data(), indices.size() * sizeof(rhi::DefaultIndexT),
+                                    draw_batch.index_buf.get_buffer_handle(),
+                                    index_alloc.offset * sizeof(rhi::DefaultIndexT));
   }
 
-  const auto meshlet_alloc = draw_batch->meshlet_buf.allocate(meshlets.tot_meshlet_count, resized);
+  const auto meshlet_alloc = draw_batch.meshlet_buf.allocate(meshlets.tot_meshlet_count, resized);
   const auto meshlet_vertices_alloc =
-      draw_batch->meshlet_vertices_buf.allocate(meshlets.tot_meshlet_verts_count, resized);
+      draw_batch.meshlet_vertices_buf.allocate(meshlets.tot_meshlet_verts_count, resized);
   const auto meshlet_triangles_alloc =
-      draw_batch->meshlet_triangles_buf.allocate(meshlets.tot_meshlet_tri_count, resized);
-  const auto mesh_alloc = draw_batch->mesh_buf.allocate(meshlets.meshlet_datas.size(), resized);
+      draw_batch.meshlet_triangles_buf.allocate(meshlets.tot_meshlet_tri_count, resized);
+  const auto mesh_alloc = draw_batch.mesh_buf.allocate(meshlets.meshlet_datas.size(), resized);
 
   size_t meshlet_offset{};
   size_t meshlet_triangles_offset{};
@@ -656,24 +658,24 @@ DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType
   // TODO: explicit staging buffer. this is writing all over the place and probably blowing
   // caches.
   for (const auto& meshlet_data : meshlets.meshlet_datas) {
-    buffer_copy_mgr_->copy_to_buffer(meshlet_data.meshlets.data(),
-                                     meshlet_data.meshlets.size() * sizeof(Meshlet),
-                                     draw_batch->meshlet_buf.get_buffer_handle(),
-                                     (meshlet_alloc.offset + meshlet_offset) * sizeof(Meshlet));
+    buffer_copy_mgr_.copy_to_buffer(meshlet_data.meshlets.data(),
+                                    meshlet_data.meshlets.size() * sizeof(Meshlet),
+                                    draw_batch.meshlet_buf.get_buffer_handle(),
+                                    (meshlet_alloc.offset + meshlet_offset) * sizeof(Meshlet));
     meshlet_offset += meshlet_data.meshlets.size();
 
-    buffer_copy_mgr_->copy_to_buffer(
+    buffer_copy_mgr_.copy_to_buffer(
         meshlet_data.meshlet_vertices.data(),
         meshlet_data.meshlet_vertices.size() * sizeof(uint32_t),
-        draw_batch->meshlet_vertices_buf.get_buffer_handle(),
+        draw_batch.meshlet_vertices_buf.get_buffer_handle(),
         (meshlet_vertices_alloc.offset + meshlet_vertices_offset) * sizeof(uint32_t));
 
     meshlet_vertices_offset += meshlet_data.meshlet_vertices.size();
 
-    buffer_copy_mgr_->copy_to_buffer(
+    buffer_copy_mgr_.copy_to_buffer(
         meshlet_data.meshlet_triangles.data(),
         meshlet_data.meshlet_triangles.size() * sizeof(uint8_t),
-        draw_batch->meshlet_triangles_buf.get_buffer_handle(),
+        draw_batch.meshlet_triangles_buf.get_buffer_handle(),
         (meshlet_triangles_alloc.offset + meshlet_triangles_offset) * sizeof(uint8_t));
 
     meshlet_triangles_offset += meshlet_data.meshlet_triangles.size();
@@ -689,17 +691,17 @@ DrawBatch::Alloc MemeRenderer123::upload_geometry([[maybe_unused]] DrawBatchType
         .center = meshes[mesh_i].center,
         .radius = meshes[mesh_i].radius,
     };
-    buffer_copy_mgr_->copy_to_buffer(&d, sizeof(d), draw_batch->mesh_buf.get_buffer_handle(),
-                                     (mesh_i + mesh_alloc.offset) * sizeof(MeshData));
+    buffer_copy_mgr_.copy_to_buffer(&d, sizeof(d), draw_batch.mesh_buf.get_buffer_handle(),
+                                    (mesh_i + mesh_alloc.offset) * sizeof(MeshData));
     mesh_i++;
   }
 
-  return DrawBatch::Alloc{.vertex_alloc = vertex_alloc,
-                          .index_alloc = index_alloc,
-                          .meshlet_alloc = meshlet_alloc,
-                          .mesh_alloc = mesh_alloc,
-                          .meshlet_triangles_alloc = meshlet_triangles_alloc,
-                          .meshlet_vertices_alloc = meshlet_vertices_alloc};
+  return GeometryBatch::Alloc{.vertex_alloc = vertex_alloc,
+                              .index_alloc = index_alloc,
+                              .meshlet_alloc = meshlet_alloc,
+                              .mesh_alloc = mesh_alloc,
+                              .meshlet_triangles_alloc = meshlet_triangles_alloc,
+                              .meshlet_vertices_alloc = meshlet_vertices_alloc};
 }
 
 ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& model,
@@ -757,15 +759,15 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
       });
     }
   }
-  static_draw_batch_->task_cmd_count += model_resources->totals.task_cmd_count;
+  static_draw_batch_.task_cmd_count += model_resources->totals.task_cmd_count;
 
   stats_.total_instances += instance_datas.size();
-  buffer_copy_mgr_->copy_to_buffer(instance_datas.data(),
-                                   instance_datas.size() * sizeof(InstanceData),
-                                   instance_data_mgr_.get_instance_data_buf(),
-                                   instance_data_gpu_alloc.offset * sizeof(InstanceData));
+  buffer_copy_mgr_.copy_to_buffer(instance_datas.data(),
+                                  instance_datas.size() * sizeof(InstanceData),
+                                  instance_data_mgr_.get_instance_data_buf(),
+                                  instance_data_gpu_alloc.offset * sizeof(InstanceData));
   if (!mesh_shaders_enabled_) {
-    buffer_copy_mgr_->copy_to_buffer(
+    buffer_copy_mgr_.copy_to_buffer(
         cmds.data(), cmds.size() * sizeof(IndexedIndirectDrawCmd),
         instance_data_mgr_.get_draw_cmd_buf(),
         instance_data_gpu_alloc.offset * sizeof(IndexedIndirectDrawCmd));
@@ -789,7 +791,7 @@ void MemeRenderer123::free_instance(ModelInstanceGPUHandle handle) {
     meshlet_vis_buf_->free(gpu_resources->meshlet_vis_buf_alloc);
   }
   auto* model_resources = model_gpu_resource_pool_.get(gpu_resources->model_resources_handle);
-  static_draw_batch_->task_cmd_count -= model_resources->totals.task_cmd_count;
+  static_draw_batch_.task_cmd_count -= model_resources->totals.task_cmd_count;
   stats_.total_instances -= model_resources->base_instance_datas.size();
   stats_.total_instance_meshlets -= model_resources->totals.instance_meshlets;
   stats_.total_instance_vertices -= model_resources->totals.instance_vertices;
@@ -804,30 +806,21 @@ void MemeRenderer123::free_model(ModelGPUHandle handle) {
   }
   gpu_resources->textures.clear();
   materials_buf_->free(gpu_resources->material_alloc);
-  static_draw_batch_->free(gpu_resources->static_draw_batch_alloc);
+  static_draw_batch_.free(gpu_resources->static_draw_batch_alloc);
   model_gpu_resource_pool_.destroy(handle);
 }
 
-OffsetAllocator::Allocation InstanceDataMgr::allocate(size_t element_count) {
-  const OffsetAllocator::Allocation alloc = allocator_->allocate(element_count);
+OffsetAllocator::Allocation InstanceDataMgr::allocate(uint32_t element_count) {
+  const OffsetAllocator::Allocation alloc = allocator_.allocate(element_count);
   if (alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
-    auto old_capacity = allocator_->capacity();
-    auto new_capacity = old_capacity * 2;
-    allocator_->grow(allocator_->capacity());
-    ASSERT(new_capacity <= allocator_->capacity());
-    auto old_instance_data_buf = std::move(instance_data_buf_);
-    allocate_buffers(new_capacity);
-    buffer_copy_mgr_->copy_to_buffer(device_->get_buf(old_instance_data_buf)->contents(),
-                                     old_capacity * sizeof(InstanceData), instance_data_buf_.handle,
-                                     0);
-    if (!mesh_shaders_enabled_) {
-      auto old_draw_cmd_buf = std::move(draw_cmd_buf_);
-      buffer_copy_mgr_->copy_to_buffer(device_->get_buf(old_draw_cmd_buf)->contents(),
-                                       old_capacity * sizeof(IndexedIndirectDrawCmd),
-                                       draw_cmd_buf_.handle, 0);
-    }
+    auto old_capacity = allocator_.capacity();
+    auto new_capacity = std::max(old_capacity * 2, element_count);
+    allocator_.grow(new_capacity - old_capacity);
+    ASSERT(new_capacity <= allocator_.capacity());
+    ensure_buffer_space(new_capacity);
     return allocate(element_count);
   }
+  ensure_buffer_space(allocator_.capacity());
   curr_element_count_ += element_count;
   max_seen_size_ = std::max<uint32_t>(max_seen_size_, alloc.offset + element_count);
   return alloc;
@@ -841,31 +834,59 @@ void InstanceDataMgr::flush_pending_frees(uint32_t curr_frame_in_flight, rhi::Cm
   auto previous_frame_idx =
       curr_frame_in_flight == 0 ? frames_in_flight_ - 1 : curr_frame_in_flight - 1;
   for (const auto& alloc : pending_frees_[previous_frame_idx]) {
-    auto element_count = allocator_->allocationSize(alloc);
+    auto element_count = allocator_.allocationSize(alloc);
     enc->fill_buffer(instance_data_buf_.handle, alloc.offset * sizeof(InstanceData),
                      element_count * sizeof(InstanceData), 0xFFFFFFFF);
-    if (!mesh_shaders_enabled_) {
+    if (!renderer_.mesh_shaders_enabled()) {
       enc->fill_buffer(draw_cmd_buf_.handle, alloc.offset * sizeof(IndexedIndirectDrawCmd),
                        element_count * sizeof(IndexedIndirectDrawCmd), 0xFFFFFFFF);
     }
-    allocator_->free(alloc);
+    allocator_.free(alloc);
     curr_element_count_ -= element_count;
   }
   pending_frees_[previous_frame_idx].clear();
 }
 
-void InstanceDataMgr::allocate_buffers(size_t element_count) {
-  instance_data_buf_ =
-      device_->create_buf_h(rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
-                                            .usage = rhi::BufferUsage_Storage,
-                                            .size = sizeof(InstanceData) * element_count,
-                                            .bindless = true});
-  if (!mesh_shaders_enabled_) {
-    draw_cmd_buf_ = device_->create_buf_h(
-        rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
-                        .usage = rhi::BufferUsage_Indirect,
-                        .size = sizeof(IndexedIndirectDrawCmd) * element_count,
-                        .bindless = true});
+void InstanceDataMgr::ensure_buffer_space(size_t element_count) {
+  if (element_count == 0) return;
+  if (!instance_data_buf_.is_valid()) {
+    instance_data_buf_ = device_->create_buf_h({
+        .storage_mode = rhi::StorageMode::Default,
+        .usage = rhi::BufferUsage_Storage,
+        .size = sizeof(InstanceData) * element_count,
+    });
+  }
+  if (device_->get_buf(instance_data_buf_)->size() < element_count * sizeof(InstanceData)) {
+    auto new_buf = device_->create_buf_h({
+        .storage_mode = rhi::StorageMode::Default,
+        .usage = rhi::BufferUsage_Storage,
+        .size = sizeof(InstanceData) * element_count,
+    });
+    buffer_copy_mgr_->copy_to_buffer(device_->get_buf(instance_data_buf_)->contents(),
+                                     device_->get_buf(instance_data_buf_)->size(), new_buf.handle,
+                                     0);
+    instance_data_buf_ = std::move(new_buf);
+  }
+
+  if (!renderer_.mesh_shaders_enabled()) {
+    if (!draw_cmd_buf_.is_valid()) {
+      draw_cmd_buf_ = device_->create_buf_h(rhi::BufferDesc{
+          .storage_mode = rhi::StorageMode::Default,
+          .usage = rhi::BufferUsage_Indirect,
+          .size = sizeof(IndexedIndirectDrawCmd) * element_count,
+      });
+    }
+    if (device_->get_buf(draw_cmd_buf_)->size() < element_count * sizeof(IndexedIndirectDrawCmd)) {
+      auto new_buf = device_->create_buf_h({
+          .storage_mode = rhi::StorageMode::Default,
+          .usage = rhi::BufferUsage_Indirect,
+          .size = sizeof(IndexedIndirectDrawCmd) * element_count,
+          .name = "draw_indexed_indirect_cmd_buf",
+      });
+      buffer_copy_mgr_->copy_to_buffer(device_->get_buf(draw_cmd_buf_)->contents(),
+                                       device_->get_buf(draw_cmd_buf_)->size(), new_buf.handle, 0);
+      draw_cmd_buf_ = std::move(new_buf);
+    }
   }
 }
 
@@ -969,7 +990,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
       .camera_pos = glm::vec4{args.camera_pos, 0},
   };
   {
-    auto [buf, offset, write_ptr] = uniforms_allocator_->alloc(sizeof(GlobalData), &global_data);
+    auto [buf, offset, write_ptr] = uniforms_allocator_.alloc(sizeof(GlobalData), &global_data);
     frame_globals_buf_info_.buf = buf;
     frame_globals_buf_info_.idx = device_->get_buf(buf)->bindless_idx();
     frame_globals_buf_info_.offset_bytes = offset;
@@ -1001,7 +1022,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
     cull_data.p11 = proj_mat[1][1];
     cull_data.paused = culling_paused_;
 
-    auto [buf, offset, write_ptr] = uniforms_allocator_->alloc(sizeof(CullData), &cull_data);
+    auto [buf, offset, write_ptr] = uniforms_allocator_.alloc(sizeof(CullData), &cull_data);
     frame_cull_data_buf_info_.buf = buf;
     frame_cull_data_buf_info_.idx = device_->get_buf(buf)->bindless_idx();
     frame_cull_data_buf_info_.offset_bytes = offset;
@@ -1105,9 +1126,23 @@ TexAndViewHolder::~TexAndViewHolder() {
               .empty();
 }
 
-MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
+MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
+    : device_(cinfo.device),
+      uniforms_allocator_(device_),
+      staging_buffer_allocator_(device_),
+      buffer_copy_mgr_(device_, staging_buffer_allocator_),
+      instance_data_mgr_(device_, &buffer_copy_mgr_, device_->get_info().frames_in_flight, *this),
+      static_draw_batch_(GeometryBatchType::Static, *device_, buffer_copy_mgr_,
+                         GeometryBatch::CreateInfo{
+                             .initial_vertex_capacity = 10'000'000,
+                             .initial_index_capacity = 10'000'000,
+                             .initial_meshlet_capacity = 1'000'000,
+                             .initial_mesh_capacity = 100'000,
+                             .initial_meshlet_triangle_capacity = 10'000'000,
+                             .initial_meshlet_vertex_capacity = 10'000'000,
+                         }),
+      mesh_shaders_enabled_(cinfo.mesh_shaders_enabled) {
   ZoneScoped;
-  device_ = cinfo.device;
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
   config_file_path_ = cinfo.config_file_path;
@@ -1138,30 +1173,6 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
   shader_mgr_->init(device_);
 
-  {
-    // TODO: streamline
-    auto desc = rhi::TextureDesc{.format = rhi::TextureFormat::R8G8B8A8Srgb,
-                                 .dims = glm::uvec3{1, 1, 1},
-                                 .mip_levels = 1,
-                                 .array_length = 1,
-                                 .bindless = true};
-    default_white_tex_ = device_->create_tex_h(desc);
-    ALWAYS_ASSERT(device_->get_tex(default_white_tex_)->bindless_idx() == 0);
-    auto* data = reinterpret_cast<uint64_t*>(malloc(sizeof(uint64_t)));
-    *data = 0xFFFFFFFF;
-    // TODO: add a function for this for the love of god!
-    pending_texture_uploads_.push_back(
-        GPUTexUpload{.upload =
-                         TextureUpload{
-                             .data = std::unique_ptr<void, UntypedDeleterFuncPtr>(data, free),
-                             .desc = desc,
-                             .bytes_per_row = 4,
-                             .load_type = CPUTextureLoadType::Malloc,
-
-                         },
-                     .tex = default_white_tex_.handle,
-                     .name = get_next_tex_upload_name()});
-  }
   {
     samplers_.emplace_back(device_->create_sampler_h({
         .min_filter = rhi::FilterMode::Nearest,
@@ -1204,29 +1215,14 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
     shade_pso_ = shader_mgr_->create_compute_pipeline({"shade"});
   }
 
-  uniforms_allocator_.emplace(device_);
-  staging_buffer_allocator_.emplace(device_);
-
-  buffer_copy_mgr_.emplace(device_, staging_buffer_allocator_.value());
-  materials_buf_.emplace(*device_, buffer_copy_mgr_.value(),
+  materials_buf_.emplace(*device_, buffer_copy_mgr_,
                          rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
                                          .usage = rhi::BufferUsage_Storage,
                                          .size = k_max_materials * sizeof(M4Material),
                                          .bindless = true,
                                          .name = "all materials buf"},
                          sizeof(M4Material));
-  instance_data_mgr_.init(100'000, device_, &buffer_copy_mgr_.value(),
-                          device_->get_info().frames_in_flight, mesh_shaders_enabled_);
-  static_draw_batch_.emplace(DrawBatchType::Static, *device_, buffer_copy_mgr_.value(),
-                             DrawBatch::CreateInfo{
-                                 .initial_vertex_capacity = 10'000'000,
-                                 .initial_index_capacity = 10'000'000,
-                                 .initial_meshlet_capacity = 1'000'000,
-                                 .initial_mesh_capacity = 100'000,
-                                 .initial_meshlet_triangle_capacity = 10'000'000,
-                                 .initial_meshlet_vertex_capacity = 10'000'000,
-                             });
-  meshlet_vis_buf_.emplace(*device_, buffer_copy_mgr_.value(),
+  meshlet_vis_buf_.emplace(*device_, buffer_copy_mgr_,
                            rhi::BufferDesc{.size = 1'000'000, .name = "meshlet_vis_buf"},
                            sizeof(uint32_t));
 
@@ -1259,13 +1255,6 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
         .name = "query_resolve_buf",
     });
   }
-}
-
-bool MemeRenderer123::begin_frame() {
-  curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
-  uniforms_allocator_->reset(curr_frame_idx_);
-  staging_buffer_allocator_->reset(curr_frame_idx_);
-  return true;
 }
 
 }  // namespace gfx

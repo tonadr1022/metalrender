@@ -5,8 +5,8 @@
 
 namespace gfx {
 
-DrawBatch::DrawBatch(DrawBatchType type, rhi::Device& device, BufferCopyMgr& buffer_copier,
-                     const CreateInfo& cinfo)
+GeometryBatch::GeometryBatch(GeometryBatchType type, rhi::Device& device,
+                             BufferCopyMgr& buffer_copier, const CreateInfo& cinfo)
     : vertex_buf(device, buffer_copier,
                  {
                      .storage_mode = rhi::StorageMode::Default,
@@ -63,7 +63,7 @@ DrawBatch::DrawBatch(DrawBatchType type, rhi::Device& device, BufferCopyMgr& buf
   // });
 }
 
-DrawBatch::Stats DrawBatch::get_stats() const {
+GeometryBatch::Stats GeometryBatch::get_stats() const {
   return {
       .vertex_count = vertex_buf.allocated_element_count(),
       .index_count = index_buf.allocated_element_count(),

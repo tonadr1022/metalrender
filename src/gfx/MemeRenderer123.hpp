@@ -39,7 +39,7 @@ struct RenderArgs {
 
 struct ModelGPUResources {
   OffsetAllocator::Allocation material_alloc;
-  DrawBatch::Alloc static_draw_batch_alloc;
+  GeometryBatch::Alloc static_draw_batch_alloc;
   std::vector<rhi::TextureHandleHolder> textures;
   std::vector<InstanceData> base_instance_datas;
   std::vector<Mesh> meshes;
@@ -60,22 +60,26 @@ struct ModelInstanceGPUResources {
   ModelGPUHandle model_resources_handle;
 };
 
+class MemeRenderer123;
 class InstanceDataMgr {
  public:
-  void init(size_t initial_element_cap, rhi::Device* device, BufferCopyMgr* buffer_copy_mgr,
-            uint32_t frames_in_flight, bool mesh_shaders_enabled) {
-    allocator_.emplace(initial_element_cap);
-    device_ = device;
-    buffer_copy_mgr_ = buffer_copy_mgr;
-    frames_in_flight_ = frames_in_flight;
-    mesh_shaders_enabled_ = mesh_shaders_enabled;
-    allocate_buffers(initial_element_cap);
-  }
+  InstanceDataMgr(const InstanceDataMgr&) = delete;
+  InstanceDataMgr(InstanceDataMgr&&) = delete;
+  InstanceDataMgr& operator=(const InstanceDataMgr&) = delete;
+  InstanceDataMgr& operator=(InstanceDataMgr&&) = delete;
+
+  InstanceDataMgr(rhi::Device* device, BufferCopyMgr* buffer_copy_mgr, uint32_t frames_in_flight,
+                  MemeRenderer123& renderer)
+      : allocator_(0),
+        buffer_copy_mgr_(buffer_copy_mgr),
+        frames_in_flight_(frames_in_flight),
+        device_(device),
+        renderer_(renderer) {}
   [[nodiscard]] bool has_draws() const { return curr_element_count_ > 0; }
-  OffsetAllocator::Allocation allocate(size_t element_count);
+  OffsetAllocator::Allocation allocate(uint32_t element_count);
 
   [[nodiscard]] size_t allocation_size(OffsetAllocator::Allocation alloc) const {
-    return allocator_->allocationSize(alloc);
+    return allocator_.allocationSize(alloc);
   }
 
   void free(OffsetAllocator::Allocation alloc, uint32_t frame_in_flight);
@@ -90,8 +94,8 @@ class InstanceDataMgr {
   [[nodiscard]] rhi::BufferHandle get_draw_cmd_buf() const { return draw_cmd_buf_.handle; }
 
  private:
-  void allocate_buffers(size_t element_count);
-  std::optional<OffsetAllocator::Allocator> allocator_;
+  void ensure_buffer_space(size_t element_count);
+  OffsetAllocator::Allocator allocator_;
   rhi::BufferHandleHolder instance_data_buf_;
   rhi::BufferHandleHolder draw_cmd_buf_;
   BufferCopyMgr* buffer_copy_mgr_{};
@@ -99,7 +103,7 @@ class InstanceDataMgr {
   uint32_t curr_element_count_{};
   uint32_t frames_in_flight_{};
   rhi::Device* device_{};
-  bool mesh_shaders_enabled_{};
+  MemeRenderer123& renderer_;
 };
 
 struct IdxOffset {
@@ -128,6 +132,7 @@ class MemeRenderer123 {
     Window* window;
     std::filesystem::path resource_dir;
     std::filesystem::path config_file_path;
+    bool mesh_shaders_enabled{true};
   };
   explicit MemeRenderer123(const CreateInfo& cinfo);
   ~MemeRenderer123();
@@ -138,7 +143,6 @@ class MemeRenderer123 {
   MemeRenderer123& operator=(MemeRenderer123&&) = delete;
 
   void render(const RenderArgs& args);
-  bool begin_frame();
   void on_imgui();
   bool on_key_event(int key, int action, int mods);
   bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
@@ -147,6 +151,7 @@ class MemeRenderer123 {
                                                           ModelGPUHandle model_gpu_handle);
   void free_instance(ModelInstanceGPUHandle handle);
   void free_model(ModelGPUHandle handle);
+  bool mesh_shaders_enabled() const { return mesh_shaders_enabled_; }
 
  private:
   void init_imgui();
@@ -158,9 +163,11 @@ class MemeRenderer123 {
   }
   void add_render_graph_passes(const RenderArgs& args);
   void set_cull_data_and_globals(const RenderArgs& args);
-  DrawBatch::Alloc upload_geometry(DrawBatchType type, const std::vector<DefaultVertex>& vertices,
-                                   const std::vector<rhi::DefaultIndexT>& indices,
-                                   const MeshletProcessResult& meshlets, std::span<Mesh> meshes);
+  GeometryBatch::Alloc upload_geometry(GeometryBatchType type,
+                                       const std::vector<DefaultVertex>& vertices,
+                                       const std::vector<rhi::DefaultIndexT>& indices,
+                                       const MeshletProcessResult& meshlets,
+                                       std::span<Mesh> meshes);
   struct AllModelData {
     uint32_t max_objects;
     uint32_t max_meshlets;
@@ -192,7 +199,10 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder shade_pso_;
   rhi::PipelineHandleHolder tex_only_pso_;
   std::optional<BackedGPUAllocator> materials_buf_;
-  std::optional<BufferCopyMgr> buffer_copy_mgr_;
+  // TODO: merge these
+  GPUFrameAllocator3 uniforms_allocator_;
+  GPUFrameAllocator3 staging_buffer_allocator_;
+  BufferCopyMgr buffer_copy_mgr_;
 
   rhi::BufferHandleHolder tmp_out_draw_cnt_buf_;
   rhi::BufferHandleHolder tmp_test_buf_;
@@ -215,7 +225,7 @@ class MemeRenderer123 {
   std::filesystem::path resource_dir_;
   std::filesystem::path config_file_path_;
   InstanceDataMgr instance_data_mgr_;
-  std::optional<DrawBatch> static_draw_batch_;
+  GeometryBatch static_draw_batch_;
 
   BlockPool<ModelGPUHandle, ModelGPUResources> model_gpu_resource_pool_{20, 1, true};
   BlockPool<ModelInstanceGPUHandle, ModelInstanceGPUResources> model_instance_gpu_resource_pool_{
@@ -242,9 +252,6 @@ class MemeRenderer123 {
   std::vector<uint32_t> indirect_cmd_buf_ids_;
   glm::mat4 get_proj_matrix(float fov = k_default_fov_deg);
 
-  // TODO: rename or sum?
-  std::optional<GPUFrameAllocator3> uniforms_allocator_;
-  std::optional<GPUFrameAllocator3> staging_buffer_allocator_;
   static constexpr float k_z_near = 0.01f;
   static constexpr float k_z_far = 30000.f;
   static constexpr float k_default_fov_deg = 70.0f;

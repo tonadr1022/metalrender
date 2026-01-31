@@ -27,12 +27,15 @@ class IndexAllocator {
     }
     const uint32_t val = free_list_.back();
     free_list_.pop_back();
+    size_++;
     return val;
   }
+  uint32_t size() const {return size_; }
 
-  void free_idx(uint32_t idx) { free_list_.push_back(idx); }
+  void free_idx(uint32_t idx) { free_list_.push_back(idx); size_--; }
 
  private:
+  uint32_t size_{};
   uint32_t capacity_{};
   std::vector<uint32_t> free_list_;
 };

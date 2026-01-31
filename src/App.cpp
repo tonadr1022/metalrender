@@ -153,18 +153,11 @@ void App::run() {
         .draw_imgui = imgui_enabled_,
     };
 
-    if (!renderer_->begin_frame()) {
-      goto end_loop;
-    }
-
     if (imgui_enabled_) {
       on_imgui(dt);
     }
     ImGui::Render();
-
     renderer_->render(args);
-
-  end_loop:
     ImGui::EndFrame();
   }
   shutdown();

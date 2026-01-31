@@ -105,7 +105,9 @@ class Device {
   virtual CmdEncoder* begin_cmd_encoder() = 0;
   virtual void submit_frame() = 0;
 
+  // does actual swapchain recreation, ideally only call this when something needs to change.
   virtual bool recreate_swapchain(const SwapchainDesc& desc, Swapchain* swapchain) = 0;
+
   // calls CmdEncoder::begin_rendering on the given cmd encoder with the swapchain's current
   // draw image
   virtual void begin_swapchain_rendering(Swapchain* swapchain, CmdEncoder* cmd_enc) = 0;
