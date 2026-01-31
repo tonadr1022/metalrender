@@ -81,13 +81,13 @@ add_custom_target(compile_shaders ALL
 
 add_dependencies(${target_name} compile_shaders)
 
-target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/resources/shaders)
+target_include_directories(${target_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/resources/shaders)
+target_include_directories(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/third_party/vendored)
 
 target_link_libraries(${target_name} PRIVATE
     glm::glm
     project_warnings
     cgltf
-    stb_image
     meshoptimizer
     Tracy::TracyClient
     implot

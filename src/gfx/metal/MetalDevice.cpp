@@ -557,8 +557,7 @@ MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path, 
 rhi::CmdEncoder* MetalDevice::begin_command_list() {
   if (mtl4_enabled_) {
     if (curr_cmd_list_idx_ == mtl4_resources_->cmd_lists_.size()) {
-      mtl4_resources_->cmd_lists_.emplace_back(
-          std::make_unique<MetalCmdEncoderBase<Metal4EncoderAPI>>());
+      mtl4_resources_->cmd_lists_.emplace_back(std::make_unique<Metal4CmdEncoder>());
       mtl4_resources_->cmd_list_res_.emplace_back();
     }
     ASSERT(curr_cmd_list_idx_ < mtl4_resources_->cmd_lists_.size());
@@ -573,7 +572,8 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
     }
     res.cmd_buf->beginCommandBuffer(res.cmd_allocators[frame_idx()].get());
     curr_cmd_list_idx_++;
-    cmd_list->reset(this, res.cmd_buf.get());
+    cmd_list->reset(this);
+    cmd_list->m4_state().cmd_buf = res.cmd_buf.get();
     cmd_list->done_ = false;
     cmd_list->presents_.clear();
     cmd_list->queue_ = rhi::QueueType::Graphics;
@@ -586,7 +586,8 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
   }
   ASSERT(curr_cmd_list_idx_ < mtl3_resources_->cmd_lists_.size());
   auto* ret = (Metal3CmdEncoder*)mtl3_resources_->cmd_lists_[curr_cmd_list_idx_].get();
-  ret->reset(this, mtl3_resources_->main_cmd_buf);
+  ret->reset(this);
+  ret->m3_state().cmd_buf = mtl3_resources_->main_cmd_buf;
   curr_cmd_list_idx_++;
 
   return ret;
@@ -595,7 +596,7 @@ rhi::CmdEncoder* MetalDevice::begin_command_list() {
 void MetalDevice::end_command_list(rhi::CmdEncoder* cmd_enc) {
   ASSERT(mtl4_enabled_);
   auto* cmd = (Metal4CmdEncoder*)cmd_enc;
-  get_queue(rhi::QueueType::Graphics).submit_cmd_bufs.push_back(cmd->encoder_state_.cmd_buf);
+  get_queue(rhi::QueueType::Graphics).submit_cmd_bufs.push_back(cmd->m4_state().cmd_buf);
 }
 
 void MetalDevice::submit_frame() {
@@ -605,14 +606,14 @@ void MetalDevice::submit_frame() {
     for (size_t cmd_list_i = 0; cmd_list_i < curr_cmd_list_idx_; cmd_list_i++) {
       auto* list = mtl4_resources_->cmd_lists_[cmd_list_i].get();
       for (auto& present : list->presents_) {
-        for (auto& queue : queues_) {
-          queue.queue->wait(present.get());
-        }
+        queues_[(int)list->queue_].queue->wait(present.get());
       }
     }
 
     for (auto& queue : queues_) {
-      queue.submit();
+      if (queue.is_valid()) {
+        queue.submit();
+      }
     }
 
     // signal completion of queues post-commit

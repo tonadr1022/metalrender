@@ -8,6 +8,7 @@
 #include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Queue.hpp"
+#include "small_vector/small_vector.hpp"
 
 class MetalDevice;
 
@@ -44,11 +45,33 @@ struct EncoderState {
   API::ArgTable arg_table{};
 };
 
+struct MTL3_State {
+  MTL::RenderCommandEncoder* render_enc;
+  MTL::ComputeCommandEncoder* compute_enc;
+  MTL::BlitCommandEncoder* blit_enc;
+  MTL::CommandBuffer* cmd_buf;
+  MTL::ArgumentEncoder* arg_encoder;
+};
+
+struct MTL4_State {
+  MTL4::RenderCommandEncoder* render_enc;
+  MTL4::ComputeCommandEncoder* compute_enc;
+  MTL4::CommandBuffer* cmd_buf;
+  MTL4::ArgumentTable* arg_table;
+};
+
+struct EncoderState2 {
+  union {
+    MTL3_State m3;
+    MTL4_State m4;
+  };
+};
+
 template <typename API>
 typename API::RPDesc* create_render_pass(
     MetalDevice* device, const std::vector<rhi::RenderingAttachmentInfo>& attachments);
 
-template <typename EncoderAPI>
+template <bool UseMTL4 = true>
 class MetalCmdEncoderBase : public rhi::CmdEncoder {
  public:
   friend class MetalDevice;
@@ -116,7 +139,10 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   void query_resolve(rhi::QueryPoolHandle query_pool, uint32_t start_query, uint32_t query_count,
                      rhi::BufferHandle dst_buffer, size_t dst_offset) override;
 
-  EncoderState<EncoderAPI> encoder_state_{};
+  EncoderState2 state_;
+  MTL4_State& m4_state() { return state_.m4; }
+  MTL3_State& m3_state() { return state_.m3; }
+  gch::small_vector<NS::SharedPtr<CA::MetalDrawable>, 8> presents_;
   MetalDevice* device_{};
   std::string curr_debug_name_;
   MetalCmdEncoderICBMgr cmd_icb_mgr_;
@@ -130,80 +156,21 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   int64_t push_debug_group_stack_size_{};
   bool done_{false};
   rhi::QueueType queue_;
-  std::vector<NS::SharedPtr<CA::MetalDrawable>> presents_;
 
  private:
-  void reset(MetalDevice* device, EncoderAPI::CommandBuffer cmd_buf);
+  void pre_dispatch();
+  void pre_blit();
+  void reset(MetalDevice* device);
   void flush_barriers();
-  void start_compute_encoder();
   void start_blit_encoder();
+  void start_compute_encoder();
   void start_blit_equivalent_encoder();
   void flush_binds();
+  void end_compute_encoder();
+  void end_blit_encoder();
+  void end_render_encoder();
+  void set_buffer(uint32_t bind_point, MTL::Buffer* buffer, size_t offset, uint32_t stages);
 };
 
-struct Metal3EncoderAPI;
-struct Metal4EncoderAPI;
-
-using Metal3CmdEncoder = MetalCmdEncoderBase<Metal3EncoderAPI>;
-using Metal4CmdEncoder = MetalCmdEncoderBase<Metal4EncoderAPI>;
-
-struct MetalRenderPassAPI3 {
-  using RPDesc = MTL::RenderPassDescriptor;
-  using ColorDesc = MTL::RenderPassColorAttachmentDescriptor;
-  using DepthDesc = MTL::RenderPassDepthAttachmentDescriptor;
-
-  static RPDesc* alloc_desc();
-  static ColorDesc* get_color_desc(RPDesc* desc, size_t index);
-  static DepthDesc* alloc_depth_desc();
-  static void set_depth(RPDesc* desc, DepthDesc* depth_desc);
-};
-
-struct MetalRenderPassAPI4 {
-  using RPDesc = MTL4::RenderPassDescriptor;
-  using ColorDesc = MTL::RenderPassColorAttachmentDescriptor;
-  using DepthDesc = MTL::RenderPassDepthAttachmentDescriptor;
-
-  static RPDesc* alloc_desc();
-  static ColorDesc* get_color_desc(RPDesc* desc, size_t index);
-  static DepthDesc* alloc_depth_desc();
-  static void set_depth(RPDesc* desc, DepthDesc* depth_desc);
-};
-
-struct Metal3EncoderAPI {
-  using RPAPI = MetalRenderPassAPI3;
-  static void set_compute_args() {}
-  using ComputeEnc = MTL::ComputeCommandEncoder*;
-  using RenderEnc = MTL::RenderCommandEncoder*;
-  using BlitEnc = MTL::BlitCommandEncoder*;
-  using CommandBuffer = MTL::CommandBuffer*;
-  using EncoderState = EncoderState<Metal3EncoderAPI>;
-  using ArgTable = void*;
-
-  static void end_compute_encoder(ComputeEnc& enc);
-  static void end_blit_encoder(BlitEnc& enc);
-  static void end_render_encoder(RenderEnc& enc);
-  static void start_compute_encoder(EncoderState& state);
-  static void start_render_encoder(EncoderState& state, RPAPI::RPDesc* desc);
-  static void start_blit_encoder(EncoderState& state);
-  static void end_all_encoders(RenderEnc& r, ComputeEnc& c, BlitEnc& b);
-};
-
-struct Metal4EncoderAPI {
-  using RPAPI = MetalRenderPassAPI4;
-  static void set_compute_args() {}
-
-  using ComputeEnc = MTL4::ComputeCommandEncoder*;
-  using RenderEnc = MTL4::RenderCommandEncoder*;
-  using BlitEnc = void*;  // no blit encoder in M4
-  using CommandBuffer = MTL4::CommandBuffer*;
-  using EncoderState = EncoderState<Metal4EncoderAPI>;
-  using ArgTable = MTL4::ArgumentTable*;
-
-  static void end_compute_encoder(ComputeEnc& enc);
-  static void end_render_encoder(RenderEnc& enc);
-  static void start_compute_encoder(EncoderState& state);
-  static void start_render_encoder(EncoderState& state, RPAPI::RPDesc* desc);
-
-  static void start_blit_encoder(...) {}
-  static void end_blit_encoder(...) {}
-};
+using Metal3CmdEncoder = MetalCmdEncoderBase<false>;
+using Metal4CmdEncoder = MetalCmdEncoderBase<true>;
