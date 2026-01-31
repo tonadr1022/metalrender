@@ -8,8 +8,6 @@
 #define MESHLET_OCCLUSION_CULL_ENABLED_BIT (1 << 2)
 
 cbuffer Task2PC HLSL_PC_REG {
-  uint max_draws;
-  uint max_meshlets;
   uint pass;
   uint flags;
 };

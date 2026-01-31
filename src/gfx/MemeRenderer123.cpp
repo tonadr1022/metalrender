@@ -164,33 +164,33 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           prep_meshlets_pass.w_buf("task_cmd_buf", rhi::PipelineStage_ComputeShader,
                                    static_draw_batch_.task_cmd_count * sizeof(TaskCmd));
     }
-    prep_meshlets_pass.set_ex([this, task_cmd_buf_rg_handle,
-                               out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
-      if (!instance_data_mgr_.has_draws()) {
-        return;
-      }
-      enc->bind_pipeline(draw_cull_pso_);
-      auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handle);
-      if (!culling_paused_) {
-        DrawCullPC pc{
-            .globals_buf_idx = frame_globals_buf_info_.idx,
-            .globals_buf_offset_bytes = frame_globals_buf_info_.offset_bytes,
-            .cull_data_idx = frame_cull_data_buf_info_.idx,
-            .cull_data_offset_bytes = frame_cull_data_buf_info_.offset_bytes,
-            .task_cmd_buf_idx = device_->get_buf(task_cmd_buf_handle)->bindless_idx(),
-            .draw_cnt_buf_idx =
-                device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx(),
-            .instance_data_buf_idx =
-                device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
-            .mesh_data_buf_idx = static_draw_batch_.mesh_buf.get_buffer()->bindless_idx(),
-            .max_draws = all_model_data_.max_objects,
-            .culling_enabled = culling_enabled_,
-        };
-        enc->push_constants(&pc, sizeof(pc));
-        enc->dispatch_compute(glm::uvec3{align_divide_up(all_model_data_.max_objects, 64ull), 1, 1},
-                              glm::uvec3{64, 1, 1});
-      }
-    });
+    prep_meshlets_pass.set_ex(
+        [this, task_cmd_buf_rg_handle, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
+          if (!instance_data_mgr_.has_draws()) {
+            return;
+          }
+          enc->bind_pipeline(draw_cull_pso_);
+          auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handle);
+          if (!culling_paused_) {
+            DrawCullPC pc{
+                .globals_buf_idx = frame_globals_buf_info_.idx,
+                .globals_buf_offset_bytes = frame_globals_buf_info_.offset_bytes,
+                .cull_data_idx = frame_cull_data_buf_info_.idx,
+                .cull_data_offset_bytes = frame_cull_data_buf_info_.offset_bytes,
+                .task_cmd_buf_idx = device_->get_buf(task_cmd_buf_handle)->bindless_idx(),
+                .draw_cnt_buf_idx =
+                    device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx(),
+                .instance_data_buf_idx =
+                    device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
+                .mesh_data_buf_idx = static_draw_batch_.mesh_buf.get_buffer()->bindless_idx(),
+                .max_draws = instance_data_mgr_.stats().max_instance_data_count,
+                .culling_enabled = culling_enabled_,
+            };
+            enc->push_constants(&pc, sizeof(pc));
+            enc->dispatch_compute(glm::uvec3{align_divide_up(pc.max_draws, 64ull), 1, 1},
+                                  glm::uvec3{64, 1, 1});
+          }
+        });
   } else {
     auto& prepare_indirect_pass = rg_.add_compute_pass("prepare_indirect");
     prepare_indirect_pass.w_external_buf("indirect_buffer", instance_data_mgr_.get_draw_cmd_buf());
@@ -202,11 +202,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
               device_->get_buf(instance_data_mgr_.get_instance_data_buf())->bindless_idx(),
           .mat_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
       };
-
-      indirect_cmd_buf_ids_.emplace_back(enc->prepare_indexed_indirect_draws(
-          instance_data_mgr_.get_draw_cmd_buf(), 0, all_model_data_.max_objects,
-          static_draw_batch_.index_buf.get_buffer_handle(), 0, &pc, sizeof(pc),
-          sizeof(DefaultVertex)));
+      indirect_cmd_buf_ids_.emplace_back(
+          enc->prepare_indexed_indirect_draws(instance_data_mgr_.get_draw_cmd_buf(), 0,
+                                              instance_data_mgr_.stats().max_instance_data_count,
+                                              static_draw_batch_.index_buf.get_buffer_handle(), 0,
+                                              &pc, sizeof(pc), sizeof(DefaultVertex)));
     });
   }
 
@@ -292,8 +292,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       if (mesh_shaders_enabled_) {
         enc->bind_pipeline(test_task_pso_);
         Task2PC pc{
-            .max_draws = all_model_data_.max_objects,
-            .max_meshlets = all_model_data_.max_meshlets,
             .pass = late,
             .flags = 0,
         };
@@ -335,7 +333,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         enc->bind_pipeline(test2_pso_);
         ASSERT(indirect_cmd_buf_ids_.size());
         enc->draw_indexed_indirect(instance_data_mgr_.get_draw_cmd_buf(), indirect_cmd_buf_ids_[0],
-                                   all_model_data_.max_objects, 0);
+                                   instance_data_mgr_.stats().max_instance_data_count, 0);
       }
       enc->end_rendering();
     });
@@ -718,11 +716,9 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   if (!mesh_shaders_enabled_) cmds.reserve(instance_datas.size());
 
   ASSERT(instance_datas.size() == instance_id_to_node.size());
-  all_model_data_.max_meshlets += model_resources->totals.meshlets;
 
   const InstanceDataMgr::Alloc instance_data_gpu_alloc = instance_data_mgr_.allocate(
       model_instance_datas.size(), model_resources->totals.instance_meshlets);
-  all_model_data_.max_objects = instance_data_mgr_.max_seen_size();
   stats_.total_instance_meshlets += model_resources->totals.instance_meshlets;
   stats_.total_instance_vertices += model_resources->totals.instance_vertices;
 
@@ -806,6 +802,9 @@ InstanceDataMgr::Alloc InstanceDataMgr::allocate(uint32_t element_count,
   if (renderer_.mesh_shaders_enabled()) {
     bool resized{};
     meshlet_vis_buf_alloc = meshlet_vis_buf_.allocate(meshlet_instance_count, resized);
+    stats_.max_seen_meshlet_instance_count =
+        std::max(stats_.max_seen_meshlet_instance_count,
+                 meshlet_vis_buf_alloc.offset + meshlet_instance_count);
   }
   return {.instance_data_alloc = allocate_instance_data(element_count),
           .meshlet_vis_alloc = meshlet_vis_buf_alloc};
@@ -849,9 +848,9 @@ void InstanceDataMgr::ensure_buffer_space(size_t element_count) {
     });
 
     if (instance_data_buf_.is_valid()) {
-      buffer_copy_mgr_->copy_to_buffer(device_.get_buf(instance_data_buf_)->contents(),
-                                       device_.get_buf(instance_data_buf_)->size(), new_buf.handle,
-                                       0);
+      buffer_copy_mgr_.copy_to_buffer(device_.get_buf(instance_data_buf_)->contents(),
+                                      device_.get_buf(instance_data_buf_)->size(), new_buf.handle,
+                                      0);
     }
     instance_data_buf_ = std::move(new_buf);
   }
@@ -866,8 +865,8 @@ void InstanceDataMgr::ensure_buffer_space(size_t element_count) {
           .name = "draw_indexed_indirect_cmd_buf",
       });
       if (draw_cmd_buf_.is_valid()) {
-        buffer_copy_mgr_->copy_to_buffer(device_.get_buf(draw_cmd_buf_)->contents(),
-                                         device_.get_buf(draw_cmd_buf_)->size(), new_buf.handle, 0);
+        buffer_copy_mgr_.copy_to_buffer(device_.get_buf(draw_cmd_buf_)->contents(),
+                                        device_.get_buf(draw_cmd_buf_)->size(), new_buf.handle, 0);
       }
       draw_cmd_buf_ = std::move(new_buf);
     }
@@ -1119,7 +1118,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
                                      .bindless = true,
                                      .name = "all materials buf"},
                      sizeof(M4Material)),
-      instance_data_mgr_(*device_, &buffer_copy_mgr_, device_->get_info().frames_in_flight, *this),
+      instance_data_mgr_(*device_, buffer_copy_mgr_, device_->get_info().frames_in_flight, *this),
       static_draw_batch_(GeometryBatchType::Static, *device_, buffer_copy_mgr_,
                          GeometryBatch::CreateInfo{
                              .initial_vertex_capacity = 10'000'000,
@@ -1237,10 +1236,10 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
   }
 }
 
-InstanceDataMgr::InstanceDataMgr(rhi::Device& device, BufferCopyMgr* buffer_copy_mgr,
+InstanceDataMgr::InstanceDataMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr,
                                  uint32_t frames_in_flight, MemeRenderer123& renderer)
     : allocator_(0),
-      meshlet_vis_buf_(device, *buffer_copy_mgr,
+      meshlet_vis_buf_(device, buffer_copy_mgr,
                        {.storage_mode = rhi::StorageMode::GPUOnly,
                         .usage = rhi::BufferUsage_Storage,
                         .name = "instance meshlet vis buf"},
@@ -1262,7 +1261,8 @@ OffsetAllocator::Allocation InstanceDataMgr::allocate_instance_data(uint32_t ele
   }
   ensure_buffer_space(allocator_.capacity());
   curr_element_count_ += element_count;
-  max_seen_size_ = std::max<uint32_t>(max_seen_size_, alloc.offset + element_count);
+  stats_.max_instance_data_count =
+      std::max<uint32_t>(stats_.max_instance_data_count, alloc.offset + element_count);
   return alloc;
 }
 
