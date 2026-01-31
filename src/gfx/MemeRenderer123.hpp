@@ -198,17 +198,12 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder depth_reduce_pso_;
   rhi::PipelineHandleHolder shade_pso_;
   rhi::PipelineHandleHolder tex_only_pso_;
-  std::optional<BackedGPUAllocator> materials_buf_;
-  // TODO: merge these
-  GPUFrameAllocator3 uniforms_allocator_;
-  GPUFrameAllocator3 staging_buffer_allocator_;
+  GPUFrameAllocator3 frame_gpu_upload_allocator_;
   BufferCopyMgr buffer_copy_mgr_;
+  BackedGPUAllocator materials_buf_;
 
-  rhi::BufferHandleHolder tmp_out_draw_cnt_buf_;
-  rhi::BufferHandleHolder tmp_test_buf_;
   TexAndViewHolder depth_pyramid_tex_;
-  void recreate_depth_pyramid_tex();
-  void recreate_external_textures();
+  void recreate_swapchain_sized_textures();
   int view_mip_{};
 
   size_t frame_num_{};
@@ -233,8 +228,8 @@ class MemeRenderer123 {
 
   gfx::RenderGraph rg_;
 
-  std::optional<BackedGPUAllocator> meshlet_vis_buf_;
-
+  // TODO: move to instance data mgr
+  std::unique_ptr<BackedGPUAllocator> meshlet_vis_buf_;
   std::optional<ImGuiRenderer> imgui_renderer_;
 
   struct GPUTexUpload {
