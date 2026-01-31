@@ -312,6 +312,8 @@ class MetalDevice : public rhi::Device {
   MTL::Stages compute_enc_dst_stages_{};
   MTL::Stages render_enc_dst_stages_{};
   MTL::Stages blit_enc_dst_stages_{};
+  // TODO: this leaks pipelines
+  std::unordered_map<uint64_t, rhi::PipelineHandle> all_pipelines;
 
   void destroy_actual(rhi::BufferHandle handle);
 

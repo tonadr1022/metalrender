@@ -112,6 +112,8 @@ class Device {
   virtual void submit_frame() = 0;
 
   virtual bool recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapchain* swapchain) = 0;
+  // calls rhi::CmdEncoder::begin_rendering on the given cmd encoder with the swapchain's current
+  // draw image
   virtual void begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc) = 0;
   virtual void resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t start_query,
                                   uint32_t query_count, std::span<uint64_t> out_timestamps) = 0;

@@ -89,7 +89,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_verbose_ = i++ == 2;
+  rg_verbose_ = i++ == -2;
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
   if (!buffer_copy_mgr_->get_copies().empty()) {
@@ -423,18 +423,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
       auto dims = gbuffer_a_tex->desc().dims;
       device_->begin_swapchain_rendering(swapchain_, enc);
+      enc->bind_pipeline(tex_only_pso_);
       enc->set_wind_order(rhi::WindOrder::Clockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, dims);
-
-      if (!tex_only_pso_.is_valid()) {
-        // TODO: JIT shader compile for the current render pass's render pass info
-        tex_only_pso_ = shader_mgr_->create_graphics_pipeline(
-            {.shaders = {{{"fullscreen_quad", ShaderType::Vertex},
-                          {"tex_only", ShaderType::Fragment}}},
-             .rendering = {.color_formats = {rhi::TextureFormat::B8G8R8A8Unorm}}});
-      }
-      enc->bind_pipeline(tex_only_pso_);
 
       uint32_t tex_idx{};
       float mult = 1.f;
@@ -1192,18 +1184,17 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
   }
 
   {
-    // TODO: move rendering info out, should be inferred from active render pass.
-    auto draw_img_format = rhi::TextureFormat::R16G16B16A16Sfloat;
     test2_pso_ = shader_mgr_->create_graphics_pipeline({
         .shaders = {{{"basic_indirect", ShaderType::Vertex},
                      {"basic_indirect", ShaderType::Fragment}}},
-        .rendering = {.color_formats{draw_img_format}, .depth_format = TextureFormat::D32float},
     });
     test_task_pso_ = shader_mgr_->create_graphics_pipeline({
         .shaders = {{{"forward_meshlet", ShaderType::Task},
                      {"forward_meshlet", ShaderType::Mesh},
                      {"forward_meshlet", ShaderType::Fragment}}},
-        .rendering = {.color_formats{draw_img_format}, .depth_format = TextureFormat::D32float},
+    });
+    tex_only_pso_ = shader_mgr_->create_graphics_pipeline({
+        .shaders = {{{"fullscreen_quad", ShaderType::Vertex}, {"tex_only", ShaderType::Fragment}}},
     });
 
     draw_cull_pso_ = shader_mgr_->create_compute_pipeline({"draw_cull"});

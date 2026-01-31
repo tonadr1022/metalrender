@@ -11,6 +11,8 @@ class CmdEncoder {
   virtual void set_debug_name(const char* name) = 0;
   virtual void begin_rendering(std::initializer_list<RenderingAttachmentInfo> attachments) = 0;
   virtual void end_rendering() = 0;
+  // pipelines are compiled on demand if the provided pipeline doesn't have matching render target
+  // info
   virtual void bind_pipeline(PipelineHandle handle) = 0;
   void bind_pipeline(const PipelineHandleHolder& handle) { bind_pipeline(handle.handle); }
 

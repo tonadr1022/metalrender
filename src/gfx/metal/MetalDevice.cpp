@@ -476,11 +476,14 @@ void set_shader_stage_functions(const rhi::ShaderCreateInfo& shader_info, T& des
 
 rhi::PipelineHandle MetalDevice::create_graphics_pipeline(
     const rhi::GraphicsPipelineCreateInfo& cinfo) {
-  auto* render_pso = create_graphics_pipeline_internal(cinfo);
-  if (!render_pso) {
+  auto* pso = create_graphics_pipeline_internal(cinfo);
+  if (!pso) {
     return {};
   }
-  return pipeline_pool_.alloc(MetalPipeline{render_pso, nullptr});
+  auto handle = pipeline_pool_.alloc(pso, cinfo);
+  auto* pipeline = pipeline_pool_.get(handle);
+  pipeline->render_target_info_hash = rhi::compute_render_target_info_hash(cinfo.rendering);
+  return handle;
 }
 
 rhi::PipelineHandle MetalDevice::create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo) {
@@ -488,7 +491,7 @@ rhi::PipelineHandle MetalDevice::create_compute_pipeline(const rhi::ShaderCreate
   if (!pso) {
     return {};
   }
-  return pipeline_pool_.alloc(MetalPipeline{nullptr, pso});
+  return pipeline_pool_.alloc(pso, cinfo);
 }
 
 rhi::SamplerHandle MetalDevice::create_sampler(const rhi::SamplerDesc& desc) {
@@ -909,17 +912,14 @@ MTL::RenderPipelineState* MetalDevice::create_graphics_pipeline_internal(
   }
 
   auto set_color_blend_atts = [&cinfo](auto desc) {
-    size_t color_format_cnt = 0;
+    size_t color_att_count = 0;
     for (const auto& format : cinfo.rendering.color_formats) {
       desc->colorAttachments()
-          ->object(color_format_cnt++)
+          ->object(color_att_count++)
           ->setPixelFormat(mtl::util::convert(format));
     }
-    if (cinfo.blend.attachments.size() > 0) {
-      ALWAYS_ASSERT(cinfo.blend.attachments.size() == (size_t)color_format_cnt);
-    }
 
-    for (size_t i = 0; i < cinfo.blend.attachments.size(); i++) {
+    for (size_t i = 0; i < color_att_count; i++) {
       const auto& info_att = cinfo.blend.attachments[i];
       auto* att = desc->colorAttachments()->object(i);
       att->setSourceRGBBlendFactor(convert(info_att.src_color_factor));

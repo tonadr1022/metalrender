@@ -5,6 +5,7 @@
 // clang-format off
 #include <Metal/MTLComputeCommandEncoder.hpp>
 #include <Metal/Metal.hpp>
+#include "core/Hash.hpp"
 #include "gfx/metal/Config.hpp"
 #include "gfx/metal/RootLayout.hpp"
 #define IR_RUNTIME_METALCPP
@@ -70,6 +71,7 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
   // TODO: consolidate
   NS::SharedPtr<MTL4::RenderPassDescriptor> m4_desc;
   NS::SharedPtr<MTL::RenderPassDescriptor> m3_desc;
+  curr_render_target_info_ = {};
   if constexpr (UseMTL4) {
     m4_desc = NS::TransferPtr(MTL4::RenderPassDescriptor::alloc()->init());
     size_t color_att_i = 0;
@@ -77,8 +79,9 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
     for (const auto& att : attachments) {
       if (att.type == rhi::RenderingAttachmentInfo::Type::DepthStencil) {
         depth_desc = NS::TransferPtr(MTL::RenderPassDepthAttachmentDescriptor::alloc()->init());
-        depth_desc->setTexture(
-            reinterpret_cast<MetalTexture*>(device_->get_tex(att.image))->texture());
+        auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
+        curr_render_target_info_.depth_format = tex->desc().format;
+        depth_desc->setTexture(tex->texture());
         depth_desc->setLoadAction(mtl::util::convert(att.load_op));
         depth_desc->setStoreAction(mtl::util::convert(att.store_op));
         depth_desc->setClearDepth(att.clear_value.depth_stencil.depth);
@@ -86,6 +89,7 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
       } else {
         auto* color_desc = m4_desc->colorAttachments()->object(color_att_i);
         auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
+        curr_render_target_info_.color_formats.push_back(tex->desc().format);
         color_desc->setTexture(tex->texture());
         color_desc->setLoadAction(mtl::util::convert(att.load_op));
         color_desc->setStoreAction(mtl::util::convert(att.store_op));
@@ -260,7 +264,29 @@ void MetalCmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
   auto* pipeline = reinterpret_cast<MetalPipeline*>(device_->get_pipeline(handle));
   ASSERT(pipeline);
   ASSERT(pipeline->render_pso || pipeline->compute_pso);
+
   if (pipeline->render_pso) {
+    // the provided PSO may not have the correct (or any) render target info,
+    // so a pipeline with the info needs to be found or created on demand.
+    // PSOs aren't required to provide render target info so the same logical pipeline
+    // can be used with different render target formats, and also because swapchain
+    // image format isn't known at pipeline creation time (and swapchain image format can change).
+    auto render_target_info_hash = compute_render_target_info_hash(curr_render_target_info_);
+    if (render_target_info_hash != pipeline->render_target_info_hash) {
+      // compile pipeline again with new render target info
+      auto new_desc = pipeline->gfx_desc();
+      new_desc.rendering = curr_render_target_info_;
+      auto h = std::make_tuple(render_target_info_hash, handle.to64());
+      auto hash = util::hash::tuple_hash<decltype(h)>()(h);
+      auto it = device_->all_pipelines.find(hash);
+      if (it == device_->all_pipelines.end()) {
+        auto new_pipeline = device_->create_graphics_pipeline(new_desc);
+        device_->all_pipelines[hash] = new_pipeline;
+        pipeline = reinterpret_cast<MetalPipeline*>(device_->get_pipeline(new_pipeline));
+      } else {
+        pipeline = reinterpret_cast<MetalPipeline*>(device_->get_pipeline(it->second));
+      }
+    }
     if constexpr (UseMTL4) {
       ASSERT(m4_state().render_enc);
       m4_state().render_enc->setRenderPipelineState(pipeline->render_pso);

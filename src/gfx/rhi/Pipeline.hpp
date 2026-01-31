@@ -1,5 +1,7 @@
 #pragma once
 
+#include <utility>
+
 #include "gfx/rhi/GFXTypes.hpp"
 #include "small_vector/small_vector.hpp"
 
@@ -16,11 +18,15 @@ struct ShaderCreateInfo {
   std::string entry_point{"main"};
 };
 
+constexpr int k_max_color_attachments = 5;
+
 struct RenderTargetInfo {
-  gch::small_vector<TextureFormat, 5> color_formats;
+  gch::small_vector<TextureFormat, k_max_color_attachments> color_formats;
   TextureFormat depth_format{TextureFormat::Undefined};
   TextureFormat stencil_format{TextureFormat::Undefined};
 };
+
+size_t compute_render_target_info_hash(const rhi::RenderTargetInfo& render_target_info);
 
 struct GraphicsPipelineCreateInfo {
   struct Rasterization {
@@ -47,9 +53,8 @@ struct GraphicsPipelineCreateInfo {
   struct Blend {
     bool logic_op_enable{false};
     LogicOp logic_op{LogicOpCopy};
-    // TODO: fixed vector
-    std::vector<ColorBlendAttachment> attachments;
-    float blend_constants[4]{};
+    gch::small_vector<ColorBlendAttachment, k_max_color_attachments> attachments;
+    float blend_constants[k_max_color_attachments]{};
   };
   struct Multisample {
     // TODO: flesh out, for now not caring about it
@@ -61,13 +66,13 @@ struct GraphicsPipelineCreateInfo {
   };
 
   struct StencilOpState {
-    StencilOp fail_op{};
-    StencilOp pass_op{};
-    StencilOp depth_fail_op{};
-    CompareOp compare_op{};
-    uint32_t compare_mask{};
-    uint32_t write_mask{};
-    uint32_t reference{};
+    StencilOp fail_op;
+    StencilOp pass_op;
+    StencilOp depth_fail_op;
+    CompareOp compare_op;
+    uint32_t compare_mask;
+    uint32_t write_mask;
+    uint32_t reference;
   };
 
   struct DepthStencil {
@@ -82,14 +87,15 @@ struct GraphicsPipelineCreateInfo {
     bool stencil_test_enable{false};
   };
 
-  std::array<ShaderCreateInfo, 3> shaders{};
+  // TODO: use pointers?
+  gch::small_vector<ShaderCreateInfo, 3> shaders;
 
   PrimitiveTopology topology{PrimitiveTopology::TriangleList};
-  RenderTargetInfo rendering{};
-  Rasterization rasterization{};
-  Blend blend{};
-  Multisample multisample{};
-  DepthStencil depth_stencil{};
+  RenderTargetInfo rendering;
+  Rasterization rasterization;
+  Blend blend;
+  Multisample multisample;
+  DepthStencil depth_stencil;
 
   static constexpr DepthStencil depth_disable() { return DepthStencil{.depth_test_enable = false}; }
   static constexpr DepthStencil depth_enable(bool write_enable, CompareOp op) {
@@ -107,6 +113,11 @@ struct GraphicsPipelineCreateInfo {
 class Pipeline {
  public:
   Pipeline() = default;
+  explicit Pipeline(GraphicsPipelineCreateInfo ginfo) : graphics_desc(std::move(ginfo)) {}
+  explicit Pipeline(ShaderCreateInfo cinfo) : compute_desc(std::move(cinfo)) {}
+  GraphicsPipelineCreateInfo graphics_desc;
+  [[nodiscard]] const GraphicsPipelineCreateInfo& gfx_desc() const { return graphics_desc; }
+  ShaderCreateInfo compute_desc;
   virtual ~Pipeline() = default;
 };
 
