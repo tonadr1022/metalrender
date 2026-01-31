@@ -238,7 +238,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         p.sample_external_tex(final_depth_pyramid_name, rhi::PipelineStage_TaskShader);
         p.rw_external_buf("meshlet_vis_buf2", "meshlet_vis_buf", rhi::PipelineStage_TaskShader);
       } else {
-        p.w_external_buf("meshlet_vis_buf", meshlet_vis_buf_->get_buffer_handle(),
+        p.w_external_buf("meshlet_vis_buf",
+                         instance_data_mgr_.get_meshlet_vis_buf().get_buffer_handle(),
                          rhi::PipelineStage_TaskShader);
       }
     } else {
@@ -300,7 +301,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
         auto out_draw_count_buf_handle = rg_.get_buf(out_draw_count_buf_rg_handle);
         enc->bind_uav(out_draw_count_buf_handle, 0);
-        enc->bind_uav(meshlet_vis_buf_->get_buffer_handle(), 1);
+        enc->bind_uav(instance_data_mgr_.get_meshlet_vis_buf().get_buffer_handle(), 1);
         enc->bind_uav(out_counts_buf_[curr_frame_idx_].handle, 2);
         if (late) {
           enc->bind_srv(depth_pyramid_tex_.handle, 3);
@@ -434,13 +435,13 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         tex_idx = gbuffer_a_tex->bindless_idx();
       } else {
         tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
-                                                     depth_pyramid_tex_.views[view_mip_]);
+                                                     depth_pyramid_tex_.views[debug_view_mip_]);
         mult = 100.f;
       }
       TexOnlyPC pc{
           .color_mult = glm::vec4{mult, mult, mult, 1},
           .tex_idx = tex_idx,
-          .mip_level = static_cast<uint32_t>(view_mip_),
+          .mip_level = static_cast<uint32_t>(debug_view_mip_),
       };
       enc->push_constants(&pc, sizeof(pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
@@ -719,17 +720,11 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   ASSERT(instance_datas.size() == instance_id_to_node.size());
   all_model_data_.max_meshlets += model_resources->totals.meshlets;
 
-  const OffsetAllocator::Allocation instance_data_gpu_alloc =
-      instance_data_mgr_.allocate(model_instance_datas.size());
+  const InstanceDataMgr::Alloc instance_data_gpu_alloc = instance_data_mgr_.allocate(
+      model_instance_datas.size(), model_resources->totals.instance_meshlets);
   all_model_data_.max_objects = instance_data_mgr_.max_seen_size();
   stats_.total_instance_meshlets += model_resources->totals.instance_meshlets;
   stats_.total_instance_vertices += model_resources->totals.instance_vertices;
-  OffsetAllocator::Allocation meshlet_vis_buf_alloc{};
-  if (mesh_shaders_enabled_) {
-    bool resized{};
-    meshlet_vis_buf_alloc =
-        meshlet_vis_buf_->allocate(model_resources->totals.instance_meshlets, resized);
-  }
 
   for (size_t i = 0; i < instance_datas.size(); i++) {
     auto node_i = instance_id_to_node[i];
@@ -739,7 +734,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
     instance_datas[i].translation = transform.translation;
     instance_datas[i].rotation = glm::vec4{rot[0], rot[1], rot[2], rot[3]};
     instance_datas[i].scale = transform.scale;
-    instance_datas[i].meshlet_vis_base += meshlet_vis_buf_alloc.offset;
+    instance_datas[i].meshlet_vis_base += instance_data_gpu_alloc.meshlet_vis_alloc.offset;
     size_t mesh_id = model.mesh_ids[node_i];
     auto& mesh = model_resources->meshes[mesh_id];
     if (!mesh_shaders_enabled_) {
@@ -753,27 +748,27 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
           .vertex_offset = static_cast<int32_t>(
               mesh.vertex_offset_bytes +
               model_resources->static_draw_batch_alloc.vertex_alloc.offset * sizeof(DefaultVertex)),
-          .first_instance = static_cast<uint32_t>(i + instance_data_gpu_alloc.offset),
+          .first_instance =
+              static_cast<uint32_t>(i + instance_data_gpu_alloc.instance_data_alloc.offset),
       });
     }
   }
   static_draw_batch_.task_cmd_count += model_resources->totals.task_cmd_count;
 
   stats_.total_instances += instance_datas.size();
-  buffer_copy_mgr_.copy_to_buffer(instance_datas.data(),
-                                  instance_datas.size() * sizeof(InstanceData),
-                                  instance_data_mgr_.get_instance_data_buf(),
-                                  instance_data_gpu_alloc.offset * sizeof(InstanceData));
+  buffer_copy_mgr_.copy_to_buffer(
+      instance_datas.data(), instance_datas.size() * sizeof(InstanceData),
+      instance_data_mgr_.get_instance_data_buf(),
+      instance_data_gpu_alloc.instance_data_alloc.offset * sizeof(InstanceData));
   if (!mesh_shaders_enabled_) {
     buffer_copy_mgr_.copy_to_buffer(
         cmds.data(), cmds.size() * sizeof(IndexedIndirectDrawCmd),
         instance_data_mgr_.get_draw_cmd_buf(),
-        instance_data_gpu_alloc.offset * sizeof(IndexedIndirectDrawCmd));
+        instance_data_gpu_alloc.instance_data_alloc.offset * sizeof(IndexedIndirectDrawCmd));
   }
   ASSERT(model_gpu_handle.is_valid());
   return model_instance_gpu_resource_pool_.alloc(ModelInstanceGPUResources{
       .instance_data_gpu_alloc = instance_data_gpu_alloc,
-      .meshlet_vis_buf_alloc = meshlet_vis_buf_alloc,
       .model_resources_handle = model_gpu_handle,
   });
 }
@@ -785,9 +780,6 @@ void MemeRenderer123::free_instance(ModelInstanceGPUHandle handle) {
     return;
   }
   instance_data_mgr_.free(gpu_resources->instance_data_gpu_alloc, curr_frame_idx_);
-  if (meshlet_vis_buf_) {
-    meshlet_vis_buf_->free(gpu_resources->meshlet_vis_buf_alloc);
-  }
   auto* model_resources = model_gpu_resource_pool_.get(gpu_resources->model_resources_handle);
   static_draw_batch_.task_cmd_count -= model_resources->totals.task_cmd_count;
   stats_.total_instances -= model_resources->base_instance_datas.size();
@@ -808,30 +800,26 @@ void MemeRenderer123::free_model(ModelGPUHandle handle) {
   model_gpu_resource_pool_.destroy(handle);
 }
 
-OffsetAllocator::Allocation InstanceDataMgr::allocate(uint32_t element_count) {
-  const OffsetAllocator::Allocation alloc = allocator_.allocate(element_count);
-  if (alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
-    auto old_capacity = allocator_.capacity();
-    auto new_capacity = std::max(old_capacity * 2, element_count);
-    allocator_.grow(new_capacity - old_capacity);
-    ASSERT(new_capacity <= allocator_.capacity());
-    ensure_buffer_space(new_capacity);
-    return allocate(element_count);
+InstanceDataMgr::Alloc InstanceDataMgr::allocate(uint32_t element_count,
+                                                 uint32_t meshlet_instance_count) {
+  OffsetAllocator::Allocation meshlet_vis_buf_alloc{};
+  if (renderer_.mesh_shaders_enabled()) {
+    bool resized{};
+    meshlet_vis_buf_alloc = meshlet_vis_buf_.allocate(meshlet_instance_count, resized);
   }
-  ensure_buffer_space(allocator_.capacity());
-  curr_element_count_ += element_count;
-  max_seen_size_ = std::max<uint32_t>(max_seen_size_, alloc.offset + element_count);
-  return alloc;
+  return {.instance_data_alloc = allocate_instance_data(element_count),
+          .meshlet_vis_alloc = meshlet_vis_buf_alloc};
 }
 
-void InstanceDataMgr::free(OffsetAllocator::Allocation alloc, uint32_t frame_in_flight) {
+void InstanceDataMgr::free(const Alloc& alloc, uint32_t frame_in_flight) {
   pending_frees_[frame_in_flight].push_back(alloc);
 }
 
 void InstanceDataMgr::flush_pending_frees(uint32_t curr_frame_in_flight, rhi::CmdEncoder* enc) {
   auto previous_frame_idx =
       curr_frame_in_flight == 0 ? frames_in_flight_ - 1 : curr_frame_in_flight - 1;
-  for (const auto& alloc : pending_frees_[previous_frame_idx]) {
+  for (const auto& allocs : pending_frees_[previous_frame_idx]) {
+    const auto& alloc = allocs.instance_data_alloc;
     auto element_count = allocator_.allocationSize(alloc);
     enc->fill_buffer(instance_data_buf_.handle, alloc.offset * sizeof(InstanceData),
                      element_count * sizeof(InstanceData), 0xFFFFFFFF);
@@ -841,6 +829,10 @@ void InstanceDataMgr::flush_pending_frees(uint32_t curr_frame_in_flight, rhi::Cm
     }
     allocator_.free(alloc);
     curr_element_count_ -= element_count;
+
+    if (renderer_.mesh_shaders_enabled()) {
+      meshlet_vis_buf_.free(allocs.meshlet_vis_alloc);
+    }
   }
   pending_frees_[previous_frame_idx].clear();
 }
@@ -848,8 +840,8 @@ void InstanceDataMgr::flush_pending_frees(uint32_t curr_frame_in_flight, rhi::Cm
 void InstanceDataMgr::ensure_buffer_space(size_t element_count) {
   if (element_count == 0) return;
   if (!instance_data_buf_.is_valid() ||
-      device_->get_buf(instance_data_buf_)->size() < element_count * sizeof(InstanceData)) {
-    auto new_buf = device_->create_buf_h({
+      device_.get_buf(instance_data_buf_)->size() < element_count * sizeof(InstanceData)) {
+    auto new_buf = device_.create_buf_h({
         .storage_mode = rhi::StorageMode::Default,
         .usage = rhi::BufferUsage_Storage,
         .size = sizeof(InstanceData) * element_count,
@@ -857,8 +849,8 @@ void InstanceDataMgr::ensure_buffer_space(size_t element_count) {
     });
 
     if (instance_data_buf_.is_valid()) {
-      buffer_copy_mgr_->copy_to_buffer(device_->get_buf(instance_data_buf_)->contents(),
-                                       device_->get_buf(instance_data_buf_)->size(), new_buf.handle,
+      buffer_copy_mgr_->copy_to_buffer(device_.get_buf(instance_data_buf_)->contents(),
+                                       device_.get_buf(instance_data_buf_)->size(), new_buf.handle,
                                        0);
     }
     instance_data_buf_ = std::move(new_buf);
@@ -866,17 +858,16 @@ void InstanceDataMgr::ensure_buffer_space(size_t element_count) {
 
   if (!renderer_.mesh_shaders_enabled()) {
     if (!draw_cmd_buf_.is_valid() ||
-        device_->get_buf(draw_cmd_buf_)->size() < element_count * sizeof(IndexedIndirectDrawCmd)) {
-      auto new_buf = device_->create_buf_h(rhi::BufferDesc{
+        device_.get_buf(draw_cmd_buf_)->size() < element_count * sizeof(IndexedIndirectDrawCmd)) {
+      auto new_buf = device_.create_buf_h(rhi::BufferDesc{
           .storage_mode = rhi::StorageMode::Default,
           .usage = rhi::BufferUsage_Indirect,
           .size = sizeof(IndexedIndirectDrawCmd) * element_count,
           .name = "draw_indexed_indirect_cmd_buf",
       });
       if (draw_cmd_buf_.is_valid()) {
-        buffer_copy_mgr_->copy_to_buffer(device_->get_buf(draw_cmd_buf_)->contents(),
-                                         device_->get_buf(draw_cmd_buf_)->size(), new_buf.handle,
-                                         0);
+        buffer_copy_mgr_->copy_to_buffer(device_.get_buf(draw_cmd_buf_)->contents(),
+                                         device_.get_buf(draw_cmd_buf_)->size(), new_buf.handle, 0);
       }
       draw_cmd_buf_ = std::move(new_buf);
     }
@@ -940,7 +931,7 @@ void MemeRenderer123::on_imgui() {
 
   auto dp_dims = device_->get_tex(depth_pyramid_tex_)->desc().dims;
   auto mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
-  ImGui::SliderInt("mip view", &view_mip_, 0, mip_levels - 1);
+  ImGui::SliderInt("mip view", &debug_view_mip_, 0, mip_levels - 1);
 
   if (ImGui::TreeNodeEx("Device", ImGuiTreeNodeFlags_DefaultOpen)) {
     device_->on_imgui();
@@ -1128,7 +1119,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
                                      .bindless = true,
                                      .name = "all materials buf"},
                      sizeof(M4Material)),
-      instance_data_mgr_(device_, &buffer_copy_mgr_, device_->get_info().frames_in_flight, *this),
+      instance_data_mgr_(*device_, &buffer_copy_mgr_, device_->get_info().frames_in_flight, *this),
       static_draw_batch_(GeometryBatchType::Static, *device_, buffer_copy_mgr_,
                          GeometryBatch::CreateInfo{
                              .initial_vertex_capacity = 10'000'000,
@@ -1213,19 +1204,15 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
     shade_pso_ = shader_mgr_->create_compute_pipeline({"shade"});
   }
 
-  if (mesh_shaders_enabled_) {
-    meshlet_vis_buf_ = std::make_unique<BackedGPUAllocator>(
-        *device_, buffer_copy_mgr_, rhi::BufferDesc{.name = "meshlet_vis_buf"}, sizeof(uint32_t));
-  }
-
-  imgui_renderer_.emplace(*shader_mgr_, device_);
-
   rg_.init(device_);
+
   init_imgui();
+  imgui_renderer_.emplace(*shader_mgr_, device_);
 
   recreate_swapchain_sized_textures();
 
   for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
+    // TODO: render graph this?
     out_counts_buf_[i] = device_->create_buf_h(rhi::BufferDesc{
         .storage_mode = rhi::StorageMode::GPUOnly,
         .usage = rhi::BufferUsage_Storage,
@@ -1238,6 +1225,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
         .name = "out_counts_buf_readback",
     });
   }
+
   for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
     query_pools_[i] = device_->create_query_pool_h(
         rhi::QueryPoolDesc{.count = k_query_count, .name = "my_query_pool_" + std::to_string(i)});
@@ -1247,6 +1235,35 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
         .name = "query_resolve_buf",
     });
   }
+}
+
+InstanceDataMgr::InstanceDataMgr(rhi::Device& device, BufferCopyMgr* buffer_copy_mgr,
+                                 uint32_t frames_in_flight, MemeRenderer123& renderer)
+    : allocator_(0),
+      meshlet_vis_buf_(device, *buffer_copy_mgr,
+                       {.storage_mode = rhi::StorageMode::GPUOnly,
+                        .usage = rhi::BufferUsage_Storage,
+                        .name = "instance meshlet vis buf"},
+                       sizeof(uint32_t)),
+      buffer_copy_mgr_(buffer_copy_mgr),
+      frames_in_flight_(frames_in_flight),
+      device_(device),
+      renderer_(renderer) {}
+
+OffsetAllocator::Allocation InstanceDataMgr::allocate_instance_data(uint32_t element_count) {
+  const OffsetAllocator::Allocation alloc = allocator_.allocate(element_count);
+  if (alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
+    auto old_capacity = allocator_.capacity();
+    auto new_capacity = std::max(old_capacity * 2, element_count);
+    allocator_.grow(new_capacity - old_capacity);
+    ASSERT(new_capacity <= allocator_.capacity());
+    ensure_buffer_space(new_capacity);
+    return allocate_instance_data(element_count);
+  }
+  ensure_buffer_space(allocator_.capacity());
+  curr_element_count_ += element_count;
+  max_seen_size_ = std::max<uint32_t>(max_seen_size_, alloc.offset + element_count);
+  return alloc;
 }
 
 }  // namespace gfx

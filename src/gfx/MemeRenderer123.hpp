@@ -54,35 +54,29 @@ struct ModelGPUResources {
   Totals totals{};
 };
 
-struct ModelInstanceGPUResources {
-  OffsetAllocator::Allocation instance_data_gpu_alloc;
-  OffsetAllocator::Allocation meshlet_vis_buf_alloc;
-  ModelGPUHandle model_resources_handle;
-};
-
 class MemeRenderer123;
+
 class InstanceDataMgr {
  public:
   InstanceDataMgr(const InstanceDataMgr&) = delete;
   InstanceDataMgr(InstanceDataMgr&&) = delete;
   InstanceDataMgr& operator=(const InstanceDataMgr&) = delete;
   InstanceDataMgr& operator=(InstanceDataMgr&&) = delete;
+  struct Alloc {
+    OffsetAllocator::Allocation instance_data_alloc;
+    OffsetAllocator::Allocation meshlet_vis_alloc;
+  };
 
-  InstanceDataMgr(rhi::Device* device, BufferCopyMgr* buffer_copy_mgr, uint32_t frames_in_flight,
-                  MemeRenderer123& renderer)
-      : allocator_(0),
-        buffer_copy_mgr_(buffer_copy_mgr),
-        frames_in_flight_(frames_in_flight),
-        device_(device),
-        renderer_(renderer) {}
+  InstanceDataMgr(rhi::Device& device, BufferCopyMgr* buffer_copy_mgr, uint32_t frames_in_flight,
+                  MemeRenderer123& renderer);
   [[nodiscard]] bool has_draws() const { return curr_element_count_ > 0; }
-  OffsetAllocator::Allocation allocate(uint32_t element_count);
+  Alloc allocate(uint32_t element_count, uint32_t meshlet_instance_count);
 
   [[nodiscard]] size_t allocation_size(OffsetAllocator::Allocation alloc) const {
     return allocator_.allocationSize(alloc);
   }
 
-  void free(OffsetAllocator::Allocation alloc, uint32_t frame_in_flight);
+  void free(const Alloc& alloc, uint32_t frame_in_flight);
   void flush_pending_frees(uint32_t curr_frame_in_flight, rhi::CmdEncoder* enc);
   [[nodiscard]] bool has_pending_frees(uint32_t curr_frame_in_flight) const;
   void zero_out_freed_instances(rhi::CmdEncoder* enc);
@@ -90,20 +84,29 @@ class InstanceDataMgr {
   [[nodiscard]] rhi::BufferHandle get_instance_data_buf() const {
     return instance_data_buf_.handle;
   }
-  std::array<std::vector<OffsetAllocator::Allocation>, k_max_frames_in_flight> pending_frees_;
+  [[nodiscard]] const BackedGPUAllocator& get_meshlet_vis_buf() const { return meshlet_vis_buf_; }
+  std::array<std::vector<Alloc>, k_max_frames_in_flight> pending_frees_;
   [[nodiscard]] rhi::BufferHandle get_draw_cmd_buf() const { return draw_cmd_buf_.handle; }
 
  private:
+  OffsetAllocator::Allocation allocate_instance_data(uint32_t element_count);
   void ensure_buffer_space(size_t element_count);
   OffsetAllocator::Allocator allocator_;
   rhi::BufferHandleHolder instance_data_buf_;
   rhi::BufferHandleHolder draw_cmd_buf_;
+  BackedGPUAllocator meshlet_vis_buf_;
   BufferCopyMgr* buffer_copy_mgr_{};
   uint32_t max_seen_size_{};
   uint32_t curr_element_count_{};
   uint32_t frames_in_flight_{};
-  rhi::Device* device_{};
+  rhi::Device& device_;
   MemeRenderer123& renderer_;
+};
+
+struct ModelInstanceGPUResources {
+  InstanceDataMgr::Alloc instance_data_gpu_alloc;
+  // OffsetAllocator::Allocation meshlet_vis_buf_alloc;
+  ModelGPUHandle model_resources_handle;
 };
 
 struct IdxOffset {
@@ -168,25 +171,35 @@ class MemeRenderer123 {
                                        const std::vector<rhi::DefaultIndexT>& indices,
                                        const MeshletProcessResult& meshlets,
                                        std::span<Mesh> meshes);
+  void recreate_swapchain_sized_textures();
+  size_t prev_frame_idx() const {
+    return curr_frame_idx_ == 0 ? device_->get_info().frames_in_flight - 1 : curr_frame_idx_ - 1;
+  }
+  size_t get_frames_ago_idx(size_t frames_ago) const {
+    if (curr_frame_idx_ >= frames_ago) {
+      return curr_frame_idx_ - frames_ago;
+    }
+    return device_->get_info().frames_in_flight + curr_frame_idx_ - frames_ago;
+  }
+
+  // TODO: this is instance data mgr stuff
   struct AllModelData {
     uint32_t max_objects;
     uint32_t max_meshlets;
   };
-
-  AllModelData all_model_data_{};
-
   struct FinalDrawResults {
     uint32_t drawn_meshlets;
     uint32_t drawn_vertices;
   };
-
   struct Stats {
-    uint32_t total_instance_meshlets{};
-    uint32_t total_instance_vertices{};
-    uint32_t total_instances{};
-    FinalDrawResults draw_results{};
+    uint32_t total_instance_meshlets;
+    uint32_t total_instance_vertices;
+    uint32_t total_instances;
+    FinalDrawResults draw_results;
   };
-  Stats stats_;
+
+  AllModelData all_model_data_{};
+  Stats stats_{};
 
   std::unique_ptr<gfx::ShaderManager> shader_mgr_;
   rhi::Device* device_{};
@@ -198,38 +211,29 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder depth_reduce_pso_;
   rhi::PipelineHandleHolder shade_pso_;
   rhi::PipelineHandleHolder tex_only_pso_;
+
   GPUFrameAllocator3 frame_gpu_upload_allocator_;
   BufferCopyMgr buffer_copy_mgr_;
   BackedGPUAllocator materials_buf_;
 
   TexAndViewHolder depth_pyramid_tex_;
-  void recreate_swapchain_sized_textures();
-  int view_mip_{};
+  int debug_view_mip_{};
 
   size_t frame_num_{};
   size_t curr_frame_idx_{};
-  size_t prev_frame_idx() const {
-    return curr_frame_idx_ == 0 ? device_->get_info().frames_in_flight - 1 : curr_frame_idx_ - 1;
-  }
-  size_t get_frames_ago_idx(size_t frames_ago) const {
-    if (curr_frame_idx_ >= frames_ago) {
-      return curr_frame_idx_ - frames_ago;
-    }
-    return device_->get_info().frames_in_flight + curr_frame_idx_ - frames_ago;
-  }
+
   std::filesystem::path resource_dir_;
   std::filesystem::path config_file_path_;
+
   InstanceDataMgr instance_data_mgr_;
   GeometryBatch static_draw_batch_;
 
   BlockPool<ModelGPUHandle, ModelGPUResources> model_gpu_resource_pool_{20, 1, true};
   BlockPool<ModelInstanceGPUHandle, ModelInstanceGPUResources> model_instance_gpu_resource_pool_{
-      1000, 5, true};
+      1024, 5, true};
 
   gfx::RenderGraph rg_;
 
-  // TODO: move to instance data mgr
-  std::unique_ptr<BackedGPUAllocator> meshlet_vis_buf_;
   std::optional<ImGuiRenderer> imgui_renderer_;
 
   struct GPUTexUpload {
