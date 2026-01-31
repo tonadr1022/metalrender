@@ -402,6 +402,8 @@ void MetalDevice::destroy(rhi::QueryPoolHandle handle) {
   }
 }
 
+void MetalDevice::destroy(rhi::SwapchainHandle) {}
+
 namespace {
 
 template <typename T>
@@ -596,22 +598,9 @@ void MetalDevice::end_command_list(rhi::CmdEncoder* cmd_enc) {
   get_queue(rhi::QueueType::Graphics).submit_cmd_bufs.push_back(cmd->encoder_state_.cmd_buf);
 }
 
-bool MetalDevice::begin_frame(glm::uvec2 window_dims) {
+bool MetalDevice::begin_frame(glm::uvec2) {
   frame_ar_pool_ = NS::AutoreleasePool::alloc()->init();
   curr_cmd_list_idx_ = 0;
-  // curr_counter_buf_idx_ = 0;
-
-  // {
-  //   curr_drawable_ = swapchain_.metal_layer_->nextDrawable();
-  //   while (!curr_drawable_) {
-  //     ZoneScopedN("nextDrawable");
-  //     curr_drawable_ = swapchain_.metal_layer_->nextDrawable();
-  //   }
-  // }
-  if (swapchain_.metal_layer_->drawableSize().width != window_dims.x ||
-      swapchain_.metal_layer_->drawableSize().height != window_dims.y) {
-    swapchain_.metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
-  }
 
   delete_queues_.flush_deletions(frame_num_);
 
@@ -813,16 +802,6 @@ void MetalDevice::ICB_Mgr::reset_for_frame() {
 
 void MetalDevice::ICB_Mgr::remove(rhi::BufferHandle indirect_buf) {
   indirect_buffer_handle_to_icb_.erase(indirect_buf.to64());
-}
-
-void MetalDevice::fill_buffer(rhi::BufferHandle handle, size_t size, size_t offset,
-                              uint32_t fill_value) {
-  // TODO: gpu only buffers!
-  memset((uint8_t*)get_buf(handle)->contents() + offset, fill_value, size);
-}
-
-void MetalDevice::set_name(rhi::BufferHandle handle, const char* name) {
-  get_mtl_buf(handle)->setLabel(mtl::util::string(name));
 }
 
 void MetalDevice::on_imgui() {
@@ -1152,47 +1131,6 @@ MetalTexture::TexView* MetalDevice::get_tex_view(rhi::TextureHandle handle, int 
   return &tex->tex_views[subresource_id];
 }
 
-// MTL::CounterSampleBuffer* MetalDevice::make_counter_sample_buf() const {
-//   auto* desc = MTL::CounterSampleBufferDescriptor::alloc()->init();
-//   desc->setCounterSet(timestamp_set_);
-//   desc->setLabel(mtl::util::string("gpu_timestamp_counter_buffer"));
-//   desc->setStorageMode(MTL::StorageModeShared);
-//   desc->setSampleCount(1000);
-//   NS::Error* err{};
-//   auto* buf = device_->newCounterSampleBuffer(desc, &err);
-//   desc->release();
-//   if (err) {
-//     LINFO("Failed to create counter sample buffer: {}",
-//           mtl::util::string(err->localizedDescription()));
-//     exit(1);
-//   }
-//   return buf;
-// }
-
-bool MetalDevice::recreate_swapchain(const rhi::SwapchainDesc& desc) {
-  if (!swapchain_.metal_layer_) {
-    swapchain_.metal_layer_ = CA::MetalLayer::layer();
-
-    {  // transparency
-      auto* objcLayer = (__bridge CAMetalLayer*)swapchain_.metal_layer_;
-      objcLayer.opaque = NO;
-      objcLayer.opacity = 1.0;
-    }
-
-    swapchain_.metal_layer_->setDevice(device_);
-    swapchain_.metal_layer_->setDisplaySyncEnabled(desc.vsync);
-    swapchain_.metal_layer_->setMaximumDrawableCount(3);
-    swapchain_.metal_layer_->setDrawableSize(CGSizeMake(desc.width, desc.height));
-    set_layer_for_window(desc.window->get_handle(), swapchain_.metal_layer_);
-  } else {
-    if (swapchain_.desc_.vsync != desc.vsync) {
-      swapchain_.metal_layer_->setDisplaySyncEnabled(desc.vsync);
-    }
-  }
-  swapchain_.desc_ = desc;
-  return true;
-}
-
 rhi::QueryPoolHandle MetalDevice::create_query_pool(const rhi::QueryPoolDesc& desc) {
   auto* heap_desc = MTL4::CounterHeapDescriptor::alloc()->init();
   heap_desc->setCount(desc.count);
@@ -1241,13 +1179,19 @@ void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdE
   ASSERT(mtl4_enabled_);
   auto* enc = (Metal4CmdEncoder*)cmd_enc;
   auto* swap = (MetalSwapchain*)swapchain;
+
+  // if (swapchain_.metal_layer_->drawableSize().width != window_dims.x ||
+  //     swapchain_.metal_layer_->drawableSize().height != window_dims.y) {
+  //   swapchain_.metal_layer_->setDrawableSize(CGSizeMake(window_dims.x, window_dims.y));
+  // }
   CA::MetalDrawable* drawable = swap->metal_layer_->nextDrawable();
   while (!drawable) {
     drawable = swap->metal_layer_->nextDrawable();
   }
-  swapchain_.drawable_ = NS::TransferPtr(drawable->retain());
 
-  enc->presents_.emplace_back(swapchain_.drawable_);
+  swap->drawable_ = NS::TransferPtr(drawable->retain());
+  enc->presents_.emplace_back(swap->drawable_);
+
   rhi::TextureDesc swap_img_desc{};
   auto* tex = drawable->texture();
   swap_img_desc.dims = {tex->width(), tex->height(), 1};
@@ -1258,4 +1202,37 @@ void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdE
   enc->begin_rendering(
       {rhi::RenderingAttachmentInfo::color_att(tex_handle, rhi::LoadOp::DontCare)});
   texture_pool_.destroy(tex_handle);
+}
+
+rhi::SwapchainHandle MetalDevice::create_swapchain(const rhi::SwapchainDesc& desc) {
+  MetalSwapchain swapchain;
+  if (!recreate_swapchain(desc, &swapchain)) {
+    return {};
+  }
+  return swapchain_pool_.alloc(std::move(swapchain));
+}
+
+bool MetalDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapchain* swapchain) {
+  auto& swap = *(MetalSwapchain*)swapchain;
+  if (!swap.metal_layer_) {
+    swap.metal_layer_ = CA::MetalLayer::layer();
+
+    {  // transparency
+      auto* objcLayer = (__bridge CAMetalLayer*)swap.metal_layer_;
+      objcLayer.opaque = NO;
+      objcLayer.opacity = 1.0;
+    }
+
+    swap.metal_layer_->setDevice(device_);
+    swap.metal_layer_->setDisplaySyncEnabled(desc.vsync);
+    swap.metal_layer_->setMaximumDrawableCount(3);
+    swap.metal_layer_->setDrawableSize(CGSizeMake(desc.width, desc.height));
+    set_layer_for_window(desc.window->get_handle(), swap.metal_layer_);
+  } else {
+    if (swap.desc_.vsync != desc.vsync) {
+      swap.metal_layer_->setDisplaySyncEnabled(desc.vsync);
+    }
+  }
+  swap.desc_ = desc;
+  return true;
 }

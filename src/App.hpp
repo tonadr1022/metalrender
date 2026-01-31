@@ -3,6 +3,7 @@
 
 #include "Camera.hpp"
 #include "gfx/RendererTypes.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 namespace gfx {
 class MemeRenderer123;
@@ -10,7 +11,8 @@ class MemeRenderer123;
 
 namespace rhi {
 class Device;
-}
+class Swapchain;
+}  // namespace rhi
 class Window;
 
 struct App {
@@ -63,6 +65,7 @@ struct App {
   std::filesystem::path camera_path_;
   std::filesystem::path config_path_;
   std::unique_ptr<rhi::Device> device_;
+  rhi::SwapchainHandleHolder swapchain_;
   std::unique_ptr<Window> window_;
   std::unique_ptr<gfx::MemeRenderer123> renderer_;
   static constexpr int k_camera_config_version{1};

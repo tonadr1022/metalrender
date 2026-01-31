@@ -1,5 +1,6 @@
 # TODOs
 
+- handle ergonomics improvements?
 - sometimes the end timestamp is less than start timestamp. This is ridiculous.
 - too much stuff is in device begin/end frame. should be exposed at lower level.
 - either all const ref or all std::move strings in RenderGraph

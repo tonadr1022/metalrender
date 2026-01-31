@@ -12,6 +12,7 @@ class Texture;
 class Pipeline;
 class Sampler;
 class QueryPool;
+class Swapchain;
 
 #define MAKE_HANDLE(name)                        \
   using name##Handle = GenerationalHandle<name>; \
@@ -22,6 +23,7 @@ MAKE_HANDLE(Buffer);
 MAKE_HANDLE(Pipeline);
 MAKE_HANDLE(Sampler);
 MAKE_HANDLE(QueryPool);
+MAKE_HANDLE(Swapchain);
 
 #undef MAKE_HANDLE
 

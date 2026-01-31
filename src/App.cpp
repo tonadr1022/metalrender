@@ -7,7 +7,6 @@
 
 #include "ResourceManager.hpp"
 #include "core/Logger.hpp"
-#include "core/Util.hpp"
 #include "gfx/MemeRenderer123.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
@@ -78,14 +77,17 @@ App::App() {
       .app_name = "lol",
       .frames_in_flight = 3,
   });
-  [[maybe_unused]] bool success = device_->recreate_swapchain({
+  auto win_dims = window_->get_window_size();
+  swapchain_ = device_->create_swapchain_h(rhi::SwapchainDesc{
       .window = window_.get(),
-      .vsync = config_.vsync,
+      .width = win_dims.x,
+      .height = win_dims.y,
+      .vsync = true,
   });
-  ASSERT(success);
   on_hide_mouse_change();
   renderer_ = std::make_unique<gfx::MemeRenderer123>(gfx::MemeRenderer123::CreateInfo{
       .device = device_.get(),
+      .swapchain = device_->get_swapchain(swapchain_),
       .window = window_.get(),
       .resource_dir = resource_dir_,
       .config_file_path = local_resource_dir_ / "renderer_config.txt",
@@ -127,11 +129,10 @@ void App::run() {
     if (new_win_x != prev_win_x || new_win_y != prev_win_y) {
       prev_win_x = new_win_x;
       prev_win_y = new_win_y;
-      auto desc = device_->get_swapchain().desc_;
-      desc.window = window_.get();
-      desc.width = new_win_x;
-      desc.height = new_win_y;
-      device_->recreate_swapchain(desc);
+      // desc.window = window_.get();
+      // desc.width = new_win_x;
+      // desc.height = new_win_y;
+      // device_->recreate_swapchain(desc);
       prev_win_x = new_win_x;
       prev_win_y = new_win_y;
     }
@@ -279,7 +280,7 @@ void App::write_config() {
   for (const auto& path : config_.paths) {
     f << path.generic_string() << '\n';
   }
-  f << "vsync " << device_->get_swapchain().desc_.vsync << '\n';
+  f << "vsync " << device_->get_swapchain(swapchain_)->desc_.vsync << '\n';
 }
 
 namespace {
@@ -379,11 +380,12 @@ void App::on_imgui(float dt) {
     ImGui::Text("Window dims: %u %u", win_dims.x, win_dims.y);
     ImGui::Text("Fullscreen: %d", window_->get_fullscreen());
 
-    bool vsync = device_->get_swapchain().desc_.vsync;
+    auto* swapchain = device_->get_swapchain(swapchain_);
+    bool vsync = swapchain->desc_.vsync;
     if (ImGui::Checkbox("VSync", &vsync)) {
-      auto desc = device_->get_swapchain().desc_;
+      auto desc = swapchain->desc_;
       desc.vsync = vsync;
-      device_->recreate_swapchain(desc);
+      device_->recreate_swapchain(desc, swapchain);
     }
     ImGui::TreePop();
   }
@@ -467,6 +469,7 @@ void App::shutdown() {
   renderer_.reset();
   ResourceManager::shutdown();
   window_->shutdown();
+  swapchain_ = {};
   device_->shutdown();
 }
 

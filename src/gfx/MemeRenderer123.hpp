@@ -124,6 +124,7 @@ class MemeRenderer123 {
  public:
   struct CreateInfo {
     rhi::Device* device;
+    rhi::Swapchain* swapchain;
     Window* window;
     std::filesystem::path resource_dir;
     std::filesystem::path config_file_path;
@@ -279,6 +280,7 @@ class MemeRenderer123 {
   rhi::BufferHandleHolder out_counts_buf_readback_[k_max_frames_in_flight];
   bool rg_verbose_{};
   rhi::BufferHandleHolder query_resolve_bufs_[k_max_frames_in_flight];
+  rhi::Swapchain* swapchain_{};
 };
 
 }  // namespace gfx

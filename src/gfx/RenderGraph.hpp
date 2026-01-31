@@ -154,7 +154,10 @@ class RenderGraph {
     void r_external_tex(std::string name, rhi::PipelineStage stage);
     void w_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
     void w_external_tex_color_output(const std::string& name, rhi::TextureHandle tex_handle);
-    void w_swapchain_tex(rhi::Swapchain* swapchain) { swapchain_write_ = swapchain; }
+    void w_swapchain_tex(rhi::Swapchain* swapchain) {
+      ASSERT(swapchain);
+      swapchain_write_ = swapchain;
+    }
     void w_external_buf(const std::string& name, rhi::BufferHandle buf);
     void w_external_buf(const std::string& name, rhi::BufferHandle buf, rhi::PipelineStage stage);
     RGResourceHandle r_tex(const std::string& name);

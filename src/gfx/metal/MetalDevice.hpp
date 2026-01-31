@@ -78,14 +78,17 @@ class MetalDevice : public rhi::Device {
   rhi::Pipeline* get_pipeline(rhi::PipelineHandle handle) override {
     return pipeline_pool_.get(handle);
   }
-  void fill_buffer(rhi::BufferHandle handle, size_t size, size_t offset,
-                   uint32_t fill_value) override;
+
+  rhi::Swapchain* get_swapchain(rhi::SwapchainHandle handle) override {
+    return swapchain_pool_.get(handle);
+  }
 
   void destroy(rhi::BufferHandle handle) override;
   void destroy(rhi::TextureHandle handle) override;
   void destroy(rhi::PipelineHandle handle) override;
   void destroy(rhi::SamplerHandle handle) override;
   void destroy(rhi::QueryPoolHandle handle) override;
+  void destroy(rhi::SwapchainHandle handle) override;
 
   rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) override;
@@ -112,14 +115,11 @@ class MetalDevice : public rhi::Device {
   [[nodiscard]] size_t frame_num() const { return frame_num_; }
   [[nodiscard]] size_t frame_idx() const { return frame_num_ % info_.frames_in_flight; }
 
-  rhi::Swapchain& get_swapchain() override { return swapchain_; }
-  const rhi::Swapchain& get_swapchain() const override { return swapchain_; }
-  bool recreate_swapchain(const rhi::SwapchainDesc& desc) override;
+  rhi::SwapchainHandle create_swapchain(const rhi::SwapchainDesc& desc) override;
+  bool recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapchain* swapchain) override;
   void begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc) override;
 
   void get_all_buffers(std::vector<rhi::Buffer*>& out_buffers) override;
-
-  void set_name(rhi::BufferHandle handle, const char* name) override;
 
   // result is in nano seconds
   void resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t start_query,
@@ -149,6 +149,8 @@ class MetalDevice : public rhi::Device {
   BlockPool<rhi::PipelineHandle, MetalPipeline> pipeline_pool_{20, 1, true};
   BlockPool<rhi::SamplerHandle, MetalSampler> sampler_pool_{16, 1, true};
   BlockPool<rhi::QueryPoolHandle, MetalQueryPool> querypool_pool_{16, 1, true};
+  BlockPool<rhi::SwapchainHandle, MetalSwapchain> swapchain_pool_{16, 1, true};
+
   Info info_{};
   std::filesystem::path metal_shader_dir_;
   struct Semaphore {
@@ -212,7 +214,7 @@ class MetalDevice : public rhi::Device {
 
   IndexAllocator resource_desc_heap_allocator_{k_max_textures + k_max_buffers};
   IndexAllocator sampler_desc_heap_allocator_{k_max_samplers};
-  MetalSwapchain swapchain_;
+  // MetalSwapchain swapchain_;
 
   size_t frame_num_{};
 

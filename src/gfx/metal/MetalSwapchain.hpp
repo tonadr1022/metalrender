@@ -20,8 +20,8 @@ class MetalSwapchain : public rhi::Swapchain {
     return textures_[frame_index].handle;
   }
 
-  SwapchainTextures textures_{};
-  CA::MetalLayer* metal_layer_{nullptr};
+  SwapchainTextures textures_;
+  CA::MetalLayer* metal_layer_{};
   NS::SharedPtr<CA::MetalDrawable> drawable_;
   // NS::SharedPtr<
 };

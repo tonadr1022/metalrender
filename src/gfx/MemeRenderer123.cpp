@@ -92,9 +92,6 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   rg_verbose_ = i++ == 2;
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
-  {
-    // auto* enc = device_->begin_command_list();
-  }
   if (!buffer_copy_mgr_->get_copies().empty()) {
     auto* enc = device_->begin_command_list();
     for (const auto& copy : buffer_copy_mgr_->get_copies()) {
@@ -113,9 +110,6 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
 
   rg_.execute();
-  // {
-  //   // auto* enc = device_->begin_command_list();
-  // }
 
   device_->submit_frame();
 
@@ -425,11 +419,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         debug_render_mode_ == DebugRenderMode::DepthReduceMips) {
       p.sample_external_tex(final_depth_pyramid_name);
     }
-    p.w_swapchain_tex(&device_->get_swapchain());
+    p.w_swapchain_tex(swapchain_);
     p.set_ex([this, gbuffer_a_rg_handle, &args](rhi::CmdEncoder* enc) {
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
       auto dims = gbuffer_a_tex->desc().dims;
-      device_->begin_swapchain_rendering(&device_->get_swapchain(), enc);
+      device_->begin_swapchain_rendering(swapchain_, enc);
       enc->set_wind_order(rhi::WindOrder::Clockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, dims);
@@ -1125,6 +1119,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo) {
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
   config_file_path_ = cinfo.config_file_path;
+  swapchain_ = cinfo.swapchain;
   {
     const char* key_mesh_shaders_enabled = "mesh_shaders_enabled";
     std::ifstream file(config_file_path_);

@@ -145,7 +145,6 @@ rhi::BufferHandleHolder ImGuiRenderer::get_buffer_of_size(size_t size, size_t fr
       bufs[best_i] = std::move(bufs.back());
     }
     bufs.pop_back();
-    device_->set_name(buf_handle.handle, name);
     return buf_handle;
   }
 

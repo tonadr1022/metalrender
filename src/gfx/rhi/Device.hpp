@@ -47,7 +47,6 @@ class Device {
   [[nodiscard]] BufferHandleHolder create_buf_h(const rhi::BufferDesc& desc) {
     return BufferHandleHolder{create_buf(desc), this};
   }
-  virtual void set_name(rhi::BufferHandle handle, const char* name) = 0;
   virtual TextureHandle create_tex(const rhi::TextureDesc& desc) = 0;
   [[nodiscard]] TextureHandleHolder create_tex_h(const rhi::TextureDesc& desc) {
     return TextureHandleHolder{create_tex(desc), this};
@@ -73,6 +72,9 @@ class Device {
   virtual void destroy(BufferHandle handle) = 0;
   virtual void destroy(PipelineHandle handle) = 0;
   virtual void destroy(rhi::QueryPoolHandle handle) = 0;
+  virtual void destroy(TextureHandle handle) = 0;
+  virtual void destroy(SamplerHandle handle) = 0;
+  virtual void destroy(SwapchainHandle handle) = 0;
   virtual rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) = 0;
   virtual bool replace_pipeline(rhi::PipelineHandle handle,
@@ -93,21 +95,24 @@ class Device {
   [[nodiscard]] rhi::SamplerHandleHolder create_sampler_h(const rhi::SamplerDesc& desc) {
     return SamplerHandleHolder{create_sampler(desc), this};
   }
+  virtual rhi::SwapchainHandle create_swapchain(const rhi::SwapchainDesc& desc) = 0;
+  rhi::SwapchainHandleHolder create_swapchain_h(const rhi::SwapchainDesc& desc) {
+    return rhi::SwapchainHandleHolder{create_swapchain(desc), this};
+  }
+  virtual rhi::Swapchain* get_swapchain(rhi::SwapchainHandle handle) = 0;
+  rhi::Swapchain* get_swapchain(const rhi::SwapchainHandleHolder& handle) {
+    return get_swapchain(handle.handle);
+  }
+
   [[nodiscard]] virtual const Info& get_info() const = 0;
   // TODO: is there a better spot for setting window dims, ie on event
   virtual bool begin_frame(glm::uvec2 window_dims) = 0;
-  virtual void fill_buffer(rhi::BufferHandle handle, size_t size, size_t offset,
-                           uint32_t fill_value) = 0;
   virtual void cmd_list_wait_for(CmdEncoder* cmd_enc1, CmdEncoder* cmd_enc2) = 0;
 
   virtual CmdEncoder* begin_command_list() = 0;
   virtual void submit_frame() = 0;
 
-  virtual void destroy(TextureHandle handle) = 0;
-  virtual void destroy(SamplerHandle handle) = 0;
-
-  virtual rhi::Swapchain& get_swapchain() = 0;
-  virtual bool recreate_swapchain(const SwapchainDesc& desc) = 0;
+  virtual bool recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapchain* swapchain) = 0;
   virtual void begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc) = 0;
 
   virtual void resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t start_query,
@@ -115,8 +120,6 @@ class Device {
   virtual void on_imgui() {}
 
   [[nodiscard]] size_t frames_in_flight() const { return get_info().frames_in_flight; }
-
-  [[nodiscard]] virtual const rhi::Swapchain& get_swapchain() const = 0;
 };
 
 enum class GfxAPI { Vulkan, Metal };
