@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gfx/rhi/GFXTypes.hpp"
+#include "small_vector/small_vector.hpp"
 
 namespace rhi {
 
@@ -16,9 +17,7 @@ struct ShaderCreateInfo {
 };
 
 struct RenderTargetInfo {
-  std::array<TextureFormat, 5> color_formats{TextureFormat::Undefined, TextureFormat::Undefined,
-                                             TextureFormat::Undefined, TextureFormat::Undefined,
-                                             TextureFormat::Undefined};
+  gch::small_vector<TextureFormat, 5> color_formats;
   TextureFormat depth_format{TextureFormat::Undefined};
   TextureFormat stencil_format{TextureFormat::Undefined};
 };

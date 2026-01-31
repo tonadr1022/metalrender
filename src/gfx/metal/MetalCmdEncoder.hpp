@@ -7,6 +7,7 @@
 #include "gfx/metal/MetalCmdEncoderICBMgr.hpp"
 #include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
+#include "gfx/rhi/Pipeline.hpp"
 #include "gfx/rhi/Queue.hpp"
 #include "small_vector/small_vector.hpp"
 
@@ -156,6 +157,7 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   int64_t push_debug_group_stack_size_{};
   bool done_{false};
   rhi::QueueType queue_;
+  rhi::RenderTargetInfo curr_render_target_info_;
 
  private:
   void pre_dispatch();

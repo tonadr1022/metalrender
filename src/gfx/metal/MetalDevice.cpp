@@ -909,17 +909,11 @@ MTL::RenderPipelineState* MetalDevice::create_graphics_pipeline_internal(
   }
 
   auto set_color_blend_atts = [&cinfo](auto desc) {
-    int color_format_cnt = 0;
-    for (auto format : cinfo.rendering.color_formats) {
-      if (format != rhi::TextureFormat::Undefined) {
-        color_format_cnt++;
-      } else {
-        break;
-      }
-    }
-    for (int i = 0; i < color_format_cnt; i++) {
-      rhi::TextureFormat format = cinfo.rendering.color_formats[i];
-      desc->colorAttachments()->object(i)->setPixelFormat(mtl::util::convert(format));
+    size_t color_format_cnt = 0;
+    for (const auto& format : cinfo.rendering.color_formats) {
+      desc->colorAttachments()
+          ->object(color_format_cnt++)
+          ->setPixelFormat(mtl::util::convert(format));
     }
     if (cinfo.blend.attachments.size() > 0) {
       ALWAYS_ASSERT(cinfo.blend.attachments.size() == (size_t)color_format_cnt);
