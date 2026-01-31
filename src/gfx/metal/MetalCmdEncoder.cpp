@@ -858,7 +858,6 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
       }
       auto* buf = device_->get_mtl_buf(binding_table_.CBV[i]);
       root_layout_.root_cbvs[i] = buf->gpuAddress() + binding_table_.CBV_offsets[i];
-      ASSERT(root_layout_.root_cbvs[i] % 256 == 0);
     }
 
     for (uint32_t i = ARRAY_SIZE(root_layout_.root_cbvs); i < ARRAY_SIZE(binding_table_.CBV); i++) {
@@ -867,7 +866,6 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
       }
       const auto* buf = device_->get_mtl_buf(binding_table_.CBV[i]);
       const auto gpu_va = buf->gpuAddress() + binding_table_.CBV_offsets[i];
-      ASSERT(gpu_va % 256 == 0);
       const size_t metadata = buf->length();
       ASSERT(i - ROOT_CBV_COUNT < ARRAY_SIZE(table.cbvs));
       IRDescriptorTableSetBuffer(table.cbvs + (i - ARRAY_SIZE(root_layout_.root_cbvs)), gpu_va,

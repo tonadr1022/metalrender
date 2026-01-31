@@ -13,6 +13,7 @@
 // clang-format on
 
 CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
+CONSTANT_BUFFER(ViewData, view_data, VIEW_DATA_SLOT);
 
 StructuredBuffer<MeshData> mesh_data_buf : register(t5);
 StructuredBuffer<Meshlet> meshlet_buf : register(t6);
@@ -102,11 +103,11 @@ main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload pay
     uint vertex_idx =
         meshlet_verts_buf[meshlet.vertex_offset + i + mesh_data.meshlet_vertices_offset];
 #ifdef DEBUG_MODE
-    verts[i] = get_vertex_attributes(instance_data, globals.vp, globals.render_mode,
+    verts[i] = get_vertex_attributes(instance_data, view_data.vp, globals.render_mode,
                                      vertex_idx + mesh_data.vertex_base, meshlet_idx,
                                      task_cmd.instance_id, i);
 #else
-    verts[i] = get_vertex_attributes(instance_data, globals.vp, globals.render_mode,
+    verts[i] = get_vertex_attributes(instance_data, view_data.vp, globals.render_mode,
                                      vertex_idx + mesh_data.vertex_base);
 #endif
     i += K_MESH_TG_SIZE;

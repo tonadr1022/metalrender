@@ -255,16 +255,9 @@ class MemeRenderer123 {
   static constexpr float k_z_far = 30000.f;
   static constexpr float k_default_fov_deg = 70.0f;
 
-  bool culling_paused_{};
-  bool culling_enabled_{true};
-  bool meshlet_frustum_culling_enabled_{true};
-  bool meshlet_cone_culling_enabled_{true};
-  bool meshlet_occlusion_culling_enabled_{true};
   IdxOffset frame_globals_buf_info_;
+  IdxOffset frame_view_buf_info_;
   IdxOffset frame_cull_data_buf_info_;
-  bool reverse_z_{true};
-  bool mesh_shaders_enabled_{true};
-  bool imgui_enabled_{true};
 
   enum class DebugRenderMode {
     None = DEBUG_RENDER_MODE_NONE,
@@ -273,8 +266,9 @@ class MemeRenderer123 {
     TriangleColors = DEBUG_RENDER_MODE_TRIANGLE_COLORS,
     InstanceColors = DEBUG_RENDER_MODE_INSTANCE_COLORS,
     Count = DEBUG_RENDER_MODE_COUNT,
-  };
-  DebugRenderMode debug_render_mode_{DebugRenderMode::None};
+  } debug_render_mode_{DebugRenderMode::None};
+
+  // TODO: this is instance mgr
   struct MeshletDrawStats {
     uint32_t meshlets_drawn_early;
     uint32_t meshlets_drawn_late;
@@ -285,9 +279,18 @@ class MemeRenderer123 {
   float gpu_frame_time_last_ms_{};
   rhi::BufferHandleHolder out_counts_buf_[k_max_frames_in_flight];
   rhi::BufferHandleHolder out_counts_buf_readback_[k_max_frames_in_flight];
-  bool rg_verbose_{};
   rhi::BufferHandleHolder query_resolve_bufs_[k_max_frames_in_flight];
   rhi::Swapchain* swapchain_{};
+
+  bool culling_paused_{};
+  bool culling_enabled_{true};
+  bool meshlet_frustum_culling_enabled_{true};
+  bool meshlet_cone_culling_enabled_{true};
+  bool meshlet_occlusion_culling_enabled_{true};
+  bool reverse_z_{true};
+  bool mesh_shaders_enabled_{true};
+  bool imgui_enabled_{true};
+  bool rg_verbose_{};
 };
 
 }  // namespace gfx

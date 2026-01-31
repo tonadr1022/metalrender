@@ -16,7 +16,6 @@
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
-#include "gfx/metal/MetalDevice.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -173,8 +172,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handle);
           if (!culling_paused_) {
             DrawCullPC pc{
-                .globals_buf_idx = frame_globals_buf_info_.idx,
-                .globals_buf_offset_bytes = frame_globals_buf_info_.offset_bytes,
+                .view_data_buf_idx = frame_view_buf_info_.idx,
+                .view_data_buf_offset_bytes = frame_view_buf_info_.offset_bytes,
                 .cull_data_idx = frame_cull_data_buf_info_.idx,
                 .cull_data_offset_bytes = frame_cull_data_buf_info_.offset_bytes,
                 .task_cmd_buf_idx = device_->get_buf(task_cmd_buf_handle)->bindless_idx(),
@@ -316,6 +315,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         enc->bind_srv(materials_buf_.get_buffer_handle(), 11);
         enc->bind_cbv(frame_globals_buf_info_.buf, GLOBALS_SLOT,
                       frame_globals_buf_info_.offset_bytes);
+        enc->bind_cbv(frame_view_buf_info_.buf, VIEW_DATA_SLOT, frame_view_buf_info_.offset_bytes);
         enc->bind_cbv(frame_cull_data_buf_info_.buf, 4, frame_cull_data_buf_info_.offset_bytes);
 
         if (meshlet_frustum_culling_enabled_ && culling_enabled_) {
@@ -966,12 +966,8 @@ glm::mat4 MemeRenderer123::get_proj_matrix(float fov) {
 void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
   glm::mat4 proj_mat = get_proj_matrix();
   GlobalData global_data{
-      .vp = proj_mat * args.view_mat,
-      .view = args.view_mat,
-      .proj = proj_mat,
       .render_mode = (uint32_t)debug_render_mode_,
       .frame_num = (uint32_t)frame_num_,
-      .camera_pos = glm::vec4{args.camera_pos, 0},
   };
   {
     auto [buf, offset, write_ptr] =
@@ -980,6 +976,19 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
     frame_globals_buf_info_.idx = device_->get_buf(buf)->bindless_idx();
     frame_globals_buf_info_.offset_bytes = offset;
   }
+  {
+    ViewData view_data{
+        .vp = proj_mat * args.view_mat,
+        .view = args.view_mat,
+        .proj = proj_mat,
+        .camera_pos = glm::vec4{args.camera_pos, 0},
+    };
+    auto [buf, offset, write_ptr] = frame_gpu_upload_allocator_.alloc(sizeof(ViewData), &view_data);
+    frame_view_buf_info_.buf = buf;
+    frame_view_buf_info_.idx = device_->get_buf(buf)->bindless_idx();
+    frame_view_buf_info_.offset_bytes = offset;
+  }
+
   {
     // set cull data buf
     CullData cull_data{};

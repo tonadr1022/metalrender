@@ -28,7 +28,8 @@ struct DispatchIndirectCmd {
   }
   MeshData mesh_data =
       bindless_buffers[mesh_data_buf_idx].Load<MeshData>(instance_data.mesh_id * sizeof(MeshData));
-  GlobalData globals = bindless_buffers[globals_buf_idx].Load<GlobalData>(globals_buf_offset_bytes);
+  ViewData view_data =
+      bindless_buffers[view_data_buf_idx].Load<ViewData>(view_data_buf_offset_bytes);
   CullData cull_data = bindless_buffers[cull_data_idx].Load<CullData>(cull_data_offset_bytes);
 
   uint task_groups = (mesh_data.meshlet_count + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
@@ -39,7 +40,7 @@ struct DispatchIndirectCmd {
         rotate_quat(instance_data.scale * mesh_data.center, instance_data.rotation) +
         instance_data.translation;
     float radius = mesh_data.radius * instance_data.scale;
-    float4 center = mul(globals.view, float4(world_center, 1.0));
+    float4 center = mul(view_data.view, float4(world_center, 1.0));
     visible = visible && (-center.z + radius) > cull_data.z_near &&
               (-center.z - radius) < cull_data.z_far;
     visible = visible &&

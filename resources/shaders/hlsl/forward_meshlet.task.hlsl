@@ -17,7 +17,7 @@
 groupshared Payload s_Payload;
 groupshared uint s_count;
 
-CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
+CONSTANT_BUFFER(ViewData, view_data, VIEW_DATA_SLOT);
 CONSTANT_BUFFER(CullData, cull_data, 4);
 StructuredBuffer<Meshlet> meshlet_buf : register(t6);
 StructuredBuffer<InstanceData> instance_data_buf : register(t10);
@@ -65,7 +65,7 @@ Texture2D depth_pyramid_tex : register(t3);
           rotate_quat(instance_data.scale * meshlet.center_radius.xyz, instance_data.rotation) +
           instance_data.translation;
       float radius = meshlet.center_radius.w * instance_data.scale;
-      float3 center = mul(globals.view, float4(world_center, 1.0)).xyz;
+      float3 center = mul(view_data.view, float4(world_center, 1.0)).xyz;
       // Ref:
       // https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
       // frustum cull, plane symmetry
@@ -88,7 +88,8 @@ Texture2D depth_pyramid_tex : register(t3);
         float cone_cutoff = float(int(meshlet.cone_axis_cutoff) >> 24) / 127.0;
         cone_axis = rotate_quat(cone_axis, instance_data.rotation);
         cone_axis =
-            mul(float3x3(globals.view[0].xyz, globals.view[1].xyz, globals.view[2].xyz), cone_axis);
+            mul(float3x3(view_data.view[0].xyz, view_data.view[1].xyz, view_data.view[2].xyz),
+                cone_axis);
         visible = visible && !cone_cull(center, radius, cone_axis, cone_cutoff, float3(0, 0, 0));
       }
 

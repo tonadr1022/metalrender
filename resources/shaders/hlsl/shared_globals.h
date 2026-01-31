@@ -10,17 +10,21 @@
 #define DEBUG_RENDER_MODE_INSTANCE_COLORS 4
 #define DEBUG_RENDER_MODE_COUNT 5
 
-struct alignas(256) GlobalData {
-  float4x4 vp;
-  float4x4 view;
-  float4x4 proj;
+struct GlobalData {
   uint render_mode;
   uint frame_num;
   uint _padding[2];
+};
+
+struct ViewData {
+  float4x4 vp;
+  float4x4 view;
+  float4x4 proj;
   float4 camera_pos;
 };
 
 #define GLOBALS_SLOT 3
+#define VIEW_DATA_SLOT 2
 
 #ifdef __HLSL__
 #define load_globals() \
