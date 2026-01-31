@@ -557,7 +557,7 @@ MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path, 
   return lib;
 }
 
-rhi::CmdEncoder* MetalDevice::begin_command_list() {
+rhi::CmdEncoder* MetalDevice::begin_cmd_encoder() {
   if (mtl4_enabled_) {
     if (curr_cmd_list_idx_ == mtl4_resources_->cmd_lists_.size()) {
       mtl4_resources_->cmd_lists_.emplace_back(std::make_unique<Metal4CmdEncoder>());

@@ -107,7 +107,7 @@ class MetalDevice : public rhi::Device {
   [[nodiscard]] const Info& get_info() const override { return info_; }
 
   void use_bindless_buffer(MTL::RenderCommandEncoder* enc);
-  rhi::CmdEncoder* begin_command_list() override;
+  rhi::CmdEncoder* begin_cmd_encoder() override;
   void end_command_list(rhi::CmdEncoder* cmd_enc);
 
   [[nodiscard]] size_t frame_num() const { return frame_num_; }

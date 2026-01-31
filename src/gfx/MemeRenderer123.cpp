@@ -93,7 +93,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
   if (!buffer_copy_mgr_->get_copies().empty()) {
-    auto* enc = device_->begin_command_list();
+    auto* enc = device_->begin_cmd_encoder();
     for (const auto& copy : buffer_copy_mgr_->get_copies()) {
       enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
                                  copy.size);
@@ -104,7 +104,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
 
   // flush textures
   if (imgui_renderer_->has_dirty_textures() || !pending_texture_uploads_.empty()) {
-    auto* enc = device_->begin_command_list();
+    auto* enc = device_->begin_cmd_encoder();
     flush_pending_texture_uploads(enc);
     enc->end_encoding();
   }

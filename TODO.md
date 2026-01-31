@@ -1,8 +1,5 @@
 # TODOs
 
-- NOW: RenderTargetInfo hash and combination with PSO object.
-- MetalCmdEncoder is not maintainable atm, template setup is pretty cringe.
-- handle ergonomics improvements (shared_ptr but using a block allocator, or pointers with block allocator)?
 - sometimes the end timestamp is less than start timestamp. This is ridiculous.
 - too much stuff is in device begin/end frame. should be exposed at lower level.
 - either all const ref or all std::move strings in RenderGraph
