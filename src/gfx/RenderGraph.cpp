@@ -237,26 +237,30 @@ RenderGraph::Pass& RenderGraph::add_pass(const std::string& name, RGPassType typ
 
 void RenderGraph::execute() {
   ZoneScoped;
+  rhi::CmdEncoder* enc = device_->begin_cmd_encoder();
   for (auto pass_i : pass_stack_) {
-    rhi::CmdEncoder* enc = device_->begin_cmd_encoder();
     // enc->set_label(passes_[pass_i].get_name());
     for (auto& barrier : pass_barrier_infos_[pass_i]) {
       enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
-      // if (barrier.resource.type == RGResourceType::Buffer ||
-      //     barrier.resource.type == RGResourceType::ExternalBuffer) {
-      //   // enc->barrier({}, barrier.src_stage, barrier.src_access, barrier.dst_stage,
-      //   //              barrier.dst_access);
-      // } else {
-      //   enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage,
-      //   barrier.dst_access);
-      // }
+      if (barrier.resource.type == RGResourceType::Buffer ||
+          barrier.resource.type == RGResourceType::ExternalBuffer) {
+        auto buf_handle = barrier.resource.type == RGResourceType::Buffer
+                              ? get_buf(barrier.resource)
+                              : get_external_buf(barrier.resource);
+        ASSERT(buf_handle.is_valid());
+        enc->barrier(buf_handle, barrier.src_stage, barrier.src_access, barrier.dst_stage,
+                     barrier.dst_access);
+      } else {
+        enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
+      }
     }
 
     auto& pass = passes_[pass_i];
     enc->set_debug_name(pass.get_name().c_str());
     pass.get_execute_fn()(enc);
-    enc->end_encoding();
   }
+  enc->end_encoding();
+
   {
     passes_.clear();
     for (auto& b : pass_barrier_infos_) {

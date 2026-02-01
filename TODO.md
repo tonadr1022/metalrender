@@ -1,8 +1,8 @@
 # TODOs
 
+- rolling avgs
 - instead of dirty textures in render graph, transition them to shader read first
 - out*counts_buf* use render graph instead
-- AllModelData is instance data mgr
 - sometimes the end timestamp is less than start timestamp. This is ridiculous.
 - too much stuff is in device begin/end frame. should be exposed at lower level.
 - either all const ref or all std::move strings in RenderGraph

@@ -174,6 +174,10 @@ void MetalCmdEncoderBase<UseMTL4>::reset(MetalDevice* device) {
       desc->setMaxTextureBindCount(0);
       NS::Error* err{};
       m4_state().arg_table = device_->get_device()->newArgumentTable(desc.get(), &err);
+      set_buffer(kIRDescriptorHeapBindPoint,
+                 device_->get_mtl_buf(device_->resource_descriptor_table_), 0, 0);
+      set_buffer(kIRSamplerHeapBindPoint, device_->get_mtl_buf(device_->sampler_descriptor_table_),
+                 0, 0);
       ASSERT(!err);
     }
   }
@@ -185,11 +189,18 @@ void MetalCmdEncoderBase<UseMTL4>::flush_barriers() {
     if (m4_state().compute_enc && device_->compute_enc_flush_stages_) {
       constexpr MTL4::VisibilityOptions visibility_options = MTL4::VisibilityOptionNone;
       m4_state().compute_enc->barrierAfterStages(MTL::StageAll, MTL::StageAll, visibility_options);
+      m4_state().compute_enc->barrierAfterEncoderStages(MTL::StageBlit | MTL::StageDispatch,
+                                                        MTL::StageBlit | MTL::StageDispatch,
+                                                        visibility_options);
       device_->compute_enc_flush_stages_ = 0;
       device_->compute_enc_dst_stages_ = 0;
     }
     if (m4_state().render_enc && device_->render_enc_flush_stages_) {
       constexpr MTL4::VisibilityOptions visibility_options = MTL4::VisibilityOptionNone;
+      m4_state().render_enc->barrierAfterEncoderStages(
+          MTL::StageObject | MTL::StageMesh | MTL::StageVertex | MTL::StageFragment,
+          MTL::StageObject | MTL::StageMesh | MTL::StageVertex | MTL::StageFragment,
+          visibility_options);
       m4_state().render_enc->barrierAfterStages(MTL::StageAll, MTL::StageAll, visibility_options);
       device_->render_enc_flush_stages_ = 0;
       device_->render_enc_dst_stages_ = 0;
@@ -959,13 +970,21 @@ void MetalCmdEncoderBase<UseMTL4>::write_timestamp(rhi::QueryPoolHandle query_po
   if constexpr (UseMTL4) {
     auto* pool = (MetalQueryPool*)device_->get_query_pool(query_pool);
     if (m4_state().compute_enc) {
-      m4_state().compute_enc->writeTimestamp(MTL4::TimestampGranularityPrecise, pool->heap_,
+      m4_state().compute_enc->writeTimestamp(MTL4::TimestampGranularityPrecise, pool->heap_.get(),
                                              query_index);
+      //      m4_state().compute_enc->barrierAfterStages(MTL::StageBlit, MTL::StageAll,
+      //                                                 MTL4::VisibilityOptionDevice);
+      //      m4_state().compute_enc->barrierAfterEncoderStages(MTL::StageBlit, MTL::StageAll,
+      //                                                        MTL4::VisibilityOptionDevice);
     } else if (m4_state().render_enc) {
       m4_state().render_enc->writeTimestamp(MTL4::TimestampGranularityPrecise,
-                                            MTL::RenderStageFragment, pool->heap_, query_index);
+                                            MTL::RenderStageObject, pool->heap_.get(), query_index);
+      //      m4_state().render_enc->barrierAfterStages(MTL::StageBlit, MTL::StageAll,
+      //                                                MTL4::VisibilityOptionDevice);
+      //      m4_state().render_enc->barrierAfterEncoderStages(MTL::StageBlit, MTL::StageAll,
+      //                                                       MTL4::VisibilityOptionDevice);
     } else {
-      m4_state().cmd_buf->writeTimestampIntoHeap(pool->heap_, query_index);
+      m4_state().cmd_buf->writeTimestampIntoHeap(pool->heap_.get(), query_index);
     }
   } else {
     LWARN("query pools not supported in Metal3");
@@ -989,8 +1008,8 @@ void MetalCmdEncoderBase<UseMTL4>::query_resolve(rhi::QueryPoolHandle query_pool
     auto range =
         MTL4::BufferRange::Make(buf->gpuAddress() + dst_offset, query_count * sizeof(uint64_t));
     ASSERT(buf->length() >= dst_offset + query_count * sizeof(uint64_t));
-    m4_state().cmd_buf->resolveCounterHeap(pool->heap_, NS::Range::Make(start_query, query_count),
-                                           range, nullptr, nullptr);
+    m4_state().cmd_buf->resolveCounterHeap(
+        pool->heap_.get(), NS::Range::Make(start_query, query_count), range, nullptr, nullptr);
   } else {
     LWARN("query pools not supported in Metal3");
   }

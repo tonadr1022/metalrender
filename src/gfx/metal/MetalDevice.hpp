@@ -189,15 +189,14 @@ class MetalDevice : public rhi::Device {
 
   struct MTL4_Resources {
     MTL4::Compiler* shader_compiler{};
-    std::array<MTL4::CommandAllocator*, k_max_frames_in_flight> cmd_allocators{};
-    // MTL4::CommandQueue* main_cmd_q{};
-    std::vector<std::unique_ptr<Metal4CmdEncoder>> cmd_lists_;
+    std::vector<std::unique_ptr<Metal4CmdEncoder>> cmd_encoders_;
     struct EncoderResources {
       std::array<NS::SharedPtr<MTL4::CommandAllocator>, k_max_frames_in_flight> cmd_allocators;
       NS::SharedPtr<MTL4::CommandBuffer> cmd_buf;
     };
-    std::vector<EncoderResources> cmd_list_res_;
+    std::vector<EncoderResources> cmd_list_resources_;
   };
+
   std::optional<MTL4_Resources> mtl4_resources_;
 
   struct MTL3_Resources {
@@ -332,6 +331,15 @@ class MetalDevice : public rhi::Device {
     std::queue<Entry<rhi::BufferHandle>> to_delete_buffers;
     MetalDevice* device_{};
   };
+
+  MTL4_Resources& m4res() {
+    ASSERT(mtl4_enabled_);
+    return *mtl4_resources_;
+  }
+  MTL3_Resources& m3res() {
+    ASSERT(!mtl4_enabled_);
+    return *mtl3_resources_;
+  }
 
   DeleteQueues delete_queues_{this};
 };
