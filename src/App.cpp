@@ -524,6 +524,8 @@ void App::load_scene_presets() {
                               Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});
   scene_presets_.emplace_back([this]() { load_model("/Users/tony/models/Bistro_Godot_opt.glb"); },
                               "bistro");
+  scene_presets_.emplace_back([this]() { load_grid(glm::ivec3{18, 0, 18}, 40.0, sponza_path); },
+                              "many many sponzas");
 }
 void App::run_preset_scene(int idx) {
   auto& preset = scene_presets_[idx];
