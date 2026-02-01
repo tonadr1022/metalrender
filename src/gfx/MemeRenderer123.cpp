@@ -85,7 +85,8 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
         auto delta_ticks = timestamps[1] - timestamps[0];
         auto delta_ms = delta_ticks * ms_per_tick;
         stats_.gpu_frame_time_last_ms = delta_ms;
-        avg_gpu_frame_time_ = glm::mix(avg_gpu_frame_time_, stats_.gpu_frame_time_last_ms, 0.05f);
+        stats_.avg_gpu_frame_time =
+            glm::mix(stats_.avg_gpu_frame_time, stats_.gpu_frame_time_last_ms, 0.05f);
       }
     }
   }
@@ -929,8 +930,7 @@ void MemeRenderer123::on_imgui() {
     ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
                 stats_.total_instance_vertices, stats_.total_instances);
     ImGui::Text("Total total instance meshlets: %d", stats_.total_instance_meshlets);
-    ImGui::Text("GPU Frame Time MS %.3f AVG: %.3f", stats_.gpu_frame_time_last_ms,
-                avg_gpu_frame_time_);
+    ImGui::Text("GPU Frame Time: %.2f", stats_.avg_gpu_frame_time);
 
     MeshletDrawStats stats{};
     constexpr int frames_ago = 2;

@@ -198,6 +198,7 @@ class MemeRenderer123 {
     uint32_t total_instances;
     FinalDrawResults draw_results;
     float gpu_frame_time_last_ms;
+    float avg_gpu_frame_time;
   };
 
   Stats stats_{};
@@ -277,7 +278,6 @@ class MemeRenderer123 {
   rhi::QueryPoolHandleHolder query_pools_[k_max_frames_in_flight];
   rhi::QueryPoolHandle get_query_pool() { return query_pools_[curr_frame_idx_].handle; }
   constexpr static int k_query_count = 2;
-  float avg_gpu_frame_time_{};
   rhi::BufferHandleHolder out_counts_buf_[k_max_frames_in_flight];
   rhi::BufferHandleHolder out_counts_buf_readback_[k_max_frames_in_flight];
   rhi::BufferHandleHolder query_resolve_bufs_[k_max_frames_in_flight];
