@@ -26,14 +26,13 @@
 #include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
 
 #include "MetalUtil.hpp"
+#include "core/Config.hpp"
 #include "core/EAssert.hpp"
 #include "gfx/metal/MetalCmdEncoder.hpp"
 #include "gfx/metal/MetalPipeline.hpp"
 #include "gfx/metal/MetalUtil.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Pipeline.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -1141,7 +1140,8 @@ void MetalDevice::resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t s
   pool->heap_->invalidateCounterRange(NS::Range::Make(start_query, query_count));
 }
 
-void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc) {
+void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
+                                            glm::vec4* clear_color) {
   ASSERT(mtl4_enabled_);
   auto* enc = (Metal4CmdEncoder*)cmd_enc;
   auto* swap = (MetalSwapchain*)swapchain;
@@ -1160,8 +1160,14 @@ void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdE
   swap_img_desc.mip_levels = 1;
   swap_img_desc.array_length = 1;
   auto tex_handle = texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true);
-  enc->begin_rendering(
-      {rhi::RenderingAttachmentInfo::color_att(tex_handle, rhi::LoadOp::DontCare)});
+  if (clear_color) {
+    enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(
+        tex_handle, rhi::LoadOp::Clear, rhi::ClearValue{.color = *clear_color})});
+  } else {
+    enc->begin_rendering(
+        {rhi::RenderingAttachmentInfo::color_att(tex_handle, rhi::LoadOp::DontCare)});
+  }
+  // TODO: is this bad
   texture_pool_.destroy(tex_handle);
 }
 
@@ -1199,4 +1205,4 @@ bool MetalDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapch
   return true;
 }
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

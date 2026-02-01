@@ -153,6 +153,7 @@ class MemeRenderer123 {
     // bool draw_imgui;
   };
   void render(const RenderArgs& args);
+  void draw_minimal_triangle();
   void on_imgui();
   bool on_key_event(int key, int action, int mods);
   bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,

@@ -1300,4 +1300,5 @@ OffsetAllocator::Allocation InstanceMgr::allocate_instance_data(uint32_t element
 }
 
 }  // namespace gfx
+
 }  // namespace TENG_NAMESPACE

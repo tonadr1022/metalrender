@@ -4,6 +4,9 @@ add_executable(${target_name}
     main.cpp
     App.cpp
     Camera.cpp
+    Util.cpp
+    TestRenderer.cpp
+    TestApp.cpp
 )
 
 target_link_libraries(${target_name} PUBLIC teng)

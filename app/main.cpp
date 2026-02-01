@@ -1,6 +1,12 @@
-#include "App.hpp"
+// #include "App.hpp"
+//
+// int main() {
+//   App app;
+//   app.run();
+// }
+#include "TestApp.hpp"
 
 int main() {
-  App app;
+  TestApp app;
   app.run();
 }

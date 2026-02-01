@@ -115,7 +115,12 @@ class Device {
 
   // calls CmdEncoder::begin_rendering on the given cmd encoder with the
   // swapchain's current draw image
-  virtual void begin_swapchain_rendering(Swapchain *swapchain, CmdEncoder *cmd_enc) = 0;
+  // TODO: move this to the encoder?
+  virtual void begin_swapchain_rendering(Swapchain *swapchain, CmdEncoder *cmd_enc,
+                                         glm::vec4 *clear_color) = 0;
+  void begin_swapchain_rendering(Swapchain *swapchain, CmdEncoder *cmd_enc) {
+    begin_swapchain_rendering(swapchain, cmd_enc, nullptr);
+  }
   virtual void resolve_query_data(QueryPoolHandle query_pool, uint32_t start_query,
                                   uint32_t query_count, std::span<uint64_t> out_timestamps) = 0;
 
