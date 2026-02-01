@@ -1,15 +1,13 @@
-set(target_name metalrender)
+set(target_name teng)
 
-add_executable(${target_name}
-    main.cpp
-    App.cpp
-    Camera.cpp
+add_library(${target_name} SHARED
     ResourceManager.cpp
+    Window.cpp
+    UI.cpp
 
     core/FileUtil.cpp
     core/Util.cpp
     core/StringUtil.cpp
-    Window.cpp
 
     gfx/ModelLoader.cpp
     gfx/MemeRenderer123.cpp
@@ -24,19 +22,11 @@ add_executable(${target_name}
     gfx/renderer/BufferResize.cpp
     platform/apple/AppleWindow.mm # TODO: move this please
 
-    # voxels/Chunk.cpp
-    # voxels/Mesher.cpp
-    # voxels/TerrainGenerator.cpp
-    # voxels/VoxelRenderer.cpp
-    # voxels/VoxelDB.cpp
-    # voxels/VoxelWorld.cpp
-    util/Stats.cpp
     gfx/texture/KtxLoad.cpp
-    UI.cpp
-
     gfx/rhi/Pipeline.cpp
     gfx/rhi/Texture.cpp
     gfx/rhi/Device.cpp
+    util/Stats.cpp
 
 )
 
@@ -81,10 +71,11 @@ add_custom_target(compile_shaders ALL
 
 add_dependencies(${target_name} compile_shaders)
 
-target_include_directories(${target_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/resources/shaders)
-target_include_directories(${target_name} PRIVATE ${CMAKE_SOURCE_DIR}/third_party/vendored)
+target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/resources/shaders)
+target_include_directories(${target_name} PUBLIC ${CMAKE_SOURCE_DIR}/third_party/vendored)
+target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
-target_link_libraries(${target_name} PRIVATE
+target_link_libraries(${target_name} PUBLIC
     glm::glm
     project_warnings
     cgltf
@@ -98,6 +89,7 @@ target_link_libraries(${target_name} PRIVATE
     concurrentqueue
     ktx
 )
+
 
 if (BUILD_VULKAN)
     target_link_libraries(${target_name} PRIVATE

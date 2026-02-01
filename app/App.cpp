@@ -6,6 +6,7 @@
 #include <random>
 
 #include "ResourceManager.hpp"
+#include "Window.hpp"
 #include "core/Logger.hpp"
 #include "gfx/MemeRenderer123.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -14,7 +15,6 @@
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "implot.h"
-#include "platform/apple/AppleWindow.hpp"
 #include "tracy/Tracy.hpp"
 
 namespace {
@@ -60,7 +60,7 @@ App::App() {
   config_path_ = local_resource_dir_ / "config.txt";
 
   load_config();
-  window_ = std::make_unique<AppleWindow>();
+  window_ = create_platform_window();
   Window::InitInfo win_init_info{
       .key_callback_fn = [this](int key, int action, int mods) { on_key_event(key, action, mods); },
       .cursor_pos_callback_fn = [this](double x_pos,

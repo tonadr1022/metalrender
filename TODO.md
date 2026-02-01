@@ -1,6 +1,6 @@
 # TODOs
 
-- rolling avgs
+- DLL export macro. Not really relevant until Vulkan
 - instead of dirty textures in render graph, transition them to shader read first
 - out*counts_buf* use render graph instead
 - sometimes the end timestamp is less than start timestamp. This is ridiculous.

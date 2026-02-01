@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <glm/vec2.hpp>
+#include <memory>
 
 namespace rhi {
 class Device;
@@ -45,3 +46,5 @@ class Window {
   FramebufferResizeCallbackFn framebuffer_resize_callback_fn_;
   GLFWwindow* window_{};
 };
+
+std::unique_ptr<Window> create_platform_window();

@@ -87,3 +87,10 @@ glm::uvec2 Window::get_window_position() {
 }
 
 void Window::set_window_position(glm::ivec2 pos) { glfwSetWindowPos(window_, pos.x, pos.y); }
+
+#ifdef __APPLE__
+#include "platform/apple/AppleWindow.hpp"
+std::unique_ptr<Window> create_platform_window() { return std::make_unique<AppleWindow>(); }
+#else
+static_assert(false, "Platform not supported");
+#endif
