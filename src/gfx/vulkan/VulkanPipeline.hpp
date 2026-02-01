@@ -1,7 +1,8 @@
 #pragma once
 
 #include "core/Config.hpp"
-#include "gfx/Pipeline.hpp"
+#include "gfx/rhi/Pipeline.hpp"
+#include "vulkan/vulkan_core.h"
 
 namespace TENG_NAMESPACE {
 
@@ -10,7 +11,10 @@ namespace gfx::vk {
 class VulkanPipeline : public rhi::Pipeline {
  public:
   VulkanPipeline() = default;
-  ~VulkanPipeline() override = default;
+  VulkanPipeline(const rhi::GraphicsPipelineCreateInfo& ginfo, VkPipeline pipeline)
+      : rhi::Pipeline(ginfo), pipeline_(pipeline) {}
+
+  VkPipeline pipeline_{};
 };
 
 }  // namespace gfx::vk

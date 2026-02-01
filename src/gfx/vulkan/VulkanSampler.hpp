@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/Config.hpp"
-#include "gfx/Sampler.hpp"
+#include "gfx/rhi/Sampler.hpp"
 
 namespace TENG_NAMESPACE {
 

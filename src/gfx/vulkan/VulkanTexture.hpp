@@ -1,7 +1,7 @@
 #pragma once
 
 #include "core/Config.hpp"
-#include "gfx/Texture.hpp"
+#include "gfx/rhi/Texture.hpp"
 #include "gfx/vulkan/VMAWrapper.hpp"
 
 namespace TENG_NAMESPACE {

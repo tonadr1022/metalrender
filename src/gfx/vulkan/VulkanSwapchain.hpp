@@ -1,8 +1,9 @@
 #pragma once
 
 #include "core/Config.hpp"
-#include "gfx/Config.hpp"
-#include "gfx/Swapchain.hpp"
+#include "gfx/rhi/Config.hpp"
+#include "gfx/rhi/Swapchain.hpp"
+#include "vulkan/vulkan_core.h"
 
 namespace TENG_NAMESPACE {
 
@@ -20,8 +21,8 @@ class VulkanSwapchain : public rhi::Swapchain {
     return textures_[frame_index].handle;
   }
 
- private:
   SwapchainTextures textures_{};
+  VkSurfaceKHR surface_{};
 };
 
 }  // namespace gfx::vk

@@ -3,7 +3,7 @@
 #include <volk.h>
 
 #include "core/Config.hpp"
-#include "gfx/CmdEncoder.hpp"
+#include "gfx/rhi/CmdEncoder.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -42,19 +42,8 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset, size_t src_bytes_per_row,
                            rhi::TextureHandle dst_tex) override;
 
-  void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset, size_t src_bytes_per_row,
-                           rhi::TextureHandle dst_tex, glm::uvec3 src_size,
-                           glm::uvec3 dst_origin) override;
   void copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice, size_t src_level,
                        rhi::BufferHandle dst_buf, size_t dst_offset) override;
-  //  void bind_index_buf(rhi::BufferHandle index_buf, size_t offset) override {}
-  //  void bind_index_buf(rhi::BufferHandle index_buf) { bind_index_buf(index_buf, 0); }
-
-  uint32_t prepare_indexed_indirect_draws(rhi::BufferHandle indirect_buf, size_t offset,
-                                          size_t draw_cnt, rhi::BufferHandle index_buf,
-                                          size_t index_buf_offset, void* push_constant_data,
-                                          size_t push_constant_size) override;
-
   void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
   void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,

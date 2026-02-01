@@ -3,7 +3,7 @@
 #include <volk.h>
 
 #include "core/Config.hpp"
-#include "gfx/Buffer.hpp"
+#include "gfx/rhi/Buffer.hpp"
 #include "gfx/vulkan/VMAWrapper.hpp"
 
 namespace TENG_NAMESPACE {
@@ -22,7 +22,6 @@ class VulkanBuffer final : public rhi::Buffer {
   [[nodiscard]] VkBuffer buffer() const { return buffer_; }
   [[nodiscard]] VmaAllocation allocation() const { return allocation_; }
 
- private:
   VkBuffer buffer_{};
   VmaAllocation allocation_{};
 };

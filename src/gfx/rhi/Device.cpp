@@ -2,7 +2,6 @@
 
 #include "core/Logger.hpp"  // IWYU pragma: keep
 
-
 #ifdef METAL_BACKEND
 #include "gfx/metal/MetalDevice.hpp"
 #endif
@@ -11,12 +10,11 @@
 #include "core/Config.hpp"
 #include "gfx/vulkan/VulkanDevice.hpp"
 
-extern std::unique_ptr<rhi::Device> create_vulkan_device();
-
 #endif
 
-
 namespace TENG_NAMESPACE {
+
+extern std::unique_ptr<rhi::Device> create_vulkan_device();
 
 namespace rhi {
 
@@ -32,9 +30,7 @@ std::unique_ptr<Device> create_device(GfxAPI api) {
 #endif
     case rhi::GfxAPI::Vulkan:
 #ifndef VULKAN_BACKEND
-      LCRITICAL("Vulkan backend not available");
-      exit(1);
-      return nullptr;
+      return std::make_unique<VulkanDevice>();
 #else
       return std::make_unique<gfx::vk::VulkanDevice>();
 #endif

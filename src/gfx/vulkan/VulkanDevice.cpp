@@ -8,14 +8,13 @@
 
 #include "VMAWrapper.hpp"  // IWYU pragma: keep
 #include "Window.hpp"
+#include "core/Config.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
-#include "gfx/GFXTypes.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/vulkan/VulkanCommon.hpp"
 #include "vulkan/vulkan_core.h"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -33,7 +32,7 @@ VkShaderStageFlagBits convert_shader_stage(rhi::ShaderType type) {
       return VK_SHADER_STAGE_COMPUTE_BIT;
     case rhi::ShaderType::Mesh:
       return VK_SHADER_STAGE_MESH_BIT_EXT;
-    case rhi::ShaderType::Object:
+    case rhi::ShaderType::Task:
       return VK_SHADER_STAGE_TASK_BIT_EXT;
     default:
       return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
@@ -159,7 +158,6 @@ void VulkanDevice::shutdown() {
   }
   vmaDestroyAllocator(allocator_);
   vkDestroyDevice(device_, nullptr);
-  vkDestroySurfaceKHR(instance_, surface_, nullptr);
   vkb::destroy_instance(vkb_inst_);
 }
 
@@ -187,14 +185,8 @@ void VulkanDevice::init(const InitInfo& init_info) {
 
   volkLoadInstance(instance_);
 
-  glfwCreateWindowSurface(instance_, init_info.window->get_handle(), nullptr, &surface_);
-  if (!surface_) {
-    LCRITICAL("Failed to create surface");
-    exit(1);
-  }
-
   vkb::PhysicalDeviceSelector phys_device_selector{vkb_inst_};
-  auto phys_ret = phys_device_selector.set_surface(surface_)
+  auto phys_ret = phys_device_selector.defer_surface_initialization()
                       .set_minimum_version(min_api_version_major, min_api_version_minor)
                       .select();
   check_vkb_result("Failed to select physical device", phys_ret);
@@ -362,7 +354,7 @@ rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
   return texture_pool_.alloc(desc, rhi::k_invalid_bindless_idx, image, allocation, allocation_info);
 }
 
-rhi::CmdEncoder* VulkanDevice::begin_command_list() {
+rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder() {
   if (curr_cmd_encoder_i_ >= cmd_encoders_.size()) {
     VkCommandBuffer vk_cmd_buf;
     VkCommandBufferAllocateInfo info{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO};
@@ -518,10 +510,56 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
   for (uint32_t i = 0; i < module_count; i++) {
     vkDestroyShaderModule(device_, stages[i].module, nullptr);
   }
-  exit(1);
-  return pipeline_pool_.alloc();
+  return pipeline_pool_.alloc(info, vk_pipeline);
+}
+
+void VulkanDevice::submit_frame() {}
+
+rhi::SwapchainHandle VulkanDevice::create_swapchain(const rhi::SwapchainDesc& desc) {
+  auto handle = swapchain_pool_.alloc();
+  auto* swapchain = (VulkanSwapchain*)get_swapchain(handle);
+  glfwCreateWindowSurface(instance_, desc.window->get_handle(), nullptr, &swapchain->surface_);
+  ASSERT(swapchain->surface_);
+  return handle;
+}
+
+void VulkanDevice::destroy(rhi::BufferHandle handle) {
+  auto* buf = (VulkanBuffer*)get_buf(handle);
+  if (buf) {
+    vmaDestroyBuffer(allocator_, buf->buffer_, buf->allocation_);
+    buffer_pool_.destroy(handle);
+  }
+}
+void VulkanDevice::destroy(rhi::PipelineHandle handle) {
+  auto* pipeline = (VulkanPipeline*)get_pipeline(handle);
+  if (pipeline) {
+    vkDestroyPipeline(device_, pipeline->pipeline_, nullptr);
+    pipeline_pool_.destroy(handle);
+  }
+}
+void VulkanDevice::destroy(rhi::TextureHandle handle) {
+  auto* tex = (VulkanTexture*)get_tex(handle);
+  if (tex) {
+    vmaDestroyImage(allocator_, tex->image_, tex->allocation_);
+    texture_pool_.destroy(handle);
+  }
+}
+void VulkanDevice::destroy(rhi::SamplerHandle handle) {
+  auto* sampler = (VulkanSampler*)sampler_pool_.get(handle);
+  if (sampler) {
+    ASSERT(0);
+    // vkDestroySampler(device_, sampler->sampler_, nullptr);
+  }
+
+  sampler_pool_.destroy(handle);
 }
 
 }  // namespace gfx::vk
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE
+
+void teng::gfx::vk::VulkanDevice::destroy(rhi::SwapchainHandle handle) {
+  auto* swapchain = static_cast<VulkanSwapchain*>(get_swapchain(handle));
+  vkDestroySurfaceKHR(instance_, swapchain->surface_, nullptr);
+  swapchain_pool_.destroy(handle);
+}

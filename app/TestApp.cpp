@@ -1,7 +1,5 @@
 #include "TestApp.hpp"
 
-#include <utility>
-
 #include "TestRenderer.hpp"
 #include "Util.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -15,17 +13,13 @@ TestApp::TestApp() {
   window_ = create_platform_window();
 
   Window::InitInfo win_init_info{
-      // .key_callback_fn = [this](int key, int action, int mods) { on_key_event(key, action, mods);
-      // },
-      // .cursor_pos_callback_fn = [this](double x_pos,
-      //                                  double y_pos) { on_curse_pos_event(x_pos, y_pos); },
       .win_dims_x = 1000,
       .win_dims_y = 1000,
       .floating_window = false,
   };
   window_->init(win_init_info);
   window_->set_window_position({500, 0});
-  device_ = rhi::create_device(rhi::GfxAPI::Metal);
+  device_ = rhi::create_device(rhi::GfxAPI::Vulkan);
 
   device_->init({
       .shader_lib_dir = resource_dir_ / "shader_out",
@@ -53,7 +47,6 @@ TestApp::~TestApp() = default;
 void TestApp::run() {
   while (!window_->should_close()) {
     window_->poll_events();
-
     renderer_->render();
   }
 
