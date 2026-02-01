@@ -14,6 +14,10 @@
 #include "concurrentqueue.h"
 #include "glm/gtx/hash.hpp"  // IWYU pragma: keep
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 class Camera;
 class RendererMetal;
 
@@ -129,3 +133,5 @@ class World {
 };
 
 }  // namespace vox
+
+} // namespace TENG_NAMESPACE

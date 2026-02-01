@@ -30,6 +30,10 @@
 #include "core/MathUtil.hpp"
 #include "meshoptimizer.h"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace {
 
 void load_stb_image(const void *data, size_t data_size, const std::filesystem::path &path,
@@ -641,3 +645,5 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
 }
 
 }  // namespace model
+
+} // namespace TENG_NAMESPACE

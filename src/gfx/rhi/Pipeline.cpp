@@ -2,6 +2,10 @@
 
 #include "core/Hash.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace rhi {
 
 const char* to_string(ShaderType type) {
@@ -30,3 +34,5 @@ size_t compute_render_target_info_hash(const rhi::RenderTargetInfo& render_targe
   return hash;
 }
 }  // namespace rhi
+
+} // namespace TENG_NAMESPACE

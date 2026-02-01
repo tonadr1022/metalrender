@@ -5,6 +5,8 @@
 #include "gfx/RendererTypes.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
+namespace teng {
+
 namespace gfx {
 class MemeRenderer123;
 }
@@ -14,6 +16,8 @@ class Device;
 class Swapchain;
 }  // namespace rhi
 class Window;
+
+}  // namespace teng
 
 struct App {
   App();
@@ -64,13 +68,13 @@ struct App {
   std::filesystem::path local_resource_dir_;
   std::filesystem::path camera_path_;
   std::filesystem::path config_path_;
-  std::unique_ptr<rhi::Device> device_;
-  rhi::SwapchainHandleHolder swapchain_;
-  std::unique_ptr<Window> window_;
-  std::unique_ptr<gfx::MemeRenderer123> renderer_;
+  std::unique_ptr<teng::rhi::Device> device_;
+  teng::rhi::SwapchainHandleHolder swapchain_;
+  std::unique_ptr<teng::Window> window_;
+  std::unique_ptr<teng::gfx::MemeRenderer123> renderer_;
   static constexpr int k_camera_config_version{1};
   Camera camera_;
-  std::vector<ModelHandle> models_;
+  std::vector<teng::ModelHandle> models_;
   bool first_mouse_{true};
   bool hide_mouse_{false};
   bool imgui_enabled_{true};

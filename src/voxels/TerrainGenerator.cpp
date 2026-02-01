@@ -4,6 +4,10 @@
 
 #include "voxels/Chunk.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace vox {
 
 void TerrainGenerator::populate_chunk([[maybe_unused]] glm::ivec3 chunk_key, Chunk& chunk) {
@@ -71,3 +75,5 @@ void TerrainGenerator::generate_world_chunk(const glm::ivec3& chunk_key, Chunk& 
 }
 
 }  // namespace vox
+
+} // namespace TENG_NAMESPACE

@@ -1,6 +1,10 @@
 #include "Stats.hpp"
 
 #include <numeric>
+
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
 namespace util {
 
 float RollingAvgCtr::avg() const {
@@ -8,3 +12,5 @@ float RollingAvgCtr::avg() const {
 }
 
 }  // namespace util
+
+} // namespace TENG_NAMESPACE

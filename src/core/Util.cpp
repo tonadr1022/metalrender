@@ -2,6 +2,10 @@
 
 #include <algorithm>
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 std::string binary_rep(size_t val) {
   int bits = 64;
   std::string res;
@@ -14,3 +18,5 @@ std::string binary_rep(size_t val) {
   std::ranges::reverse(res);
   return res;
 }
+
+} // namespace TENG_NAMESPACE

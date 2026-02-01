@@ -6,6 +6,7 @@
 
 #include "ModelInstance.hpp"
 #include "RendererTypes.hpp"
+#include "core/Config.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "hlsl/default_vertex.h"
 
@@ -13,6 +14,8 @@ namespace MTL {
 class Texture;
 class Device;
 }  // namespace MTL
+
+namespace TENG_NAMESPACE {
 
 enum class CPUTextureLoadType : uint8_t {
   None,
@@ -88,3 +91,5 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
                 ModelInstance &out_model, ModelLoadResult &out_load_result);
 
 }
+
+}  // namespace TENG_NAMESPACE

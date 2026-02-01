@@ -2,7 +2,10 @@
 
 #include <Metal/MTLTexture.hpp>
 
+#include "core/Config.hpp"
 #include "gfx/rhi/Texture.hpp"
+
+namespace TENG_NAMESPACE {
 
 class MetalTexture : public rhi::Texture {
  public:
@@ -23,3 +26,5 @@ class MetalTexture : public rhi::Texture {
   MTL::Texture* tex_{};
   bool is_drawable_tex_{};
 };
+
+}  // namespace TENG_NAMESPACE

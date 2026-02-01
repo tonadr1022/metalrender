@@ -4,6 +4,10 @@
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/Device.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 void gfx::BufferCopyMgr::copy_to_buffer(const void* src_data, size_t src_size,
                                         rhi::BufferHandle dst_buffer, size_t dst_offset) {
   // if dst buffer is cpu visible, direct copy, otherwise copy to staging buffer
@@ -36,3 +40,5 @@ void gfx::BufferCopyMgr::add_copy(const BufferCopy& copy) {
     copies_.push_back(copy);
   }
 }
+
+} // namespace TENG_NAMESPACE

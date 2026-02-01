@@ -1,6 +1,13 @@
 #pragma once
 
 #include "Window.hpp"
+#include "core/Config.hpp"
+
+namespace CA {
+class MetalLayer;
+}
+
+namespace TENG_NAMESPACE {
 
 class AppleWindow final : public Window {
  public:
@@ -13,8 +20,6 @@ class AppleWindow final : public Window {
   bool fullscreen_{};
 };
 
-namespace CA {
-class MetalLayer;
-}
-
 void set_layer_for_window(GLFWwindow* window, CA::MetalLayer* layer);
+
+}  // namespace TENG_NAMESPACE

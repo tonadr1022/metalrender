@@ -6,6 +6,10 @@
 #include "core/Logger.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace mtl::util {
 
 void print_err(NS::Error* err) {
@@ -235,3 +239,5 @@ MTL::Stages convert_stage(rhi::PipelineStage stage) {
   return result;
 }
 }  // namespace mtl::util
+
+} // namespace TENG_NAMESPACE

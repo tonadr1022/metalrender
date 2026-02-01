@@ -10,6 +10,10 @@
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Texture.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx {
 
 namespace {
@@ -1028,3 +1032,5 @@ RGResourceHandle RenderGraph::Pass::rw_tex(const std::string& name, const std::s
 }
 
 }  // namespace gfx
+
+} // namespace TENG_NAMESPACE

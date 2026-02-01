@@ -10,3 +10,9 @@
 #include <Metal/Metal.hpp>
 
 #include "MetalDevice.hpp"
+
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
+} // namespace TENG_NAMESPACE

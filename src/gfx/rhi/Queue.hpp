@@ -2,6 +2,10 @@
 
 #include <cstdint>
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace rhi {
 
 enum class QueueType : uint8_t {
@@ -25,3 +29,5 @@ inline const char* to_string(QueueType type) {
 }
 
 }  // namespace rhi
+
+} // namespace TENG_NAMESPACE

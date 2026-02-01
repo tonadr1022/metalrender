@@ -2,6 +2,10 @@
 
 #include <cstdint>
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 template <typename HandleT>
 struct GenerationalHandle {
   GenerationalHandle() = default;
@@ -37,3 +41,5 @@ struct GenerationalHandle {
 };
 
 inline bool generational_handle_u64_is_valid(uint64_t packed) { return packed >> 32 != 0; }
+
+} // namespace TENG_NAMESPACE

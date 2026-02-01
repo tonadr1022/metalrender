@@ -5,6 +5,10 @@
 #include "gfx/rhi/GFXTypes.hpp"
 #include "small_vector/small_vector.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace rhi {
 
 enum class ShaderType : uint8_t { None, Vertex, Fragment, Task, Mesh, Compute };
@@ -122,3 +126,5 @@ class Pipeline {
 };
 
 }  // namespace rhi
+
+} // namespace TENG_NAMESPACE

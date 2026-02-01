@@ -33,6 +33,10 @@
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Pipeline.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace {
 MTL::BlendFactor convert(rhi::BlendFactor factor) {
   switch (factor) {
@@ -1194,3 +1198,5 @@ bool MetalDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapch
   swap.desc_ = desc;
   return true;
 }
+
+} // namespace TENG_NAMESPACE

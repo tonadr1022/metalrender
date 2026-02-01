@@ -5,6 +5,10 @@
 #include "gfx/Buffer.hpp"
 #include "gfx/vulkan/VMAWrapper.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx::vk {
 
 class VulkanBuffer final : public rhi::Buffer {
@@ -25,3 +29,5 @@ class VulkanBuffer final : public rhi::Buffer {
 };
 
 }  // namespace gfx::vk
+
+} // namespace TENG_NAMESPACE

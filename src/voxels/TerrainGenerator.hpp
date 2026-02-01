@@ -5,6 +5,10 @@
 
 #include "core/Math.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace vox {
 
 struct Chunk;
@@ -21,3 +25,5 @@ class TerrainGenerator {
 };
 
 }  // namespace vox
+
+} // namespace TENG_NAMESPACE

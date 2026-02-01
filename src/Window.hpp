@@ -6,11 +6,15 @@
 #include <glm/vec2.hpp>
 #include <memory>
 
+#include "core/Config.hpp"
+
+struct GLFWwindow;
+
+namespace TENG_NAMESPACE {
+
 namespace rhi {
 class Device;
 }
-
-struct GLFWwindow;
 
 class Window {
  public:
@@ -48,3 +52,5 @@ class Window {
 };
 
 std::unique_ptr<Window> create_platform_window();
+
+}  // namespace TENG_NAMESPACE

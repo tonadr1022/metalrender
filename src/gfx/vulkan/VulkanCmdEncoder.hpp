@@ -4,6 +4,10 @@
 
 #include "gfx/CmdEncoder.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx::vk {
 
 class VulkanCmdEncoder : public rhi::CmdEncoder {
@@ -64,3 +68,5 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
 };
 
 }  // namespace gfx::vk
+
+} // namespace TENG_NAMESPACE

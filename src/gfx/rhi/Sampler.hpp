@@ -2,6 +2,10 @@
 
 #include "GFXTypes.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace rhi {
 
 struct SamplerDesc {
@@ -36,3 +40,5 @@ class Sampler {
 };
 
 }  // namespace rhi
+
+} // namespace TENG_NAMESPACE

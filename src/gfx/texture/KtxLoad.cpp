@@ -6,6 +6,10 @@
 #include "core/Logger.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx {
 
 namespace {
@@ -79,3 +83,5 @@ cleanup_failed_load:
 }
 
 }  // namespace gfx
+
+} // namespace TENG_NAMESPACE

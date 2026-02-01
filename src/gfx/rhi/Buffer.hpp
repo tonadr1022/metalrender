@@ -4,6 +4,10 @@
 
 #include "GFXTypes.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace rhi {
 
 class Buffer {
@@ -30,3 +34,5 @@ class Buffer {
 };
 
 }  // namespace rhi
+
+} // namespace TENG_NAMESPACE

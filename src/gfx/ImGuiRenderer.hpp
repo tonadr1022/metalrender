@@ -1,10 +1,13 @@
 #pragma once
 
+#include "core/Config.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 
 struct ImTextureData;
+
+namespace TENG_NAMESPACE {
 
 namespace gfx {
 
@@ -34,3 +37,5 @@ class ImGuiRenderer {
 };
 
 }  // namespace gfx
+
+}  // namespace TENG_NAMESPACE

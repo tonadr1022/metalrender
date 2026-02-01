@@ -4,3 +4,9 @@
 #include <Foundation/Foundation.hpp>
 #include <Metal/Metal.hpp>
 #include <QuartzCore/QuartzCore.hpp>
+
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
+} // namespace TENG_NAMESPACE

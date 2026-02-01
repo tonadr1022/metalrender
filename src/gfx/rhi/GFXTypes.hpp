@@ -1,8 +1,11 @@
 #pragma once
 
+#include "core/Config.hpp"
 #include "core/Handle.hpp"
 #include "core/Math.hpp"  // IWYU pragma: keep
 #include "core/Pool.hpp"
+
+namespace TENG_NAMESPACE {
 
 namespace rhi {
 
@@ -16,7 +19,7 @@ class Swapchain;
 
 #define MAKE_HANDLE(name)                        \
   using name##Handle = GenerationalHandle<name>; \
-  using name##HandleHolder = Holder<name##Handle, ::rhi::Device>
+  using name##HandleHolder = Holder<name##Handle, Device>
 
 MAKE_HANDLE(Texture);
 MAKE_HANDLE(Buffer);
@@ -342,3 +345,5 @@ enum AccessFlags : uint64_t {
 };
 
 }  // namespace rhi
+
+}  // namespace TENG_NAMESPACE

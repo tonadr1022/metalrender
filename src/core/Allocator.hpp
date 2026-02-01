@@ -6,6 +6,10 @@
 #include "Logger.hpp"
 #include "core/EAssert.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 class IndexAllocator {
  public:
   IndexAllocator() = default;
@@ -139,3 +143,5 @@ class FreeListAllocator {
   std::map<SlotOffset, Slot> slot_offset_to_slot_;
   bool initialized_{};
 };
+
+} // namespace TENG_NAMESPACE

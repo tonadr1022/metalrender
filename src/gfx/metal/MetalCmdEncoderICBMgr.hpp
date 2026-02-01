@@ -3,9 +3,8 @@
 #include <span>
 #include <vector>
 
+#include "core/Config.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
-
-class MetalDevice;
 
 namespace MTL {
 
@@ -15,6 +14,10 @@ class IndirectCommandBuffer;
 class ArgumentDescriptor;
 
 }  // namespace MTL
+
+namespace TENG_NAMESPACE {
+
+class MetalDevice;
 
 class MetalCmdEncoderICBMgr {
  public:
@@ -35,3 +38,5 @@ class MetalCmdEncoderICBMgr {
   MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
   MetalDevice* device_{};
 };
+
+}  // namespace TENG_NAMESPACE

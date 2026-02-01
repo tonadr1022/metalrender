@@ -21,6 +21,10 @@
 #include "hlsl/shared_instance_data.h"
 #include "offsetAllocator.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 struct ImDrawData;
 class Window;
 
@@ -295,3 +299,5 @@ class MemeRenderer123 {
 };
 
 }  // namespace gfx
+
+} // namespace TENG_NAMESPACE

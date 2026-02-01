@@ -5,6 +5,10 @@
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/Device.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx {
 
 struct BufferCopyMgr;
@@ -47,3 +51,5 @@ class BackedGPUAllocator {
 };
 
 }  // namespace gfx
+
+} // namespace TENG_NAMESPACE

@@ -5,12 +5,15 @@
 
 #include "GFXTypes.hpp"
 #include "Sampler.hpp"
-
-class Window;
+#include "core/Config.hpp"
 
 namespace MTL {
 class Texture;
 }
+
+namespace TENG_NAMESPACE {
+
+class Window;
 
 namespace rhi {
 
@@ -126,3 +129,5 @@ enum class GfxAPI { Vulkan, Metal };
 std::unique_ptr<Device> create_device(GfxAPI api);
 
 }  // namespace rhi
+
+}  // namespace TENG_NAMESPACE

@@ -4,14 +4,13 @@
 #include <Metal/MTLGPUAddress.hpp>
 #include <QuartzCore/CAMetalDrawable.hpp>
 
+#include "core/Config.hpp"
 #include "gfx/metal/MetalCmdEncoderICBMgr.hpp"
 #include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Pipeline.hpp"
 #include "gfx/rhi/Queue.hpp"
 #include "small_vector/small_vector.hpp"
-
-class MetalDevice;
 
 namespace MTL4 {
 
@@ -36,6 +35,10 @@ class RenderCommandEncoder;
 class BlitCommandEncoder;
 
 }  // namespace MTL
+
+namespace TENG_NAMESPACE {
+
+class MetalDevice;
 
 template <typename API>
 struct EncoderState {
@@ -176,3 +179,5 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
 
 using Metal3CmdEncoder = MetalCmdEncoderBase<false>;
 using Metal4CmdEncoder = MetalCmdEncoderBase<true>;
+
+}  // namespace TENG_NAMESPACE

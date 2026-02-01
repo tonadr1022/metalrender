@@ -8,6 +8,7 @@
 #include "MetalPipeline.hpp"
 #include "MetalTexture.hpp"
 #include "core/Allocator.hpp"
+#include "core/Config.hpp"
 #include "core/Handle.hpp"
 #include "core/Pool.hpp"
 #include "gfx/metal/MetalCmdEncoder.hpp"
@@ -18,14 +19,6 @@
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Queue.hpp"
 #include "hlsl/shader_constants.h"
-
-class Window;
-
-namespace rhi {
-
-struct TextureDesc;
-
-}  // namespace rhi
 
 namespace NS {
 class AutoreleasePool;
@@ -41,6 +34,16 @@ class Texture;
 class RenderCommandEncoder;
 
 }  // namespace MTL
+
+namespace TENG_NAMESPACE {
+
+class Window;
+
+namespace rhi {
+
+struct TextureDesc;
+
+}  // namespace rhi
 
 struct MetalDeviceInitInfo {
   bool prefer_mtl4{};
@@ -344,4 +347,4 @@ class MetalDevice : public rhi::Device {
   DeleteQueues delete_queues_{this};
 };
 
-struct GLFWwindow;
+}  // namespace TENG_NAMESPACE

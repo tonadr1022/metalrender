@@ -3,6 +3,10 @@
 #include "gfx/Texture.hpp"
 #include "gfx/vulkan/VMAWrapper.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx::vk {
 
 class VulkanTexture : public rhi::Texture {
@@ -25,3 +29,5 @@ class VulkanTexture : public rhi::Texture {
 };
 
 }  // namespace gfx::vk
+
+} // namespace TENG_NAMESPACE

@@ -2,6 +2,10 @@
 
 #include "gfx/rhi/GFXTypes.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx {
 
 struct GPUFrameAllocator3;
@@ -33,3 +37,5 @@ struct BufferCopyMgr {
 };
 
 }  // namespace gfx
+
+} // namespace TENG_NAMESPACE

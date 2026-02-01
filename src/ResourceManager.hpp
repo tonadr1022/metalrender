@@ -8,6 +8,10 @@
 #include "gfx/ModelInstance.hpp"
 #include "gfx/RendererTypes.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx {
 class MemeRenderer123;
 }
@@ -69,3 +73,5 @@ class ResourceManager {
   size_t tot_instances_loaded_{0};
   bool should_release_unused_models_{};
 };
+
+} // namespace TENG_NAMESPACE

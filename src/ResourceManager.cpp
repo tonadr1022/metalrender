@@ -6,6 +6,10 @@
 #include "core/Logger.hpp"
 #include "gfx/MemeRenderer123.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 ModelHandle ResourceManager::load_model(const std::filesystem::path &path,
                                         const glm::mat4 &root_transform) {
   ZoneScoped;
@@ -65,3 +69,5 @@ void ResourceManager::free_model(ModelHandle handle) {
 }
 
 ResourceManager::ResourceManager(const CreateInfo &cinfo) : renderer_(cinfo.renderer) {}
+
+} // namespace TENG_NAMESPACE

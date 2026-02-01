@@ -4,6 +4,10 @@
 
 #include "core/Logger.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx::vk {
 
 void print_vk_error(size_t x, bool exit_prog) {
@@ -17,3 +21,5 @@ void print_vk_error(size_t x, bool exit_prog) {
 }
 
 }  // namespace gfx::vk
+
+} // namespace TENG_NAMESPACE

@@ -7,6 +7,10 @@
 
 #include "EAssert.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 template <typename, typename>
 struct Pool;
 
@@ -321,3 +325,5 @@ struct Holder {
     }
   }
 };
+
+} // namespace TENG_NAMESPACE

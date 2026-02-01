@@ -2,6 +2,7 @@
 
 #include <Metal/Metal.hpp>
 
+#include "core/Config.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 
@@ -9,6 +10,8 @@ namespace CA {
 class MetalLayer;
 class MetalDrawable;
 }  // namespace CA
+
+namespace TENG_NAMESPACE {
 
 class MetalSwapchain : public rhi::Swapchain {
  public:
@@ -25,3 +28,5 @@ class MetalSwapchain : public rhi::Swapchain {
   NS::SharedPtr<CA::MetalDrawable> drawable_;
   // NS::SharedPtr<
 };
+
+}  // namespace TENG_NAMESPACE

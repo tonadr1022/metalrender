@@ -9,6 +9,10 @@
 #include "core/Logger.hpp"
 #include "imgui.h"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace vox {
 
 void VoxelDB::save(const std::filesystem::path& path) {
@@ -76,3 +80,5 @@ void VoxelDB::populate_tex_arr_indices(
 }
 
 }  // namespace vox
+
+} // namespace TENG_NAMESPACE

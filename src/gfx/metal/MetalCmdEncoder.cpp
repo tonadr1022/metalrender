@@ -19,6 +19,10 @@
 #include "gfx/metal/MetalUtil.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 enum EncoderType {
   EncoderType_Render = 1,
   EncoderType_Compute = 1 << 1,
@@ -1085,3 +1089,5 @@ void MetalCmdEncoderBase<UseMTL4>::start_compute_encoder() {
 
 template class MetalCmdEncoderBase<true>;
 template class MetalCmdEncoderBase<false>;
+
+} // namespace TENG_NAMESPACE

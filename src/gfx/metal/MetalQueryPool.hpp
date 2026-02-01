@@ -3,10 +3,14 @@
 #include <Metal/Metal.hpp>
 #include <utility>
 
+#include "core/Config.hpp"
 #include "gfx/rhi/QueryPool.hpp"
+
 namespace MTL4 {
 class CounterHeap;
 }
+
+namespace TENG_NAMESPACE {
 
 class MetalQueryPool : public rhi::QueryPool {
  public:
@@ -15,3 +19,5 @@ class MetalQueryPool : public rhi::QueryPool {
 
   NS::SharedPtr<MTL4::CounterHeap> heap_;
 };
+
+}  // namespace TENG_NAMESPACE

@@ -14,6 +14,10 @@
 #include "gfx/vulkan/VulkanSwapchain.hpp"
 #include "gfx/vulkan/VulkanTexture.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 class Window;
 
 namespace gfx::vk {
@@ -137,3 +141,5 @@ class VulkanDevice : public rhi::Device {
 };
 
 }  // namespace gfx::vk
+
+} // namespace TENG_NAMESPACE

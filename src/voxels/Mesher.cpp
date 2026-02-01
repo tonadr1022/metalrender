@@ -2,6 +2,10 @@
 
 #include <tracy/Tracy.hpp>
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace greedy_mesher {
 
 void mesh(const uint8_t* voxels, MeshData& meshData, int lod) {
@@ -193,3 +197,5 @@ void mesh(const uint8_t* voxels, MeshData& meshData, int lod) {
   meshData.vertexCount = vertexI + 1;
 }
 }  // namespace greedy_mesher
+
+} // namespace TENG_NAMESPACE

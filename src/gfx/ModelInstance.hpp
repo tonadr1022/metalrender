@@ -4,6 +4,10 @@
 #include <glm/mat4x4.hpp>
 #include <vector>
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 struct Hierarchy {
   int32_t parent{k_invalid_node_id};
   int32_t first_child{k_invalid_node_id};
@@ -36,3 +40,5 @@ struct ModelInstance {
   // returns true if any transforms were updated
   bool update_transforms();
 };
+
+} // namespace TENG_NAMESPACE

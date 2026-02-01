@@ -6,6 +6,10 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/string_cast.hpp>
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace vox {
 
 namespace {
@@ -54,3 +58,5 @@ void ChunkBlockArr::fill_lods() {
   }
 }
 }  // namespace vox
+
+} // namespace TENG_NAMESPACE

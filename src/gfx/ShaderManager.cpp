@@ -14,6 +14,10 @@
 #include "core/Logger.hpp"
 #include "gfx/rhi/Device.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace fs = std::filesystem;
 
 namespace gfx {
@@ -467,3 +471,5 @@ void ShaderManager::replace_dirty_pipelines() {
 }
 
 }  // namespace gfx
+
+} // namespace TENG_NAMESPACE

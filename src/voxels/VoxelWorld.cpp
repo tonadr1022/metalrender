@@ -17,6 +17,10 @@
 #define BM_IMPEMENTATION
 #include "Mesher.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace {
 
 constexpr int radius = 20;
@@ -302,3 +306,5 @@ void World::on_imgui() {
 }
 
 }  // namespace vox
+
+} // namespace TENG_NAMESPACE

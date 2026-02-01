@@ -4,6 +4,15 @@
 
 #include "core/Logger.hpp"
 
+#ifdef __APPLE__
+#include "core/Config.hpp"
+#include "platform/apple/AppleWindow.hpp"
+#else
+static_assert(false, "Platform not supported");
+#endif
+
+namespace TENG_NAMESPACE {
+
 void Window::init(InitInfo& init_info) {
   ZoneScoped;
   this->key_callback_fn_ = std::move(init_info.key_callback_fn);
@@ -89,8 +98,7 @@ glm::uvec2 Window::get_window_position() {
 void Window::set_window_position(glm::ivec2 pos) { glfwSetWindowPos(window_, pos.x, pos.y); }
 
 #ifdef __APPLE__
-#include "platform/apple/AppleWindow.hpp"
 std::unique_ptr<Window> create_platform_window() { return std::make_unique<AppleWindow>(); }
-#else
-static_assert(false, "Platform not supported");
 #endif
+
+}  // namespace TENG_NAMESPACE

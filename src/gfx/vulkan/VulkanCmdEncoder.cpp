@@ -2,6 +2,10 @@
 
 #include "gfx/vulkan/VulkanCommon.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx::vk {
 void VulkanCmdEncoder::begin_rendering(
     std::initializer_list<rhi::RenderingAttachmentInfo> /*attachments*/) {}
@@ -55,3 +59,5 @@ void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle /*src_buf*/, size_t
   exit(1);
 }
 }  // namespace gfx::vk
+
+} // namespace TENG_NAMESPACE

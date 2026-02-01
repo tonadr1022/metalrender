@@ -4,6 +4,10 @@
 #include "core/MathUtil.hpp"
 #include "glm/gtc/type_ptr.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace {
 
 TRS to_trs(const glm::mat4& transform) {
@@ -60,3 +64,5 @@ bool ModelInstance::update_transforms() {
 
   return dirty;
 }
+
+} // namespace TENG_NAMESPACE

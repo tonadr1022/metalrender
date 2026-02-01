@@ -2,6 +2,10 @@
 
 #include "GFXTypes.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace rhi {
 
 using AccessFlagsBits = uint64_t;
@@ -100,3 +104,5 @@ class CmdEncoder {
 };
 
 }  // namespace rhi
+
+} // namespace TENG_NAMESPACE

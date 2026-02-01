@@ -4,6 +4,10 @@
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/Config.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 class GPUFrameAllocator;
 namespace rhi {
 class Device;
@@ -61,3 +65,5 @@ void PerFrameBuffer<ElementT>::fill(const ElementT& data) {
       i) = data;
   }
 }
+
+} // namespace TENG_NAMESPACE

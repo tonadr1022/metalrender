@@ -3,6 +3,10 @@
 #include "hlsl/default_vertex.h"
 #include "hlsl/shared_mesh_data.h"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx {
 
 GeometryBatch::GeometryBatch(GeometryBatchType type, rhi::Device& device,
@@ -89,3 +93,5 @@ GeometryBatch::Stats GeometryBatch::get_stats() const {
 // }
 
 }  // namespace gfx
+
+} // namespace TENG_NAMESPACE

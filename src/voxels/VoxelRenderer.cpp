@@ -18,6 +18,10 @@
 #include "voxels/Types.hpp"
 #include "voxels/VoxelDB.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace vox {
 
 void vox::Renderer::upload_chunk(const ChunkUploadData& upload_data) {
@@ -241,3 +245,5 @@ void Renderer::on_imgui() {
 }
 
 }  // namespace vox
+
+} // namespace TENG_NAMESPACE

@@ -3,6 +3,10 @@
 #include "glm/gtc/quaternion.hpp"
 #include "glm/vec3.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace math {
 // Source:
 // https://github.com/zeux/niagara/blob/7fa51801abc258c3cb05e9a615091224f02e11cf/src/scene.cpp#L282
@@ -56,3 +60,5 @@ inline size_t get_mip_levels(size_t w, size_t h) {
 }
 
 }  // namespace math
+
+} // namespace TENG_NAMESPACE

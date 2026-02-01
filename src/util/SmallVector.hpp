@@ -53,6 +53,10 @@
 #include "absl/hash/internal/weakly_mixed_integer.h"
 #include "absl/memory/memory.h"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace absl {
 ABSL_NAMESPACE_BEGIN
 
@@ -499,3 +503,5 @@ ABSL_NAMESPACE_END
 }  // namespace absl
 
 #endif  // ABSL_CONTAINER_FIXED_ARRAY_H_
+
+} // namespace TENG_NAMESPACE

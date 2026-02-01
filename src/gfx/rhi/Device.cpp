@@ -2,15 +2,21 @@
 
 #include "core/Logger.hpp"  // IWYU pragma: keep
 
-extern std::unique_ptr<rhi::Device> create_vulkan_device();
 
 #ifdef METAL_BACKEND
 #include "gfx/metal/MetalDevice.hpp"
 #endif
 
 #ifdef VULKAN_BACKEND
+#include "core/Config.hpp"
 #include "gfx/vulkan/VulkanDevice.hpp"
+
+extern std::unique_ptr<rhi::Device> create_vulkan_device();
+
 #endif
+
+
+namespace TENG_NAMESPACE {
 
 namespace rhi {
 
@@ -36,3 +42,5 @@ std::unique_ptr<Device> create_device(GfxAPI api) {
 }
 
 }  // namespace rhi
+
+}  // namespace TENG_NAMESPACE

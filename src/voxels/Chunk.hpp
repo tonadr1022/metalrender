@@ -3,6 +3,10 @@
 #include "chunk_shaders_shared.h"
 #include "core/EAssert.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace vox {
 
 using VoxelId = uint8_t;
@@ -120,3 +124,5 @@ using PaddedChunkVoxArr = std::vector<VoxelId>;
 // void populate_mesh(const PaddedChunkVoxArr& voxels, ChunkUploadData& result);
 
 }  // namespace vox
+
+} // namespace TENG_NAMESPACE

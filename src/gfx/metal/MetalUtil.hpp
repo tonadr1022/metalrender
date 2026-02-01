@@ -7,11 +7,14 @@
 #include "Metal/MTLPixelFormat.hpp"
 #include "Metal/MTLResource.hpp"
 #include "Metal/MTLTexture.hpp"
+#include "core/Config.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
 namespace NS {
 class Error;
 }  // namespace NS
+
+namespace TENG_NAMESPACE {
 
 namespace mtl::util {
 
@@ -45,3 +48,5 @@ rhi::TextureFormat convert(MTL::PixelFormat format);
 MTL::Stages convert_stage(rhi::PipelineStage stage);
 
 }  // namespace mtl::util
+
+}  // namespace TENG_NAMESPACE

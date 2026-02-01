@@ -4,6 +4,10 @@
 
 #include "core/EAssert.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace util {
 
 class RollingAvgCtr {
@@ -27,3 +31,5 @@ class RollingAvgCtr {
 };
 
 }  // namespace util
+
+} // namespace TENG_NAMESPACE

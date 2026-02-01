@@ -5,6 +5,10 @@
 #include "gfx/BackedGPUAllocator.hpp"
 #include "offsetAllocator.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace rhi {
 class Device;
 }
@@ -85,3 +89,5 @@ struct GeometryBatch {
   uint32_t task_cmd_count{};
 };
 }  // namespace gfx
+
+} // namespace TENG_NAMESPACE

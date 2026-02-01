@@ -4,6 +4,10 @@
 
 #include "core/Logger.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 class Timer {
  public:
   Timer() { Start(); }
@@ -56,3 +60,5 @@ class PrintTimerMilli : public Timer {
   ~PrintTimerMilli() { Print(msg_); }
   const char* msg_{};
 };
+
+} // namespace TENG_NAMESPACE

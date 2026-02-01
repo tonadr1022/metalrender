@@ -3,6 +3,10 @@
 #include "gfx/Config.hpp"
 #include "gfx/Swapchain.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx::vk {
 
 class VulkanSwapchain : public rhi::Swapchain {
@@ -22,3 +26,5 @@ class VulkanSwapchain : public rhi::Swapchain {
 };
 
 }  // namespace gfx::vk
+
+} // namespace TENG_NAMESPACE

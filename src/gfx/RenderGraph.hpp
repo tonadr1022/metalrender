@@ -2,8 +2,11 @@
 
 #include <unordered_set>
 
+#include "core/Config.hpp"
 #include "core/Hash.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
+
+namespace TENG_NAMESPACE {
 
 namespace rhi {
 class Swapchain;
@@ -40,13 +43,9 @@ struct BufferInfo {
   }
 };
 
-}  // namespace gfx
-
-namespace std {
-
-template <>
-struct hash<gfx::AttachmentInfo> {
-  size_t operator()(const gfx::AttachmentInfo& att_info) const {
+// Custom hash functors defined in your own namespace
+struct AttachmentInfoHash {
+  size_t operator()(const AttachmentInfo& att_info) const {
     auto h = std::make_tuple((uint32_t)att_info.size_class, att_info.array_layers,
                              att_info.mip_levels, att_info.dims.x, att_info.dims.y,
                              (uint32_t)att_info.format, att_info.is_swapchain_tex);
@@ -54,15 +53,14 @@ struct hash<gfx::AttachmentInfo> {
   }
 };
 
-template <>
-struct hash<gfx::BufferInfo> {
-  size_t operator()(const gfx::BufferInfo& att_info) const {
-    auto h = std::make_tuple(att_info.size);
+struct BufferInfoHash {
+  size_t operator()(const BufferInfo& buff_info) const {
+    auto h = std::make_tuple(buff_info.size);
     return util::hash::tuple_hash<decltype(h)>{}(h);
   }
 };
 
-}  // namespace std
+}  // namespace gfx
 
 namespace gfx {
 
@@ -299,9 +297,10 @@ class RenderGraph {
   std::vector<rhi::TextureHandle> external_textures_;
   std::vector<rhi::BufferHandle> external_buffers_;
 
-  std::unordered_map<gfx::AttachmentInfo, std::vector<rhi::TextureHandle>> free_atts_;
-  std::unordered_map<gfx::BufferInfo, std::vector<rhi::BufferHandle>> free_bufs_;
-  std::unordered_map<gfx::BufferInfo, std::vector<rhi::BufferHandle>> history_free_bufs_;
+  std::unordered_map<AttachmentInfo, std::vector<rhi::TextureHandle>, AttachmentInfoHash>
+      free_atts_;
+  std::unordered_map<BufferInfo, std::vector<rhi::BufferHandle>, BufferInfoHash> free_bufs_;
+  std::unordered_map<BufferInfo, std::vector<rhi::BufferHandle>, BufferInfoHash> history_free_bufs_;
 
   struct BufferInfoAndHandle {
     BufferInfo buf_info;
@@ -324,3 +323,5 @@ class RenderGraph {
 using RGPass = RenderGraph::Pass;
 
 }  // namespace gfx
+
+}  // namespace TENG_NAMESPACE

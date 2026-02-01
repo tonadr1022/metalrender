@@ -2,6 +2,10 @@
 
 #include "gfx/Sampler.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx::vk {
 
 class VulkanSampler : public rhi::Sampler {
@@ -14,3 +18,5 @@ class VulkanSampler : public rhi::Sampler {
 };
 
 }  // namespace gfx::vk
+
+} // namespace TENG_NAMESPACE

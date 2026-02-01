@@ -2,6 +2,10 @@
 
 #include <cstdint>
 #include <string>
+
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
 namespace rhi {
 
 struct QueryPoolDesc {
@@ -12,3 +16,5 @@ struct QueryPoolDesc {
 class QueryPool {};
 
 }  // namespace rhi
+
+} // namespace TENG_NAMESPACE

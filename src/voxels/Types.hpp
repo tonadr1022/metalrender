@@ -3,6 +3,10 @@
 #include "chunk_shaders_shared.h"
 #include "core/Handle.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 class Chunk;
 using ChunkKey = glm::ivec3;
 using ChunkHandle = GenerationalHandle<Chunk>;
@@ -19,3 +23,5 @@ struct ChunkUploadData {
 
   std::array<PerLod, 6> lods{};
 };
+
+} // namespace TENG_NAMESPACE

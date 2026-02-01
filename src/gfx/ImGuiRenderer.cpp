@@ -15,6 +15,10 @@
 #include "hlsl/shared_imgui.h"
 #include "imgui.h"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx {
 
 ImGuiRenderer::ImGuiRenderer(ShaderManager& shader_mgr, rhi::Device* device) : device_(device) {
@@ -277,3 +281,5 @@ void ImGuiRenderer::destroy_texture(ImTextureData* im_tex) {
 }
 
 }  // namespace gfx
+
+} // namespace TENG_NAMESPACE

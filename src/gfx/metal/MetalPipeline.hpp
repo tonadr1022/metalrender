@@ -3,7 +3,10 @@
 #include <Metal/MTLComputePipeline.hpp>
 #include <Metal/MTLRenderPipeline.hpp>
 
+#include "core/Config.hpp"
 #include "gfx/rhi/Pipeline.hpp"
+
+namespace TENG_NAMESPACE {
 
 struct MetalPipeline final : rhi::Pipeline {
   MetalPipeline(MTL::RenderPipelineState* render_pso, const rhi::GraphicsPipelineCreateInfo& cinfo)
@@ -17,3 +20,5 @@ struct MetalPipeline final : rhi::Pipeline {
   MTL::ComputePipelineState* compute_pso;
   size_t render_target_info_hash;
 };
+
+}  // namespace TENG_NAMESPACE

@@ -2,6 +2,10 @@
 
 #include "gfx/rhi/GFXTypes.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 class Window;
 
 namespace rhi {
@@ -24,3 +28,5 @@ class Swapchain {
 };
 
 }  // namespace rhi
+
+} // namespace TENG_NAMESPACE

@@ -17,6 +17,8 @@
 #include "implot.h"
 #include "tracy/Tracy.hpp"
 
+using namespace teng;
+
 namespace {
 
 std::filesystem::path get_resource_dir() {

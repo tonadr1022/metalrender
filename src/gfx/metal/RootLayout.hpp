@@ -6,10 +6,14 @@
 #include <cstdint>
 
 #include "core/Util.hpp"
-#include "gfx/RendererTypes.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 #define IR_RUNTIME_METALCPP
 #include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
+
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
 
 constexpr size_t ROOT_CBV_COUNT = 3;
 constexpr size_t DESCRIPTOR_TABLE_CBV_COUNT = 9;
@@ -47,3 +51,5 @@ struct ResourceTable {
   IRDescriptorTableEntry srvs[ARRAY_SIZE(DescriptorBindingTable::SRV)];
   IRDescriptorTableEntry uavs[ARRAY_SIZE(DescriptorBindingTable::UAV)];
 };
+
+}  // namespace TENG_NAMESPACE

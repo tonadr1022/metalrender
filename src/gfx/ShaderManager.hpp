@@ -8,6 +8,10 @@
 
 #include "gfx/rhi/Pipeline.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace rhi {
 struct GraphicsPipelineCreateInfo;
 struct ShaderCreateInfo;
@@ -64,3 +68,5 @@ class ShaderManager {
 };
 
 }  // namespace gfx
+
+} // namespace TENG_NAMESPACE

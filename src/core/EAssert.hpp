@@ -3,6 +3,10 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 // Credit: ChatGPT 5.0 (I was too lazy)
 
 #define ALL_ASSERTS_ENABLED 1
@@ -43,3 +47,5 @@ class AlwaysAssert {
 #else
 #define ASSERT(expr, ...)
 #endif
+
+} // namespace TENG_NAMESPACE

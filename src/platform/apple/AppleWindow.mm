@@ -8,6 +8,10 @@
 #include <GLFW/glfw3native.h>
 #include <dispatch/dispatch.h>
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 void AppleWindow::init(InitInfo &init_info) {
   Window::init(init_info);
   NSView *ns_view = glfwGetCocoaView(window_);
@@ -43,3 +47,5 @@ void set_layer_for_window(GLFWwindow *window, CA::MetalLayer *layer) {
   ns_window.contentView.layer = (__bridge CAMetalLayer *)layer;
   ns_window.contentView.wantsLayer = YES;
 }
+
+} // namespace TENG_NAMESPACE

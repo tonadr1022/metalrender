@@ -8,6 +8,7 @@
 #include "GLFW/glfw3.h"
 #include "UI.hpp"
 #include "Window.hpp"
+#include "core/Config.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
 #include "core/MathUtil.hpp"
@@ -41,6 +42,8 @@
 #include "imgui_impl_glfw.h"
 #include "implot.h"
 #include "ktx.h"
+
+namespace TENG_NAMESPACE {
 
 using rhi::PipelineStage;
 
@@ -1297,3 +1300,4 @@ OffsetAllocator::Allocation InstanceMgr::allocate_instance_data(uint32_t element
 }
 
 }  // namespace gfx
+}  // namespace TENG_NAMESPACE

@@ -5,6 +5,10 @@
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/Device.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx {
 
 GPUFrameAllocator2::GPUFrameAllocator2(size_t size, rhi::Device* device) {
@@ -106,3 +110,5 @@ GPUFrameAllocator3::StagingBuffer GPUFrameAllocator3::create_staging_buffer(uint
 }
 
 }  // namespace gfx
+
+} // namespace TENG_NAMESPACE

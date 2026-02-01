@@ -2,6 +2,10 @@
 
 #include "GFXTypes.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx {
 
 uint32_t get_block_width_bytes(rhi::TextureFormat format);
@@ -28,3 +32,5 @@ class Texture {
 };
 
 }  // namespace rhi
+
+} // namespace TENG_NAMESPACE

@@ -2,6 +2,10 @@
 #include <functional>
 #include <tuple>
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 // src: https://github.com/JuanDiegoMontoya/Frogfood/blob/main/src/Fvog/detail/Hash2.h
 
 namespace util::hash {
@@ -37,3 +41,5 @@ struct tuple_hash<std::tuple<TT...>> {
   }
 };
 }  // namespace util::hash
+
+} // namespace TENG_NAMESPACE

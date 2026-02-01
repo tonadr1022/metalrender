@@ -306,6 +306,10 @@ typedef enum VkFormat {
 typedef unsigned __int32 VkFlags;
 #else
 #include <stdint.h>
+
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
 typedef uint64_t VkFlags64;
 #endif
 
@@ -314,3 +318,5 @@ typedef uint64_t VkFlags64;
 
 #endif /* _VKFORMAT_ENUM_H_ */
 // clang-format on
+
+} // namespace TENG_NAMESPACE

@@ -2,11 +2,21 @@
 
 #include <filesystem>
 
+#include "core/Config.hpp"
 #include "gfx/Device.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/metal/MetalBuffer.hpp"
 #include "voxels/Chunk.hpp"
 #include "voxels/Types.hpp"
+
+namespace MTL {
+class CommandBuffer;
+class RenderCommandEncoder;
+class RenderPipelineState;
+class Buffer;
+}  // namespace MTL
+
+namespace TENG_NAMESPACE {
 
 class RendererMetal;
 
@@ -17,13 +27,6 @@ struct Uniforms;
 namespace rhi {
 class Device;
 }
-
-namespace MTL {
-class CommandBuffer;
-class RenderCommandEncoder;
-class RenderPipelineState;
-class Buffer;
-}  // namespace MTL
 
 namespace vox {
 
@@ -71,3 +74,5 @@ class Renderer {
 };
 
 }  // namespace vox
+
+}  // namespace TENG_NAMESPACE

@@ -1,5 +1,9 @@
 #include "StringUtil.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 std::pair<std::string, std::string> core::split_string_at_first(const std::string& str,
                                                                 char delimiter) {
   size_t pos = str.find(delimiter);
@@ -8,3 +12,5 @@ std::pair<std::string, std::string> core::split_string_at_first(const std::strin
   }
   return {str.substr(0, pos), str.substr(pos + 1)};
 }
+
+} // namespace TENG_NAMESPACE

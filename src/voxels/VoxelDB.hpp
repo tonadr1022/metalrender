@@ -5,6 +5,10 @@
 
 #include "core/Math.hpp"  // IWYU pragma: keep
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace vox {
 
 class Renderer;
@@ -40,3 +44,5 @@ class VoxelDB {
 };
 
 }  // namespace vox
+
+} // namespace TENG_NAMESPACE

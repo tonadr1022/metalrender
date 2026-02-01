@@ -40,6 +40,10 @@ SOFTWARE.
 #include <vector>
 
 #include "chunk_shaders_shared.h"
+
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
 namespace greedy_mesher {
 
 struct MeshData {
@@ -103,3 +107,5 @@ static inline uint64_t getQuad(uint64_t x, uint64_t y, uint64_t z, uint64_t w, u
 
 }  // namespace greedy_mesher
 #endif  // MESHER_H
+
+} // namespace TENG_NAMESPACE

@@ -15,6 +15,10 @@
 #include "gfx/vulkan/VulkanCommon.hpp"
 #include "vulkan/vulkan_core.h"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 namespace gfx::vk {
 
 namespace {
@@ -519,3 +523,5 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
 }
 
 }  // namespace gfx::vk
+
+} // namespace TENG_NAMESPACE

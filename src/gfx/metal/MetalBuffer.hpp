@@ -1,11 +1,14 @@
 #pragma once
 
+#include "core/Config.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
 namespace MTL {
 class Buffer;
 }
+
+namespace TENG_NAMESPACE {
 
 class MetalBuffer final : public rhi::Buffer {
  public:
@@ -23,3 +26,5 @@ class MetalBuffer final : public rhi::Buffer {
  private:
   [[maybe_unused]] MTL::Buffer* buffer_{};
 };
+
+}  // namespace TENG_NAMESPACE

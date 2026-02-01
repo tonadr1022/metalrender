@@ -4,6 +4,10 @@
 
 #include "gfx/renderer/BufferResize.hpp"
 
+#include "core/Config.hpp"
+
+namespace TENG_NAMESPACE {
+
 gfx::BackedGPUAllocator::BackedGPUAllocator(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr,
                                             const rhi::BufferDesc& buffer_desc,
                                             size_t bytes_per_element)
@@ -59,3 +63,5 @@ void gfx::BackedGPUAllocator::free(OffsetAllocator::Allocation alloc) {
     allocator_.free(alloc);
   }
 }
+
+} // namespace TENG_NAMESPACE
