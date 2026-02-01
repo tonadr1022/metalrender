@@ -43,9 +43,9 @@
 #include "ktx.h"
 
 using rhi::PipelineStage;
+
 namespace {
 
-using rhi::RenderingAttachmentInfo;
 using rhi::ShaderType;
 
 glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
@@ -73,7 +73,23 @@ namespace gfx {
 
 void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   ZoneScoped;
-  curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
+  {
+    if (frame_num_ >= device_->get_info().frames_in_flight) {
+      // 3 frames in flight ago is ready to be read back to the cpu, since we waited on fence for
+      // it.
+      uint64_t timestamps[k_query_count]{};
+      device_->resolve_query_data(query_pools_[curr_frame_idx_].handle, 0, k_query_count,
+                                  timestamps);
+      if (timestamps[0] != 0 && timestamps[1] != 0 && timestamps[1] > timestamps[0]) {
+        auto ms_per_tick = (1.0 / device_->get_info().timestamp_frequency) * 1000.0;
+        auto delta_ticks = timestamps[1] - timestamps[0];
+        auto delta_ms = delta_ticks * ms_per_tick;
+        stats_.gpu_frame_time_last_ms = delta_ms;
+        avg_gpu_frame_time_ = glm::mix(avg_gpu_frame_time_, stats_.gpu_frame_time_last_ms, 0.05f);
+      }
+    }
+  }
+
   frame_gpu_upload_allocator_.reset(curr_frame_idx_);
   shader_mgr_->replace_dirty_pipelines();
 
@@ -113,6 +129,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   device_->submit_frame();
 
   frame_num_++;
+  curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
 }
 
 uint32_t MemeRenderer123::get_bindless_idx(const rhi::BufferHandleHolder& buf) const {
@@ -216,6 +233,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     auto& p = rg_.add_transfer_pass("clear_out_counts_buf");
     p.w_external_buf(out_counts_buf_name, out_counts_buf_[curr_frame_idx_].handle);
     p.set_ex([this](rhi::CmdEncoder* enc) {
+      enc->write_timestamp(get_query_pool(), 0);
       enc->fill_buffer(out_counts_buf_[curr_frame_idx_].handle, 0, sizeof(MeshletDrawStats), 0);
     });
   }
@@ -279,8 +297,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       auto gbuffer_a_tex = rg_.get_att_img(rg_gbuffer_a_handle);
       auto load_op = late ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
       enc->begin_rendering({
-          RenderingAttachmentInfo::color_att(gbuffer_a_tex, load_op, {.color = args.clear_color}),
-          RenderingAttachmentInfo::depth_stencil_att(
+          rhi::RenderingAttachmentInfo::color_att(gbuffer_a_tex, load_op,
+                                                  {.color = args.clear_color}),
+          rhi::RenderingAttachmentInfo::depth_stencil_att(
               depth_handle, load_op, {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
       });
       enc->set_depth_stencil_state(reverse_z_ ? rhi::CompareOp::Greater : rhi::CompareOp::Less,
@@ -451,6 +470,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                                 curr_frame_idx_);
       }
       enc->end_rendering();
+      enc->write_timestamp(get_query_pool(), 1);
     });
   }
 }
@@ -909,7 +929,8 @@ void MemeRenderer123::on_imgui() {
     ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
                 stats_.total_instance_vertices, stats_.total_instances);
     ImGui::Text("Total total instance meshlets: %d", stats_.total_instance_meshlets);
-    ImGui::Text("GPU Frame Time MS %.3f", gpu_frame_time_last_ms_);
+    ImGui::Text("GPU Frame Time MS %.3f AVG: %.3f", stats_.gpu_frame_time_last_ms,
+                avg_gpu_frame_time_);
 
     MeshletDrawStats stats{};
     constexpr int frames_ago = 2;
@@ -1237,12 +1258,11 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
 
   for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
     query_pools_[i] = device_->create_query_pool_h(
-        rhi::QueryPoolDesc{.count = k_query_count, .name = "my_query_pool_" + std::to_string(i)});
-    query_resolve_bufs_[i] = device_->create_buf_h(rhi::BufferDesc{
-        .storage_mode = rhi::StorageMode::CPUAndGPU,
-        .size = sizeof(uint64_t) * k_query_count,
-        .name = "query_resolve_buf",
-    });
+        rhi::QueryPoolDesc{.count = k_query_count, .name = "query_pool_[i]"});
+    query_resolve_bufs_[curr_frame_idx_] =
+        device_->create_buf_h({.storage_mode = rhi::StorageMode::CPUAndGPU,
+                               .size = sizeof(uint64_t) * k_query_count,
+                               .name = "query"});
   }
 }
 

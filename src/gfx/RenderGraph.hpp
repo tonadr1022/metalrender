@@ -263,6 +263,10 @@ class RenderGraph {
   // end usually called by Pass
 
   AttachmentInfo* get_tex_att_info(RGResourceHandle handle);
+  rhi::BufferHandle get_external_buf(RGResourceHandle handle) {
+    ASSERT(handle.type == RGResourceType::ExternalBuffer);
+    return external_buffers_[handle.idx];
+  }
 
   void find_deps_recursive(uint32_t pass_i, uint32_t stack_size);
   static void dfs(const std::vector<std::unordered_set<uint32_t>>& pass_dependencies,

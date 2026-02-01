@@ -159,7 +159,7 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 
   info_.frames_in_flight = std::clamp<size_t>(init_info.frames_in_flight, k_min_frames_in_flight,
                                               k_max_frames_in_flight);
-  info_.timestamp_period = 1.f / device_->queryTimestampFrequency();
+  info_.timestamp_frequency = device_->queryTimestampFrequency();
 
   {  // residency set
     auto desc = NS::TransferPtr(MTL::ResidencySetDescriptor::alloc()->init());
@@ -178,11 +178,8 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
     NS::Error* err{};
     {
       MTL4::CompilerDescriptor* compiler_desc = MTL4::CompilerDescriptor::alloc()->init();
-      mtl4_resources_->shader_compiler = device_->newCompiler(compiler_desc, &err);
+      m4res().shader_compiler = device_->newCompiler(compiler_desc, &err);
       compiler_desc->release();
-    }
-    for (size_t i = 0; i < frames_in_flight(); i++) {
-      mtl4_resources_->cmd_allocators[i] = device_->newCommandAllocator();
     }
     auto init_queue = [this](Queue& queue) {
       queue.queue = NS::TransferPtr(device_->newMTL4CommandQueue());
@@ -190,11 +187,11 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
     };
     init_queue(get_queue(rhi::QueueType::Graphics));
 
-    mtl4_resources_->cmd_lists_.reserve(20);
+    m4res().cmd_encoders_.reserve(20);
   } else {
     mtl3_resources_.emplace(MTL3_Resources{});
-    mtl3_resources_->main_cmd_q = device_->newCommandQueue();
-    mtl3_resources_->cmd_lists_.reserve(20);
+    m3res().main_cmd_q = device_->newCommandQueue();
+    m3res().cmd_lists_.reserve(20);
   }
 
   push_constant_allocator_.emplace(1024ul * 1024, this, frames_in_flight());
@@ -237,14 +234,11 @@ void MetalDevice::shutdown() {
   test_allocator_.reset();
 
   if (mtl4_enabled_) {
-    for (size_t i = 0; i < frames_in_flight(); i++) {
-      mtl4_resources_->cmd_allocators[i]->release();
-    }
-    mtl4_resources_->shader_compiler->release();
+    m4res().shader_compiler->release();
     mtl4_resources_.reset();
   } else {
-    mtl3_resources_->main_cmd_q->release();
-    mtl3_resources_->cmd_lists_.clear();
+    m3res().main_cmd_q->release();
+    m3res().cmd_lists_.clear();
   }
 
   delete_queues_.flush_deletions(SIZE_T_MAX);
@@ -395,12 +389,7 @@ void MetalDevice::destroy(rhi::SamplerHandle handle) {
   }
 }
 
-void MetalDevice::destroy(rhi::QueryPoolHandle handle) {
-  auto* p = querypool_pool_.get(handle);
-  if (p) {
-    p->heap_->release();
-  }
-}
+void MetalDevice::destroy(rhi::QueryPoolHandle) {}
 
 void MetalDevice::destroy(rhi::SwapchainHandle) {}
 
@@ -559,14 +548,14 @@ MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path, 
 
 rhi::CmdEncoder* MetalDevice::begin_cmd_encoder() {
   if (mtl4_enabled_) {
-    if (curr_cmd_list_idx_ == mtl4_resources_->cmd_lists_.size()) {
-      mtl4_resources_->cmd_lists_.emplace_back(std::make_unique<Metal4CmdEncoder>());
-      mtl4_resources_->cmd_list_res_.emplace_back();
+    if (curr_cmd_list_idx_ == m4res().cmd_encoders_.size()) {
+      m4res().cmd_encoders_.emplace_back(std::make_unique<Metal4CmdEncoder>());
+      m4res().cmd_list_resources_.emplace_back();
     }
-    ASSERT(curr_cmd_list_idx_ < mtl4_resources_->cmd_lists_.size());
-    auto* cmd_list = mtl4_resources_->cmd_lists_[curr_cmd_list_idx_].get();
-    ASSERT(curr_cmd_list_idx_ < mtl4_resources_->cmd_list_res_.size());
-    auto& res = mtl4_resources_->cmd_list_res_[curr_cmd_list_idx_];
+    ASSERT(curr_cmd_list_idx_ < m4res().cmd_encoders_.size());
+    auto* cmd_list = m4res().cmd_encoders_[curr_cmd_list_idx_].get();
+    ASSERT(curr_cmd_list_idx_ < m4res().cmd_list_resources_.size());
+    auto& res = m4res().cmd_list_resources_[curr_cmd_list_idx_];
     if (!res.cmd_allocators[frame_idx()]) {
       res.cmd_allocators[frame_idx()] = NS::TransferPtr(device_->newCommandAllocator());
     }
@@ -580,17 +569,17 @@ rhi::CmdEncoder* MetalDevice::begin_cmd_encoder() {
     cmd_list->done_ = false;
     cmd_list->presents_.clear();
     cmd_list->queue_ = rhi::QueueType::Graphics;
-    return mtl4_resources_->cmd_lists_[curr_cmd_list_idx_ - 1].get();
+    return m4res().cmd_encoders_[curr_cmd_list_idx_ - 1].get();
   }
 
   // MTL3 path
-  if (curr_cmd_list_idx_ >= mtl3_resources_->cmd_lists_.size()) {
-    mtl3_resources_->cmd_lists_.emplace_back(std::make_unique<Metal3CmdEncoder>());
+  if (curr_cmd_list_idx_ >= m3res().cmd_lists_.size()) {
+    m3res().cmd_lists_.emplace_back(std::make_unique<Metal3CmdEncoder>());
   }
-  ASSERT(curr_cmd_list_idx_ < mtl3_resources_->cmd_lists_.size());
-  auto* ret = (Metal3CmdEncoder*)mtl3_resources_->cmd_lists_[curr_cmd_list_idx_].get();
+  ASSERT(curr_cmd_list_idx_ < m3res().cmd_lists_.size());
+  auto* ret = (Metal3CmdEncoder*)m3res().cmd_lists_[curr_cmd_list_idx_].get();
   ret->reset(this);
-  ret->m3_state().cmd_buf = mtl3_resources_->main_cmd_buf;
+  ret->m3_state().cmd_buf = m3res().main_cmd_buf;
   curr_cmd_list_idx_++;
 
   return ret;
@@ -607,7 +596,7 @@ void MetalDevice::submit_frame() {
   if (mtl4_enabled_) {
     // wait for presents to be ready
     for (size_t cmd_list_i = 0; cmd_list_i < curr_cmd_list_idx_; cmd_list_i++) {
-      auto* list = mtl4_resources_->cmd_lists_[cmd_list_i].get();
+      auto* list = m4res().cmd_encoders_[cmd_list_i].get();
       for (auto& present : list->presents_) {
         queues_[(int)list->queue_].queue->wait(present.get());
       }
@@ -633,7 +622,7 @@ void MetalDevice::submit_frame() {
 
     // presents
     for (size_t cmd_list_i = 0; cmd_list_i < curr_cmd_list_idx_; cmd_list_i++) {
-      auto* list = mtl4_resources_->cmd_lists_[cmd_list_i].get();
+      auto* list = m4res().cmd_encoders_[cmd_list_i].get();
       for (auto& present : list->presents_) {
         auto& queue = get_queue(list->queue_);
         queue.queue->signalDrawable(present.get());
@@ -696,7 +685,7 @@ MTL::ComputePipelineState* MetalDevice::compile_mtl_compute_pipeline(
     func_desc->setLibrary(lib);
     desc->setComputeFunctionDescriptor(func_desc);
     NS::Error* err{};
-    auto* pso = mtl4_resources_->shader_compiler->newComputePipelineState(desc, nullptr, &err);
+    auto* pso = m4res().shader_compiler->newComputePipelineState(desc, nullptr, &err);
     if (err) {
       LERROR("Failed to create compute pipeline {}", mtl::util::get_err_string(err));
     }
@@ -955,7 +944,7 @@ MTL::RenderPipelineState* MetalDevice::create_graphics_pipeline_internal(
             cinfo.blend.attachments[i].enable ? MTL4::BlendStateEnabled : MTL4::BlendStateDisabled);
       }
       desc->setSupportIndirectCommandBuffers(MTL4::IndirectCommandBufferSupportStateEnabled);
-      return mtl4_resources_->shader_compiler->newRenderPipelineState(desc, nullptr, err);
+      return m4res().shader_compiler->newRenderPipelineState(desc, nullptr, err);
     };
 
     if (!is_vertex_pipeline) {
@@ -1110,7 +1099,7 @@ rhi::QueryPoolHandle MetalDevice::create_query_pool(const rhi::QueryPoolDesc& de
   heap_desc->setCount(desc.count);
   heap_desc->setType(MTL4::CounterHeapTypeTimestamp);
   NS::Error* err{};
-  MTL4::CounterHeap* pool = device_->newCounterHeap(heap_desc, &err);
+  auto pool = NS::TransferPtr(device_->newCounterHeap(heap_desc, &err));
   if (!desc.name.empty()) {
     pool->setLabel(mtl::util::string(desc.name));
   }
@@ -1140,13 +1129,12 @@ void MetalDevice::resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t s
   NS::Data* resolved_query_data =
       pool->heap_->resolveCounterRange(NS::Range::Make(start_query, query_count));
   ASSERT(resolved_query_data);
-  ASSERT(resolved_query_data->length() == out_timestamps.size_bytes());
   // objc runtime directly to call -bytes(), since NS::Data binding only has mutableBytes().
-  const void* data = ((const void* (*)(id, SEL))objc_msgSend)((__bridge id)resolved_query_data,
-                                                              sel_registerName("bytes"));
+  const void* data = [(__bridge NSData*)resolved_query_data bytes];
   ASSERT(data);
   ASSERT(out_timestamps.size_bytes() >= resolved_query_data->length());
   memcpy(out_timestamps.data(), data, resolved_query_data->length());
+  pool->heap_->invalidateCounterRange(NS::Range::Make(start_query, query_count));
 }
 
 void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc) {
