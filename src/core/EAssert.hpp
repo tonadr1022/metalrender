@@ -48,4 +48,4 @@ class AlwaysAssert {
 #define ASSERT(expr, ...)
 #endif
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

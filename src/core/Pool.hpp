@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "EAssert.hpp"
-
 #include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
@@ -326,4 +325,4 @@ struct Holder {
   }
 };
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

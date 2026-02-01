@@ -1,9 +1,8 @@
 #pragma once
 
+#include "core/Config.hpp"
 #include "gfx/Texture.hpp"
 #include "gfx/vulkan/VMAWrapper.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -30,4 +29,4 @@ class VulkanTexture : public rhi::Texture {
 
 }  // namespace gfx::vk
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

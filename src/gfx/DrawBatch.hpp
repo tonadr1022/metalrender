@@ -2,10 +2,9 @@
 
 #include <cstdint>
 
+#include "core/Config.hpp"
 #include "gfx/BackedGPUAllocator.hpp"
 #include "offsetAllocator.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -90,4 +89,4 @@ struct GeometryBatch {
 };
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

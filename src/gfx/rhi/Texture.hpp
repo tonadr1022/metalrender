@@ -1,7 +1,6 @@
 #pragma once
 
 #include "GFXTypes.hpp"
-
 #include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
@@ -33,4 +32,4 @@ class Texture {
 
 }  // namespace rhi
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

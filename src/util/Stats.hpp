@@ -2,9 +2,8 @@
 
 #include <vector>
 
-#include "core/EAssert.hpp"
-
 #include "core/Config.hpp"
+#include "core/EAssert.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -32,4 +31,4 @@ class RollingAvgCtr {
 
 }  // namespace util
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

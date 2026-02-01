@@ -1,8 +1,7 @@
 #pragma once
 
-#include "gfx/Sampler.hpp"
-
 #include "core/Config.hpp"
+#include "gfx/Sampler.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -19,4 +18,4 @@ class VulkanSampler : public rhi::Sampler {
 
 }  // namespace gfx::vk
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

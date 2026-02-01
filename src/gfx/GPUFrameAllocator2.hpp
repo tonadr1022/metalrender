@@ -1,9 +1,8 @@
 #pragma once
 
+#include "core/Config.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -71,4 +70,4 @@ struct GPUFrameAllocator3 {
 
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

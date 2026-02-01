@@ -42,4 +42,4 @@ struct tuple_hash<std::tuple<TT...>> {
 };
 }  // namespace util::hash
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

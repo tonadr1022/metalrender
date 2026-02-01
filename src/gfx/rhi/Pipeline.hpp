@@ -2,10 +2,9 @@
 
 #include <utility>
 
+#include "core/Config.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "small_vector/small_vector.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -127,4 +126,4 @@ class Pipeline {
 
 }  // namespace rhi
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

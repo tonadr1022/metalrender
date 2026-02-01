@@ -2,9 +2,8 @@
 
 #include <chrono>
 
-#include "core/Logger.hpp"
-
 #include "core/Config.hpp"
+#include "core/Logger.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -61,4 +60,4 @@ class PrintTimerMilli : public Timer {
   const char* msg_{};
 };
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

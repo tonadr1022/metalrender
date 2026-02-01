@@ -319,4 +319,4 @@ typedef uint64_t VkFlags64;
 #endif /* _VKFORMAT_ENUM_H_ */
 // clang-format on
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

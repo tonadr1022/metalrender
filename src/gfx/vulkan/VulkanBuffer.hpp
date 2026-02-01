@@ -2,10 +2,9 @@
 
 #include <volk.h>
 
+#include "core/Config.hpp"
 #include "gfx/Buffer.hpp"
 #include "gfx/vulkan/VMAWrapper.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -30,4 +29,4 @@ class VulkanBuffer final : public rhi::Buffer {
 
 }  // namespace gfx::vk
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

@@ -3,12 +3,11 @@
 #include <filesystem>
 #include <glm/mat4x4.hpp>
 
+#include "core/Config.hpp"
 #include "core/Handle.hpp"
 #include "core/Pool.hpp"
 #include "gfx/ModelInstance.hpp"
 #include "gfx/RendererTypes.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -74,4 +73,4 @@ class ResourceManager {
   bool should_release_unused_models_{};
 };
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

@@ -2,9 +2,8 @@
 
 #include <volk.h>
 
-#include "gfx/CmdEncoder.hpp"
-
 #include "core/Config.hpp"
+#include "gfx/CmdEncoder.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -69,4 +68,4 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
 
 }  // namespace gfx::vk
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

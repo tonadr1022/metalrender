@@ -12,9 +12,8 @@
 #include "voxels/VoxelDB.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "concurrentqueue.h"
-#include "glm/gtx/hash.hpp"  // IWYU pragma: keep
-
 #include "core/Config.hpp"
+#include "glm/gtx/hash.hpp"  // IWYU pragma: keep
 
 namespace TENG_NAMESPACE {
 
@@ -134,4 +133,4 @@ class World {
 
 }  // namespace vox
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

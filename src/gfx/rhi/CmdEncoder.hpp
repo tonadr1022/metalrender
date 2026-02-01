@@ -1,7 +1,6 @@
 #pragma once
 
 #include "GFXTypes.hpp"
-
 #include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
@@ -105,4 +104,4 @@ class CmdEncoder {
 
 }  // namespace rhi
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

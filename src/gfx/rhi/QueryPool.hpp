@@ -17,4 +17,4 @@ class QueryPool {};
 
 }  // namespace rhi
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

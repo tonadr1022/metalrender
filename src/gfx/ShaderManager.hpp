@@ -6,9 +6,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include "gfx/rhi/Pipeline.hpp"
-
 #include "core/Config.hpp"
+#include "gfx/rhi/Pipeline.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -69,4 +68,4 @@ class ShaderManager {
 
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

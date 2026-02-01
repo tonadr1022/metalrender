@@ -1,9 +1,8 @@
 #pragma once
 
+#include "core/Config.hpp"
 #include "core/Handle.hpp"
 #include "core/Math.hpp"  // IWYU pragma: keep
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -18,4 +17,4 @@ using UntypedDeleterFuncPtr = void (*)(void*);
 struct ModelInstance;
 using ModelHandle = GenerationalHandle<ModelInstance>;
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

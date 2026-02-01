@@ -1,6 +1,6 @@
 #pragma once
 
-#include <print>
+#include <print>  // IWYU pragma: keep
 
 #include "core/Config.hpp"
 
@@ -13,4 +13,4 @@ namespace TENG_NAMESPACE {
 #define LCRITICAL(...) std::println("[critical] " __VA_ARGS__)
 #define LDEBUG(...) std::println("[debug]   " __VA_ARGS__)
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

@@ -26,4 +26,4 @@ void print_vk_error(size_t x, bool exit_prog = false);
   } while (0)
 #endif
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

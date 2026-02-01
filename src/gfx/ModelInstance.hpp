@@ -41,4 +41,4 @@ struct ModelInstance {
   bool update_transforms();
 };
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

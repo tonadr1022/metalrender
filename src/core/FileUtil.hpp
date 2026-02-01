@@ -12,4 +12,4 @@ std::string load_file_to_string(const std::filesystem::path &path);
 
 }  // namespace util
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

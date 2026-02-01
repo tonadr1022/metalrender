@@ -6,6 +6,4 @@
 
 #include "core/Config.hpp"
 
-namespace TENG_NAMESPACE {
-
-} // namespace TENG_NAMESPACE
+namespace TENG_NAMESPACE {}  // namespace TENG_NAMESPACE

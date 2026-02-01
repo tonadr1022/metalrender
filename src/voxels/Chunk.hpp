@@ -1,9 +1,8 @@
 #pragma once
 
 #include "chunk_shaders_shared.h"
-#include "core/EAssert.hpp"
-
 #include "core/Config.hpp"
+#include "core/EAssert.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -125,4 +124,4 @@ using PaddedChunkVoxArr = std::vector<VoxelId>;
 
 }  // namespace vox
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

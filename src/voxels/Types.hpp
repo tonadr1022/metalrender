@@ -1,9 +1,8 @@
 #pragma once
 
 #include "chunk_shaders_shared.h"
-#include "core/Handle.hpp"
-
 #include "core/Config.hpp"
+#include "core/Handle.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -24,4 +23,4 @@ struct ChunkUploadData {
   std::array<PerLod, 6> lods{};
 };
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

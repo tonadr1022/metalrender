@@ -52,7 +52,6 @@
 #include "absl/container/internal/compressed_tuple.h"
 #include "absl/hash/internal/weakly_mixed_integer.h"
 #include "absl/memory/memory.h"
-
 #include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
@@ -504,4 +503,4 @@ ABSL_NAMESPACE_END
 
 #endif  // ABSL_CONTAINER_FIXED_ARRAY_H_
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

@@ -1,8 +1,7 @@
 #pragma once
 
-#include "gfx/rhi/GFXTypes.hpp"
-
 #include "core/Config.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -38,4 +37,4 @@ struct BufferCopyMgr {
 
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

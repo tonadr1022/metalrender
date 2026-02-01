@@ -2,9 +2,8 @@
 
 #include <filesystem>
 
-#include "gfx/rhi/GFXTypes.hpp"
-
 #include "core/Config.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -15,4 +14,4 @@ class PipelineManager {
   void shutdown();
 };
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

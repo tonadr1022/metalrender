@@ -3,9 +3,8 @@
 #include <filesystem>
 #include <vector>
 
-#include "core/Math.hpp"  // IWYU pragma: keep
-
 #include "core/Config.hpp"
+#include "core/Math.hpp"  // IWYU pragma: keep
 
 namespace TENG_NAMESPACE {
 
@@ -45,4 +44,4 @@ class VoxelDB {
 
 }  // namespace vox
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

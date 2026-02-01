@@ -1,8 +1,7 @@
 #pragma once
 
-#include "gfx/Pipeline.hpp"
-
 #include "core/Config.hpp"
+#include "gfx/Pipeline.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -16,4 +15,4 @@ class VulkanPipeline : public rhi::Pipeline {
 
 }  // namespace gfx::vk
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

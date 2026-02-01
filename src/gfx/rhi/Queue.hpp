@@ -30,4 +30,4 @@ inline const char* to_string(QueueType type) {
 
 }  // namespace rhi
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

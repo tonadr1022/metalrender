@@ -3,9 +3,8 @@
 #include <FastNoise/Generators/Fractal.h>
 #include <FastNoise/SmartNode.h>
 
-#include "core/Math.hpp"
-
 #include "core/Config.hpp"
+#include "core/Math.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -26,4 +25,4 @@ class TerrainGenerator {
 
 }  // namespace vox
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

@@ -14,4 +14,4 @@ class ThreadPool {
   }
 };
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

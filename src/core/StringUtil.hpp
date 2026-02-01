@@ -12,4 +12,4 @@ std::pair<std::string, std::string> split_string_at_first(const std::string& str
 
 }  // namespace core
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

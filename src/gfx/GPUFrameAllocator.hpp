@@ -1,10 +1,9 @@
 #pragma once
 
 #include "core/BitUtil.hpp"
+#include "core/Config.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/Config.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -66,4 +65,4 @@ void PerFrameBuffer<ElementT>::fill(const ElementT& data) {
   }
 }
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

@@ -1,9 +1,8 @@
 #pragma once
 
+#include "core/Config.hpp"
 #include "gfx/Config.hpp"
 #include "gfx/Swapchain.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -27,4 +26,4 @@ class VulkanSwapchain : public rhi::Swapchain {
 
 }  // namespace gfx::vk
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

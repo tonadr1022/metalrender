@@ -4,6 +4,7 @@
 #include <span>
 
 #include "ImGuiRenderer.hpp"
+#include "core/Config.hpp"
 #include "core/Math.hpp"  // IWYU pragma: keep
 #include "gfx/BackedGPUAllocator.hpp"
 #include "gfx/DrawBatch.hpp"
@@ -20,8 +21,6 @@
 #include "hlsl/shared_globals.h"
 #include "hlsl/shared_instance_data.h"
 #include "offsetAllocator.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -300,4 +299,4 @@ class MemeRenderer123 {
 
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

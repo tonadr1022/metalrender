@@ -18,4 +18,4 @@ constexpr size_t align_divide_up(size_t n, size_t alignment) {
   return (n + alignment - 1) / alignment;
 }
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

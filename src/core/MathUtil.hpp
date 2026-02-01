@@ -1,9 +1,8 @@
 #pragma once
 
+#include "core/Config.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "glm/vec3.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -61,4 +60,4 @@ inline size_t get_mip_levels(size_t w, size_t h) {
 
 }  // namespace math
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

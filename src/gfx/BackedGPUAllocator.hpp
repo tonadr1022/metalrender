@@ -2,10 +2,9 @@
 
 #include <offsetAllocator.hpp>
 
+#include "core/Config.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/Device.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -52,4 +51,4 @@ class BackedGPUAllocator {
 
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

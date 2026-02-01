@@ -4,6 +4,7 @@
 
 #include "VMAWrapper.hpp"
 #include "VkBootstrap.h"
+#include "core/Config.hpp"
 #include "gfx/Config.hpp"
 #include "gfx/Device.hpp"
 #include "gfx/GFXTypes.hpp"
@@ -13,8 +14,6 @@
 #include "gfx/vulkan/VulkanSampler.hpp"
 #include "gfx/vulkan/VulkanSwapchain.hpp"
 #include "gfx/vulkan/VulkanTexture.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -142,4 +141,4 @@ class VulkanDevice : public rhi::Device {
 
 }  // namespace gfx::vk
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE
