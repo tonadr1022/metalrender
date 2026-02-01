@@ -516,9 +516,16 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
 void VulkanDevice::submit_frame() {}
 
 rhi::SwapchainHandle VulkanDevice::create_swapchain(const rhi::SwapchainDesc& desc) {
-  auto handle = swapchain_pool_.alloc();
+  VkSurfaceKHR surface{};
+  glfwCreateWindowSurface(instance_, desc.window->get_handle(), nullptr, &surface);
+  ASSERT(surface);
+  auto handle = swapchain_pool_.alloc(surface);
   auto* swapchain = (VulkanSwapchain*)get_swapchain(handle);
-  glfwCreateWindowSurface(instance_, desc.window->get_handle(), nullptr, &swapchain->surface_);
+  swapchain->desc_ = desc;
+  // swapchain images
+  //
+  // swapchain image views.
+
   ASSERT(swapchain->surface_);
   return handle;
 }
