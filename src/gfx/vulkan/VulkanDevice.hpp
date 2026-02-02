@@ -1,6 +1,6 @@
 #pragma once
 
-#include <volk.h>
+#include <vulkan/vulkan_core.h>
 
 #include "VMAWrapper.hpp"
 #include "VkBootstrap.h"
@@ -11,6 +11,7 @@
 #include "gfx/rhi/Queue.hpp"
 #include "gfx/vulkan/VulkanBuffer.hpp"
 #include "gfx/vulkan/VulkanCmdEncoder.hpp"
+#include "gfx/vulkan/VulkanDeleteQueue.hpp"
 #include "gfx/vulkan/VulkanPipeline.hpp"
 #include "gfx/vulkan/VulkanSampler.hpp"
 #include "gfx/vulkan/VulkanSwapchain.hpp"
@@ -104,6 +105,13 @@ class VulkanDevice : public rhi::Device {
   [[nodiscard]] void* get_native_device() const override { return nullptr; }
 
  private:
+  size_t frame_idx() const { return frame_num_ % info_.frames_in_flight; }
+  // TODO: doesn't handle arrays.
+  VkImageView create_img_view(VulkanTexture& img, VkImageViewType type,
+                              const VkImageSubresourceRange& subresource_range);
+  void set_vk_debug_name(VkObjectType object_type, uint64_t object_handle, const char* name);
+  VkSemaphore create_semaphore(const char* name = nullptr);
+
   struct Queue {
     VkQueue queue;
     uint32_t family_idx;
@@ -123,6 +131,7 @@ class VulkanDevice : public rhi::Device {
   BlockPool<rhi::PipelineHandle, VulkanPipeline> pipeline_pool_{20, 1, true};
   BlockPool<rhi::SamplerHandle, VulkanSampler> sampler_pool_{16, 1, true};
   BlockPool<rhi::SwapchainHandle, VulkanSwapchain> swapchain_pool_{16, 1, true};
+  DeleteQueue del_q_{};
   VkCommandPool command_pools_[k_max_frames_in_flight];
   vkb::Instance vkb_inst_;
   vkb::Device vkb_device_;
@@ -138,12 +147,11 @@ class VulkanDevice : public rhi::Device {
   size_t curr_cmd_encoder_i_{};
   VmaAllocator allocator_;
   size_t frame_num_{};
-  size_t frame_idx() const { return frame_num_ % info_.frames_in_flight; }
-  // TODO: doesn't handle arrays.
-  VkImageView create_img_view(VulkanTexture& img, VkImageViewType type,
-                              const VkImageSubresourceRange& subresource_range);
-  void set_vk_debug_name(VkObjectType object_type, uint64_t object_handle, const char* name);
-  VkSemaphore create_semaphore(const char* name = nullptr);
+  template <typename T>
+  struct DeleteQueueEntry {
+    T obj;
+    size_t frame_to_delete;
+  };
 };
 
 }  // namespace gfx::vk

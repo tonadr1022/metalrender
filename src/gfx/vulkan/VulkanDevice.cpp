@@ -7,6 +7,7 @@
 // clang-format on
 
 #include "VMAWrapper.hpp"  // IWYU pragma: keep
+#include "VulkanDeleteQueue.hpp"
 #include "Window.hpp"
 #include "core/Config.hpp"
 #include "core/EAssert.hpp"
@@ -177,6 +178,15 @@ void check_vkb_result(const char* err_msg, const auto& vkb_result) {
 
 void VulkanDevice::shutdown() {
   vkDeviceWaitIdle(device_);
+
+  del_q_.flush(SIZE_T_MAX);
+
+  for (auto& frame_fence : frame_fences_) {
+    for (size_t frame_i = 0; frame_i < info_.frames_in_flight; frame_i++) {
+      vkDestroyFence(device_, frame_fence[frame_i], nullptr);
+    }
+  }
+
   for (size_t i = 0; i < info_.frames_in_flight; i++) {
     vkDestroyCommandPool(device_, command_pools_[i], nullptr);
   }
@@ -331,6 +341,7 @@ void VulkanDevice::init(const InitInfo& init_info) {
   //   };
   //   vkCreatePipelineLayout(device_, &default_layout_cinfo, nullptr, &default_pipeline_layout_);
   // }
+  del_q_.init(device_, info_.frames_in_flight);
 }
 
 rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
@@ -659,6 +670,8 @@ void VulkanDevice::submit_frame() {
     VK_CHECK(vkResetFences(device_, reset_fence_count, reset_fences));
   }
   curr_cmd_encoder_i_ = 0;
+  del_q_.flush(frame_num_);
+  del_q_.set_curr_frame(frame_num_);
 }
 
 rhi::SwapchainHandle VulkanDevice::create_swapchain(const rhi::SwapchainDesc& desc) {
@@ -693,7 +706,9 @@ void VulkanDevice::destroy(rhi::TextureHandle handle) {
     if (!tex->is_swapchain_image_) {
       vmaDestroyImage(allocator_, tex->image_, tex->allocation_);
     }
-    vkDestroyImageView(device_, tex->default_view_, nullptr);
+    if (tex->default_view_) {
+      del_q_.enqueue(tex->default_view_);
+    }
     texture_pool_.destroy(handle);
   }
 }
@@ -775,16 +790,20 @@ void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::Cmd
 
 void VulkanDevice::destroy(rhi::SwapchainHandle handle) {
   auto* swapchain = static_cast<VulkanSwapchain*>(get_swapchain(handle));
-  for (VkSemaphore sem : swapchain->acquire_semaphores_) {
-    vkDestroySemaphore(device_, sem, nullptr);
+  if (swapchain) {
+    for (VkSemaphore sem : swapchain->acquire_semaphores_) {
+      del_q_.enqueue(sem);
+    }
+    for (VkSemaphore sem : swapchain->ready_to_present_semaphores_) {
+      del_q_.enqueue(sem);
+    }
+    for (size_t i = 0; i < swapchain->swapchain_tex_count_; i++) {
+      destroy(swapchain->textures_[i]);
+    }
+    vkDestroySwapchainKHR(device_, swapchain->swapchain_, nullptr);
+    vkDestroySurfaceKHR(instance_, swapchain->surface_, nullptr);
+    swapchain_pool_.destroy(handle);
   }
-  for (VkSemaphore sem : swapchain->ready_to_present_semaphores_) {
-    vkDestroySemaphore(device_, sem, nullptr);
-  }
-
-  vkDestroySwapchainKHR(device_, swapchain->swapchain_, nullptr);
-  vkDestroySurfaceKHR(instance_, swapchain->surface_, nullptr);
-  swapchain_pool_.destroy(handle);
 }
 
 void VulkanDevice::Queue::submit(VkFence fence) {
@@ -949,14 +968,14 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
 
     // TODO: delete queue
     for (VkSemaphore sem : swapchain->acquire_semaphores_) {
-      if (sem) vkDestroySemaphore(device_, sem, nullptr);
+      if (sem) del_q_.enqueue(sem);
     }
     for (uint32_t i = 0; i < swapchain_image_count; i++) {
       swapchain->acquire_semaphores_[i] =
           create_semaphore(("swapchain_acquire_semaphore_" + std::to_string(i)).c_str());
     }
     for (VkSemaphore sem : swapchain->ready_to_present_semaphores_) {
-      if (sem) vkDestroySemaphore(device_, sem, nullptr);
+      if (sem) del_q_.enqueue(sem);
     }
     for (uint32_t i = 0; i < swapchain_image_count; i++) {
       swapchain->ready_to_present_semaphores_[i] =
