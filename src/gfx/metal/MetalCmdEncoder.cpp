@@ -14,12 +14,11 @@
 
 #include <Metal/MTLCommandEncoder.hpp>
 
+#include "core/Config.hpp"
 #include "core/EAssert.hpp"
 #include "gfx/metal/MetalDevice.hpp"
 #include "gfx/metal/MetalUtil.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -1090,4 +1089,4 @@ void MetalCmdEncoderBase<UseMTL4>::start_compute_encoder() {
 template class MetalCmdEncoderBase<true>;
 template class MetalCmdEncoderBase<false>;
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

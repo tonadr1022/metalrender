@@ -1,5 +1,7 @@
 # TODOs
 
+- instead of acquiring next swapchain image in begin_swapchain_rendering(), maybe expose it?
+- in begin_rendering() use image view instead of assuming default view
 - modularize engine into separate libraries?
 - DLL export macro. Not really relevant until Vulkan
 - instead of dirty textures in render graph, transition them to shader read first

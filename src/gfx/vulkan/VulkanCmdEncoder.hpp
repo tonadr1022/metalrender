@@ -1,22 +1,25 @@
 #pragma once
 
-#include <volk.h>
+#include <vulkan/vulkan_core.h>
 
 #include "core/Config.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
+#include "gfx/rhi/Config.hpp"
+#include "gfx/rhi/Queue.hpp"
 
 namespace TENG_NAMESPACE {
 
 namespace gfx::vk {
+class VulkanDevice;
 
 class VulkanCmdEncoder : public rhi::CmdEncoder {
  public:
-  explicit VulkanCmdEncoder(VkCommandBuffer cmd_buf, VkPipelineLayout shared_pipeline_layout)
-      : cmd_buf_(cmd_buf), shared_pipeline_layout_(shared_pipeline_layout) {}
+  VulkanCmdEncoder(VkPipelineLayout shared_pipeline_layout, VulkanDevice* device)
+      : shared_pipeline_layout_(shared_pipeline_layout), device_(device) {}
 
   void set_debug_name(const char* /*name*/) override { exit(1); }
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
-  void end_rendering() override { exit(1); }
+  void end_rendering() override;
 
   void bind_pipeline(rhi::PipelineHandle handle) override;
   void bind_pipeline(const rhi::PipelineHandleHolder& handle);
@@ -133,8 +136,14 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
 
  private:
   friend class VulkanDevice;
-  VkCommandBuffer cmd_buf_;
+  VkCommandBuffer cmd() { return cmd_bufs_[curr_frame_i_]; }
+
+  size_t curr_frame_i_{};
+  VkCommandBuffer cmd_bufs_[k_max_frames_in_flight];
   VkPipelineLayout shared_pipeline_layout_;
+  VulkanDevice* device_{};
+  std::vector<rhi::Swapchain*> submit_swapchains_;
+  rhi::QueueType queue_type_{};
 };
 
 }  // namespace gfx::vk

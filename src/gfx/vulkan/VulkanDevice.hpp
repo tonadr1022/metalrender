@@ -8,6 +8,7 @@
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
+#include "gfx/rhi/Queue.hpp"
 #include "gfx/vulkan/VulkanBuffer.hpp"
 #include "gfx/vulkan/VulkanCmdEncoder.hpp"
 #include "gfx/vulkan/VulkanPipeline.hpp"
@@ -20,13 +21,6 @@ namespace TENG_NAMESPACE {
 class Window;
 
 namespace gfx::vk {
-
-enum QueueType : uint8_t {
-  QueueType_Graphics,
-  QueueType_Compute,
-  QueueType_Transfer,
-  QueueType_Count,
-};
 
 class VulkanDevice : public rhi::Device {
  public:
@@ -53,7 +47,9 @@ class VulkanDevice : public rhi::Device {
   rhi::Pipeline* get_pipeline(rhi::PipelineHandle handle) override {
     return pipeline_pool_.get(handle);
   }
-  rhi::Swapchain* get_swapchain(rhi::SwapchainHandle /*handle*/) override { exit(1); }
+  rhi::Swapchain* get_swapchain(rhi::SwapchainHandle handle) override {
+    return swapchain_pool_.get(handle);
+  }
   void get_all_buffers(std::vector<rhi::Buffer*>& /*out_buffers*/) override { exit(1); }
   uint32_t get_tex_view_bindless_idx(rhi::TextureHandle /*handle*/,
                                      int /*subresource_id*/) override {
@@ -94,14 +90,11 @@ class VulkanDevice : public rhi::Device {
   void cmd_encoder_wait_for(rhi::CmdEncoder* /*cmd_enc*/, rhi::CmdEncoder* /*wait_for*/) override {
     exit(1);
   }
-  bool recreate_swapchain(const rhi::SwapchainDesc& /*desc*/,
-                          rhi::Swapchain* /*swapchain*/) override {
-    exit(1);
-  }
-  void begin_swapchain_rendering(rhi::Swapchain* /*swapchain*/, rhi::CmdEncoder* /*cmd_enc*/,
-                                 glm::vec4* /*clear_color*/) override {
-    exit(1);
-  }
+
+  bool recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapchain* swapchain) override;
+
+  void begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
+                                 glm::vec4* clear_color) override;
   void resolve_query_data(rhi::QueryPoolHandle /*query_pool*/, uint32_t /*start_query*/,
                           uint32_t /*query_count*/,
                           std::span<uint64_t> /*out_timestamps*/) override {
@@ -114,6 +107,14 @@ class VulkanDevice : public rhi::Device {
   struct Queue {
     VkQueue queue;
     uint32_t family_idx;
+    std::vector<VkSemaphoreSubmitInfo> wait_semaphores;
+    std::vector<VkSemaphoreSubmitInfo> signal_semaphores;
+    std::vector<VkCommandBufferSubmitInfo> submit_cmd_bufs;
+    std::vector<VkSwapchainKHR> present_swapchains;
+    std::vector<VkSemaphore> present_wait_semaphores;
+    std::vector<uint32_t> present_swapchain_img_indices;
+    [[nodiscard]] bool is_valid() const { return queue != VK_NULL_HANDLE; }
+    void submit(VkFence fence);
   };
 
   Info info_{};
@@ -129,12 +130,20 @@ class VulkanDevice : public rhi::Device {
   VkPhysicalDevice physical_device_{};
   VkDevice device_{};
   VkPipelineLayout default_pipeline_layout_{};
+  VkFence frame_fences_[(int)rhi::QueueType::Count][k_max_frames_in_flight]{};
 
-  Queue queues_[QueueType_Count]{};
+  Queue queues_[(int)rhi::QueueType::Count]{};
 
   std::vector<std::unique_ptr<VulkanCmdEncoder>> cmd_encoders_;
   size_t curr_cmd_encoder_i_{};
   VmaAllocator allocator_;
+  size_t frame_num_{};
+  size_t frame_idx() const { return frame_num_ % info_.frames_in_flight; }
+  // TODO: doesn't handle arrays.
+  VkImageView create_img_view(VulkanTexture& img, VkImageViewType type,
+                              const VkImageSubresourceRange& subresource_range);
+  void set_vk_debug_name(VkObjectType object_type, uint64_t object_handle, const char* name);
+  VkSemaphore create_semaphore(const char* name = nullptr);
 };
 
 }  // namespace gfx::vk

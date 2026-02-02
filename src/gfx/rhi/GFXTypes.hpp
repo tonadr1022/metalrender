@@ -52,13 +52,16 @@ enum class StorageMode : uint8_t {
   Default
 };
 
-enum TextureUsage : uint8_t {
-  TextureUsageNone,
-  TextureUsageStorage,
-  TextureUsageSample,
-  TextureUsageShaderWrite,
-  TextureUsageColorAttachment,
-  TextureUsageDepthStencilAttachment,
+using TextureUsageFlags = uint32_t;
+enum TextureUsage : TextureUsageFlags {
+  TextureUsageNone = 1 << 0,
+  TextureUsageStorage = 1 << 1,
+  TextureUsageSample = 1 << 2,
+  TextureUsageShaderWrite = 1 << 3,
+  TextureUsageColorAttachment = 1 << 4,
+  TextureUsageDepthStencilAttachment = 1 << 5,
+  TextureUsageTransferSrc = 1 << 6,
+  TextureUsageTransferDst = 1 << 7,
 };
 
 using DefaultIndexT = uint32_t;
@@ -73,7 +76,7 @@ enum TextureDescFlags { TextureDescFlags_None, TextureDescFlags_PixelFormatView 
 struct TextureDesc {
   TextureFormat format{TextureFormat::Undefined};
   StorageMode storage_mode{StorageMode::GPUOnly};
-  TextureUsage usage{TextureUsageNone};
+  TextureUsageFlags usage{TextureUsageNone};
   glm::uvec3 dims{1};
   uint32_t mip_levels{1};
   uint32_t array_length{1};

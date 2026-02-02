@@ -3,10 +3,9 @@
 #include <Metal/Metal.hpp>
 #include <cassert>
 
+#include "core/Config.hpp"
 #include "core/Logger.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -193,7 +192,7 @@ MTL::ResourceOptions convert(rhi::StorageMode mode) {
   return MTL::StorageModePrivate;
 }
 
-MTL::TextureUsage convert(rhi::TextureUsage usage) {
+MTL::TextureUsage convert(rhi::TextureUsageFlags usage) {
   using namespace rhi;
   MTL::TextureUsage result{};
 
@@ -240,4 +239,4 @@ MTL::Stages convert_stage(rhi::PipelineStage stage) {
 }
 }  // namespace mtl::util
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

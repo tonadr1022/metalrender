@@ -15,7 +15,7 @@ void TestRenderer::render() {
   shader_mgr_->replace_dirty_pipelines();
 
   auto* enc = device_->begin_cmd_encoder();
-  glm::vec4 clear_color{1, 1, 0, 1};
+  glm::vec4 clear_color{1, 1, 1, 1};
   device_->begin_swapchain_rendering(swapchain_, enc, &clear_color);
   enc->end_rendering();
 
