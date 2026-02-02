@@ -1,7 +1,6 @@
 #include "VulkanCmdEncoder.hpp"
 
 #include "core/Config.hpp"
-#include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/vulkan/VulkanCommon.hpp"
 #include "gfx/vulkan/VulkanDevice.hpp"
@@ -55,7 +54,10 @@ void VulkanCmdEncoder::begin_rendering(
       vk_att->loadOp = convert_load_op(att.load_op);
       vk_att->storeOp = convert_store_op(att.store_op);
       if (att.load_op == rhi::LoadOp::Clear) {
-        memcpy(&vk_att->clearValue.color, &att.clear_value.color, sizeof(att.clear_value.color));
+        vk_att->clearValue.color.float32[0] = att.clear_value.color[0];
+        vk_att->clearValue.color.float32[1] = att.clear_value.color[1];
+        vk_att->clearValue.color.float32[2] = att.clear_value.color[2];
+        vk_att->clearValue.color.float32[3] = att.clear_value.color[3];
       }
     } else {
       ds_att.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;

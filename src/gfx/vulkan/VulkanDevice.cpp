@@ -68,6 +68,8 @@ constexpr VkFormat convert_format(TextureFormat format) {
       return VK_FORMAT_R8G8B8A8_UNORM;
     case TextureFormat::B8G8R8A8Unorm:
       return VK_FORMAT_B8G8R8A8_UNORM;
+    case TextureFormat::B8G8R8A8Srgb:
+      return VK_FORMAT_B8G8R8A8_SRGB;
     case TextureFormat::D32float:
       return VK_FORMAT_D32_SFLOAT;
     case TextureFormat::R32float:
@@ -76,6 +78,25 @@ constexpr VkFormat convert_format(TextureFormat format) {
     default:
       ASSERT(0);
       return VK_FORMAT_UNDEFINED;
+  }
+}
+constexpr TextureFormat convert_format(VkFormat format) {
+  switch (format) {
+    case VK_FORMAT_R8G8B8A8_SRGB:
+      return TextureFormat::R8G8B8A8Srgb;
+    case VK_FORMAT_R8G8B8A8_UNORM:
+      return TextureFormat::R8G8B8A8Unorm;
+    case VK_FORMAT_B8G8R8A8_UNORM:
+      return TextureFormat::B8G8R8A8Unorm;
+    case VK_FORMAT_B8G8R8A8_SRGB:
+      return TextureFormat::B8G8R8A8Srgb;
+    case VK_FORMAT_D32_SFLOAT:
+      return TextureFormat::D32float;
+    case VK_FORMAT_R32_SFLOAT:
+      return TextureFormat::R32float;
+    default:
+      ASSERT(0);
+      return TextureFormat::Undefined;
   }
 }
 
@@ -701,7 +722,9 @@ VkImageView VulkanDevice::create_img_view(VulkanTexture& img, VkImageViewType ty
                       .b = VK_COMPONENT_SWIZZLE_IDENTITY,
                       .a = VK_COMPONENT_SWIZZLE_IDENTITY};
   cinfo.subresourceRange = subresource_range;
-  return nullptr;
+  VkImageView view;
+  VK_CHECK(vkCreateImageView(device_, &cinfo, nullptr, &view));
+  return view;
 }
 
 void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
@@ -723,10 +746,10 @@ void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::Cmd
   VkImageMemoryBarrier2 img_barriers[] = {
       VkImageMemoryBarrier2{
           .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-          .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-          .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT,
-          .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-          .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT,
+          .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+          .srcAccessMask = 0,
+          .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+          .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
           .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
           .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
           .image = ((VulkanTexture*)get_tex(swap->get_texture((swap)->curr_img_idx_)))->image(),
@@ -857,12 +880,25 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
     create_h = surface_properties.currentExtent.height;
   }
 
+  VkCompositeAlphaFlagBitsKHR composite = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  if (surface_properties.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
+    composite = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  } else if (surface_properties.supportedCompositeAlpha & VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) {
+    composite = VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR;
+  } else if (surface_properties.supportedCompositeAlpha &
+             VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) {
+    composite = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+  } else if (surface_properties.supportedCompositeAlpha &
+             VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR) {
+    composite = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+  }
   rhi::TextureUsageFlags usage = rhi::TextureUsageColorAttachment | rhi::TextureUsageTransferSrc |
                                  rhi::TextureUsageTransferDst;
   VkSwapchainCreateInfoKHR swap_info{
       .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
       .surface = swapchain->surface_,
-      .minImageCount = std::max<uint32_t>(frames_in_flight(), surface_properties.minImageCount),
+      .minImageCount = std::min<uint32_t>(surface_properties.maxImageCount,
+                                          surface_properties.minImageCount + 1),
       .imageFormat = selected_format,
       .imageColorSpace = VK_COLORSPACE_SRGB_NONLINEAR_KHR,
       .imageExtent = {create_w, create_h},
@@ -872,7 +908,7 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
       .queueFamilyIndexCount = 1,
       .pQueueFamilyIndices = &queues_[(int)rhi::QueueType::Graphics].family_idx,
       .preTransform = surface_properties.currentTransform,
-      .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+      .compositeAlpha = composite,
       .presentMode = selected_present_mode,
       .clipped = VK_TRUE,
   };
@@ -887,7 +923,7 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
     VK_CHECK(vkGetSwapchainImagesKHR(device_, swapchain->swapchain_, &swapchain_image_count,
                                      swapchain_images));
     rhi::TextureDesc tex_desc{
-        .format = TextureFormat::B8G8R8A8Unorm,
+        .format = convert_format(selected_format),
         .storage_mode = rhi::StorageMode::GPUOnly,
         .usage = usage,
         .dims = {swap_info.imageExtent.width, swap_info.imageExtent.height, 1},
@@ -906,6 +942,7 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
                                             .levelCount = 1,
                                             .baseArrayLayer = 0,
                                             .layerCount = 1});
+      ASSERT(tex->default_view_);
       swapchain->textures_[i] = tex_handle;
     }
     swapchain->swapchain_tex_count_ = swapchain_image_count;
