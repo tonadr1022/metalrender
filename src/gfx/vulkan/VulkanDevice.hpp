@@ -31,6 +31,7 @@ class VulkanDevice : public rhi::Device {
 
   void init(const InitInfo&) override;
   void shutdown() override;
+  rhi::ShaderTarget get_supported_shader_targets() override { return rhi::ShaderTarget::Spirv; }
 
   rhi::BufferHandle create_buf(const rhi::BufferDesc& desc) override;
 

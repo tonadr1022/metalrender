@@ -26,7 +26,11 @@ class ShaderManager {
   ShaderManager& operator=(const ShaderManager&) = delete;
   ShaderManager& operator=(ShaderManager&&) = delete;
   ShaderManager() = default;
-  void init(rhi::Device* device);
+  struct Options {
+    rhi::ShaderTarget targets{rhi::ShaderTarget::None};
+  };
+
+  void init(rhi::Device* device, const Options& options);
   void shutdown();
   bool shader_dirty(const std::filesystem::path& path);
   rhi::PipelineHandleHolder create_graphics_pipeline(const rhi::GraphicsPipelineCreateInfo& cinfo);
@@ -40,6 +44,7 @@ class ShaderManager {
   void check_and_recompile(std::vector<std::filesystem::path>& dirty_paths);
 
  private:
+  Options options_;
   std::unordered_set<std::filesystem::path> clean_shaders_;
   std::unordered_map<std::filesystem::path, HashT> path_to_existing_hash_;
   std::unordered_map<std::filesystem::path, uint64_t> last_write_times_;

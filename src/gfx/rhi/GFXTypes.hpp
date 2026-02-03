@@ -1,5 +1,6 @@
 #pragma once
 
+#include "core/BitUtil.hpp"
 #include "core/Config.hpp"
 #include "core/Handle.hpp"
 #include "core/Math.hpp"  // IWYU pragma: keep
@@ -407,6 +408,14 @@ struct GPUBarrier {
     Texture tex;
   };
 };
+
+enum class ShaderTarget : uint8_t {
+  None = 0,
+  Spirv = (1 << 0),
+  MSL = (1 << 0),
+};
+
+AUGMENT_ENUM_CLASS(ShaderTarget);
 
 }  // namespace rhi
 

@@ -1193,7 +1193,8 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
 
   // TODO: renderer shouldn't own this
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
-  shader_mgr_->init(device_);
+  shader_mgr_->init(
+      device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
 
   {
     samplers_.emplace_back(device_->create_sampler_h({

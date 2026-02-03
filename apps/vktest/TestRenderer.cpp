@@ -9,7 +9,8 @@ using namespace teng;
 TestRenderer::TestRenderer(const CreateInfo& cinfo)
     : device_(cinfo.device), swapchain_(cinfo.swapchain) {
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
-  shader_mgr_->init(device_);
+  shader_mgr_->init(
+      device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
   // clear_color_cmp_pso_ = device_->create_compute_pipeline_h({"vulkan_exp/clear_tex_to_color"});
 }
 

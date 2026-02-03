@@ -193,8 +193,9 @@ void write_file_hashes(const fs::path& out_path, std::span<FileAndHash> file_has
 
 }  // namespace
 
-void ShaderManager::init(rhi::Device* device) {
+void ShaderManager::init(rhi::Device* device, const Options& options) {
   ZoneScoped;
+  options_ = options;
   device_ = device;
   shader_out_dir_ = fs::path("resources/shader_out");
   depfile_dir_ = shader_out_dir_ / "deps";
@@ -381,13 +382,14 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
     return false;
   }
 
-  {  // spirv
+  if (has_flag(options_.targets, rhi::ShaderTarget::Spirv)) {  // spirv
     auto spirv_path = out_filepath;
     spirv_path.replace_extension(".spv");
-    auto compile_spirv =
-        std::format("dxc {} -Fo {} -T {} -E main {} -spirv -fspv-target-env=vulkan1.3",
-                    path.string(), spirv_path.string(), shader_model,
-                    debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");
+    auto compile_spirv = std::format(
+        "dxc {} -Fo {} -T {} -E main {}  -fspv-preserve-bindings -fspv-reflect -spirv "
+        "-fspv-target-env=vulkan1.3",
+        path.string(), spirv_path.string(), shader_model,
+        debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");
     if (std::system(compile_spirv.c_str())) {
       LINFO("dxc spirv failed for {}", compile_spirv);
       return false;
@@ -403,7 +405,7 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
     }
   }
 
-  {  // dxil -> metallib
+  if (has_flag(options_.targets, rhi::ShaderTarget::MSL)) {
     auto metallib_path =
         (fs::path("resources/shader_out/metal") / relative).replace_extension(".metallib");
     bool output_reflection = true;
@@ -498,10 +500,11 @@ void teng::gfx::ShaderManager::check_and_recompile(
     clean_shaders_.insert(path);
     // recompile the pipelines using the shader
     auto it = path_to_pipelines_using_.find(path);
-    ASSERT(it != path_to_pipelines_using_.end());
-    for (const auto& pipeline_handle : it->second) {
-      std::lock_guard l(pipeline_recompile_mtx_);
-      pipeline_recompile_requests_.emplace_back(pipeline_handle);
+    if (it != path_to_pipelines_using_.end()) {
+      for (const auto& pipeline_handle : it->second) {
+        std::lock_guard l(pipeline_recompile_mtx_);
+        pipeline_recompile_requests_.emplace_back(pipeline_handle);
+      }
     }
   };
 

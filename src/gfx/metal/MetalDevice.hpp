@@ -60,6 +60,7 @@ class MetalDevice : public rhi::Device {
   bool init(const InitInfo& init_info, const MetalDeviceInitInfo& metal_init_info);
   void init(const InitInfo& init_info) override;
   void on_imgui() override;
+  rhi::ShaderTarget get_supported_shader_targets() override { return rhi::ShaderTarget::MSL; }
   [[nodiscard]] void* get_native_device() const override { return device_; }
 
   [[nodiscard]] MTL::Device* get_device() const { return device_; }

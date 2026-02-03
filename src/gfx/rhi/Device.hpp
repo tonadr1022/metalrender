@@ -45,6 +45,7 @@ class Device {
   virtual void init(const InitInfo &init_info) = 0;
   [[nodiscard]] virtual void *get_native_device() const = 0;
   virtual void shutdown() = 0;
+  virtual rhi::ShaderTarget get_supported_shader_targets() = 0;
 
   // resource CRUD
   virtual BufferHandle create_buf(const BufferDesc &desc) = 0;
