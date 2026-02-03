@@ -29,7 +29,6 @@ void TestRenderer::render() {
                                         rhi::ResourceState::ColorWrite,
                                         rhi::ResourceState::ComputeWrite);
   enc->barrier(&b);
-
   enc->bind_pipeline(clear_color_cmp_pso_);
   struct {
     glm::uvec2 dims;

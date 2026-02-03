@@ -811,7 +811,8 @@ void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::Cmd
   VkImageMemoryBarrier2 img_barriers[] = {
       VkImageMemoryBarrier2{
           .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-          .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+          .srcStageMask =
+              VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,  // from vkAcquireNextImageKHR
           .srcAccessMask = 0,
           .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
           .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
@@ -827,18 +828,6 @@ void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::Cmd
                         .imageMemoryBarrierCount = ARRAY_SIZE(img_barriers),
                         .pImageMemoryBarriers = img_barriers};
   vkCmdPipelineBarrier2KHR(vk_enc->cmd(), &info);
-
-  // vk_enc->render_pass_end_img_barriers_.emplace_back(VkImageMemoryBarrier2{
-  //     .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-  //     .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-  //     .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-  //     .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-  //     .dstAccessMask = 0,
-  //     .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-  //     .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-  //     .image = curr_image,
-  //     .subresourceRange = {
-  //         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}});
 
   cmd_enc->begin_rendering({
       rhi::RenderingAttachmentInfo{
@@ -1016,6 +1005,8 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
         .array_length = 1,
         .bindless = false,
     };
+    swapchain->desc_.width = swap_info.imageExtent.width;
+    swapchain->desc_.height = swap_info.imageExtent.height;
     for (uint32_t i = 0; i < swapchain_image_count; i++) {
       if (swapchain->textures_[i].is_valid()) {
         destroy(swapchain->textures_[i]);

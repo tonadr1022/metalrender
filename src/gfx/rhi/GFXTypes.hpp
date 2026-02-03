@@ -357,25 +357,28 @@ enum ImageAspect {
 
 enum ResourceState : uint32_t {
   None = 0,
-  ColorWrite = 1ULL << 1,
-  ColorRead = 1ULL << 2,
-  ColorRW = ColorRead | ColorWrite,
-  DepthStencilRead = 1ULL << 3,
-  DepthStencilWrite = 1ULL << 4,
-  DepthStencilRW = DepthStencilRead | DepthStencilWrite,
-  VertexRead = 1ULL << 5,
-  IndexRead = 1ULL << 6,
-  IndirectRead = 1ULL << 7,
-  ComputeRead = 1ULL << 8,
-  ComputeWrite = 1ULL << 9,
-  ComputeRW = ComputeRead | ComputeWrite,
-  TransferRead = 1ULL << 10,
-  TransferWrite = 1ULL << 11,
-  FragmentStorageRead = 1ULL << 12,
-  ComputeSample = 1ULL << 13,
-  FragmentSample = 1ULL << 14,
-  ShaderRead = 1ULL << 15,
-  SwapchainPresent = 1ULL << 16,
+  ColorWrite = 1ULL << 1,  // Stage == ColorAttachmentOutput, Access == ColorWrite
+  ColorRead = 1ULL << 2,   // Stage == ColorAttachmentOutput, Access == ColorRead
+  ColorRW =
+      ColorRead | ColorWrite,    // Stage == ColorAttachmentOutput, Access == ColorRead | ColorWrite
+  DepthStencilRead = 1ULL << 3,  // Stage == Early/LateFragmentTests, Access == DepthStencilRead
+  DepthStencilWrite = 1ULL << 4,  // Stage == Early/LateFragmentTests, Access == DepthStencilWrite
+  DepthStencilRW =
+      DepthStencilRead | DepthStencilWrite,  // Stage == Early/LateFragmentTests, Access ==
+                                             // DepthStencilRead | DepthStencilWrite
+  VertexRead = 1ULL << 5,                    // Stage == VertexInput, Access == VertexRead
+  IndexRead = 1ULL << 6,                     // Stage == IndexInput, Access == IndexRead
+  IndirectRead = 1ULL << 7,                  // Stage == DrawIndirect, Access == IndirectRead
+  ComputeRead = 1ULL << 8,                   // Stage == Compute, Access == ComputeRead
+  ComputeWrite = 1ULL << 9,                  // Stage == Compute, Access == ComputeWrite
+  ComputeRW = ComputeRead | ComputeWrite,  // Stage == Compute, Access == ComputeRead | ComputeWrite
+  TransferRead = 1ULL << 10,               // Stage == Transfer, Access == TransferRead
+  TransferWrite = 1ULL << 11,              // Stage == Transfer, Access == TransferWrite
+  FragmentStorageRead = 1ULL << 12,        // Stage == Fragment, Access == ShaderRead
+  ComputeSample = 1ULL << 13,              // Stage == Compute, Access == ShaderSample
+  FragmentSample = 1ULL << 14,             // Stage == Fragment, Access == ShaderSample
+  ShaderRead = 1ULL << 15,                 // Stage == AllCommands, Access == ShaderRead
+  SwapchainPresent = 1ULL << 16,           // Stage == BottomOfPipe, no access
   AnyRead = ColorRead | DepthStencilRead | VertexRead | IndexRead | IndirectRead | ComputeRead |
             TransferRead | FragmentSample | FragmentStorageRead | ComputeSample | ShaderRead,
   AnyWrite = ColorWrite | DepthStencilWrite | ComputeWrite | TransferWrite,
