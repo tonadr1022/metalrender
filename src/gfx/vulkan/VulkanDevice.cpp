@@ -11,11 +11,14 @@
 #include "Window.hpp"
 #include "core/Config.hpp"
 #include "core/EAssert.hpp"
+#include "core/Hash.hpp"
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/vulkan/VkUtil.hpp"
 #include "gfx/vulkan/VulkanCommon.hpp"
+#include "spirv_reflect.h"
+#include "vulkan/vk_enum_string_helper.h"
 #include "vulkan/vulkan_core.h"
 
 namespace TENG_NAMESPACE {
@@ -1047,7 +1050,86 @@ VkSemaphore VulkanDevice::create_semaphore(const char* name) {
 }
 
 rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo) {
-  VkShaderModule module = create_shader_module((shader_lib_dir_ / cinfo.path).concat(".comp.spv"));
+  auto spirv_code = read_file_to_uint_vec((shader_lib_dir_ / cinfo.path).concat(".comp.spv"));
+
+  {
+    spv_reflect::ShaderModule refl{spirv_code, SPV_REFLECT_MODULE_FLAG_NO_COPY};
+    auto result = refl.GetResult();
+    ASSERT(result == SPV_REFLECT_RESULT_SUCCESS);
+    uint32_t set_count;
+    refl.EnumerateDescriptorSets(&set_count, nullptr);
+    std::vector<SpvReflectDescriptorSet*> sets;
+
+    VkDescriptorSetLayout layouts[16];
+    VkPushConstantRange push_constant_ranges[4];
+    VkPipelineLayoutCreateInfo pipeline_layout_cinfo{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .pNext = nullptr,
+        .setLayoutCount = 0,
+        .pSetLayouts = layouts,
+        .pushConstantRangeCount = 0,
+        .pPushConstantRanges = push_constant_ranges,
+    };
+
+    uint32_t pc_count;
+    refl.EnumeratePushConstantBlocks(&pc_count, nullptr);
+    std::vector<SpvReflectBlockVariable*> push_constants(pc_count);
+    refl.EnumeratePushConstantBlocks(&pc_count, push_constants.data());
+
+    for (uint32_t i = 0; i < pc_count; i++) {
+      auto& pc = push_constants[i];
+      VkPushConstantRange range{
+          .stageFlags = (VkShaderStageFlagBits)refl.GetShaderStage(),
+          .offset = pc->offset,
+          .size = pc->size,
+      };
+      LINFO("PC Range: offset {}, size {}", range.offset, range.size);
+      push_constant_ranges[pipeline_layout_cinfo.pushConstantRangeCount++] = range;
+    }
+
+    VkDescriptorSetLayoutBinding layout_bindings[16];
+    sets.resize(set_count);
+    refl.EnumerateDescriptorSets(&set_count, sets.data());
+    for (uint32_t i = 0; i < set_count; i++) {
+      auto& set = sets[i];
+      LINFO("set {}: binding count {}", set->set, set->binding_count);
+      for (uint32_t j = 0; j < set->binding_count; j++) {
+        auto& binding = set->bindings[j];
+        LINFO("  binding {}: type {}, count {}", binding->binding,
+              string_VkDescriptorType((VkDescriptorType)binding->descriptor_type), binding->count);
+        layout_bindings[j] = VkDescriptorSetLayoutBinding{
+            .binding = binding->binding,
+            .descriptorType = (VkDescriptorType)binding->descriptor_type,
+            .descriptorCount = binding->count,
+            .stageFlags = (VkShaderStageFlagBits)refl.GetShaderStage(),
+            .pImmutableSamplers = nullptr,
+        };
+      }
+      VkDescriptorSetLayoutCreateInfo layout_cinfo{
+          .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+          .bindingCount = set->binding_count,
+          .pBindings = layout_bindings,
+      };
+
+      auto hash = hash_descriptor_set_layout_cinfo(layout_cinfo);
+      auto it = set_layout_cache.find(hash);
+
+      VkDescriptorSetLayout layout;
+      if (it != set_layout_cache.end()) {
+        layout = it->second;
+      } else {
+        VK_CHECK(vkCreateDescriptorSetLayout(device_, &layout_cinfo, nullptr, &layout));
+        set_layout_cache[hash] = layout;
+      }
+      layouts[pipeline_layout_cinfo.setLayoutCount++] = layout;
+    }
+
+    VK_CHECK(vkCreatePipelineLayout(device_, &pipeline_layout_cinfo, nullptr,
+                                    &default_pipeline_layout_));
+  }
+
+  VkShaderModule module = create_shader_module(spirv_code);
+
   VkPipelineShaderStageCreateInfo stage_info{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
       .stage = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -1071,6 +1153,23 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
 
 VkShaderModule VulkanDevice::create_shader_module(const std::filesystem::path& path) {
   auto spirv_code = read_file_to_uint_vec(path);
+
+  return create_shader_module(spirv_code);
+}
+
+uint64_t VulkanDevice::hash_descriptor_set_layout_cinfo(
+    const VkDescriptorSetLayoutCreateInfo& cinfo) {
+  uint64_t hash = 1;
+  for (const auto& binding : std::span(cinfo.pBindings, cinfo.bindingCount)) {
+    util::hash::hash_combine(hash, binding.binding);
+    util::hash::hash_combine(hash, binding.descriptorType);
+    util::hash::hash_combine(hash, binding.descriptorCount);
+    util::hash::hash_combine(hash, binding.stageFlags);
+  }
+  return hash;
+}
+
+VkShaderModule VulkanDevice::create_shader_module(std::span<const uint32_t> spirv_code) {
   VkShaderModuleCreateInfo module_cinfo{
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
       .codeSize = spirv_code.size() * sizeof(uint32_t),

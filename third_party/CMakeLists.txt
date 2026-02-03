@@ -90,6 +90,13 @@ target_include_directories(imgui PUBLIC
 set(MESHOPT_INSTALL OFF)
 add_subdirectory(meshoptimizer)
 
+if (BUILD_VULKAN)
+    set(SPIRV_REFLECT_EXECUTABLE OFF CACHE BOOL "" FORCE)
+    set(SPIRV_REFLECT_STATIC_LIB ON CACHE BOOL "" FORCE)
+    set(SPIRV_REFLECT_INSTALL OFF CACHE BOOL "" FORCE)
+    add_subdirectory(SPIRV-Reflect)
+endif()
+
 option(TRACY_STATIC "Build Tracy as a static library" ON)
 option(TRACY_ENABLE "Enable Tracy profiler" ON)
 option(TRACY_ONLY_IPV4 "IPv4 only" ON)

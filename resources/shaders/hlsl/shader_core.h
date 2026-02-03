@@ -17,14 +17,26 @@
 
 #define ATTR_POSITION : POSITION
 
+#if defined(VULKAN)
+#define PUSHCONSTANT(type, name) [[vk::push_constant]] type name
+#define CONSTANT_BUFFER(type, name, reg)
+#else
+
+#define PASTE1(a, b) a##b
+#define PASTE(a, b) PASTE1(a, b)
+#define CONSTANT_BUFFER(type, name, reg) ConstantBuffer<type> name : register(PASTE(b, reg))
+#define PUSHCONSTANT(type, name) CONSTANT_BUFFER(type, name, 998)
+
+#endif  // VULKAN
+
 #elif defined(__METAL__)
 
 #define uint32_t uint
 #define ATTR_POSITION [[position]]
 
-#define PUSH_CONSTANT(x) cbuffer x HLSL_REG(b998)
-
 #elif defined(__cplusplus)
+
+#define PUSHCONSTANT(type, name)
 
 #include <glm/ext/vector_int3_sized.hpp>
 #include <glm/ext/vector_int4_sized.hpp>
@@ -51,7 +63,6 @@
 #define HLSL_REG(x)
 #define HLSL_PC_REG
 
-#define PUSH_CONSTANT(x) struct x
 #define BIND_CBV(type, name, slot)
 #define row_major
 

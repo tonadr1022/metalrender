@@ -1,13 +1,14 @@
 // clang-format off
 #include "../root_sig.hlsl"
 #include "../shader_core.h"
-
-struct PushConstants {
-  uint2 dims;
-};
 // clang-format on
 
-[[vk::push_constant]] PushConstants pc;
+struct PC {
+  uint2 dims;
+};
+
+PUSHCONSTANT(PC, pc);
+
 RWTexture2D<float4> out_tex : register(u0);
 
 [RootSignature(ROOT_SIGNATURE)][NumThreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {

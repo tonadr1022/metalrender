@@ -98,6 +98,7 @@ if (BUILD_VULKAN)
         volk::volk
         GPUOpen::VulkanMemoryAllocator
         vk-bootstrap::vk-bootstrap
+        spirv-reflect-static
     )
 endif()
 

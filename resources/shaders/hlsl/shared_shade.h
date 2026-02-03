@@ -3,7 +3,7 @@
 
 #include "shader_core.h"
 
-cbuffer ShadePC HLSL_PC_REG {
+struct ShadePC {
   uint gbuffer_a_tex_idx;
   uint depth_pyramid_tex_idx;
   uint view_mip;

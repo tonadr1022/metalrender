@@ -11,7 +11,7 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
   shader_mgr_->init(
       device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
-  // clear_color_cmp_pso_ = device_->create_compute_pipeline_h({"vulkan_exp/clear_tex_to_color"});
+  clear_color_cmp_pso_ = device_->create_compute_pipeline_h({"vulkan_exp/clear_tex_to_color"});
 }
 
 void TestRenderer::render() {
@@ -20,6 +20,7 @@ void TestRenderer::render() {
   auto* enc = device_->begin_cmd_encoder();
   glm::vec4 clear_color{1, 1, 0, 1};
   device_->begin_swapchain_rendering(swapchain_, enc, &clear_color);
+  enc->bind_pipeline(clear_color_cmp_pso_);
   enc->end_rendering();
 
   enc->end_encoding();

@@ -386,8 +386,12 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
     auto spirv_path = out_filepath;
     spirv_path.replace_extension(".spv");
     auto compile_spirv = std::format(
-        "dxc {} -Fo {} -T {} -E main {}  -fspv-preserve-bindings -fspv-reflect -spirv "
-        "-fspv-target-env=vulkan1.3",
+        "dxc {} -Fo {} -T {} -E main {} -spirv "
+        " -fspv-target-env=vulkan1.3"
+        " -fspv-extension=SPV_NV_mesh_shader"
+        " -fspv-extension=SPV_EXT_descriptor_indexing"
+        " -fvk-u-shift 1000 0"
+        " -D VULKAN",
         path.string(), spirv_path.string(), shader_model,
         debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");
     if (std::system(compile_spirv.c_str())) {

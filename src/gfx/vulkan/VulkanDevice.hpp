@@ -156,6 +156,9 @@ class VulkanDevice : public rhi::Device {
   };
 
   VkShaderModule create_shader_module(const std::filesystem::path& path);
+  VkShaderModule create_shader_module(std::span<const uint32_t> spirv_code);
+  std::unordered_map<uint64_t, VkDescriptorSetLayout> set_layout_cache;
+  uint64_t hash_descriptor_set_layout_cinfo(const VkDescriptorSetLayoutCreateInfo& cinfo);
 };
 
 }  // namespace gfx::vk
