@@ -183,6 +183,18 @@ void VulkanDevice::shutdown() {
 
   del_q_.flush(SIZE_T_MAX);
 
+  for (auto& cmd : cmd_encoders_) {
+    for (uint32_t pool_i = 0; pool_i < frames_in_flight(); pool_i++) {
+      cmd->binder_pools_[pool_i].destroy(*this);
+    }
+  }
+
+  // TODO: remove
+  vkDestroyPipelineLayout(device_, default_pipeline_layout_, nullptr);
+  for (auto& [hash, layout] : set_layout_cache_) {
+    vkDestroyDescriptorSetLayout(device_, layout, nullptr);
+  }
+
   for (auto& frame_fence : frame_fences_) {
     for (size_t frame_i = 0; frame_i < info_.frames_in_flight; frame_i++) {
       vkDestroyFence(device_, frame_fence[frame_i], nullptr);
@@ -449,7 +461,7 @@ rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
 rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder() {
   if (curr_cmd_encoder_i_ >= cmd_encoders_.size()) {
     // TODO: pipeline layout
-    auto& enc = cmd_encoders_.emplace_back(std::make_unique<VulkanCmdEncoder>(nullptr, this));
+    auto& enc = cmd_encoders_.emplace_back(std::make_unique<VulkanCmdEncoder>(this));
 
     for (size_t i = 0; i < frames_in_flight(); i++) {
       VkCommandBufferAllocateInfo info{
@@ -465,6 +477,18 @@ rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder() {
   enc.curr_frame_i_ = frame_idx();
   enc.submit_swapchains_.clear();
   enc.queue_type_ = rhi::QueueType::Graphics;
+
+  if (!enc.binder_pools_[enc.curr_frame_i_].pool) {
+    for (size_t i = 0; i < frames_in_flight(); i++) {
+      enc.binder_pools_[i].init(*this);
+    }
+    auto& binder = enc.binder_;
+    binder.writes.reserve(120);
+    binder.img_infos.reserve(60);
+  } else {
+    enc.binder_pools_[enc.curr_frame_i_].reset(*this);
+  }
+
   VkCommandBufferBeginInfo begin_info{.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
                                       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
   VK_CHECK(vkResetCommandBuffer(enc.cmd_bufs_[frame_idx()], 0));
@@ -606,7 +630,9 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
   for (uint32_t i = 0; i < module_count; i++) {
     vkDestroyShaderModule(device_, stages[i].module, nullptr);
   }
-  return pipeline_pool_.alloc(info, vk_pipeline);
+  ASSERT(0 && " unhandled pipeline layout and descriptor set layout");
+  std::vector<VkDescriptorSetLayoutBinding> bindings;
+  return pipeline_pool_.alloc(info, vk_pipeline, nullptr, nullptr, std::move(bindings));
 }
 
 void VulkanDevice::submit_frame() {
@@ -700,13 +726,15 @@ void VulkanDevice::destroy(rhi::BufferHandle handle) {
     buffer_pool_.destroy(handle);
   }
 }
+
 void VulkanDevice::destroy(rhi::PipelineHandle handle) {
   auto* pipeline = (VulkanPipeline*)get_pipeline(handle);
   if (pipeline) {
-    vkDestroyPipeline(device_, pipeline->pipeline_, nullptr);
+    del_q_.enqueue(pipeline->pipeline_);
     pipeline_pool_.destroy(handle);
   }
 }
+
 void VulkanDevice::destroy(rhi::TextureHandle handle) {
   auto* tex = (VulkanTexture*)get_tex(handle);
   if (tex) {
@@ -800,17 +828,17 @@ void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::Cmd
                         .pImageMemoryBarriers = img_barriers};
   vkCmdPipelineBarrier2KHR(vk_enc->cmd(), &info);
 
-  vk_enc->render_pass_end_img_barriers_.emplace_back(VkImageMemoryBarrier2{
-      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-      .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-      .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-      .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-      .dstAccessMask = 0,
-      .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-      .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-      .image = curr_image,
-      .subresourceRange = {
-          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}});
+  // vk_enc->render_pass_end_img_barriers_.emplace_back(VkImageMemoryBarrier2{
+  //     .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+  //     .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+  //     .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+  //     .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+  //     .dstAccessMask = 0,
+  //     .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+  //     .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+  //     .image = curr_image,
+  //     .subresourceRange = {
+  //         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}});
 
   cmd_enc->begin_rendering({
       rhi::RenderingAttachmentInfo{
@@ -944,7 +972,7 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
     composite = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
   }
   rhi::TextureUsageFlags usage = rhi::TextureUsageColorAttachment | rhi::TextureUsageTransferSrc |
-                                 rhi::TextureUsageTransferDst;
+                                 rhi::TextureUsageTransferDst | rhi::TextureUsageStorage;
   VkSwapchainKHR old_swapchain = swapchain->swapchain_;
   VkSwapchainCreateInfoKHR swap_info{
       .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
@@ -1052,6 +1080,9 @@ VkSemaphore VulkanDevice::create_semaphore(const char* name) {
 rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo) {
   auto spirv_code = read_file_to_uint_vec((shader_lib_dir_ / cinfo.path).concat(".comp.spv"));
 
+  VkDescriptorSetLayout layout;
+  // TODO: don't allocate?
+  std::vector<VkDescriptorSetLayoutBinding> layout_bindings;
   {
     spv_reflect::ShaderModule refl{spirv_code, SPV_REFLECT_MODULE_FLAG_NO_COPY};
     auto result = refl.GetResult();
@@ -1079,7 +1110,8 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
     for (uint32_t i = 0; i < pc_count; i++) {
       auto& pc = push_constants[i];
       VkPushConstantRange range{
-          .stageFlags = (VkShaderStageFlagBits)refl.GetShaderStage(),
+          // TODO: lolllll
+          .stageFlags = VK_SHADER_STAGE_ALL,
           .offset = pc->offset,
           .size = pc->size,
       };
@@ -1087,9 +1119,9 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
       push_constant_ranges[pipeline_layout_cinfo.pushConstantRangeCount++] = range;
     }
 
-    VkDescriptorSetLayoutBinding layout_bindings[16];
     sets.resize(set_count);
     refl.EnumerateDescriptorSets(&set_count, sets.data());
+    ASSERT(set_count == 1);
     for (uint32_t i = 0; i < set_count; i++) {
       auto& set = sets[i];
       LINFO("set {}: binding count {}", set->set, set->binding_count);
@@ -1097,29 +1129,28 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
         auto& binding = set->bindings[j];
         LINFO("  binding {}: type {}, count {}", binding->binding,
               string_VkDescriptorType((VkDescriptorType)binding->descriptor_type), binding->count);
-        layout_bindings[j] = VkDescriptorSetLayoutBinding{
+        layout_bindings.emplace_back(VkDescriptorSetLayoutBinding{
             .binding = binding->binding,
             .descriptorType = (VkDescriptorType)binding->descriptor_type,
             .descriptorCount = binding->count,
             .stageFlags = (VkShaderStageFlagBits)refl.GetShaderStage(),
             .pImmutableSamplers = nullptr,
-        };
+        });
       }
       VkDescriptorSetLayoutCreateInfo layout_cinfo{
           .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
           .bindingCount = set->binding_count,
-          .pBindings = layout_bindings,
+          .pBindings = layout_bindings.data(),
       };
 
       auto hash = hash_descriptor_set_layout_cinfo(layout_cinfo);
-      auto it = set_layout_cache.find(hash);
+      auto it = set_layout_cache_.find(hash);
 
-      VkDescriptorSetLayout layout;
-      if (it != set_layout_cache.end()) {
+      if (it != set_layout_cache_.end()) {
         layout = it->second;
       } else {
         VK_CHECK(vkCreateDescriptorSetLayout(device_, &layout_cinfo, nullptr, &layout));
-        set_layout_cache[hash] = layout;
+        set_layout_cache_[hash] = layout;
       }
       layouts[pipeline_layout_cinfo.setLayoutCount++] = layout;
     }
@@ -1148,7 +1179,8 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
 
   vkDestroyShaderModule(device_, module, nullptr);
 
-  return pipeline_pool_.alloc(cinfo, vk_pipeline);
+  return pipeline_pool_.alloc(cinfo, vk_pipeline, default_pipeline_layout_, layout,
+                              std::move(layout_bindings));
 }
 
 VkShaderModule VulkanDevice::create_shader_module(const std::filesystem::path& path) {

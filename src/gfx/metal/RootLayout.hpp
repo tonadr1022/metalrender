@@ -15,11 +15,11 @@
 
 namespace TENG_NAMESPACE {
 
-constexpr size_t ROOT_CBV_COUNT = 3;
-constexpr size_t DESCRIPTOR_TABLE_CBV_COUNT = 9;
-constexpr size_t TOTAL_CBV_BINDINGS = ROOT_CBV_COUNT + DESCRIPTOR_TABLE_CBV_COUNT;
-constexpr size_t TOTAL_SRV_BINDINGS = 12;
-constexpr size_t TOTAL_UAV_BINDINGS = 12;
+constexpr uint32_t ROOT_CBV_COUNT = 3;
+constexpr uint32_t DESCRIPTOR_TABLE_CBV_COUNT = 9;
+constexpr uint32_t TOTAL_CBV_BINDINGS = ROOT_CBV_COUNT + DESCRIPTOR_TABLE_CBV_COUNT;
+constexpr uint32_t TOTAL_SRV_BINDINGS = 12;
+constexpr uint32_t TOTAL_UAV_BINDINGS = 12;
 
 struct RootLayout {
   uint32_t constants[22];

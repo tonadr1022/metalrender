@@ -2,6 +2,7 @@
 
 #include "GFXTypes.hpp"
 #include "core/Config.hpp"
+#include "gfx/rhi/Barrier.hpp"
 
 namespace TENG_NAMESPACE {
 

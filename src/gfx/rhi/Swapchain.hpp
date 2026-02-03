@@ -20,6 +20,7 @@ class Swapchain {
  public:
   ~Swapchain() = default;
   virtual TextureHandle get_texture(uint32_t frame_index) = 0;
+  virtual TextureHandle get_current_texture() = 0;
 
   SwapchainDesc desc_;
 

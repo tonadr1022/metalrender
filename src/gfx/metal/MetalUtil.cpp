@@ -237,6 +237,36 @@ MTL::Stages convert_stage(rhi::PipelineStage stage) {
   }
   return result;
 }
+
+MTL::Stages convert_stages(rhi::ResourceState state) {
+  MTL::Stages result{};
+  if (state & rhi::ColorRead || state & rhi::ColorWrite) {
+    result |= MTL::StageFragment;
+  }
+  if (state & rhi::DepthStencilRead || state & rhi::DepthStencilWrite) {
+    result |= MTL::StageFragment;
+  }
+  if (state & rhi::ComputeRead || state & rhi::ComputeWrite) {
+    result |= MTL::StageDispatch;
+  }
+  if (state & rhi::VertexRead || state & rhi::IndexRead || state & rhi::IndirectRead) {
+    result |= MTL::StageVertex;
+  }
+  if (state & rhi::TransferRead || state & rhi::TransferWrite) {
+    result |= MTL::StageBlit;
+  }
+  if (state & rhi::FragmentStorageRead || state & rhi::FragmentSample) {
+    result |= MTL::StageFragment;
+  }
+  if (state & rhi::ComputeSample) {
+    result |= MTL::StageDispatch;
+  }
+  if (state & rhi::ShaderRead) {
+    result |= MTL::StageAll;
+  }
+
+  return result;
+}
 }  // namespace mtl::util
 
 }  // namespace TENG_NAMESPACE

@@ -19,6 +19,7 @@ class VulkanSwapchain : public rhi::Swapchain {
   SwapchainTextures& get_textures() { return textures_; }
 
   rhi::TextureHandle get_texture(uint32_t frame_index) override { return textures_[frame_index]; }
+  rhi::TextureHandle get_current_texture() override { return textures_[curr_img_idx_]; }
 
   SwapchainTextures textures_;
   VkSurfaceKHR surface_{};

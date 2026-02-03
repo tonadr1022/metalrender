@@ -22,6 +22,8 @@ void DeleteQueue::flush(size_t frame_num) {
   flush_queue(semaphores_, [this](VkSemaphore sem) { vkDestroySemaphore(device_, sem, nullptr); });
   flush_queue(image_views_,
               [this](VkImageView view) { vkDestroyImageView(device_, view, nullptr); });
+  flush_queue(pipelines_,
+              [this](VkPipeline pipeline) { vkDestroyPipeline(device_, pipeline, nullptr); });
 }
 
 }  // namespace gfx::vk

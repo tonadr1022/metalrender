@@ -3,6 +3,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include "core/Config.hpp"
+#include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Queue.hpp"
@@ -11,11 +12,24 @@ namespace TENG_NAMESPACE {
 
 namespace gfx::vk {
 class VulkanDevice;
+class VulkanPipeline;
+
+struct DescriptorBinderPool {
+  VkDescriptorPool pool{};
+  uint32_t pool_size{256};
+  void init(VulkanDevice& device);
+  void reset(VulkanDevice& device) const;
+  void destroy(VulkanDevice& device);
+};
+
+struct DescriptorBinder {
+  std::vector<VkWriteDescriptorSet> writes;
+  std::vector<VkDescriptorImageInfo> img_infos;
+};
 
 class VulkanCmdEncoder : public rhi::CmdEncoder {
  public:
-  VulkanCmdEncoder(VkPipelineLayout shared_pipeline_layout, VulkanDevice* device)
-      : shared_pipeline_layout_(shared_pipeline_layout), device_(device) {}
+  explicit VulkanCmdEncoder(VulkanDevice* device);
 
   void set_debug_name(const char* /*name*/) override { exit(1); }
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
@@ -96,10 +110,8 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
     exit(1);
   }
 
-  void dispatch_compute(glm::uvec3 /*thread_groups*/,
-                        glm::uvec3 /*threads_per_threadgroup*/) override {
-    exit(1);
-  }
+  void dispatch_compute(glm::uvec3 thread_groups, glm::uvec3 threads_per_threadgroup) override;
+
   void fill_buffer(rhi::BufferHandle /*handle*/, uint32_t /*offset_bytes*/, uint32_t /*size*/,
                    uint32_t /*value*/) override {
     exit(1);
@@ -115,10 +127,7 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
     exit(1);
   }
 
-  void bind_uav(rhi::TextureHandle /*texture*/, uint32_t /*slot*/,
-                int /*subresource_id*/) override {
-    exit(1);
-  }
+  void bind_uav(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
   void bind_uav(rhi::BufferHandle /*buffer*/, uint32_t /*slot*/, size_t /*offset_bytes*/) override {
     exit(1);
   }
@@ -140,14 +149,22 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   friend class VulkanDevice;
   VkCommandBuffer cmd() { return cmd_bufs_[curr_frame_i_]; }
   void flush_barriers();
+  void flush_binds();
+  [[nodiscard]] VkPipelineBindPoint get_bound_pipeline_bind_point() const;
 
   size_t curr_frame_i_{};
   VkCommandBuffer cmd_bufs_[k_max_frames_in_flight];
-  VkPipelineLayout shared_pipeline_layout_;
+  VulkanPipeline* bound_pipeline_{};
   VulkanDevice* device_{};
+  VkDevice vk_device_{};
   std::vector<rhi::Swapchain*> submit_swapchains_;
   std::vector<VkBufferMemoryBarrier2> buf_barriers_;
   std::vector<VkImageMemoryBarrier2> img_barriers_;
+  DescriptorBinderPool binder_pools_[k_max_frames_in_flight];
+  DescriptorBinder binder_;
+
+  DescriptorBindingTable binding_table_{};
+  bool descriptors_dirty_{true};
 
   // initial use is for swapchain rendering
   std::vector<VkImageMemoryBarrier2> render_pass_end_img_barriers_;

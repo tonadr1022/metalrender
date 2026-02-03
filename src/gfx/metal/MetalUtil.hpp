@@ -46,6 +46,7 @@ MTL::StoreAction convert(rhi::StoreOp op);
 MTL::PrimitiveType convert(rhi::PrimitiveTopology top);
 rhi::TextureFormat convert(MTL::PixelFormat format);
 MTL::Stages convert_stage(rhi::PipelineStage stage);
+MTL::Stages convert_stages(rhi::ResourceState state);
 
 }  // namespace mtl::util
 

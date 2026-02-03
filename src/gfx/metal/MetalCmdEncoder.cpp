@@ -602,12 +602,12 @@ template <bool UseMTL4>
 void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::GPUBarrier* gpu_barriers, size_t barrier_count) {
   for (size_t i = 0; i < barrier_count; i++) {
     auto& gpu_barrier = gpu_barriers[i];
-    auto src_mtl_stage = mtl::util::convert_stage(gpu_barrier.type == rhi::GPUBarrier::Type::Buffer
-                                                      ? gpu_barrier.buf.src_stage
-                                                      : gpu_barrier.tex.src_stage);
-    auto dst_mtl_stage = mtl::util::convert_stage(gpu_barrier.type == rhi::GPUBarrier::Type::Buffer
-                                                      ? gpu_barrier.buf.dst_stage
-                                                      : gpu_barrier.tex.dst_stage);
+    auto src_mtl_stage = mtl::util::convert_stages(gpu_barrier.type == rhi::GPUBarrier::Type::Buffer
+                                                       ? gpu_barrier.buf.src_state
+                                                       : gpu_barrier.tex.src_layout);
+    auto dst_mtl_stage = mtl::util::convert_stages(gpu_barrier.type == rhi::GPUBarrier::Type::Buffer
+                                                       ? gpu_barrier.buf.dst_state
+                                                       : gpu_barrier.tex.dst_layout);
     if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
       device_->compute_enc_flush_stages_ |= src_mtl_stage;
       device_->compute_enc_dst_stages_ |= dst_mtl_stage;

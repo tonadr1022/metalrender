@@ -25,6 +25,7 @@ struct DeleteQueue {
   void set_curr_frame(size_t curr_frame) { curr_frame_ = curr_frame; }
   void enqueue(VkSemaphore entry) { semaphores_.emplace(entry, curr_frame_); }
   void enqueue(VkImageView entry) { image_views_.emplace(entry, curr_frame_); }
+  void enqueue(VkPipeline entry) { pipelines_.emplace(entry, curr_frame_); }
 
  private:
   VkDevice device_{};
@@ -32,6 +33,7 @@ struct DeleteQueue {
   size_t frames_in_flight_{};
   std::queue<Entry<VkSemaphore>> semaphores_;
   std::queue<Entry<VkImageView>> image_views_;
+  std::queue<Entry<VkPipeline>> pipelines_;
 };
 
 }  // namespace gfx::vk

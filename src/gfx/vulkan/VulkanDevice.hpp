@@ -101,7 +101,12 @@ class VulkanDevice : public rhi::Device {
     exit(1);
   }
 
-  [[nodiscard]] void* get_native_device() const override { return nullptr; }
+  [[nodiscard]] void* get_native_device() const override { return device_; }
+
+  [[nodiscard]] VkDevice vk_device() const { return device_; }
+  VulkanTexture* get_vk_tex(rhi::TextureHandle handle) {
+    return static_cast<VulkanTexture*>(get_tex(handle));
+  }
 
  private:
   size_t frame_idx() const { return frame_num_ % info_.frames_in_flight; }
@@ -157,7 +162,7 @@ class VulkanDevice : public rhi::Device {
 
   VkShaderModule create_shader_module(const std::filesystem::path& path);
   VkShaderModule create_shader_module(std::span<const uint32_t> spirv_code);
-  std::unordered_map<uint64_t, VkDescriptorSetLayout> set_layout_cache;
+  std::unordered_map<uint64_t, VkDescriptorSetLayout> set_layout_cache_;
   uint64_t hash_descriptor_set_layout_cinfo(const VkDescriptorSetLayoutCreateInfo& cinfo);
 };
 

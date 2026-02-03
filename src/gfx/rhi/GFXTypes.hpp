@@ -355,7 +355,7 @@ enum ImageAspect {
   ImageAspect_Stencil = (1 << 2),
 };
 
-enum ResourceState : uint16_t {
+enum ResourceState : uint32_t {
   None = 0,
   ColorWrite = 1ULL << 1,
   ColorRead = 1ULL << 2,
@@ -375,39 +375,13 @@ enum ResourceState : uint16_t {
   ComputeSample = 1ULL << 13,
   FragmentSample = 1ULL << 14,
   ShaderRead = 1ULL << 15,
+  SwapchainPresent = 1ULL << 16,
   AnyRead = ColorRead | DepthStencilRead | VertexRead | IndexRead | IndirectRead | ComputeRead |
             TransferRead | FragmentSample | FragmentStorageRead | ComputeSample | ShaderRead,
   AnyWrite = ColorWrite | DepthStencilWrite | ComputeWrite | TransferWrite,
 };
 
 // resource state implying src/dst access/stage inspiration from WickedEngine
-
-struct GPUBarrier {
-  enum class Type : uint8_t { Buffer, Texture } type;
-  struct Buffer {
-    BufferHandle buffer;
-    rhi::PipelineStage src_stage;
-    rhi::PipelineStage dst_stage;
-    rhi::AccessFlags src_access;
-    rhi::AccessFlags dst_access;
-    size_t offset;
-    size_t size;
-  };
-  struct Texture {
-    TextureHandle texture;
-    rhi::PipelineStage src_stage;
-    rhi::PipelineStage dst_stage;
-    rhi::AccessFlags src_access;
-    rhi::AccessFlags dst_access;
-    uint32_t mip;
-    uint32_t slice;
-    ImageAspect aspect;
-  };
-  union {
-    Buffer buf;
-    Texture tex;
-  };
-};
 
 enum class ShaderTarget : uint8_t {
   None = 0,
