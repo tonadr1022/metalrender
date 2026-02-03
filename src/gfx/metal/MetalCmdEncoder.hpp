@@ -117,6 +117,11 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
   void barrier(rhi::BufferHandle, rhi::PipelineStage, rhi::AccessFlags, rhi::PipelineStage,
                rhi::AccessFlags) override;
+  void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
+               rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access, size_t, size_t) override {
+    barrier(buf, src_stage, src_access, dst_stage, dst_access);
+  }
+  void barrier(rhi::GPUBarrier* gpu_barrier, size_t barrier_count) override;
   void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
                              size_t draw_cnt, size_t offset_i) override;
   void copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice, size_t src_level,

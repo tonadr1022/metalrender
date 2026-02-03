@@ -73,11 +73,13 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
 
   void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
-  void barrier(rhi::BufferHandle /*buf*/, rhi::PipelineStage /*src_stage*/,
-               rhi::AccessFlags /*src_access*/, rhi::PipelineStage /*dst_stage*/,
-               rhi::AccessFlags /*dst_access*/) override {
-    exit(1);
-  }
+  void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
+               rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
+  void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
+               rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access, size_t offset,
+               size_t size) override;
+
+  void barrier(rhi::GPUBarrier* gpu_barrier, size_t barrier_count) override;
 
   void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
                              size_t draw_cnt, size_t offset_i) override;
@@ -137,12 +139,19 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
  private:
   friend class VulkanDevice;
   VkCommandBuffer cmd() { return cmd_bufs_[curr_frame_i_]; }
+  void flush_barriers();
 
   size_t curr_frame_i_{};
   VkCommandBuffer cmd_bufs_[k_max_frames_in_flight];
   VkPipelineLayout shared_pipeline_layout_;
   VulkanDevice* device_{};
   std::vector<rhi::Swapchain*> submit_swapchains_;
+  std::vector<VkBufferMemoryBarrier2> buf_barriers_;
+  std::vector<VkImageMemoryBarrier2> img_barriers_;
+
+  // initial use is for swapchain rendering
+  std::vector<VkImageMemoryBarrier2> render_pass_end_img_barriers_;
+
   rhi::QueueType queue_type_{};
 };
 

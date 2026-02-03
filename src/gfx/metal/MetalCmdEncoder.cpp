@@ -599,6 +599,34 @@ void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::PipelineStage src_stage, rhi::Ac
 }
 
 template <bool UseMTL4>
+void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::GPUBarrier* gpu_barriers, size_t barrier_count) {
+  for (size_t i = 0; i < barrier_count; i++) {
+    auto& gpu_barrier = gpu_barriers[i];
+    auto src_mtl_stage = mtl::util::convert_stage(gpu_barrier.type == rhi::GPUBarrier::Type::Buffer
+                                                      ? gpu_barrier.buf.src_stage
+                                                      : gpu_barrier.tex.src_stage);
+    auto dst_mtl_stage = mtl::util::convert_stage(gpu_barrier.type == rhi::GPUBarrier::Type::Buffer
+                                                      ? gpu_barrier.buf.dst_stage
+                                                      : gpu_barrier.tex.dst_stage);
+    if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
+      device_->compute_enc_flush_stages_ |= src_mtl_stage;
+      device_->compute_enc_dst_stages_ |= dst_mtl_stage;
+    }
+    if (dst_mtl_stage &
+        (MTL::StageVertex | MTL::StageFragment | MTL::StageObject | MTL::StageMesh)) {
+      device_->render_enc_flush_stages_ |= src_mtl_stage;
+      device_->render_enc_dst_stages_ |= dst_mtl_stage;
+    }
+    if constexpr (UseMTL4) {
+      if (dst_mtl_stage & MTL::StageBlit) {
+        device_->blit_enc_flush_stages_ |= src_mtl_stage;
+        device_->blit_enc_dst_stages_ |= dst_mtl_stage;
+      }
+    }
+  }
+}
+
+template <bool UseMTL4>
 void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::BufferHandle, rhi::PipelineStage src_stage,
                                            rhi::AccessFlags, rhi::PipelineStage dst_stage,
                                            rhi::AccessFlags) {

@@ -16,6 +16,7 @@
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/vulkan/VkUtil.hpp"
 #include "gfx/vulkan/VulkanCommon.hpp"
+#include "vulkan/vk_enum_string_helper.h"
 #include "vulkan/vulkan_core.h"
 
 namespace TENG_NAMESPACE {
@@ -751,23 +752,38 @@ void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::Cmd
   // TODO: while loop
   constexpr int k_timeout_value = 1'000'000'000;
   ASSERT(swap->acquire_semaphores_[swap->acquire_semaphore_idx_]);
-  VK_CHECK(vkAcquireNextImageKHR(device_, swap->swapchain_, k_timeout_value,
-                                 swap->acquire_semaphores_[swap->acquire_semaphore_idx_], nullptr,
-                                 &swap->curr_img_idx_));
+
+  VkResult acquire_result;
+  do {
+    acquire_result = vkAcquireNextImageKHR(device_, swap->swapchain_, k_timeout_value,
+                                           swap->acquire_semaphores_[swap->acquire_semaphore_idx_],
+                                           nullptr, &swap->curr_img_idx_);
+    if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR || acquire_result == VK_SUBOPTIMAL_KHR) {
+      recreate_swapchain(swapchain->desc_, swapchain);
+    }
+  } while (acquire_result == VK_TIMEOUT || acquire_result == VK_ERROR_OUT_OF_DATE_KHR ||
+           acquire_result == VK_SUBOPTIMAL_KHR);
+  if (acquire_result != VK_SUCCESS && acquire_result != VK_SUBOPTIMAL_KHR &&
+      acquire_result != VK_ERROR_OUT_OF_DATE_KHR) {
+    LCRITICAL("Failed to acquire swapchain image!");
+    ALWAYS_ASSERT(0);
+  }
 
   auto* vk_enc = (VulkanCmdEncoder*)cmd_enc;
   vk_enc->submit_swapchains_.emplace_back(swapchain);
 
+  VkImage curr_image =
+      ((VulkanTexture*)get_tex(swapchain->get_texture(swap->curr_img_idx_)))->image();
   VkImageMemoryBarrier2 img_barriers[] = {
       VkImageMemoryBarrier2{
           .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-          .srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT,
+          .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
           .srcAccessMask = 0,
           .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
           .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
           .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
           .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-          .image = ((VulkanTexture*)get_tex(swap->get_texture((swap)->curr_img_idx_)))->image(),
+          .image = curr_image,
           .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                                .levelCount = 1,
                                .layerCount = 1},
@@ -777,6 +793,18 @@ void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::Cmd
                         .imageMemoryBarrierCount = ARRAY_SIZE(img_barriers),
                         .pImageMemoryBarriers = img_barriers};
   vkCmdPipelineBarrier2KHR(vk_enc->cmd(), &info);
+
+  vk_enc->render_pass_end_img_barriers_.emplace_back(VkImageMemoryBarrier2{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+      .srcStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
+      .dstAccessMask = 0,
+      .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+      .image = curr_image,
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .levelCount = 1, .layerCount = 1}});
 
   cmd_enc->begin_rendering({
       rhi::RenderingAttachmentInfo{
@@ -825,7 +853,6 @@ void VulkanDevice::Queue::submit(VkFence fence) {
   signal_semaphores.clear();
 
   if (!present_swapchains.empty()) {
-    // transition to present layout
     VkPresentInfoKHR present_info{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = (uint32_t)present_wait_semaphores.size(),
@@ -847,7 +874,6 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
   VkSurfaceCapabilitiesKHR surface_properties;
   VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device_, swapchain->surface_,
                                                      &surface_properties));
-  // format
   uint32_t format_count = 0;
   VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device_, swapchain->surface_,
                                                 &format_count, nullptr));
@@ -913,6 +939,7 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
   }
   rhi::TextureUsageFlags usage = rhi::TextureUsageColorAttachment | rhi::TextureUsageTransferSrc |
                                  rhi::TextureUsageTransferDst;
+  VkSwapchainKHR old_swapchain = swapchain->swapchain_;
   VkSwapchainCreateInfoKHR swap_info{
       .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
       .surface = swapchain->surface_,
@@ -930,8 +957,13 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
       .compositeAlpha = composite,
       .presentMode = selected_present_mode,
       .clipped = VK_TRUE,
+      .oldSwapchain = old_swapchain,
   };
   VK_CHECK(vkCreateSwapchainKHR(device_, &swap_info, nullptr, &swapchain->swapchain_));
+
+  if (old_swapchain) {
+    vkDestroySwapchainKHR(device_, old_swapchain, nullptr);
+  }
 
   {  // swapchain images
     uint32_t swapchain_image_count{};
@@ -951,6 +983,9 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
         .bindless = false,
     };
     for (uint32_t i = 0; i < swapchain_image_count; i++) {
+      if (swapchain->textures_[i].is_valid()) {
+        destroy(swapchain->textures_[i]);
+      }
       auto tex_handle =
           texture_pool_.alloc(tex_desc, rhi::k_invalid_bindless_idx, swapchain_images[i],
                               VmaAllocation{}, VmaAllocationInfo{}, true);
@@ -966,7 +1001,6 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
     }
     swapchain->swapchain_tex_count_ = swapchain_image_count;
 
-    // TODO: delete queue
     for (VkSemaphore sem : swapchain->acquire_semaphores_) {
       if (sem) del_q_.enqueue(sem);
     }
@@ -981,13 +1015,13 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
       swapchain->ready_to_present_semaphores_[i] =
           create_semaphore(("swapchain_present_semaphore_" + std::to_string(i)).c_str());
     }
-    swapchain->acquire_semaphore_idx_ = 0;
   }
 
   swapchain->desc_ = desc;
 
   return true;
 }
+
 void VulkanDevice::set_vk_debug_name(VkObjectType object_type, uint64_t object_handle,
                                      const char* name) {
   VkDebugUtilsObjectNameInfoEXT name_info{

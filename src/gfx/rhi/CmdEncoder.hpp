@@ -68,6 +68,11 @@ class CmdEncoder {
   virtual void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage,
                        rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
                        rhi::AccessFlags dst_access) = 0;
+  virtual void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage,
+                       rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
+                       rhi::AccessFlags dst_access, size_t offset, size_t size) = 0;
+  virtual void barrier(GPUBarrier* gpu_barrier, size_t barrier_count) = 0;
+  virtual void barrier(GPUBarrier* gpu_barrier) { barrier(gpu_barrier, 1); }
   virtual void draw_indexed_indirect(rhi::BufferHandle indirect_buf, uint32_t indirect_buf_id,
                                      size_t draw_cnt, size_t offset_i) = 0;
   virtual void draw_mesh_threadgroups(glm::uvec3 thread_groups,

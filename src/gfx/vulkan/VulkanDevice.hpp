@@ -109,6 +109,8 @@ class VulkanDevice : public rhi::Device {
   // TODO: doesn't handle arrays.
   VkImageView create_img_view(VulkanTexture& img, VkImageViewType type,
                               const VkImageSubresourceRange& subresource_range);
+  void acquire_next_swapchain_image(VulkanSwapchain& swapchain, uint32_t& out_img_idx,
+                                    VkSemaphore& out_acquire_semaphore);
   void set_vk_debug_name(VkObjectType object_type, uint64_t object_handle, const char* name);
   VkSemaphore create_semaphore(const char* name = nullptr);
 

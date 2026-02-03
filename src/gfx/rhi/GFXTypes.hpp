@@ -54,14 +54,14 @@ enum class StorageMode : uint8_t {
 
 using TextureUsageFlags = uint32_t;
 enum TextureUsage : TextureUsageFlags {
-  TextureUsageNone = 1 << 0,
-  TextureUsageStorage = 1 << 1,
-  TextureUsageSample = 1 << 2,
-  TextureUsageShaderWrite = 1 << 3,
-  TextureUsageColorAttachment = 1 << 4,
-  TextureUsageDepthStencilAttachment = 1 << 5,
-  TextureUsageTransferSrc = 1 << 6,
-  TextureUsageTransferDst = 1 << 7,
+  TextureUsageNone = 0,
+  TextureUsageStorage = 1 << 0,
+  TextureUsageSample = 1 << 1,
+  TextureUsageShaderWrite = 1 << 2,
+  TextureUsageColorAttachment = 1 << 3,
+  TextureUsageDepthStencilAttachment = 1 << 4,
+  TextureUsageTransferSrc = 1 << 5,
+  TextureUsageTransferDst = 1 << 6,
 };
 
 using DefaultIndexT = uint32_t;
@@ -308,6 +308,7 @@ enum PipelineStage : uint64_t {
   PipelineStage_Host = 0x4000ull,
   PipelineStage_AllGraphics = 0x8000ull,
   PipelineStage_AllCommands = 0x10000ull,
+  PipelineStage_Blit = 0x400000000ULL,
 };
 
 using PipelineStageBits = uint64_t;
@@ -345,6 +346,66 @@ enum AccessFlags : uint64_t {
                          rhi::AccessFlags_DepthStencilWrite | rhi::AccessFlags_TransferWrite |
                          rhi::AccessFlags_HostWrite | rhi::AccessFlags_MemoryWrite |
                          rhi::AccessFlags_ShaderStorageWrite,
+};
+
+enum ImageAspect {
+  ImageAspect_Color = (1 << 0),
+  ImageAspect_Depth = (1 << 1),
+  ImageAspect_Stencil = (1 << 2),
+};
+
+enum ResourceState : uint16_t {
+  None = 0,
+  ColorWrite = 1ULL << 1,
+  ColorRead = 1ULL << 2,
+  ColorRW = ColorRead | ColorWrite,
+  DepthStencilRead = 1ULL << 3,
+  DepthStencilWrite = 1ULL << 4,
+  DepthStencilRW = DepthStencilRead | DepthStencilWrite,
+  VertexRead = 1ULL << 5,
+  IndexRead = 1ULL << 6,
+  IndirectRead = 1ULL << 7,
+  ComputeRead = 1ULL << 8,
+  ComputeWrite = 1ULL << 9,
+  ComputeRW = ComputeRead | ComputeWrite,
+  TransferRead = 1ULL << 10,
+  TransferWrite = 1ULL << 11,
+  FragmentStorageRead = 1ULL << 12,
+  ComputeSample = 1ULL << 13,
+  FragmentSample = 1ULL << 14,
+  ShaderRead = 1ULL << 15,
+  AnyRead = ColorRead | DepthStencilRead | VertexRead | IndexRead | IndirectRead | ComputeRead |
+            TransferRead | FragmentSample | FragmentStorageRead | ComputeSample | ShaderRead,
+  AnyWrite = ColorWrite | DepthStencilWrite | ComputeWrite | TransferWrite,
+};
+
+// resource state implying src/dst access/stage inspiration from WickedEngine
+
+struct GPUBarrier {
+  enum class Type : uint8_t { Buffer, Texture } type;
+  struct Buffer {
+    BufferHandle buffer;
+    rhi::PipelineStage src_stage;
+    rhi::PipelineStage dst_stage;
+    rhi::AccessFlags src_access;
+    rhi::AccessFlags dst_access;
+    size_t offset;
+    size_t size;
+  };
+  struct Texture {
+    TextureHandle texture;
+    rhi::PipelineStage src_stage;
+    rhi::PipelineStage dst_stage;
+    rhi::AccessFlags src_access;
+    rhi::AccessFlags dst_access;
+    uint32_t mip;
+    uint32_t slice;
+    ImageAspect aspect;
+  };
+  union {
+    Buffer buf;
+    Texture tex;
+  };
 };
 
 }  // namespace rhi
