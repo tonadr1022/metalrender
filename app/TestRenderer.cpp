@@ -9,6 +9,8 @@ using namespace teng;
 TestRenderer::TestRenderer(const CreateInfo& cinfo)
     : device_(cinfo.device), swapchain_(cinfo.swapchain) {
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
+  shader_mgr_->init(device_);
+  // clear_color_cmp_pso_ = device_->create_compute_pipeline_h({"vulkan_exp/clear_tex_to_color"});
 }
 
 void TestRenderer::render() {
@@ -24,4 +26,4 @@ void TestRenderer::render() {
   device_->submit_frame();
 }
 
-TestRenderer::~TestRenderer() = default;
+TestRenderer::~TestRenderer() { shader_mgr_->shutdown(); }

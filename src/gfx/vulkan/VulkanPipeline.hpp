@@ -13,6 +13,8 @@ class VulkanPipeline : public rhi::Pipeline {
   VulkanPipeline() = default;
   VulkanPipeline(const rhi::GraphicsPipelineCreateInfo& ginfo, VkPipeline pipeline)
       : rhi::Pipeline(ginfo), pipeline_(pipeline) {}
+  VulkanPipeline(const rhi::ShaderCreateInfo& cinfo, VkPipeline pipeline)
+      : rhi::Pipeline(cinfo), pipeline_(pipeline) {}
 
   VkPipeline pipeline_{};
 };

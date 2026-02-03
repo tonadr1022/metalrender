@@ -105,7 +105,15 @@ void VulkanCmdEncoder::begin_rendering(
   vkCmdBeginRenderingKHR(cmd(), &rendering_info);
 }
 
-void VulkanCmdEncoder::bind_pipeline(rhi::PipelineHandle /*handle*/) {}
+void VulkanCmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
+  auto* pipeline = (VulkanPipeline*)device_->get_pipeline(handle);
+  ASSERT(pipeline);
+  vkCmdBindPipeline(cmd(),
+                    pipeline->type() == rhi::PipelineType::Graphics
+                        ? VK_PIPELINE_BIND_POINT_GRAPHICS
+                        : VK_PIPELINE_BIND_POINT_COMPUTE,
+                    pipeline->pipeline_);
+}
 
 void VulkanCmdEncoder::bind_pipeline(const rhi::PipelineHandleHolder& handle) {
   bind_pipeline(handle.handle);

@@ -1,5 +1,4 @@
 // clang-format off
-#define COMPUTE_ROOT_SIG
 #include "../root_sig.hlsl"
 #include "shared_depth_reduce.h"
 // clang-format on

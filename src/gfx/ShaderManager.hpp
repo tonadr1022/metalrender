@@ -36,9 +36,10 @@ class ShaderManager {
   void recompile_shaders_no_lock();
   void replace_dirty_pipelines();
 
- private:
   std::filesystem::path get_shader_path(const std::string& relative_path, rhi::ShaderType type);
+  void check_and_recompile(std::vector<std::filesystem::path>& dirty_paths);
 
+ private:
   std::unordered_set<std::filesystem::path> clean_shaders_;
   std::unordered_map<std::filesystem::path, HashT> path_to_existing_hash_;
   std::unordered_map<std::filesystem::path, uint64_t> last_write_times_;

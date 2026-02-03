@@ -108,20 +108,32 @@ struct GraphicsPipelineCreateInfo {
   std::string name;
 };
 
-// struct ComputePipelineCreateInfo {
-//   ShaderCreateInfo info;
-//   std::string name;
-// };
+enum class PipelineType : uint8_t { Graphics, Compute };
 
 class Pipeline {
  public:
   Pipeline() = default;
-  explicit Pipeline(GraphicsPipelineCreateInfo ginfo) : graphics_desc(std::move(ginfo)) {}
-  explicit Pipeline(ShaderCreateInfo cinfo) : compute_desc(std::move(cinfo)) {}
-  GraphicsPipelineCreateInfo graphics_desc;
-  [[nodiscard]] const GraphicsPipelineCreateInfo& gfx_desc() const { return graphics_desc; }
-  ShaderCreateInfo compute_desc;
+  explicit Pipeline(GraphicsPipelineCreateInfo ginfo) : desc_(std::move(ginfo)) {}
+  explicit Pipeline(ShaderCreateInfo cinfo) : desc_(std::move(cinfo)) {}
+
+  [[nodiscard]] PipelineType type() const {
+    if (std::holds_alternative<GraphicsPipelineCreateInfo>(desc_)) {
+      return PipelineType::Graphics;
+    }
+    return PipelineType::Compute;
+  }
+
+  [[nodiscard]] const GraphicsPipelineCreateInfo& gfx_desc() const {
+    return *std::get_if<GraphicsPipelineCreateInfo>(&desc_);
+  }
+  [[nodiscard]] const ShaderCreateInfo& compute_desc() const {
+    return *std::get_if<ShaderCreateInfo>(&desc_);
+  }
+
   virtual ~Pipeline() = default;
+
+ private:
+  std::variant<GraphicsPipelineCreateInfo, ShaderCreateInfo> desc_;
 };
 
 }  // namespace rhi

@@ -67,9 +67,7 @@ class VulkanDevice : public rhi::Device {
 
   rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) override;
-  rhi::PipelineHandle create_compute_pipeline(const rhi::ShaderCreateInfo& /*cinfo*/) override {
-    exit(1);
-  }
+  rhi::PipelineHandle create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo) override;
   bool replace_pipeline(rhi::PipelineHandle /*handle*/,
                         const rhi::GraphicsPipelineCreateInfo& /*cinfo*/) override {
     exit(1);
@@ -149,11 +147,14 @@ class VulkanDevice : public rhi::Device {
   size_t curr_cmd_encoder_i_{};
   VmaAllocator allocator_;
   size_t frame_num_{};
+  std::filesystem::path shader_lib_dir_;
   template <typename T>
   struct DeleteQueueEntry {
     T obj;
     size_t frame_to_delete;
   };
+
+  VkShaderModule create_shader_module(const std::filesystem::path& path);
 };
 
 }  // namespace gfx::vk

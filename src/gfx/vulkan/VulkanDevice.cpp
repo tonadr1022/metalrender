@@ -16,7 +16,6 @@
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/vulkan/VkUtil.hpp"
 #include "gfx/vulkan/VulkanCommon.hpp"
-#include "vulkan/vk_enum_string_helper.h"
 #include "vulkan/vulkan_core.h"
 
 namespace TENG_NAMESPACE {
@@ -44,13 +43,12 @@ VkShaderStageFlagBits convert_shader_stage(rhi::ShaderType type) {
 std::vector<uint32_t> read_file_to_uint_vec(const std::filesystem::path& path) {
   std::vector<uint32_t> result;
 
-  std::ifstream file(path, std::ios::binary);
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
   if (!file.is_open()) {
     LERROR("Error reading file: {}", path.c_str());
     return result;
   }
 
-  file.seekg(std::ios::end);
   size_t size_bytes = file.tellg();
   file.seekg(std::ios::beg);
 
@@ -198,6 +196,8 @@ void VulkanDevice::shutdown() {
 
 void VulkanDevice::init(const InitInfo& init_info) {
   info_.frames_in_flight = init_info.frames_in_flight;
+  shader_lib_dir_ = init_info.shader_lib_dir;
+  shader_lib_dir_ /= "metal";
   vkb::InstanceBuilder builder{};
 
   VK_CHECK(volkInitialize());
@@ -207,7 +207,7 @@ void VulkanDevice::init(const InitInfo& init_info) {
   }
 
   constexpr int min_api_version_major = 1;
-  constexpr int min_api_version_minor = 2;
+  constexpr int min_api_version_minor = 3;
 
   auto inst_ret = builder.request_validation_layers(init_info.validation_layers_enabled)
                       .set_minimum_instance_version(min_api_version_major, min_api_version_minor, 0)
@@ -323,9 +323,19 @@ void VulkanDevice::init(const InitInfo& init_info) {
   //       .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
   //   };
   // }
-  //
+
   // {  // default pipeline layout
   //   VkPushConstantRange pc_range{.stageFlags = VK_SHADER_STAGE_ALL, .offset = 0, .size = 120};
+  //   VkDescriptorSetLayoutBinding b1{
+  //       .binding = 0,
+  //       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+  //       .descriptorCount = 3,
+  //   };
+  //   VkDescriptorSetLayoutBinding b2{
+  //       .binding = 1,
+  //       .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+  //       .descriptorCount = 9,
+  //   };
   //   VkDescriptorSetLayoutCreateInfo layout_cinfo{
   //       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
   //       .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
@@ -561,14 +571,7 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
       break;
     }
 
-    auto spirv_code = read_file_to_uint_vec(shader_info.path);
-    VkShaderModuleCreateInfo module_cinfo{
-        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-        .codeSize = spirv_code.size() * sizeof(uint32_t),
-        .pCode = spirv_code.data(),
-    };
-    VkShaderModule module;
-    VK_CHECK(vkCreateShaderModule(device_, &module_cinfo, nullptr, &module));
+    VkShaderModule module = create_shader_module(shader_info.path);
     stages[i] = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
         .stage = convert_shader_stage(shader_info.type),
@@ -1041,6 +1044,41 @@ VkSemaphore VulkanDevice::create_semaphore(const char* name) {
     set_vk_debug_name(VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)result, name);
   }
   return result;
+}
+
+rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo) {
+  VkShaderModule module = create_shader_module((shader_lib_dir_ / cinfo.path).concat(".comp.spv"));
+  VkPipelineShaderStageCreateInfo stage_info{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+      .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+      .module = module,
+      .pName = cinfo.entry_point.c_str(),
+  };
+
+  VkComputePipelineCreateInfo pipeline_cinfo{
+      .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+      .stage = stage_info,
+      .layout = default_pipeline_layout_,
+  };
+
+  VkPipeline vk_pipeline;
+  VK_CHECK(vkCreateComputePipelines(device_, nullptr, 1, &pipeline_cinfo, nullptr, &vk_pipeline));
+
+  vkDestroyShaderModule(device_, module, nullptr);
+
+  return pipeline_pool_.alloc(cinfo, vk_pipeline);
+}
+
+VkShaderModule VulkanDevice::create_shader_module(const std::filesystem::path& path) {
+  auto spirv_code = read_file_to_uint_vec(path);
+  VkShaderModuleCreateInfo module_cinfo{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = spirv_code.size() * sizeof(uint32_t),
+      .pCode = spirv_code.data(),
+  };
+  VkShaderModule module;
+  VK_CHECK(vkCreateShaderModule(device_, &module_cinfo, nullptr, &module));
+  return module;
 }
 
 }  // namespace gfx::vk

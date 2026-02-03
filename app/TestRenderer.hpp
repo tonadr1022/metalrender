@@ -3,6 +3,8 @@
 #include <filesystem>
 #include <memory>
 
+#include "gfx/rhi/GFXTypes.hpp"
+
 namespace teng {
 namespace gfx {
 class ShaderManager;
@@ -32,6 +34,7 @@ class TestRenderer {
   std::unique_ptr<gfx::ShaderManager> shader_mgr_;
   rhi::Device* device_;
   rhi::Swapchain* swapchain_;
+  rhi::PipelineHandleHolder clear_color_cmp_pso_;
 };
 
 }  // namespace teng

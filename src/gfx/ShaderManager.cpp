@@ -9,12 +9,11 @@
 #include <tracy/Tracy.hpp>
 #include <vector>
 
+#include "core/Config.hpp"
 #include "core/EAssert.hpp"
 #include "core/Hash.hpp"
 #include "core/Logger.hpp"
 #include "gfx/rhi/Device.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -225,6 +224,7 @@ void ShaderManager::init(rhi::Device* device) {
     clean_shaders_.insert(hash.file);
   }
 
+  ASSERT(fs::exists(std::filesystem::current_path() / hlsl_src_dir));
   for (const auto& entry : fs::recursive_directory_iterator(hlsl_src_dir)) {
     if (!entry.is_regular_file()) continue;
     last_write_times_.emplace(entry.path(), entry.last_write_time().time_since_epoch().count());
@@ -245,6 +245,9 @@ void ShaderManager::init(rhi::Device* device) {
     }
   }
 
+  std::vector<std::filesystem::path> dirty_paths;
+  check_and_recompile(dirty_paths);
+
   file_watcher_thread_ = std::jthread{[this]() {
     std::vector<std::filesystem::path> dirty_paths;
     dirty_paths.reserve(20);
@@ -258,46 +261,7 @@ void ShaderManager::init(rhi::Device* device) {
 
       lk.unlock();
 
-      {
-        std::lock_guard lk(compile_shaders_mtx_);
-        dirty_paths.clear();
-        for (const auto& entry : fs::recursive_directory_iterator(hlsl_src_dir)) {
-          if (!entry.is_regular_file()) {
-            continue;
-          }
-          auto last_write_time = entry.last_write_time().time_since_epoch().count();
-          const auto& path = entry.path();
-          auto it = last_write_times_.find(path);
-          if (it == last_write_times_.end() || it->second < last_write_time) {
-            dirty_paths.emplace_back(path);
-            last_write_times_[path] = last_write_time;
-          }
-        }
-
-        auto recompile = [this](const fs::path& path) {
-          compile_shader(path);
-          clean_shaders_.insert(path);
-          // recompile the pipelines using the shader
-          auto it = path_to_pipelines_using_.find(path);
-          ASSERT(it != path_to_pipelines_using_.end());
-          for (const auto& pipeline_handle : it->second) {
-            std::lock_guard l(pipeline_recompile_mtx_);
-            pipeline_recompile_requests_.emplace_back(pipeline_handle);
-          }
-        };
-
-        for (const auto& dirty_path : dirty_paths) {
-          auto it = filepath_to_src_hlsl_includers_.find(dirty_path);
-          if (dirty_path.extension() == ".hlsl") {
-            recompile(dirty_path);
-          }
-          if (it != filepath_to_src_hlsl_includers_.end()) {
-            for (const auto& includer_path : it->second) {
-              recompile(includer_path);
-            }
-          }
-        }
-      }
+      check_and_recompile(dirty_paths);
       std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
   }};
@@ -409,32 +373,58 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
   auto dep_filepath = (fs::path("resources/shader_out/deps") / relative).replace_extension(".d");
   fs::create_directories(out_filepath.parent_path());
   fs::create_directories(dep_filepath.parent_path());
-  std::string cmd1 =
+  std::string compile_dxil =
       std::format("dxc {} -Fo {} -T {} -E main {}", path.string(), out_filepath.string(),
                   shader_model, debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");
-  std::system(cmd1.c_str());
-  std::string cmd2 = std::format("dxc {} -T {} -E main -MF {}", path.string(), shader_model,
-                                 dep_filepath.string());
-  std::system(cmd2.c_str());
-  auto metallib_path =
-      (fs::path("resources/shader_out/metal") / relative).replace_extension(".metallib");
-
-  bool output_reflection = true;
-
-  std::string output_reflection_arg;
-  if (output_reflection) {
-    auto reflection_path = metallib_path;
-    output_reflection_arg =
-        output_reflection
-            ? "--output-reflection-file " + reflection_path.replace_extension(".json").string()
-            : "";
+  if (std::system(compile_dxil.c_str())) {
+    LINFO("dxc failed for {}", path.string());
+    return false;
   }
 
-  std::string metallib_compile_args =
-      std::format("metal-shaderconverter {} -o {} {}", out_filepath.string(),
-                  metallib_path.string(), output_reflection_arg);
-  LINFO("compiling metallib: {}", metallib_compile_args);
-  std::system(metallib_compile_args.c_str());
+  {  // spirv
+    auto spirv_path = out_filepath;
+    spirv_path.replace_extension(".spv");
+    auto compile_spirv =
+        std::format("dxc {} -Fo {} -T {} -E main {} -spirv -fspv-target-env=vulkan1.3",
+                    path.string(), spirv_path.string(), shader_model,
+                    debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");
+    if (std::system(compile_spirv.c_str())) {
+      LINFO("dxc spirv failed for {}", compile_spirv);
+      return false;
+    }
+  }
+
+  {  // write shader deps
+    std::string write_shader_dependencies_cmd = std::format(
+        "dxc {} -T {} -E main -MF {}", path.string(), shader_model, dep_filepath.string());
+    if (std::system(write_shader_dependencies_cmd.c_str())) {
+      LINFO("dxc dep-generation failed for {}", path.string());
+      return false;
+    }
+  }
+
+  {  // dxil -> metallib
+    auto metallib_path =
+        (fs::path("resources/shader_out/metal") / relative).replace_extension(".metallib");
+    bool output_reflection = true;
+
+    std::string output_reflection_arg;
+    if (output_reflection) {
+      auto reflection_path = metallib_path;
+      output_reflection_arg =
+          output_reflection
+              ? "--output-reflection-file " + reflection_path.replace_extension(".json").string()
+              : "";
+    }
+
+    std::string metallib_compile_args =
+        std::format("metal-shaderconverter {} -o {} {}", out_filepath.string(),
+                    metallib_path.string(), output_reflection_arg);
+    if (std::system(metallib_compile_args.c_str())) {
+      LINFO("metal-shaderconverter metallib failed for {}", path.string());
+      return false;
+    }
+  }
 
   // update hash
   auto deps = get_dep_filepaths(dep_filepath);
@@ -472,4 +462,58 @@ void ShaderManager::replace_dirty_pipelines() {
 
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE
+
+void teng::gfx::ShaderManager::check_and_recompile(
+    std::vector<std::filesystem::path>& dirty_paths) {
+  std::lock_guard lk(compile_shaders_mtx_);
+  dirty_paths.clear();
+  for (const auto& entry : fs::recursive_directory_iterator(hlsl_src_dir)) {
+    if (!entry.is_regular_file()) {
+      continue;
+    }
+    auto last_write_time = entry.last_write_time().time_since_epoch().count();
+    const auto& path = entry.path();
+    auto it = last_write_times_.find(path);
+    if (it == last_write_times_.end() || it->second < last_write_time ||
+        (path.extension() == ".hlsl" &&
+         !std::filesystem::exists(
+             (fs::path("resources/shader_out/metal") / path_after_word(path, "hlsl"))
+                 .replace_extension(".dxil")))) {
+      // TODO: cursed
+      if (!path.string().contains("root_sig")) {
+        LINFO("dirty shader detected: {}", path.string());
+        dirty_paths.emplace_back(path);
+        last_write_times_[path] = last_write_time;
+      }
+    }
+  }
+
+  auto recompile = [this](const fs::path& path) {
+    bool success = compile_shader(path);
+    if (!success) {
+      LINFO("Failed to compile shader {}", path.string());
+      return;
+    }
+    clean_shaders_.insert(path);
+    // recompile the pipelines using the shader
+    auto it = path_to_pipelines_using_.find(path);
+    ASSERT(it != path_to_pipelines_using_.end());
+    for (const auto& pipeline_handle : it->second) {
+      std::lock_guard l(pipeline_recompile_mtx_);
+      pipeline_recompile_requests_.emplace_back(pipeline_handle);
+    }
+  };
+
+  for (const auto& dirty_path : dirty_paths) {
+    auto it = filepath_to_src_hlsl_includers_.find(dirty_path);
+    if (dirty_path.extension() == ".hlsl") {
+      recompile(dirty_path);
+    }
+    if (it != filepath_to_src_hlsl_includers_.end()) {
+      for (const auto& includer_path : it->second) {
+        recompile(includer_path);
+      }
+    }
+  }
+}
