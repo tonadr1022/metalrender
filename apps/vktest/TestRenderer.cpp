@@ -15,6 +15,10 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   shader_mgr_->init(
       device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
   clear_color_cmp_pso_ = device_->create_compute_pipeline_h({"vulkan_exp/clear_tex_to_color"});
+  test_gfx_pso_ = device_->create_graphics_pipeline_h({
+      .shaders = {{"fullscreen_quad", rhi::ShaderType::Vertex},
+                  {"vulkan_exp/single_color", rhi::ShaderType::Fragment}},
+  });
 }
 
 void TestRenderer::render() {
@@ -23,6 +27,12 @@ void TestRenderer::render() {
   auto* enc = device_->begin_cmd_encoder();
   glm::vec4 clear_color{1, 1, 0, 1};
   device_->begin_swapchain_rendering(swapchain_, enc, &clear_color);
+  enc->set_cull_mode(rhi::CullMode::None);
+  enc->set_viewport({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
+  enc->set_scissor({swapchain_->desc_.width / 4, swapchain_->desc_.height / 4},
+                   {swapchain_->desc_.width * 3 / 4.f, swapchain_->desc_.height * 3 / 4.f});
+  enc->bind_pipeline(test_gfx_pso_);
+  enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
   enc->end_rendering();
 
   auto b = rhi::GPUBarrier::tex_barrier(swapchain_->get_current_texture(),

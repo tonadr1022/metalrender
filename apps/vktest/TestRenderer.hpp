@@ -35,6 +35,7 @@ class TestRenderer {
   rhi::Device* device_;
   rhi::Swapchain* swapchain_;
   rhi::PipelineHandleHolder clear_color_cmp_pso_;
+  rhi::PipelineHandleHolder test_gfx_pso_;
 };
 
 }  // namespace teng

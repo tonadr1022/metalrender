@@ -6,6 +6,7 @@
 #include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Config.hpp"
+#include "gfx/rhi/Pipeline.hpp"
 #include "gfx/rhi/Queue.hpp"
 
 namespace TENG_NAMESPACE {
@@ -59,7 +60,7 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   void end_encoding() override;
   void set_label(const std::string& /*label*/) override { exit(1); }
   void set_viewport(glm::uvec2 min, glm::uvec2 extent) override;
-  void set_scissor(glm::uvec2 /*min*/, glm::uvec2 /*extent*/) override { exit(1); }
+  void set_scissor(glm::uvec2 min, glm::uvec2 extent) override;
 
   void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset, size_t src_bytes_per_row,
                            rhi::TextureHandle dst_tex) override;
@@ -163,8 +164,11 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   DescriptorBinderPool binder_pools_[k_max_frames_in_flight];
   DescriptorBinder binder_;
 
+  // only valid during render pass
+  rhi::RenderTargetInfo curr_render_target_info_;
+
   DescriptorBindingTable binding_table_{};
-  bool descriptors_dirty_{true};
+  bool descriptors_dirty_{false};
 
   // initial use is for swapchain rendering
   std::vector<VkImageMemoryBarrier2> render_pass_end_img_barriers_;

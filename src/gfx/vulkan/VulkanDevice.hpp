@@ -144,7 +144,6 @@ class VulkanDevice : public rhi::Device {
   VkInstance instance_{};
   VkPhysicalDevice physical_device_{};
   VkDevice device_{};
-  VkPipelineLayout default_pipeline_layout_{};
   VkFence frame_fences_[(int)rhi::QueueType::Count][k_max_frames_in_flight]{};
 
   Queue queues_[(int)rhi::QueueType::Count]{};
@@ -154,16 +153,25 @@ class VulkanDevice : public rhi::Device {
   VmaAllocator allocator_;
   size_t frame_num_{};
   std::filesystem::path shader_lib_dir_;
-  template <typename T>
-  struct DeleteQueueEntry {
-    T obj;
-    size_t frame_to_delete;
-  };
 
+ public:
+  // TODO: lmao
+  std::unordered_map<uint64_t, rhi::PipelineHandle> all_pipelines_;
+
+ private:
   VkShaderModule create_shader_module(const std::filesystem::path& path);
   VkShaderModule create_shader_module(std::span<const uint32_t> spirv_code);
   std::unordered_map<uint64_t, VkDescriptorSetLayout> set_layout_cache_;
+  std::unordered_map<uint64_t, VkPipelineLayout> pipeline_layout_cache_;
   uint64_t hash_descriptor_set_layout_cinfo(const VkDescriptorSetLayoutCreateInfo& cinfo);
+  uint64_t hash_pipeline_layout_cinfo(const VkPipelineLayoutCreateInfo& cinfo);
+
+  struct DescSetCreateInfo {
+    std::vector<VkDescriptorSetLayoutBinding> bindings;
+  };
+  void reflect_shader(std::span<const uint32_t> spirv_code,
+                      std::vector<VkPushConstantRange>& out_pc_ranges,
+                      DescSetCreateInfo& out_set_0_info);
 };
 
 }  // namespace gfx::vk

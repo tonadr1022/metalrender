@@ -1,6 +1,7 @@
 #include "VulkanCmdEncoder.hpp"
 
 #include "core/Config.hpp"
+#include "core/Hash.hpp"
 #include "core/Logger.hpp"
 #include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -8,7 +9,6 @@
 #include "gfx/vulkan/VulkanCommon.hpp"
 #include "gfx/vulkan/VulkanDevice.hpp"
 #include "gfx/vulkan/VulkanTexture.hpp"
-#include "vulkan/vk_enum_string_helper.h"
 
 namespace TENG_NAMESPACE {
 
@@ -65,10 +65,12 @@ void VulkanCmdEncoder::begin_rendering(
   uint32_t color_attachment_count = 0;
   // TODO: parameterize
   glm::uvec2 extent{0, 0};
+  curr_render_target_info_ = {};
   for (const auto& att : attachments) {
     if (att.type == rhi::RenderingAttachmentInfo::Type::Color) {
       auto* vk_att = &color_attachments[color_attachment_count++];
       auto* tex = (VulkanTexture*)device_->get_tex(att.image);
+      curr_render_target_info_.color_formats.push_back(tex->desc().format);
       extent.x = std::max(extent.x, tex->desc().dims.x);
       extent.y = std::max(extent.y, tex->desc().dims.y);
       vk_att->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -86,6 +88,7 @@ void VulkanCmdEncoder::begin_rendering(
       ds_att.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
       auto* tex = (VulkanTexture*)device_->get_tex(att.image);
       ds_att.imageView = tex->default_view_;
+      curr_render_target_info_.depth_format = tex->desc().format;
       extent.x = std::max(extent.x, tex->desc().dims.x);
       extent.y = std::max(extent.y, tex->desc().dims.y);
       ds_att.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
@@ -113,17 +116,49 @@ void VulkanCmdEncoder::begin_rendering(
 
 void VulkanCmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
   auto* pipeline = (VulkanPipeline*)device_->get_pipeline(handle);
+  VkPipelineBindPoint bindpoint = pipeline->type() == rhi::PipelineType::Graphics
+                                      ? VK_PIPELINE_BIND_POINT_GRAPHICS
+                                      : VK_PIPELINE_BIND_POINT_COMPUTE;
+  if (bindpoint == VK_PIPELINE_BIND_POINT_GRAPHICS) {
+    auto render_target_info_hash = compute_render_target_info_hash(curr_render_target_info_);
+    if (render_target_info_hash != pipeline->render_target_info_hash_) {
+      auto new_desc = pipeline->gfx_desc();
+      new_desc.rendering = curr_render_target_info_;
+      auto h = std::make_tuple(render_target_info_hash, handle.to64());
+      auto hash = util::hash::tuple_hash<decltype(h)>()(h);
+      auto it = device_->all_pipelines_.find(hash);
+      if (it == device_->all_pipelines_.end()) {
+        auto new_pipeline = device_->create_graphics_pipeline(new_desc);
+        device_->all_pipelines_[hash] = new_pipeline;
+        LINFO("making pipeline");
+        pipeline = reinterpret_cast<VulkanPipeline*>(device_->get_pipeline(new_pipeline));
+      } else {
+        pipeline = reinterpret_cast<VulkanPipeline*>(device_->get_pipeline(it->second));
+      }
+    } else {
+      LINFO("eq");
+    }
+  }
+
+  descriptors_dirty_ = true;
   bound_pipeline_ = pipeline;
   ASSERT(pipeline);
-  vkCmdBindPipeline(cmd(), get_bound_pipeline_bind_point(), pipeline->pipeline_);
+  vkCmdBindPipeline(cmd(), bindpoint, pipeline->pipeline_);
 }
 
 void VulkanCmdEncoder::bind_pipeline(const rhi::PipelineHandleHolder& handle) {
   bind_pipeline(handle.handle);
 }
 
-void VulkanCmdEncoder::draw_primitives(rhi::PrimitiveTopology /*topology*/, size_t /*vertex_start*/,
-                                       size_t /*count*/, size_t /*instance_count*/) {}
+void VulkanCmdEncoder::draw_primitives(rhi::PrimitiveTopology topologyg, size_t vertex_start,
+                                       size_t count, size_t instance_count) {
+  flush_binds();
+  // TODO: SOOOOOOOOOOOO BADDDDDDDDDDDDDDDDDD
+  vkCmdSetPrimitiveTopologyEXT(cmd(), convert_prim_topology(topologyg));
+  vkCmdDraw(cmd(), static_cast<uint32_t>(count), static_cast<uint32_t>(instance_count),
+            // TODO: is this bytes or index
+            static_cast<uint32_t>(vertex_start), 0);
+}
 
 void VulkanCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology /*topology*/,
                                                rhi::BufferHandle /*index_buf*/,
@@ -131,10 +166,15 @@ void VulkanCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology /*topology
                                                size_t /*instance_count*/, size_t /*base_vertex*/,
                                                size_t /*base_instance*/,
                                                rhi::IndexType /*index_type*/) {}
+
 void VulkanCmdEncoder::set_depth_stencil_state(rhi::CompareOp /*depth_compare_op*/,
                                                bool /*depth_write_enabled*/) {}
+
 void VulkanCmdEncoder::set_wind_order(rhi::WindOrder /*wind_order*/) {}
-void VulkanCmdEncoder::set_cull_mode(rhi::CullMode /*cull_mode*/) {}
+
+void VulkanCmdEncoder::set_cull_mode(rhi::CullMode cull_mode) {
+  vkCmdSetCullModeEXT(cmd(), convert(cull_mode));
+}
 
 void VulkanCmdEncoder::push_constants(void* data, size_t size) {
   ASSERT(bound_pipeline_);
@@ -147,7 +187,18 @@ void VulkanCmdEncoder::end_encoding() {
   VK_CHECK(vkEndCommandBuffer(cmd()));
 }
 
-void VulkanCmdEncoder::set_viewport(glm::uvec2 /*min*/, glm::uvec2 /*extent*/) {}
+void VulkanCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 extent) {
+  VkViewport viewport{
+      .x = static_cast<float>(min.x),
+      .y = static_cast<float>(min.y),
+      .width = static_cast<float>(extent.x),
+      .height = static_cast<float>(extent.y),
+      .minDepth = 0.0f,
+      .maxDepth = 1.0f,
+  };
+  vkCmdSetViewport(cmd(), 0, 1, &viewport);
+}
+
 void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle /*src_buf*/, size_t /*src_offset*/,
                                            size_t /*src_bytes_per_row*/,
                                            rhi::TextureHandle /*dst_tex*/) {}
@@ -384,7 +435,7 @@ void VulkanCmdEncoder::bind_uav(rhi::TextureHandle texture, uint32_t slot, int s
 
 void VulkanCmdEncoder::flush_binds() {
   ASSERT(bound_pipeline_);
-  if (descriptors_dirty_) {
+  if (descriptors_dirty_ && !bound_pipeline_->layout_bindings_.empty()) {
     ASSERT(bound_pipeline_->descriptor_set_layout_);
 
     VkDescriptorSetAllocateInfo alloc_info{
@@ -493,6 +544,14 @@ void VulkanCmdEncoder::dispatch_compute(glm::uvec3 thread_groups, glm::uvec3) {
 [[nodiscard]] VkPipelineBindPoint VulkanCmdEncoder::get_bound_pipeline_bind_point() const {
   return bound_pipeline_->type() == rhi::PipelineType::Graphics ? VK_PIPELINE_BIND_POINT_GRAPHICS
                                                                 : VK_PIPELINE_BIND_POINT_COMPUTE;
+}
+
+void VulkanCmdEncoder::set_scissor(glm::uvec2 min, glm::uvec2 extent) {
+  VkRect2D scissor{
+      .offset = {static_cast<int32_t>(min.x), static_cast<int32_t>(min.y)},
+      .extent = {extent.x, extent.y},
+  };
+  vkCmdSetScissor(cmd(), 0, 1, &scissor);
 }
 
 }  // namespace gfx::vk

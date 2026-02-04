@@ -86,7 +86,6 @@ VkPipelineStageFlags2 convert(rhi::PipelineStage stage) {
 
 VkAccessFlags2 convert(rhi::AccessFlags access) {
   VkAccessFlags2 flags{};
-
   if (access & rhi::AccessFlags_IndirectCommandRead) {
     flags |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
   }
@@ -149,6 +148,38 @@ VkAccessFlags2 convert(rhi::AccessFlags access) {
   }
 
   return flags;
+}
+
+VkPrimitiveTopology convert_prim_topology(rhi::PrimitiveTopology top) {
+  switch (top) {
+    default:
+    case rhi::PrimitiveTopology::PointList:
+      return VK_PRIMITIVE_TOPOLOGY_POINT_LIST;
+    case rhi::PrimitiveTopology::LineList:
+      return VK_PRIMITIVE_TOPOLOGY_LINE_LIST;
+    case rhi::PrimitiveTopology::TriangleList:
+      return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    case rhi::PrimitiveTopology::LineStrip:
+      return VK_PRIMITIVE_TOPOLOGY_LINE_STRIP;
+    case rhi::PrimitiveTopology::TriangleStrip:
+      return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP;
+    case rhi::PrimitiveTopology::TriangleFan:
+      return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
+    case rhi::PrimitiveTopology::PatchList:
+      assert(0);
+      return VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
+  }
+}
+VkCullModeFlags convert(rhi::CullMode cull_mode) {
+  switch (cull_mode) {
+    case rhi::CullMode::None:
+    default:
+      return VK_CULL_MODE_NONE;
+    case rhi::CullMode::Front:
+      return VK_CULL_MODE_FRONT_BIT;
+    case rhi::CullMode::Back:
+      return VK_CULL_MODE_BACK_BIT;
+  }
 }
 
 }  // namespace gfx::vk

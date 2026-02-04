@@ -27,6 +27,32 @@ namespace gfx::vk {
 
 namespace {
 
+std::filesystem::path get_spv_path(const std::filesystem::path& shader_lib_dir,
+                                   const std::filesystem::path& path, const rhi::ShaderType type) {
+  const char* type_str{};
+  switch (type) {
+    case rhi::ShaderType::Fragment:
+      type_str = "frag";
+      break;
+    case rhi::ShaderType::Vertex:
+      type_str = "vert";
+      break;
+    case rhi::ShaderType::Mesh:
+      type_str = "mesh";
+      break;
+    case rhi::ShaderType::Task:
+      type_str = "task";
+      break;
+    case rhi::ShaderType::Compute:
+      type_str = "comp";
+      break;
+    default:
+      ASSERT(0);
+      break;
+  }
+  return (shader_lib_dir / path).concat(".").concat(type_str).concat(".spv");
+}
+
 VkShaderStageFlagBits convert_shader_stage(rhi::ShaderType type) {
   switch (type) {
     case rhi::ShaderType::Vertex:
@@ -78,6 +104,7 @@ constexpr VkFormat convert_format(TextureFormat format) {
     case TextureFormat::R32float:
       return VK_FORMAT_R32_SFLOAT;
     case TextureFormat::Undefined:
+      return VK_FORMAT_UNDEFINED;
     default:
       ASSERT(0);
       return VK_FORMAT_UNDEFINED;
@@ -164,8 +191,10 @@ vk_debug_callback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
   } else {
     std::println("[{}: {}]\n{}", ms, mt, pCallbackData->pMessage);
   }
+  if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+    ALWAYS_ASSERT(0);
+  }
 
-  ALWAYS_ASSERT(0);
   return VK_FALSE;
 }
 
@@ -189,10 +218,11 @@ void VulkanDevice::shutdown() {
     }
   }
 
-  // TODO: remove
-  vkDestroyPipelineLayout(device_, default_pipeline_layout_, nullptr);
   for (auto& [hash, layout] : set_layout_cache_) {
     vkDestroyDescriptorSetLayout(device_, layout, nullptr);
+  }
+  for (auto& [hash, layout] : pipeline_layout_cache_) {
+    vkDestroyPipelineLayout(device_, layout, nullptr);
   }
 
   for (auto& frame_fence : frame_fences_) {
@@ -240,6 +270,7 @@ void VulkanDevice::init(const InitInfo& init_info) {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,
       VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
       VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
+      VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
   };
   phys_device_selector.add_required_extensions(ARRAY_SIZE(required_extensions),
                                                required_extensions);
@@ -249,6 +280,12 @@ void VulkanDevice::init(const InitInfo& init_info) {
       .dynamicRendering = true,
   };
   phys_device_selector.set_required_features_13(feat13);
+
+  VkPhysicalDeviceExtendedDynamicStateFeaturesEXT ext_state{
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
+      .extendedDynamicState = true,
+  };
+  phys_device_selector.add_required_extension_features(ext_state);
 
   auto phys_ret = phys_device_selector.defer_surface_initialization()
                       .set_minimum_version(min_api_version_major, min_api_version_minor)
@@ -329,44 +366,6 @@ void VulkanDevice::init(const InitInfo& init_info) {
     VK_CHECK(vkCreateCommandPool(device_, &cinfo, nullptr, &command_pools_[i]));
   }
 
-  // NEED: VK_EXT_mutable_descriptor_type
-  // {
-  //   VkDescriptorPoolSize size{.type = VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR};
-  //   // descriptor pool
-  //   VkDescriptorPoolCreateInfo pool_cinfo{
-  //       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-  //       .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
-  //   };
-  // }
-
-  // {  // default pipeline layout
-  //   VkPushConstantRange pc_range{.stageFlags = VK_SHADER_STAGE_ALL, .offset = 0, .size = 120};
-  //   VkDescriptorSetLayoutBinding b1{
-  //       .binding = 0,
-  //       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-  //       .descriptorCount = 3,
-  //   };
-  //   VkDescriptorSetLayoutBinding b2{
-  //       .binding = 1,
-  //       .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-  //       .descriptorCount = 9,
-  //   };
-  //   VkDescriptorSetLayoutCreateInfo layout_cinfo{
-  //       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-  //       .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
-  //   };
-  //   VkDescriptorSetLayout main_desc_set_layout{
-  //
-  //   };
-  //   VkPipelineLayoutCreateInfo default_layout_cinfo{
-  //       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-  //       .setLayoutCount = 1,
-  //       .pSetLayouts = &main_desc_set_layout,
-  //       .pushConstantRangeCount = 1,
-  //       .pPushConstantRanges = &pc_range,
-  //   };
-  //   vkCreatePipelineLayout(device_, &default_layout_cinfo, nullptr, &default_pipeline_layout_);
-  // }
   del_q_.init(device_, info_.frames_in_flight);
 }
 
@@ -499,8 +498,94 @@ rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder() {
 
 rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
     const rhi::GraphicsPipelineCreateInfo& info) {
+  std::array<VkPipelineShaderStageCreateInfo, 3> stages;
+  uint32_t module_count = 0;
+  std::vector<VkPushConstantRange> push_constant_ranges;
+  DescSetCreateInfo set0_info;
+  VkDescriptorSetLayout set_layout;
+  std::vector<VkDescriptorSetLayoutBinding> merged_bindings;
+
+  for (size_t i = 0; i < info.shaders.size(); i++, module_count++) {
+    const auto& shader_info = info.shaders[i];
+    if (shader_info.type == rhi::ShaderType::None) {
+      break;
+    }
+
+    auto spirv_code =
+        read_file_to_uint_vec(get_spv_path(shader_lib_dir_, shader_info.path, shader_info.type));
+    reflect_shader(spirv_code, push_constant_ranges, set0_info);
+
+    VkShaderModule module = create_shader_module(spirv_code);
+    stages[i] = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+        .stage = convert_shader_stage(shader_info.type),
+        .module = module,
+        .pName = info.shaders[i].entry_point.c_str(),
+    };
+  }
+
+  // merge PC blocks
+  // not actually handling multiple push constant ranges yet
+  VkPushConstantRange merged_push_constant_range{};
+  bool has_range = false;
+  for (auto& range : push_constant_ranges) {
+    has_range = true;
+    ASSERT(range.stageFlags == VK_SHADER_STAGE_ALL);
+    merged_push_constant_range.stageFlags |= range.stageFlags;
+    merged_push_constant_range.offset = range.offset;
+    merged_push_constant_range.size = std::max(range.size, merged_push_constant_range.size);
+  }
+  // merge set layouts
+  for (const auto& b : set0_info.bindings) {
+    for (auto& existing_b : merged_bindings) {
+      if (existing_b.binding == b.binding) {
+        existing_b.stageFlags |= b.stageFlags;
+        ASSERT(existing_b.descriptorCount == b.descriptorCount);
+        ASSERT(existing_b.descriptorType == b.descriptorType);
+      } else {
+        merged_bindings.emplace_back(b);
+      }
+    }
+  }
+
+  VkDescriptorSetLayoutCreateInfo set_cinfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = static_cast<uint32_t>(merged_bindings.size()),
+      .pBindings = merged_bindings.data(),
+  };
+  auto hash = hash_descriptor_set_layout_cinfo(set_cinfo);
+  auto it = set_layout_cache_.find(hash);
+  if (it != set_layout_cache_.end()) {
+    set_layout = it->second;
+  } else {
+    VK_CHECK(vkCreateDescriptorSetLayout(device_, &set_cinfo, nullptr, &set_layout));
+    set_layout_cache_[hash] = set_layout;
+  }
+
+  VkPipelineLayoutCreateInfo pipeline_layout_cinfo{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = 1,
+      .pSetLayouts = &set_layout,
+      .pushConstantRangeCount = has_range,
+      .pPushConstantRanges = &merged_push_constant_range,
+  };
+
+  VkPipelineLayout pipeline_layout;
+  {
+    auto hash = hash_pipeline_layout_cinfo(pipeline_layout_cinfo);
+    auto it = pipeline_layout_cache_.find(hash);
+    if (it != pipeline_layout_cache_.end()) {
+      pipeline_layout = it->second;
+    } else {
+      VK_CHECK(vkCreatePipelineLayout(device_, &pipeline_layout_cinfo, nullptr, &pipeline_layout));
+      pipeline_layout_cache_[hash] = pipeline_layout;
+    }
+  }
+
   std::array<VkPipelineColorBlendAttachmentState, 10> attachments{};
+
   uint32_t i = 0;
+  uint32_t color_format_cnt = info.rendering.color_formats.size();
   uint32_t attachment_cnt = info.blend.attachments.size();
   for (const auto& attachment : info.blend.attachments) {
     attachments[i++] = convert_color_blend_attachment(attachment);
@@ -509,7 +594,7 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
       .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
       .logicOpEnable = info.blend.logic_op_enable,
       .logicOp = convert_logic_op(info.blend.logic_op),
-      .attachmentCount = attachment_cnt,
+      .attachmentCount = color_format_cnt,
       .pAttachments = attachments.data()};
 
   VkPipelineMultisampleStateCreateInfo multisample{
@@ -551,16 +636,14 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
   VkPipelineVertexInputStateCreateInfo vertex_state{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
   VkPipelineInputAssemblyStateCreateInfo input_assembly{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+      .topology = convert_prim_topology(info.topology),
+  };
 
-  std::array<VkFormat, 5> color_formats;
-  uint32_t color_format_cnt = 0;
+  gch::small_vector<VkFormat, rhi::k_max_color_attachments> color_formats;
   for (auto format : info.rendering.color_formats) {
     if (format != rhi::TextureFormat::Undefined) {
-      color_formats[color_format_cnt] = convert_format(format);
-      color_format_cnt++;
-    } else {
-      break;
+      color_formats.push_back(convert_format(format));
     }
   }
   // dummy blend attachment if color attachment is specified but no blending
@@ -590,23 +673,6 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
       .depthBiasSlopeFactor = info.rasterization.depth_bias_slope_factor,
       .lineWidth = info.rasterization.line_width};
 
-  std::array<VkPipelineShaderStageCreateInfo, 2> stages;
-  uint32_t module_count = 0;
-  for (size_t i = 0; i < info.shaders.size(); i++, module_count++) {
-    const auto& shader_info = info.shaders[i];
-    if (shader_info.type == rhi::ShaderType::None) {
-      break;
-    }
-
-    VkShaderModule module = create_shader_module(shader_info.path);
-    stages[i] = {
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-        .stage = convert_shader_stage(shader_info.type),
-        .module = module,
-        .pName = info.shaders[i].entry_point.c_str(),
-    };
-  }
-
   VkGraphicsPipelineCreateInfo cinfo{
       .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
       .pNext = &rendering_info,
@@ -621,7 +687,7 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
       .pDepthStencilState = &depth_stencil,
       .pColorBlendState = &blend_state,
       .pDynamicState = &dynamic_state,
-      .layout = default_pipeline_layout_,
+      .layout = pipeline_layout,
   };
 
   VkPipeline vk_pipeline;
@@ -630,9 +696,9 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
   for (uint32_t i = 0; i < module_count; i++) {
     vkDestroyShaderModule(device_, stages[i].module, nullptr);
   }
-  ASSERT(0 && " unhandled pipeline layout and descriptor set layout");
-  std::vector<VkDescriptorSetLayoutBinding> bindings;
-  return pipeline_pool_.alloc(info, vk_pipeline, nullptr, nullptr, std::move(bindings));
+  return pipeline_pool_.alloc(info, vk_pipeline, pipeline_layout, set_layout,
+                              std::move(merged_bindings),
+                              rhi::compute_render_target_info_hash(info.rendering));
 }
 
 void VulkanDevice::submit_frame() {
@@ -1069,8 +1135,10 @@ VkSemaphore VulkanDevice::create_semaphore(const char* name) {
 }
 
 rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreateInfo& cinfo) {
-  auto spirv_code = read_file_to_uint_vec((shader_lib_dir_ / cinfo.path).concat(".comp.spv"));
+  auto spirv_code =
+      read_file_to_uint_vec(get_spv_path(shader_lib_dir_, cinfo.path, rhi::ShaderType::Compute));
 
+  VkPipelineLayout pipeline_layout;
   VkDescriptorSetLayout layout;
   // TODO: don't allocate?
   std::vector<VkDescriptorSetLayoutBinding> layout_bindings;
@@ -1146,8 +1214,14 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
       layouts[pipeline_layout_cinfo.setLayoutCount++] = layout;
     }
 
-    VK_CHECK(vkCreatePipelineLayout(device_, &pipeline_layout_cinfo, nullptr,
-                                    &default_pipeline_layout_));
+    auto pipeline_layout_hash = hash_pipeline_layout_cinfo(pipeline_layout_cinfo);
+    auto it = pipeline_layout_cache_.find(pipeline_layout_hash);
+    if (it != pipeline_layout_cache_.end()) {
+      pipeline_layout = it->second;
+    } else {
+      VK_CHECK(vkCreatePipelineLayout(device_, &pipeline_layout_cinfo, nullptr, &pipeline_layout));
+      pipeline_layout_cache_[pipeline_layout_hash] = pipeline_layout;
+    }
   }
 
   VkShaderModule module = create_shader_module(spirv_code);
@@ -1162,7 +1236,7 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
   VkComputePipelineCreateInfo pipeline_cinfo{
       .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
       .stage = stage_info,
-      .layout = default_pipeline_layout_,
+      .layout = pipeline_layout,
   };
 
   VkPipeline vk_pipeline;
@@ -1170,7 +1244,7 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
 
   vkDestroyShaderModule(device_, module, nullptr);
 
-  return pipeline_pool_.alloc(cinfo, vk_pipeline, default_pipeline_layout_, layout,
+  return pipeline_pool_.alloc(cinfo, vk_pipeline, pipeline_layout, layout,
                               std::move(layout_bindings));
 }
 
@@ -1192,6 +1266,20 @@ uint64_t VulkanDevice::hash_descriptor_set_layout_cinfo(
   return hash;
 }
 
+uint64_t VulkanDevice::hash_pipeline_layout_cinfo(const VkPipelineLayoutCreateInfo& cinfo) {
+  uint64_t hash = 1;
+  for (uint32_t i = 0; i < cinfo.setLayoutCount; i++) {
+    util::hash::hash_combine(hash, (uint64_t)cinfo.pSetLayouts[i]);
+  }
+  for (uint32_t i = 0; i < cinfo.pushConstantRangeCount; i++) {
+    const auto& pc_range = cinfo.pPushConstantRanges[i];
+    util::hash::hash_combine(hash, pc_range.offset);
+    util::hash::hash_combine(hash, pc_range.size);
+    util::hash::hash_combine(hash, pc_range.stageFlags);
+  }
+  return hash;
+}
+
 VkShaderModule VulkanDevice::create_shader_module(std::span<const uint32_t> spirv_code) {
   VkShaderModuleCreateInfo module_cinfo{
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1201,6 +1289,67 @@ VkShaderModule VulkanDevice::create_shader_module(std::span<const uint32_t> spir
   VkShaderModule module;
   VK_CHECK(vkCreateShaderModule(device_, &module_cinfo, nullptr, &module));
   return module;
+}
+
+void VulkanDevice::reflect_shader(std::span<const uint32_t> spirv_code,
+                                  std::vector<VkPushConstantRange>& out_pc_ranges,
+                                  DescSetCreateInfo& out_set_0_info) {
+  {
+    spv_reflect::ShaderModule refl{spirv_code.size() * sizeof(uint32_t), spirv_code.data(),
+                                   SPV_REFLECT_MODULE_FLAG_NO_COPY};
+    auto result = refl.GetResult();
+    ASSERT(result == SPV_REFLECT_RESULT_SUCCESS);
+    uint32_t set_count;
+    refl.EnumerateDescriptorSets(&set_count, nullptr);
+    std::vector<SpvReflectDescriptorSet*> sets;
+
+    // VkPushConstantRange push_constant_ranges[4];
+    // VkPipelineLayoutCreateInfo pipeline_layout_cinfo{
+    //     .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+    //     .pNext = nullptr,
+    //     .setLayoutCount = 0,
+    //     .pSetLayouts = layouts,
+    //     .pushConstantRangeCount = 0,
+    //     .pPushConstantRanges = push_constant_ranges,
+    // };
+
+    uint32_t pc_count;
+    refl.EnumeratePushConstantBlocks(&pc_count, nullptr);
+    std::vector<SpvReflectBlockVariable*> push_constants(pc_count);
+    refl.EnumeratePushConstantBlocks(&pc_count, push_constants.data());
+
+    for (uint32_t i = 0; i < pc_count; i++) {
+      auto& pc = push_constants[i];
+      VkPushConstantRange range{
+          // TODO: lolllll
+          .stageFlags = VK_SHADER_STAGE_ALL,
+          .offset = pc->offset,
+          .size = pc->size,
+      };
+      out_pc_ranges.emplace_back(range);
+    }
+
+    sets.resize(set_count);
+    refl.EnumerateDescriptorSets(&set_count, sets.data());
+    ASSERT(set_count <= 1);
+    for (uint32_t i = 0; i < set_count; i++) {
+      auto& set = sets[i];
+      // LINFO("set {}: binding count {}", set->set, set->binding_count);
+      for (uint32_t j = 0; j < set->binding_count; j++) {
+        auto& binding = set->bindings[j];
+        // LINFO("  binding {}: type {}, count {}", binding->binding,
+        //       string_VkDescriptorType((VkDescriptorType)binding->descriptor_type),
+        //       binding->count);
+        out_set_0_info.bindings.emplace_back(VkDescriptorSetLayoutBinding{
+            .binding = binding->binding,
+            .descriptorType = (VkDescriptorType)binding->descriptor_type,
+            .descriptorCount = binding->count,
+            .stageFlags = (VkShaderStageFlagBits)refl.GetShaderStage(),
+            .pImmutableSamplers = nullptr,
+        });
+      }
+    }
+  }
 }
 
 }  // namespace gfx::vk
