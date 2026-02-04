@@ -1,15 +1,21 @@
 # Another Renderer
 
 I've been working on this renderer to enlighten myself on the wonders
-of the Metal API while I don't have access to a desktop. As of Jan 2026, I might be quitting this for now, since HLSL shader debugging in Xcode is quite lacking. As of later Jan 2026, I came back to this, since I once again was sentenced to MacOS only. My current work is inspiring me to continue this and add a Vulkan backend so the RHI is actually an RHI and is provably not leaky.
+of the Metal API while I don't have access to a desktop.
+
+[Meshlet Occlusion Culling YouTube Demo](https://youtu.be/VtvOlOpG3P0?si=x588W3CFihpYrXrU)
 
 ## The deal
 
+The main branch is an ongoing attempt at a render hardware interface (RHI) wrapping Metal and eventually Vulkan to enable a single renderer frontend to run on multiple platforms. The approach compiles HLSL with [DXC](https://github.com/microsoft/DirectXShaderCompiler) to either SPIRV directly for use with Vulkan, or `dxil`, which is converted directly to Metal IR using [metal-shaderconverter](https://developer.apple.com/metal/shader-converter/). After half-arsing abstractions in my previous renderer iterations, [VkRender2](https://github.com/tonadr1022/vkrender2) and [VulkanRenderer](https://github.com/tonadr1022/VulkanRenderer), it's incredibly satisfying to write a renderer without any "metal" or "vulkan" keywords.
+
+The initial hard-coded Metal pipeline was written in Metal 3. I switched to Metal 4 for the first implementation of the RHI, only to realize it's practically unusable for anything beyond basic rendering due to a lack of GPU debugging support. I'm now supporting both Metal 3 and 4, since working without a GPU debugger/profiler is mega cursed. Update: I might be dropping Metal 3 out of laziness.
+
 The `pre_rhi` branch contains meshlet occlusion culling and primitive voxel rendering written in hardcoded Metal 3 as a learning experience.
 
-The main branch is an ongoing attempt at a render hardware interface (RHI) wrapping Metal and eventually Vulkan to enable a single renderer path to run on multiple platforms. The new RHI approach uses HLSL and [metal-shaderconverter](https://developer.apple.com/metal/shader-converter/) to convert `dxil` directly to Metal IR (`metallib`). After half-arsing abstractions in my previous iterations, it's incredibly satisfying to write an entire pipeline without a single "metal" or "mtl" keyword.
+Here's a lot of albedo only Sponzas culled aggresively (new RHI on Metal 4, M4 Pro):
 
-The initial hard-coded Metal pipeline was written in Metal 3. I switched to Metal 4 for the first implementation of the RHI, only to realize it's practically unusable for anything beyond basic rendering due to a lack of GPU debugging support. I'm now supporting both Metal 3 and 4, since working without a GPU debugger/profiler is mega cursed.
+![Many Sponzas](./screenshots/many_sponzas.png "Many Sponzas")
 
 Here's some out-of-date random Suzanne meshlets rendered with the old Metal 3 hard-coded pipeline:
 
@@ -26,7 +32,7 @@ git clone https://github.com/tonadr1022/metalrender
 cd metalrender
 git submodule update --init --recursive
 cmake --preset Release
-cmake --build build/Release
+cmake --build build/Release --target metalrender # or vktest for the in-progress Vulkan test app
 
 # Download glTF Sample Assets: https://github.com/KhronosGroup/glTF-Sample-Assets
 ./scripts/download_gltf_models.sh $HOME/gltf_sample_assets
@@ -66,6 +72,7 @@ ln -s $HOME/gltf_sample_assets/models/gltf ./resources/models/gltf
 - [stb_image](https://github.com/nothings/stb)
 - [tracy](https://github.com:wolfpld/tracy)
 - [OffsetAllocator](https://github.com/sebbbi/OffsetAllocator)
+- TODO: list the vulkan deps LOL
 
 ## TODO
 
