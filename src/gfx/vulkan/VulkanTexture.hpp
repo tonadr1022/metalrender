@@ -11,12 +11,10 @@ namespace gfx::vk {
 class VulkanTexture : public rhi::Texture {
  public:
   VulkanTexture(const rhi::TextureDesc& desc, uint32_t bindless_idx, VkImage image,
-                VmaAllocation allocation, VmaAllocationInfo allocation_info,
-                bool is_swapchain_image)
+                VmaAllocation allocation, bool is_swapchain_image)
       : rhi::Texture(desc, bindless_idx),
         image_(image),
         allocation_(allocation),
-        allocation_info_(allocation_info),
         is_swapchain_image_(is_swapchain_image) {}
   VulkanTexture() = default;
   ~VulkanTexture() = default;
@@ -30,7 +28,6 @@ class VulkanTexture : public rhi::Texture {
   VkImage image_;
   VkImageView default_view_{};
   VmaAllocation allocation_;
-  VmaAllocationInfo allocation_info_;
   VkImageLayout current_layout_{VK_IMAGE_LAYOUT_UNDEFINED};
   bool is_swapchain_image_{false};
 };

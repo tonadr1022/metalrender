@@ -103,6 +103,8 @@ constexpr VkFormat convert_format(TextureFormat format) {
       return VK_FORMAT_D32_SFLOAT;
     case TextureFormat::R32float:
       return VK_FORMAT_R32_SFLOAT;
+    case TextureFormat::R16G16B16A16Sfloat:
+      return VK_FORMAT_R16G16B16A16_SFLOAT;
     case TextureFormat::Undefined:
       return VK_FORMAT_UNDEFINED;
     default:
@@ -124,6 +126,8 @@ constexpr TextureFormat convert_format(VkFormat format) {
       return TextureFormat::D32float;
     case VK_FORMAT_R32_SFLOAT:
       return TextureFormat::R32float;
+    case VK_FORMAT_R16G16B16A16_SFLOAT:
+      return TextureFormat::R16G16B16A16Sfloat;
     default:
       ASSERT(0);
       return TextureFormat::Undefined;
@@ -308,6 +312,7 @@ void VulkanDevice::init(const InitInfo& init_info) {
     const auto& queue_family = vkb_device_.queue_families[i];
     if (queue_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
       vkGetDeviceQueue(device_, i, 0, &queues_[(int)rhi::QueueType::Graphics].queue);
+      queue_family_indices_.push_back(i);
       found_graphics_queue = true;
       break;
     }
@@ -324,6 +329,26 @@ void VulkanDevice::init(const InitInfo& init_info) {
           .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
       };
       VK_CHECK(vkCreateFence(device_, &fence_cinfo, nullptr, &frame_fence[frame_i]));
+    }
+  }
+
+  VkPhysicalDeviceMemoryProperties2 mem_props2{
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
+  };
+  // https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#memory-device
+  //  In a unified memory architecture (UMA) system there is often only a single memory heap which
+  //  is considered to be equally “local” to the host and to the device, and such an
+  //  implementation must advertise the heap as device-local.
+  vkGetPhysicalDeviceMemoryProperties2(physical_device_, &mem_props2);
+  if (mem_props2.memoryProperties.memoryHeapCount == 1 &&
+      mem_props2.memoryProperties.memoryHeaps[0].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+    auto count = mem_props2.memoryProperties.memoryTypeCount;
+    for (auto i = 0u; i < count; i++) {
+      auto flags = mem_props2.memoryProperties.memoryTypes[i].propertyFlags;
+      if (flags & (VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+                   VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+        capabilities_ |= rhi::GraphicsCapability::CacheCoherentUMA;
+      }
     }
   }
 
@@ -349,7 +374,6 @@ void VulkanDevice::init(const InitInfo& init_info) {
   vma_funcs.vkUnmapMemory = vkUnmapMemory;
   vma_funcs.vkCmdCopyBuffer = vkCmdCopyBuffer;
   VmaAllocatorCreateInfo allocator_info{
-      .flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
       .physicalDevice = physical_device_,
       .device = device_,
       .pVulkanFunctions = &vma_funcs,
@@ -377,7 +401,10 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
   VkBufferCreateInfo cinfo{
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .size = desc.size,
-      .sharingMode = VK_SHARING_MODE_CONCURRENT,
+      .sharingMode = queue_family_indices_.size() == 1 ? VK_SHARING_MODE_EXCLUSIVE
+                                                       : VK_SHARING_MODE_CONCURRENT,
+      .queueFamilyIndexCount = (uint32_t)queue_family_indices_.size(),
+      .pQueueFamilyIndices = queue_family_indices_.data(),
   };
   if (desc.usage & rhi::BufferUsage_Index) {
     cinfo.usage |= VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT;
@@ -395,9 +422,9 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
     cinfo.usage |= VK_BUFFER_USAGE_2_VERTEX_BUFFER_BIT;
   }
 
-  // cinfo.usage |= VK_BUFFER_USAGE_2_MICROMAP_STORAGE_BIT_EXT
   VmaAllocationCreateInfo vma_cinfo{};
-  if (desc.storage_mode == rhi::StorageMode::CPUAndGPU) {
+  if (desc.storage_mode == rhi::StorageMode::CPUAndGPU ||
+      has_flag(capabilities_, rhi::GraphicsCapability::CacheCoherentUMA)) {
     vma_cinfo.flags |=
         VMA_ALLOCATION_CREATE_MAPPED_BIT |
         (desc.random_host_access ? VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
@@ -410,8 +437,11 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
   VkBuffer buffer{};
   VmaAllocation allocation{};
   VK_CHECK(vmaCreateBuffer(allocator_, &cinfo, &vma_cinfo, &buffer, &allocation, nullptr));
+  VmaAllocationInfo allocation_info{};
+  vmaGetAllocationInfo(allocator_, allocation, &allocation_info);
 
-  return buffer_pool_.alloc(desc, rhi::k_invalid_bindless_idx, buffer, allocation);
+  return buffer_pool_.alloc(desc, rhi::k_invalid_bindless_idx, buffer, allocation,
+                            allocation_info.pMappedData);
 }
 
 rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
@@ -433,9 +463,8 @@ rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
   VmaAllocationCreateInfo alloc_info{};
   alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
 
-  VkImage image;
+  VkImage image{};
   VmaAllocation allocation;
-  VmaAllocationInfo allocation_info;
 
   VkImageViewType view_type;
   if (desc.dims.z > 1) {
@@ -447,10 +476,11 @@ rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
   }
 
   VK_CHECK(vmaCreateImage(allocator_, &cinfo, &alloc_info, &image, &allocation, nullptr));
-  auto handle = texture_pool_.alloc(desc, rhi::k_invalid_bindless_idx, image, allocation,
-                                    allocation_info, false);
+  ASSERT(image);
+  auto handle = texture_pool_.alloc(desc, rhi::k_invalid_bindless_idx, image, allocation, false);
 
   auto* tex = (VulkanTexture*)get_tex(handle);
+  ASSERT(tex->image_);
   tex->default_view_ = create_img_view(*tex, view_type,
                                        {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                                         .baseMipLevel = 0,
@@ -1080,9 +1110,8 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
       if (swapchain->textures_[i].is_valid()) {
         destroy(swapchain->textures_[i]);
       }
-      auto tex_handle =
-          texture_pool_.alloc(tex_desc, rhi::k_invalid_bindless_idx, swapchain_images[i],
-                              VmaAllocation{}, VmaAllocationInfo{}, true);
+      auto tex_handle = texture_pool_.alloc(tex_desc, rhi::k_invalid_bindless_idx,
+                                            swapchain_images[i], VmaAllocation{}, true);
       auto* tex = (VulkanTexture*)get_tex(tex_handle);
       tex->default_view_ = create_img_view(*tex, VK_IMAGE_VIEW_TYPE_2D,
                                            {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,

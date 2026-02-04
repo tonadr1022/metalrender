@@ -17,5 +17,5 @@ class TestApp {
   std::unique_ptr<teng::Window> window_;
   std::unique_ptr<teng::rhi::Device> device_;
   teng::rhi::SwapchainHandleHolder swapchain_;
-  std::unique_ptr<teng::TestRenderer> renderer_;
+  std::unique_ptr<teng::gfx::TestRenderer> renderer_;
 };

@@ -147,6 +147,7 @@ class VulkanDevice : public rhi::Device {
   VkFence frame_fences_[(int)rhi::QueueType::Count][k_max_frames_in_flight]{};
 
   Queue queues_[(int)rhi::QueueType::Count]{};
+  gch::small_vector<uint32_t, 4> queue_family_indices_;
 
   std::vector<std::unique_ptr<VulkanCmdEncoder>> cmd_encoders_;
   size_t curr_cmd_encoder_i_{};

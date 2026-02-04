@@ -28,6 +28,13 @@ class Swapchain;
 
 using TextureViewHandle = int32_t;
 
+enum class GraphicsCapability : uint32_t {
+  None = 0,
+  CacheCoherentUMA = 1 << 0,  // CPU-GPU shared memory is cache coherent -> no staging buffers, etc.
+};
+
+AUGMENT_ENUM_CLASS(GraphicsCapability);
+
 class Device {
  public:
   struct Info {
@@ -128,6 +135,13 @@ class Device {
   [[nodiscard]] virtual const Info &get_info() const = 0;
   [[nodiscard]] size_t frames_in_flight() const { return get_info().frames_in_flight; }
   virtual void on_imgui() {}
+
+  [[nodiscard]] const GraphicsCapability &get_graphics_capabilities() const {
+    return capabilities_;
+  }
+
+ protected:
+  GraphicsCapability capabilities_{};
 };
 
 enum class GfxAPI { Vulkan, Metal };

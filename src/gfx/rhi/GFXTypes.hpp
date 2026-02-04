@@ -81,7 +81,7 @@ struct TextureDesc {
   glm::uvec3 dims{1};
   uint32_t mip_levels{1};
   uint32_t array_length{1};
-  bool bindless{};
+  bool bindless{true};
   TextureDescFlags flags{};
   const char* name{};
 };
@@ -93,10 +93,6 @@ enum BufferUsage : uint8_t {
   BufferUsage_Vertex = 1 << 2,
   BufferUsage_Index = 1 << 3,
   BufferUsage_Uniform = 1 << 4,
-  // TODO: transder dst/src
-  BufferUsage_TransferDst = 1 << 5,
-  BufferUsage_TransferSrc = 1 << 6,
-  BufferUsage_Transfer = BufferUsage_TransferDst | BufferUsage_TransferSrc,
 };
 
 struct BufferDesc {
@@ -105,6 +101,7 @@ struct BufferDesc {
   size_t size{};
   bool bindless{true};
   bool random_host_access{};
+  bool force_gpu_only{};
   const char* name{};
 };
 

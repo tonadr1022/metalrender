@@ -160,6 +160,10 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 
   device_ = MTL::CreateSystemDefaultDevice();
 
+  if (device_->hasUnifiedMemory()) {
+    capabilities_ |= rhi::GraphicsCapability::CacheCoherentUMA;
+  }
+
   info_.frames_in_flight = std::clamp<size_t>(init_info.frames_in_flight, k_min_frames_in_flight,
                                               k_max_frames_in_flight);
   info_.timestamp_frequency = device_->queryTimestampFrequency();

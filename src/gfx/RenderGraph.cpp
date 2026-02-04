@@ -4,13 +4,12 @@
 #include <tracy/Tracy.hpp>
 #include <utility>
 
+#include "core/Config.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Texture.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -463,7 +462,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       if (!actual_buf_handle.is_valid()) {
         auto buf_handle = device_->create_buf(rhi::BufferDesc{
             .storage_mode = rhi::StorageMode::GPUOnly,
-            .usage = (rhi::BufferUsage)(rhi::BufferUsage_Storage | rhi::BufferUsage_Transfer),
+            .usage = (rhi::BufferUsage)(rhi::BufferUsage_Storage),
             .size = binfo.size,
             .name = "render_graph_buffer",
         });
@@ -1033,4 +1032,4 @@ RGResourceHandle RenderGraph::Pass::rw_tex(const std::string& name, const std::s
 
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

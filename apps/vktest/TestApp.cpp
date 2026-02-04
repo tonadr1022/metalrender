@@ -7,6 +7,7 @@
 #include "gfx/rhi/Swapchain.hpp"
 
 using namespace teng;
+using namespace teng;
 
 TestApp::TestApp() {
   resource_dir_ = get_resource_dir();
@@ -37,7 +38,7 @@ TestApp::TestApp() {
       .height = win_dims.y,
       .vsync = true,
   });
-  renderer_ = std::make_unique<TestRenderer>(TestRenderer::CreateInfo{
+  renderer_ = std::make_unique<gfx::TestRenderer>(gfx::TestRenderer::CreateInfo{
       .device = device_.get(),
       .swapchain = device_->get_swapchain(swapchain_),
       .window = window_.get(),
