@@ -362,13 +362,18 @@ void VulkanDevice::init(const InitInfo& init_info) {
   volkLoadInstance(instance_);
 
   vkb::PhysicalDeviceSelector phys_device_selector{vkb_inst_};
-  const char* required_extensions[] = {
-      VK_KHR_SWAPCHAIN_EXTENSION_NAME,           VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
-      VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,   VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
-      VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME,
+
+  VkPhysicalDeviceFeatures feat{
+      .samplerAnisotropy = true,
   };
-  phys_device_selector.add_required_extensions(ARRAY_SIZE(required_extensions),
-                                               required_extensions);
+  phys_device_selector.set_required_features(feat);
+
+  VkPhysicalDeviceVulkan12Features feat12{
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+      .scalarBlockLayout = true,
+  };
+  phys_device_selector.set_required_features_12(feat12);
+
   VkPhysicalDeviceVulkan13Features feat13{
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
       .shaderDemoteToHelperInvocation = true,
@@ -377,17 +382,19 @@ void VulkanDevice::init(const InitInfo& init_info) {
   };
   phys_device_selector.set_required_features_13(feat13);
 
-  VkPhysicalDeviceVulkan12Features feat12{
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-      .scalarBlockLayout = true,
-  };
-  phys_device_selector.set_required_features_12(feat12);
-
   VkPhysicalDeviceExtendedDynamicStateFeaturesEXT ext_state{
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
       .extendedDynamicState = true,
   };
   phys_device_selector.add_required_extension_features(ext_state);
+
+  const char* required_extensions[] = {
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,           VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+      VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,   VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
+      VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME,
+  };
+  phys_device_selector.add_required_extensions(ARRAY_SIZE(required_extensions),
+                                               required_extensions);
 
   auto phys_ret = phys_device_selector.defer_surface_initialization()
                       .set_minimum_version(min_api_version_major, min_api_version_minor)
@@ -490,13 +497,86 @@ void VulkanDevice::init(const InitInfo& init_info) {
 
   del_q_.init(device_, allocator_, info_.frames_in_flight);
   {
-    // create immutable samplers
-    immutable_samplers_.emplace_back(create_vk_sampler({
+    auto add_immutable_sampler = [&](const rhi::SamplerDesc& desc) {
+      immutable_samplers_.emplace_back(create_vk_sampler(desc));
+    };
+    add_immutable_sampler({
         .min_filter = rhi::FilterMode::Linear,
         .mag_filter = rhi::FilterMode::Linear,
         .mipmap_mode = rhi::FilterMode::Linear,
         .address_mode = rhi::AddressMode::ClampToEdge,
-    }));
+    });
+    add_immutable_sampler({
+        .min_filter = rhi::FilterMode::Linear,
+        .mag_filter = rhi::FilterMode::Linear,
+        .mipmap_mode = rhi::FilterMode::Linear,
+        .address_mode = rhi::AddressMode::Repeat,
+        .bindless = false,
+    });
+    add_immutable_sampler({
+        .min_filter = rhi::FilterMode::Linear,
+        .mag_filter = rhi::FilterMode::Linear,
+        .mipmap_mode = rhi::FilterMode::Linear,
+        .address_mode = rhi::AddressMode::MirroredRepeat,
+        .bindless = false,
+    });
+    add_immutable_sampler({
+        .min_filter = rhi::FilterMode::Nearest,
+        .mag_filter = rhi::FilterMode::Nearest,
+        .mipmap_mode = rhi::FilterMode::Nearest,
+        .address_mode = rhi::AddressMode::ClampToEdge,
+        .bindless = false,
+    });
+    add_immutable_sampler({
+        .min_filter = rhi::FilterMode::Nearest,
+        .mag_filter = rhi::FilterMode::Nearest,
+        .mipmap_mode = rhi::FilterMode::Nearest,
+        .address_mode = rhi::AddressMode::Repeat,
+        .bindless = false,
+    });
+    add_immutable_sampler({
+        .min_filter = rhi::FilterMode::Nearest,
+        .mag_filter = rhi::FilterMode::Nearest,
+        .mipmap_mode = rhi::FilterMode::Nearest,
+        .address_mode = rhi::AddressMode::MirroredRepeat,
+        .bindless = false,
+    });
+    add_immutable_sampler({
+        .min_filter = rhi::FilterMode::Linear,
+        .mag_filter = rhi::FilterMode::Linear,
+        .mipmap_mode = rhi::FilterMode::Linear,
+        .address_mode = rhi::AddressMode::ClampToEdge,
+        .anisotropy_enable = true,
+        .max_anisotropy = 16.0f,
+        .bindless = false,
+    });
+    add_immutable_sampler({
+        .min_filter = rhi::FilterMode::Linear,
+        .mag_filter = rhi::FilterMode::Linear,
+        .mipmap_mode = rhi::FilterMode::Linear,
+        .address_mode = rhi::AddressMode::Repeat,
+        .anisotropy_enable = true,
+        .max_anisotropy = 16.0f,
+        .bindless = false,
+    });
+    add_immutable_sampler({
+        .min_filter = rhi::FilterMode::Linear,
+        .mag_filter = rhi::FilterMode::Linear,
+        .mipmap_mode = rhi::FilterMode::Linear,
+        .address_mode = rhi::AddressMode::MirroredRepeat,
+        .anisotropy_enable = true,
+        .max_anisotropy = 16.0f,
+        .bindless = false,
+    });
+    add_immutable_sampler({
+        .min_filter = rhi::FilterMode::Linear,
+        .mag_filter = rhi::FilterMode::Linear,
+        .mipmap_mode = rhi::FilterMode::Nearest,
+        .address_mode = rhi::AddressMode::ClampToEdge,
+        .compare_enable = true,
+        .compare_op = rhi::CompareOp::GreaterOrEqual,
+        .bindless = false,
+    });
   }
 }
 
