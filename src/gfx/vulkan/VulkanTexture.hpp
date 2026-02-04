@@ -24,6 +24,8 @@ class VulkanTexture : public rhi::Texture {
     ASSERT(!is_swapchain_image_);
     return allocation_;
   }
+  rhi::TextureDesc& desc() { return desc_; }
+  uint32_t& bindless_idx() { return bindless_idx_; }
 
   VkImage image_;
   VkImageView default_view_{};

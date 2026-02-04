@@ -391,6 +391,7 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
         " -fspv-extension=SPV_NV_mesh_shader"
         " -fspv-extension=SPV_EXT_descriptor_indexing"
         " -fvk-u-shift 1000 0"
+        " -fvk-t-shift 2000 0"
         " -D VULKAN",
         path.string(), spirv_path.string(), shader_model,
         debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");

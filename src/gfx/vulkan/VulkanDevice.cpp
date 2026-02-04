@@ -3,6 +3,7 @@
 // clang-format off
 #include <volk.h>
 #include <VkBootstrap.h>
+#include <algorithm>
 #include <fstream>
 // clang-format on
 
@@ -26,6 +27,86 @@ namespace TENG_NAMESPACE {
 namespace gfx::vk {
 
 namespace {
+
+VkBorderColor convert_border_color(rhi::BorderColor border_color) {
+  switch (border_color) {
+    case rhi::BorderColor::FloatTransparentBlack:
+      return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+    case rhi::BorderColor::FloatOpaqueBlack:
+      return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+    case rhi::BorderColor::FloatOpaqueWhite:
+      return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+    case rhi::BorderColor::IntTransparentBlack:
+      return VK_BORDER_COLOR_INT_TRANSPARENT_BLACK;
+    case rhi::BorderColor::IntOpaqueBlack:
+      return VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    case rhi::BorderColor::IntOpaqueWhite:
+      return VK_BORDER_COLOR_INT_OPAQUE_WHITE;
+    default:
+      ASSERT(0);
+      return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+  }
+}
+VkCompareOp convert_compare_op(rhi::CompareOp compare_op) {
+  switch (compare_op) {
+    case rhi::CompareOp::Never:
+      return VK_COMPARE_OP_NEVER;
+    case rhi::CompareOp::Less:
+      return VK_COMPARE_OP_LESS;
+    case rhi::CompareOp::Equal:
+      return VK_COMPARE_OP_EQUAL;
+    case rhi::CompareOp::LessOrEqual:
+      return VK_COMPARE_OP_LESS_OR_EQUAL;
+    case rhi::CompareOp::Greater:
+      return VK_COMPARE_OP_GREATER;
+    case rhi::CompareOp::NotEqual:
+      return VK_COMPARE_OP_NOT_EQUAL;
+    case rhi::CompareOp::GreaterOrEqual:
+      return VK_COMPARE_OP_GREATER_OR_EQUAL;
+    case rhi::CompareOp::Always:
+      return VK_COMPARE_OP_ALWAYS;
+    default:
+      ASSERT(0);
+  }
+}
+VkSamplerMipmapMode convert_mipmap_mode(rhi::FilterMode filter) {
+  switch (filter) {
+    case rhi::FilterMode::Linear:
+      return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    case rhi::FilterMode::Nearest:
+      return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    default:
+      ASSERT(0);
+  }
+}
+
+VkFilter convert_filter_mode(rhi::FilterMode filter) {
+  switch (filter) {
+    case rhi::FilterMode::Linear:
+      return VK_FILTER_LINEAR;
+    case rhi::FilterMode::Nearest:
+      return VK_FILTER_NEAREST;
+    default:
+      ASSERT(0);
+  }
+}
+
+VkSamplerAddressMode convert_address_mode(rhi::AddressMode mode) {
+  switch (mode) {
+    case rhi::AddressMode::Repeat:
+      return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    case rhi::AddressMode::MirroredRepeat:
+      return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    case rhi::AddressMode::ClampToEdge:
+      return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    case rhi::AddressMode::ClampToBorder:
+      return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+    case rhi::AddressMode::MirrorClampToEdge:
+      return VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+    default:
+      ASSERT(0);
+  }
+}
 
 std::filesystem::path get_spv_path(const std::filesystem::path& shader_lib_dir,
                                    const std::filesystem::path& path, const rhi::ShaderType type) {
@@ -216,6 +297,10 @@ void VulkanDevice::shutdown() {
 
   del_q_.flush(SIZE_T_MAX);
 
+  for (VkSampler sampler : immutable_samplers_) {
+    vkDestroySampler(device_, sampler, nullptr);
+  }
+
   for (auto& cmd : cmd_encoders_) {
     for (uint32_t pool_i = 0; pool_i < frames_in_flight(); pool_i++) {
       cmd->binder_pools_[pool_i].destroy(*this);
@@ -393,7 +478,16 @@ void VulkanDevice::init(const InitInfo& init_info) {
     VK_CHECK(vkCreateCommandPool(device_, &cinfo, nullptr, &command_pools_[i]));
   }
 
-  del_q_.init(device_, info_.frames_in_flight);
+  del_q_.init(device_, allocator_, info_.frames_in_flight);
+  {
+    // create immutable samplers
+    immutable_samplers_.emplace_back(create_vk_sampler({
+        .min_filter = rhi::FilterMode::Linear,
+        .mag_filter = rhi::FilterMode::Linear,
+        .mipmap_mode = rhi::FilterMode::Linear,
+        .address_mode = rhi::AddressMode::ClampToEdge,
+    }));
+  }
 }
 
 rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
@@ -446,19 +540,27 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
 
 rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
   VkImageCreateInfo cinfo{.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+  ASSERT(desc.format != rhi::TextureFormat::Undefined);
+
+  if (desc.dims.z > 1) {
+    ASSERT(desc.array_length == 1);
+    cinfo.imageType = VK_IMAGE_TYPE_3D;
+  } else if (desc.dims.y > 1) {
+    cinfo.imageType = VK_IMAGE_TYPE_2D;
+  } else {
+    cinfo.imageType = VK_IMAGE_TYPE_1D;
+  }
+
+  cinfo.format = convert_format(desc.format);
+  cinfo.extent = VkExtent3D{desc.dims.x, desc.dims.y, desc.dims.z};
+  cinfo.mipLevels = desc.mip_levels;
+  cinfo.arrayLayers = desc.array_length;
+  cinfo.samples = VK_SAMPLE_COUNT_1_BIT;
+  cinfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+  cinfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  cinfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  cinfo.usage = convert(desc.usage);
   cinfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-  if (desc.usage & rhi::TextureUsageSample) {
-    cinfo.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-  }
-  if (desc.usage & rhi::TextureUsageStorage) {
-    cinfo.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
-  }
-  if (desc.usage & rhi::TextureUsageColorAttachment) {
-    cinfo.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-  }
-  if (desc.usage & rhi::TextureUsageDepthStencilAttachment) {
-    cinfo.usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-  }
 
   VmaAllocationCreateInfo alloc_info{};
   alloc_info.usage = VMA_MEMORY_USAGE_AUTO;
@@ -477,10 +579,13 @@ rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
 
   VK_CHECK(vmaCreateImage(allocator_, &cinfo, &alloc_info, &image, &allocation, nullptr));
   ASSERT(image);
-  auto handle = texture_pool_.alloc(desc, rhi::k_invalid_bindless_idx, image, allocation, false);
 
+  if (desc.name) {
+    set_vk_debug_name(VK_OBJECT_TYPE_IMAGE, (uint64_t)image, desc.name);
+  }
+
+  auto handle = texture_pool_.alloc(desc, rhi::k_invalid_bindless_idx, image, allocation, false);
   auto* tex = (VulkanTexture*)get_tex(handle);
-  ASSERT(tex->image_);
   tex->default_view_ = create_img_view(*tex, view_type,
                                        {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
                                         .baseMipLevel = 0,
@@ -570,17 +675,24 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
   }
   // merge set layouts
   for (const auto& b : set0_info.bindings) {
+    bool exists = false;
     for (auto& existing_b : merged_bindings) {
       if (existing_b.binding == b.binding) {
         existing_b.stageFlags |= b.stageFlags;
         ASSERT(existing_b.descriptorCount == b.descriptorCount);
         ASSERT(existing_b.descriptorType == b.descriptorType);
-      } else {
-        merged_bindings.emplace_back(b);
+        exists = true;
+        break;
       }
+    }
+    if (!exists) {
+      merged_bindings.emplace_back(b);
     }
   }
 
+  std::ranges::sort(merged_bindings,
+                    [](const VkDescriptorSetLayoutBinding& a,
+                       const VkDescriptorSetLayoutBinding& b) { return a.binding < b.binding; });
   VkDescriptorSetLayoutCreateInfo set_cinfo{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
       .bindingCount = static_cast<uint32_t>(merged_bindings.size()),
@@ -838,7 +950,7 @@ void VulkanDevice::destroy(rhi::TextureHandle handle) {
   auto* tex = (VulkanTexture*)get_tex(handle);
   if (tex) {
     if (!tex->is_swapchain_image_) {
-      vmaDestroyImage(allocator_, tex->image_, tex->allocation_);
+      del_q_.enqueue({tex->image_, tex->allocation_});
     }
     if (tex->default_view_) {
       del_q_.enqueue(tex->default_view_);
@@ -1173,77 +1285,32 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
   VkPipelineLayout pipeline_layout;
   VkDescriptorSetLayout layout;
   // TODO: don't allocate?
-  std::vector<VkDescriptorSetLayoutBinding> layout_bindings;
-  {
-    spv_reflect::ShaderModule refl{spirv_code, SPV_REFLECT_MODULE_FLAG_NO_COPY};
-    auto result = refl.GetResult();
-    ASSERT(result == SPV_REFLECT_RESULT_SUCCESS);
-    uint32_t set_count;
-    refl.EnumerateDescriptorSets(&set_count, nullptr);
-    std::vector<SpvReflectDescriptorSet*> sets;
+  std::vector<VkPushConstantRange> push_constant_ranges;
+  DescSetCreateInfo set0_cinfo;
+  reflect_shader(spirv_code, push_constant_ranges, set0_cinfo);
 
-    VkDescriptorSetLayout layouts[16];
-    VkPushConstantRange push_constant_ranges[4];
+  VkDescriptorSetLayoutCreateInfo set_cinfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = static_cast<uint32_t>(set0_cinfo.bindings.size()),
+      .pBindings = set0_cinfo.bindings.data(),
+  };
+  auto hash = hash_descriptor_set_layout_cinfo(set_cinfo);
+  auto it = set_layout_cache_.find(hash);
+  if (it != set_layout_cache_.end()) {
+    layout = it->second;
+  } else {
+    VK_CHECK(vkCreateDescriptorSetLayout(device_, &set_cinfo, nullptr, &layout));
+    set_layout_cache_[hash] = layout;
+  }
+
+  {
     VkPipelineLayoutCreateInfo pipeline_layout_cinfo{
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .pNext = nullptr,
-        .setLayoutCount = 0,
-        .pSetLayouts = layouts,
-        .pushConstantRangeCount = 0,
-        .pPushConstantRanges = push_constant_ranges,
+        .setLayoutCount = 1,
+        .pSetLayouts = &layout,
+        .pushConstantRangeCount = (uint32_t)push_constant_ranges.size(),
+        .pPushConstantRanges = push_constant_ranges.data(),
     };
-
-    uint32_t pc_count;
-    refl.EnumeratePushConstantBlocks(&pc_count, nullptr);
-    std::vector<SpvReflectBlockVariable*> push_constants(pc_count);
-    refl.EnumeratePushConstantBlocks(&pc_count, push_constants.data());
-
-    for (uint32_t i = 0; i < pc_count; i++) {
-      auto& pc = push_constants[i];
-      VkPushConstantRange range{
-          // TODO: lolllll
-          .stageFlags = VK_SHADER_STAGE_ALL,
-          .offset = pc->offset,
-          .size = pc->size,
-      };
-      LINFO("PC Range: offset {}, size {}", range.offset, range.size);
-      push_constant_ranges[pipeline_layout_cinfo.pushConstantRangeCount++] = range;
-    }
-
-    sets.resize(set_count);
-    refl.EnumerateDescriptorSets(&set_count, sets.data());
-    for (uint32_t i = 0; i < set_count; i++) {
-      auto& set = sets[i];
-      LINFO("set {}: binding count {}", set->set, set->binding_count);
-      for (uint32_t j = 0; j < set->binding_count; j++) {
-        auto& binding = set->bindings[j];
-        LINFO("  binding {}: type {}, count {}", binding->binding,
-              string_VkDescriptorType((VkDescriptorType)binding->descriptor_type), binding->count);
-        layout_bindings.emplace_back(VkDescriptorSetLayoutBinding{
-            .binding = binding->binding,
-            .descriptorType = (VkDescriptorType)binding->descriptor_type,
-            .descriptorCount = binding->count,
-            .stageFlags = (VkShaderStageFlagBits)refl.GetShaderStage(),
-            .pImmutableSamplers = nullptr,
-        });
-      }
-      VkDescriptorSetLayoutCreateInfo layout_cinfo{
-          .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-          .bindingCount = set->binding_count,
-          .pBindings = layout_bindings.data(),
-      };
-
-      auto hash = hash_descriptor_set_layout_cinfo(layout_cinfo);
-      auto it = set_layout_cache_.find(hash);
-
-      if (it != set_layout_cache_.end()) {
-        layout = it->second;
-      } else {
-        VK_CHECK(vkCreateDescriptorSetLayout(device_, &layout_cinfo, nullptr, &layout));
-        set_layout_cache_[hash] = layout;
-      }
-      layouts[pipeline_layout_cinfo.setLayoutCount++] = layout;
-    }
 
     auto pipeline_layout_hash = hash_pipeline_layout_cinfo(pipeline_layout_cinfo);
     auto it = pipeline_layout_cache_.find(pipeline_layout_hash);
@@ -1276,7 +1343,7 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
   vkDestroyShaderModule(device_, module, nullptr);
 
   return pipeline_pool_.alloc(cinfo, vk_pipeline, pipeline_layout, layout,
-                              std::move(layout_bindings));
+                              std::move(set0_cinfo.bindings));
 }
 
 VkShaderModule VulkanDevice::create_shader_module(const std::filesystem::path& path) {
@@ -1334,16 +1401,6 @@ void VulkanDevice::reflect_shader(std::span<const uint32_t> spirv_code,
     refl.EnumerateDescriptorSets(&set_count, nullptr);
     std::vector<SpvReflectDescriptorSet*> sets;
 
-    // VkPushConstantRange push_constant_ranges[4];
-    // VkPipelineLayoutCreateInfo pipeline_layout_cinfo{
-    //     .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-    //     .pNext = nullptr,
-    //     .setLayoutCount = 0,
-    //     .pSetLayouts = layouts,
-    //     .pushConstantRangeCount = 0,
-    //     .pPushConstantRanges = push_constant_ranges,
-    // };
-
     uint32_t pc_count;
     refl.EnumeratePushConstantBlocks(&pc_count, nullptr);
     std::vector<SpvReflectBlockVariable*> push_constants(pc_count);
@@ -1365,22 +1422,53 @@ void VulkanDevice::reflect_shader(std::span<const uint32_t> spirv_code,
     ASSERT(set_count <= 1);
     for (uint32_t i = 0; i < set_count; i++) {
       auto& set = sets[i];
-      // LINFO("set {}: binding count {}", set->set, set->binding_count);
       for (uint32_t j = 0; j < set->binding_count; j++) {
         auto& binding = set->bindings[j];
-        // LINFO("  binding {}: type {}, count {}", binding->binding,
-        //       string_VkDescriptorType((VkDescriptorType)binding->descriptor_type),
-        //       binding->count);
-        out_set_0_info.bindings.emplace_back(VkDescriptorSetLayoutBinding{
+        // auto layout_b = out_set_0_info.bindings.emplace_back(VkDescriptorSetLayoutBinding{});
+        // layout_b.binding = binding->binding;
+        // LINFO("Binding {} type {}", binding->binding,
+        //       string_VkDescriptorType(((VkDescriptorType)binding->descriptor_type)));
+        // layout_b.descriptorType = (VkDescriptorType)binding->descriptor_type;
+        // layout_b.descriptorCount = binding->count;
+        // layout_b.stageFlags = (VkShaderStageFlagBits)refl.GetShaderStage();
+        auto& layout_b = out_set_0_info.bindings.emplace_back(VkDescriptorSetLayoutBinding{
             .binding = binding->binding,
             .descriptorType = (VkDescriptorType)binding->descriptor_type,
             .descriptorCount = binding->count,
             .stageFlags = (VkShaderStageFlagBits)refl.GetShaderStage(),
             .pImmutableSamplers = nullptr,
         });
+        if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER &&
+            binding->binding >= 100) {
+          layout_b.pImmutableSamplers = immutable_samplers_.data();
+        }
       }
     }
   }
+}
+
+VkSampler VulkanDevice::create_vk_sampler(const rhi::SamplerDesc& desc) {
+  VkSamplerCreateInfo cinfo{
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .magFilter = convert_filter_mode(desc.mag_filter),
+      .minFilter = convert_filter_mode(desc.min_filter),
+      .mipmapMode = convert_mipmap_mode(desc.mipmap_mode),
+      .addressModeU = convert_address_mode(desc.address_mode),
+      .addressModeV = convert_address_mode(desc.address_mode),
+      .addressModeW = convert_address_mode(desc.address_mode),
+      .anisotropyEnable = desc.anisotropy_enable,
+      .maxAnisotropy = desc.max_anisotropy,
+      .compareEnable = desc.compare_enable,
+      .compareOp = convert_compare_op(desc.compare_op),
+      .minLod = desc.min_lod,
+      .maxLod = desc.max_lod,
+      .borderColor = convert_border_color(desc.border_color),
+  };
+
+  VkSampler sampler;
+  VK_CHECK(vkCreateSampler(device_, &cinfo, nullptr, &sampler));
+  ASSERT(sampler);
+  return sampler;
 }
 
 }  // namespace gfx::vk

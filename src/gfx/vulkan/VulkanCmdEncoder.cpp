@@ -9,6 +9,8 @@
 #include "gfx/vulkan/VulkanCommon.hpp"
 #include "gfx/vulkan/VulkanDevice.hpp"
 #include "gfx/vulkan/VulkanTexture.hpp"
+#include "vulkan/vk_enum_string_helper.h"
+#include "vulkan/vulkan_core.h"
 
 namespace TENG_NAMESPACE {
 
@@ -219,30 +221,6 @@ void VulkanCmdEncoder::end_rendering() {
   }
   render_pass_end_img_barriers_.clear();
   flush_barriers();
-
-  // VkImageMemoryBarrier2 img_barriers[] = {
-  //     VkImageMemoryBarrier2{
-  //         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-  //         .srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-  //         .srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT | VK_ACCESS_2_MEMORY_READ_BIT,
-  //         .dstStageMask = VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT,
-  //         .dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT,
-  //         .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-  //         .newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-  //         .image =
-  //             ((VulkanTexture*)device_->get_tex(
-  //                  ((VulkanSwapchain*)submit_swapchains_.back())
-  //                      ->get_texture(((VulkanSwapchain*)submit_swapchains_.back())->curr_img_idx_)))
-  //                 ->image(),
-  //         .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-  //                              .levelCount = 1,
-  //                              .layerCount = 1},
-  //     },
-  // };
-  // VkDependencyInfo info{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-  //                       .imageMemoryBarrierCount = ARRAY_SIZE(img_barriers),
-  //                       .pImageMemoryBarriers = img_barriers};
-  // vkCmdPipelineBarrier2KHR(cmd(), &info);
 }
 
 void VulkanCmdEncoder::barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage,
@@ -368,7 +346,7 @@ VkImageLayout convert_layout(rhi::ResourceState state) {
     return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
   }
   if (state & rhi::ShaderRead) {
-    return VK_IMAGE_LAYOUT_GENERAL;
+    return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   }
   if (state & rhi::ComputeWrite || state & rhi::ComputeRead) {
     return VK_IMAGE_LAYOUT_GENERAL;
@@ -382,7 +360,7 @@ VkImageLayout convert_layout(rhi::ResourceState state) {
   if (state & rhi::SwapchainPresent) {
     return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
   }
-  return VK_IMAGE_LAYOUT_GENERAL;
+  return VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
 }  // namespace
@@ -455,9 +433,13 @@ void VulkanCmdEncoder::flush_binds() {
       }
     } while (result == VK_ERROR_OUT_OF_POOL_MEMORY);
     constexpr uint32_t k_uav_binding_start = 1000;
+    constexpr uint32_t k_srv_binding_start = 2000;
     binder_.writes.clear();
 
     for (auto& binding : bound_pipeline_->layout_bindings_) {
+      if (binding.pImmutableSamplers) {
+        continue;
+      }
       auto& write = binder_.writes.emplace_back();
       write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
       write.pNext = nullptr;
@@ -484,8 +466,28 @@ void VulkanCmdEncoder::flush_binds() {
         }
 
         write.pImageInfo = &img_info;
+      } else if (binding.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) {
+        auto table_index = binding.binding - k_srv_binding_start;
+        auto tex_handle = rhi::TextureHandle{binding_table_.SRV[table_index]};
+        ASSERT((table_index >= 0 && table_index < ARRAY_SIZE(binding_table_.SRV)));
+        auto subresource_id = binding_table_.SRV_subresources[table_index];
+        auto& img_info = binder_.img_infos.emplace_back();
+        img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        auto* tex = device_->get_vk_tex(tex_handle);
+        if (subresource_id == -1) {
+          img_info.imageView = tex->default_view_;
+        } else {
+          // not handled image views yet
+          ASSERT(subresource_id == -1);
+        }
+        write.pImageInfo = &img_info;
 
+      } else if (binding.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) {
+        LINFO("Failed descriptor type: {}", string_VkDescriptorType(binding.descriptorType));
+        LINFO("Binding: {}", binding.binding);
+        ASSERT(0);
       } else {
+        LINFO("unhandled descriptor type: {}", string_VkDescriptorType(binding.descriptorType));
         ASSERT(0);
       }
     }
@@ -507,6 +509,8 @@ void DescriptorBinderPool::init(VulkanDevice& device) {
       {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, TOTAL_SRV_BINDINGS * pool_size},
       {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, TOTAL_UAV_BINDINGS * pool_size},
       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, TOTAL_UAV_BINDINGS * pool_size},
+      // TODO: separate sampler thing in table
+      {VK_DESCRIPTOR_TYPE_SAMPLER, TOTAL_UAV_BINDINGS * pool_size},
   };
 
   VkDescriptorPoolCreateInfo pool_info{
@@ -552,6 +556,13 @@ void VulkanCmdEncoder::set_scissor(glm::uvec2 min, glm::uvec2 extent) {
       .extent = {extent.x, extent.y},
   };
   vkCmdSetScissor(cmd(), 0, 1, &scissor);
+}
+
+void VulkanCmdEncoder::bind_srv(rhi::TextureHandle texture, uint32_t slot, int subresource_id) {
+  ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
+  binding_table_.SRV[slot] = texture.to64();
+  binding_table_.SRV_subresources[slot] = subresource_id;
+  descriptors_dirty_ = true;
 }
 
 }  // namespace gfx::vk

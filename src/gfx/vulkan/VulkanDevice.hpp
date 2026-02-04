@@ -79,8 +79,8 @@ class VulkanDevice : public rhi::Device {
   }
 
   rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) override {
-    exit(1);
-    return sampler_pool_.alloc(desc, rhi::k_invalid_bindless_idx);
+    VkSampler sampler = create_vk_sampler(desc);
+    return sampler_pool_.alloc(desc, sampler, rhi::k_invalid_bindless_idx);
   }
   [[nodiscard]] const Info& get_info() const override { return info_; }
 
@@ -162,6 +162,7 @@ class VulkanDevice : public rhi::Device {
  private:
   VkShaderModule create_shader_module(const std::filesystem::path& path);
   VkShaderModule create_shader_module(std::span<const uint32_t> spirv_code);
+  VkSampler create_vk_sampler(const rhi::SamplerDesc& desc);
   std::unordered_map<uint64_t, VkDescriptorSetLayout> set_layout_cache_;
   std::unordered_map<uint64_t, VkPipelineLayout> pipeline_layout_cache_;
   uint64_t hash_descriptor_set_layout_cinfo(const VkDescriptorSetLayoutCreateInfo& cinfo);
@@ -173,6 +174,8 @@ class VulkanDevice : public rhi::Device {
   void reflect_shader(std::span<const uint32_t> spirv_code,
                       std::vector<VkPushConstantRange>& out_pc_ranges,
                       DescSetCreateInfo& out_set_0_info);
+
+  gch::small_vector<VkSampler, 10> immutable_samplers_;
 };
 
 }  // namespace gfx::vk

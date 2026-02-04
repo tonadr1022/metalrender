@@ -17,16 +17,14 @@
 
 #define ATTR_POSITION : POSITION
 
-#if defined(VULKAN)
-#define PUSHCONSTANT(type, name) [[vk::push_constant]] type name
-#define CONSTANT_BUFFER(type, name, reg)
-#else
-
 #define PASTE1(a, b) a##b
 #define PASTE(a, b) PASTE1(a, b)
 #define CONSTANT_BUFFER(type, name, reg) ConstantBuffer<type> name : register(PASTE(b, reg))
-#define PUSHCONSTANT(type, name) CONSTANT_BUFFER(type, name, 998)
 
+#if defined(VULKAN)
+#define PUSHCONSTANT(type, name) [[vk::push_constant]] type name
+#else
+#define PUSHCONSTANT(type, name) CONSTANT_BUFFER(type, name, 998)
 #endif  // VULKAN
 
 #elif defined(__METAL__)

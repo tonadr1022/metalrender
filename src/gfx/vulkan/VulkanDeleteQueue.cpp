@@ -27,6 +27,9 @@ void DeleteQueue::flush(size_t frame_num) {
   flush_queue(pipeline_layouts_, [this](VkPipelineLayout pipeline_layout) {
     vkDestroyPipelineLayout(device_, pipeline_layout, nullptr);
   });
+  flush_queue(images_, [this](ImgEntry image) {
+    vmaDestroyImage(allocator_, image.image, image.allocation);
+  });
 }
 
 }  // namespace gfx::vk

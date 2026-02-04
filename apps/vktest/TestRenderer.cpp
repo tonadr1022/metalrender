@@ -6,9 +6,11 @@
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
+#include "gfx/rhi/Texture.hpp"
 #include "hlsl/default_vertex.h"
 
 using namespace teng;
+using namespace teng::rhi;
 
 namespace teng::gfx {
 
@@ -30,6 +32,7 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
       .size = 1024ul * 1024,
   });
   recreate_resources_on_swapchain_resize();
+
   std::vector<DefaultVertex> tri_verts;
   tri_verts.emplace_back(glm::vec4{-.5f, -0.5f, 0.0f, 0.f});
   tri_verts.emplace_back(glm::vec4{.5f, -0.5f, 0.0f, 0.f});
@@ -41,33 +44,44 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
 void TestRenderer::render() {
   shader_mgr_->replace_dirty_pipelines();
   auto* enc = device_->begin_cmd_encoder();
+
+  auto compute_clear_pass = [this](rhi::CmdEncoder* enc, rhi::TextureHandle tex_handle) {
+    auto* tex = device_->get_tex(tex_handle);
+    enc->bind_pipeline(clear_color_cmp_pso_);
+    struct {
+      glm::uvec2 dims;
+    } pc;
+    pc.dims = tex->desc().dims;
+    enc->push_constants(&pc, sizeof(pc));
+    enc->bind_uav(tex_handle, 0);
+    enc->dispatch_compute(
+        glm::uvec3{align_divide_up(pc.dims.x, 8), align_divide_up(pc.dims.y, 8), 1},
+        glm::uvec3{8, 8, 1});
+  };
+
+  {  // compute clear
+    auto b = rhi::GPUBarrier::tex_barrier(test_full_screen_tex_.handle, rhi::ResourceState::None,
+                                          rhi::ResourceState::ComputeWrite);
+    enc->barrier(&b);
+    compute_clear_pass(enc, test_full_screen_tex_.handle);
+    b = rhi::GPUBarrier::tex_barrier(test_full_screen_tex_.handle, rhi::ResourceState::ComputeWrite,
+                                     rhi::ResourceState::ShaderRead);
+    enc->barrier(&b);
+  }
+
   glm::vec4 clear_color{1, 1, 0, 1};
   device_->begin_swapchain_rendering(swapchain_, enc, &clear_color);
   enc->set_cull_mode(rhi::CullMode::None);
   enc->set_viewport({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
   enc->set_scissor({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
   enc->bind_pipeline(test_gfx_pso_);
+  enc->bind_srv(test_full_screen_tex_.handle, 0);
   enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
   enc->end_rendering();
 
-  auto b = rhi::GPUBarrier::tex_barrier(swapchain_->get_current_texture(),
-                                        rhi::ResourceState::ColorWrite,
-                                        rhi::ResourceState::ComputeWrite);
-  enc->barrier(&b);
-  enc->bind_pipeline(clear_color_cmp_pso_);
-  struct {
-    glm::uvec2 dims;
-  } pc;
-  pc.dims = glm::uvec2{swapchain_->desc_.width, swapchain_->desc_.height};
-  enc->push_constants(&pc, sizeof(pc));
-  enc->bind_uav(swapchain_->get_current_texture(), 0);
-  enc->dispatch_compute(glm::uvec3{align_divide_up(swapchain_->desc_.width, 8),
-                                   align_divide_up(swapchain_->desc_.height, 8), 1},
-                        glm::uvec3{8, 8, 1});
-
   {
     auto b = rhi::GPUBarrier::tex_barrier(swapchain_->get_current_texture(),
-                                          rhi::ResourceState::ComputeWrite,
+                                          rhi::ResourceState::ColorWrite,
                                           rhi::ResourceState::SwapchainPresent);
     enc->barrier(&b);
   }
@@ -87,6 +101,7 @@ void TestRenderer::recreate_resources_on_swapchain_resize() {
       .dims = {dims.x, dims.y, 1},
       .mip_levels = 1,
       .array_length = 1,
+      .name = "test full screen texture",
   });
 }
 

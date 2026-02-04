@@ -120,10 +120,8 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   void push_debug_group(const char* /*name*/) override { exit(1); }
   void pop_debug_group() override { exit(1); }
 
-  void bind_srv(rhi::TextureHandle /*texture*/, uint32_t /*slot*/,
-                int /*subresource_id*/) override {
-    exit(1);
-  }
+  void bind_srv(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
+
   void bind_srv(rhi::BufferHandle /*buffer*/, uint32_t /*slot*/, size_t /*offset_bytes*/) override {
     exit(1);
   }
