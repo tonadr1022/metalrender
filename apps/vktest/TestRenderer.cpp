@@ -73,10 +73,6 @@ void TestRenderer::render() {
     enc->barrier(&b);
   }
 
-  // auto b = rhi::GPUBarrier::buf_barrier(test_vert_buf_.handle, rhi::ResourceState::None,
-  //                                       rhi::ResourceState::ShaderRead);
-  // enc->barrier(&b);
-
   glm::vec4 clear_color{0, 0, 1, 1};
   device_->begin_swapchain_rendering(swapchain_, enc, &clear_color);
   enc->set_cull_mode(rhi::CullMode::None);

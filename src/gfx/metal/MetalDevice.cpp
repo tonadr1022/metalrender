@@ -226,6 +226,21 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
       frame_fence_values_[frame_i] = 0;
     }
   }
+  {
+    // static samplers
+    static_samplers_.emplace_back(create_sampler_h({
+        .min_filter = rhi::FilterMode::Linear,
+        .mag_filter = rhi::FilterMode::Linear,
+        .mipmap_mode = rhi::FilterMode::Linear,
+        .address_mode = rhi::AddressMode::ClampToEdge,
+        .bindless = true,
+    }));
+    static_sampler_entries_.resize(10);
+    auto* resource_table = static_sampler_entries_.data();
+    IRDescriptorTableSetSampler(&resource_table[0],
+                                sampler_pool_.get(static_samplers_.back().handle)->sampler(), 0.0);
+    LINFO("gpu va: {}", resource_table[0].gpuVA);
+  }
   return true;
 }
 
@@ -362,7 +377,6 @@ void MetalDevice::destroy(rhi::TextureHandle handle) {
   }
   ASSERT(tex->texture());
   if (tex->desc().bindless) {
-    ASSERT(tex->bindless_idx() != rhi::k_invalid_bindless_idx);
     resource_desc_heap_allocator_.free_idx(tex->bindless_idx());
   }
   for (auto& view : tex->tex_views) {
@@ -1163,16 +1177,24 @@ void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdE
   swap_img_desc.format = mtl::util::convert(tex->pixelFormat());
   swap_img_desc.mip_levels = 1;
   swap_img_desc.array_length = 1;
-  auto tex_handle = texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true);
+  swap_img_desc.bindless = false;
+  // auto tex_handle_h = rhi::TextureHandleHolder{
+  //     texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
+  // TODO: fix
+  for (auto& t : swap->textures_) {
+    t = rhi::TextureHandleHolder{
+        texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
+  }
+  // auto tex_handle = texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true);
   if (clear_color) {
     enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(
-        tex_handle, rhi::LoadOp::Clear, rhi::ClearValue{.color = *clear_color})});
+        swap->textures_[0].handle, rhi::LoadOp::Clear, rhi::ClearValue{.color = *clear_color})});
   } else {
-    enc->begin_rendering(
-        {rhi::RenderingAttachmentInfo::color_att(tex_handle, rhi::LoadOp::DontCare)});
+    enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(swap->textures_[0].handle,
+                                                                  rhi::LoadOp::DontCare)});
   }
-  // TODO: is this bad
-  texture_pool_.destroy(tex_handle);
+  // // TODO: is this bad
+  // texture_pool_.destroy();
 }
 
 rhi::SwapchainHandle MetalDevice::create_swapchain(const rhi::SwapchainDesc& desc) {

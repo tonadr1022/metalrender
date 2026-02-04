@@ -23,7 +23,7 @@ TestApp::TestApp() {
   };
   window_->init(win_init_info);
   window_->set_window_position({500, 0});
-  device_ = rhi::create_device(rhi::GfxAPI::Vulkan);
+  device_ = rhi::create_device(rhi::GfxAPI::Metal);
 
   device_->init({
       .shader_lib_dir = resource_dir_ / "shader_out",

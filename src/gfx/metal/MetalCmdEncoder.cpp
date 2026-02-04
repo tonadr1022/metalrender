@@ -129,9 +129,11 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
     }
   }
 
+  flush_barriers();
   end_blit_encoder();
   end_compute_encoder();
   if constexpr (UseMTL4) {
+    LINFO("begin rendering");
     m4_state().render_enc = m4_state().cmd_buf->renderCommandEncoder(m4_desc.get());
     m4_state().render_enc->setArgumentTable(m4_state().arg_table,
                                             MTL::RenderStageVertex | MTL::RenderStageFragment |
@@ -145,7 +147,6 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
       m3_state().render_enc->setLabel(mtl::util::string(curr_debug_name_));
     }
   }
-  flush_barriers();
   set_buffer(kIRDescriptorHeapBindPoint, device_->get_mtl_buf(device_->resource_descriptor_table_),
              0,
              EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment |
@@ -191,7 +192,8 @@ void MetalCmdEncoderBase<UseMTL4>::flush_barriers() {
   if constexpr (UseMTL4) {
     if (m4_state().compute_enc && device_->compute_enc_flush_stages_) {
       constexpr MTL4::VisibilityOptions visibility_options = MTL4::VisibilityOptionNone;
-      m4_state().compute_enc->barrierAfterStages(MTL::StageAll, MTL::StageAll, visibility_options);
+      m4_state().compute_enc->barrierAfterStages(MTL::StageDispatch | MTL::StageBlit, MTL::StageAll,
+                                                 visibility_options);
       m4_state().compute_enc->barrierAfterEncoderStages(MTL::StageBlit | MTL::StageDispatch,
                                                         MTL::StageBlit | MTL::StageDispatch,
                                                         visibility_options);
@@ -232,6 +234,7 @@ void MetalCmdEncoderBase<UseMTL4>::flush_barriers() {
 
 template <bool UseMTL4>
 void MetalCmdEncoderBase<UseMTL4>::end_encoding() {
+  flush_barriers();
   end_render_encoder();
   end_compute_encoder();
   end_blit_encoder();
@@ -247,14 +250,7 @@ template <bool UseMTL4>
 void MetalCmdEncoderBase<UseMTL4>::pre_dispatch() {
   flush_barriers();
   ASSERT(m4_state().compute_enc);
-  if constexpr (UseMTL4) {
-    ASSERT(m4_state().compute_enc);
-    // if (m4_state().compute_enc) {
-    //   ASSERT(!m4_state().render_enc);
-    //   m4_state().compute_enc = m4_state().cmd_buf->computeCommandEncoder();
-    //   m4_state().compute_enc->setArgumentTable(m4_state().arg_table);
-    // }
-  } else {
+  if constexpr (!UseMTL4) {
     if (!m3_state().compute_enc) {
       ASSERT((!m3_state().blit_enc && !m3_state().render_enc));
       m3_state().compute_enc = m3_state().cmd_buf->computeCommandEncoder();
@@ -737,6 +733,7 @@ void MetalCmdEncoderBase<UseMTL4>::dispatch_compute(glm::uvec3 thread_groups,
   flush_binds();
   pre_dispatch();
   // TODO: address misbindings of descriptor/sampler heap
+  LINFO("dispatch_compute");
   if constexpr (UseMTL4) {
     m4_state().compute_enc->dispatchThreadgroups(
         MTL::Size::Make(thread_groups.x, thread_groups.y, thread_groups.z),
@@ -839,15 +836,11 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
       if (!generational_handle_u64_is_valid(binding_table_.SRV[i])) {
         continue;
       }
-      // if (!binding_table_.SRV[i].is_valid()) {
-      //   continue;
-      // }
       IRDescriptorTableEntry entry;
       const auto resource_id = binding_table_.SRV_subresources[i];
       if (resource_id == DescriptorBindingTable::k_buffer_resource) {
         const auto* buf = device_->get_mtl_buf(rhi::BufferHandle{binding_table_.SRV[i]});
         const size_t metadata = buf->length();
-        ASSERT(i - ROOT_CBV_COUNT < ARRAY_SIZE(table.cbvs));
         entry.gpuVA = buf->gpuAddress() + binding_table_.SRV_offsets[i];
         entry.textureViewID = 0;
         entry.metadata = metadata;
@@ -917,9 +910,23 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
     binding_table_dirty_ = false;
     auto [binding_table, binding_table_offset] =
         device_->push_constant_allocator_->alloc(sizeof(ResourceTable));
-    root_layout_.resource_table_ptr = binding_table->gpuAddress() + binding_table_offset;
     memcpy((uint8_t*)binding_table->contents() + binding_table_offset, &table,
            sizeof(ResourceTable));
+    root_layout_.resource_table_ptr = binding_table->gpuAddress() + binding_table_offset;
+
+    struct SamplerTable {
+      IRDescriptorTableEntry sampler_table[8];
+      IRDescriptorTableEntry static_samplers[10];
+    };
+    auto [sampler_table, sampler_table_offset] =
+        device_->push_constant_allocator_->alloc(sizeof(SamplerTable));
+
+    auto* dst_sampler_table =
+        (SamplerTable*)((uint8_t*)sampler_table->contents() + sampler_table_offset);
+    memcpy(dst_sampler_table->static_samplers, (void*)device_->static_sampler_entries_.data(),
+           sizeof(SamplerTable::static_samplers));
+    LINFO("GPU VA: {}", dst_sampler_table->static_samplers[0].gpuVA);
+    root_layout_.sampler_table_ptr = sampler_table->gpuAddress() + sampler_table_offset;
   }
 
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(sizeof(RootLayout));
@@ -1003,17 +1010,9 @@ void MetalCmdEncoderBase<UseMTL4>::write_timestamp(rhi::QueryPoolHandle query_po
     if (m4_state().compute_enc) {
       m4_state().compute_enc->writeTimestamp(MTL4::TimestampGranularityPrecise, pool->heap_.get(),
                                              query_index);
-      //      m4_state().compute_enc->barrierAfterStages(MTL::StageBlit, MTL::StageAll,
-      //                                                 MTL4::VisibilityOptionDevice);
-      //      m4_state().compute_enc->barrierAfterEncoderStages(MTL::StageBlit, MTL::StageAll,
-      //                                                        MTL4::VisibilityOptionDevice);
     } else if (m4_state().render_enc) {
       m4_state().render_enc->writeTimestamp(MTL4::TimestampGranularityPrecise,
                                             MTL::RenderStageObject, pool->heap_.get(), query_index);
-      //      m4_state().render_enc->barrierAfterStages(MTL::StageBlit, MTL::StageAll,
-      //                                                MTL4::VisibilityOptionDevice);
-      //      m4_state().render_enc->barrierAfterEncoderStages(MTL::StageBlit, MTL::StageAll,
-      //                                                       MTL4::VisibilityOptionDevice);
     } else {
       m4_state().cmd_buf->writeTimestampIntoHeap(pool->heap_.get(), query_index);
     }
