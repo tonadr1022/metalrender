@@ -390,6 +390,7 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
         " -fspv-target-env=vulkan1.3"
         " -fspv-extension=SPV_NV_mesh_shader"
         " -fspv-extension=SPV_EXT_descriptor_indexing"
+        " -fvk-use-dx-layout"
         " -fvk-u-shift 1000 0"
         " -fvk-t-shift 2000 0"
         " -D VULKAN",

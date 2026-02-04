@@ -17,9 +17,10 @@ RWTexture2D<min16float4> out_tex : register(u0);
   if (dtid.x < pc.dims.x / 2) {
     if (dtid.y < pc.dims.y / 2) {
       out_tex[dtid] = min16float4(1.0, 0.0, 0.0, 1.0);
-
     } else {
       out_tex[dtid] = min16float4(0.0, 1.0, 1.0, 1.0);
     }
+  } else {
+    out_tex[dtid] = min16float4(0.0, 0.0, 0.0, 0.0);
   }
 }

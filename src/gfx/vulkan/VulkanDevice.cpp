@@ -359,19 +359,25 @@ void VulkanDevice::init(const InitInfo& init_info) {
 
   vkb::PhysicalDeviceSelector phys_device_selector{vkb_inst_};
   const char* required_extensions[] = {
-      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-      VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
-      VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,
-      VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,           VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
+      VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,   VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
+      VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME,
   };
   phys_device_selector.add_required_extensions(ARRAY_SIZE(required_extensions),
                                                required_extensions);
   VkPhysicalDeviceVulkan13Features feat13{
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES,
+      .shaderDemoteToHelperInvocation = true,
       .synchronization2 = true,
       .dynamicRendering = true,
   };
   phys_device_selector.set_required_features_13(feat13);
+
+  VkPhysicalDeviceVulkan12Features feat12{
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+      .scalarBlockLayout = true,
+  };
+  phys_device_selector.set_required_features_12(feat12);
 
   VkPhysicalDeviceExtendedDynamicStateFeaturesEXT ext_state{
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT,
@@ -621,7 +627,8 @@ rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder() {
     }
     auto& binder = enc.binder_;
     binder.writes.reserve(120);
-    binder.img_infos.reserve(60);
+    binder.img_infos.reserve(120);
+    binder.buf_infos.reserve(120);
   } else {
     enc.binder_pools_[enc.curr_frame_i_].reset(*this);
   }

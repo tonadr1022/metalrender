@@ -171,7 +171,11 @@ void VulkanCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology /*topology
 void VulkanCmdEncoder::set_depth_stencil_state(rhi::CompareOp /*depth_compare_op*/,
                                                bool /*depth_write_enabled*/) {}
 
-void VulkanCmdEncoder::set_wind_order(rhi::WindOrder /*wind_order*/) {}
+void VulkanCmdEncoder::set_wind_order(rhi::WindOrder wind_order) {
+  vkCmdSetFrontFaceEXT(cmd(), wind_order == rhi::WindOrder::Clockwise
+                                  ? VK_FRONT_FACE_CLOCKWISE
+                                  : VK_FRONT_FACE_COUNTER_CLOCKWISE);
+}
 
 void VulkanCmdEncoder::set_cull_mode(rhi::CullMode cull_mode) {
   vkCmdSetCullModeEXT(cmd(), convert(cull_mode));
@@ -434,6 +438,8 @@ void VulkanCmdEncoder::flush_binds() {
     constexpr uint32_t k_uav_binding_start = 1000;
     constexpr uint32_t k_srv_binding_start = 2000;
     binder_.writes.clear();
+    binder_.img_infos.clear();
+    binder_.buf_infos.clear();
 
     for (auto& binding : bound_pipeline_->layout_bindings_) {
       if (binding.pImmutableSamplers) {
@@ -488,7 +494,7 @@ void VulkanCmdEncoder::flush_binds() {
           ASSERT((table_index >= 0 && table_index < ARRAY_SIZE(binding_table_.SRV)));
           auto& buf_info = binder_.buf_infos.emplace_back();
           auto* buf = device_->get_vk_buf(buf_handle);
-          buf_info.buffer = buf->buffer();
+          buf_info.buffer = buf->buffer_;
           buf_info.offset = binding_table_.SRV_offsets[table_index];
           buf_info.range = VK_WHOLE_SIZE;
           write.pBufferInfo = &buf_info;

@@ -8,7 +8,7 @@ struct VOut {
   float2 uv : TEXCOORD0;
 };
 
-StructuredBuffer<DefaultVertex> vertices : register(t1);
+StructuredBuffer<DefaultVertex> vertices : register(t0);
 
 [RootSignature(ROOT_SIGNATURE)] VOut main(uint vert_id : SV_VertexID) {
   DefaultVertex v = vertices[vert_id];

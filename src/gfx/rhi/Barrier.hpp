@@ -27,6 +27,17 @@ struct GPUBarrier {
     Texture tex;
   };
 
+  static GPUBarrier buf_barrier(BufferHandle handle, ResourceState src_state,
+                                ResourceState dst_state, size_t offset = 0,
+                                size_t size = SIZE_MAX) {
+    return {.type = Type::Buffer,
+            .buf = {.buffer = handle,
+                    .src_state = src_state,
+                    .dst_state = dst_state,
+                    .offset = offset,
+                    .size = size}};
+  }
+
   static GPUBarrier tex_barrier(rhi::TextureHandle handle, ResourceState src_state,
                                 ResourceState dst_state, uint32_t mip = 0, uint32_t slice = 0,
                                 ImageAspect aspect = ImageAspect_Color) {

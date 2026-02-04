@@ -38,9 +38,9 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   recreate_resources_on_swapchain_resize();
 
   std::vector<DefaultVertex> tri_verts;
-  tri_verts.emplace_back(glm::vec4{-.5f, -0.5f, 0.0f, 0.f});
-  tri_verts.emplace_back(glm::vec4{.5f, -0.5f, 0.0f, 0.f});
-  tri_verts.emplace_back(glm::vec4{0.0f, .5f, 0.0f, 0.f});
+  tri_verts.emplace_back(glm::vec4{-.5f, -0.5f, 0.0f, 1.f}, glm::vec2{0.f, 0.f});
+  tri_verts.emplace_back(glm::vec4{.5f, -0.5f, 0.0f, 1.f}, glm::vec2{1.f, 0.f});
+  tri_verts.emplace_back(glm::vec4{0.0f, .5f, 0.0f, 1.f}, glm::vec2{0.5f, 1.f});
   buffer_copy_mgr_.copy_to_buffer(tri_verts.data(), tri_verts.size() * sizeof(DefaultVertex),
                                   test_vert_buf_.handle, 0);
 }
@@ -73,9 +73,14 @@ void TestRenderer::render() {
     enc->barrier(&b);
   }
 
-  glm::vec4 clear_color{1, 1, 0, 1};
+  // auto b = rhi::GPUBarrier::buf_barrier(test_vert_buf_.handle, rhi::ResourceState::None,
+  //                                       rhi::ResourceState::ShaderRead);
+  // enc->barrier(&b);
+
+  glm::vec4 clear_color{0, 0, 1, 1};
   device_->begin_swapchain_rendering(swapchain_, enc, &clear_color);
   enc->set_cull_mode(rhi::CullMode::None);
+  enc->set_wind_order(rhi::WindOrder::CounterClockwise);
   enc->set_viewport({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
   enc->set_scissor({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
   enc->bind_pipeline(test_gfx_pso_);
@@ -83,7 +88,7 @@ void TestRenderer::render() {
   enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
 
   enc->bind_pipeline(test_geo_pso_);
-  enc->bind_srv(test_vert_buf_.handle, 1);
+  enc->bind_srv(test_vert_buf_.handle, 0);
   enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
 
   enc->end_rendering();

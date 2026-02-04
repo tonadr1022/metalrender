@@ -5,4 +5,6 @@ struct VOut {
   float2 uv : TEXCOORD0;
 };
 
-[RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target { return float4(1, 1, 1, 1); }
+[RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target {
+  return float4(input.uv, 1, 1);
+}
