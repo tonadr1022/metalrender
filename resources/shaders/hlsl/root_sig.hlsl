@@ -15,9 +15,6 @@
   "DATA_STATIC_WHILE_SET_AT_EXECUTE),"                                                            \
   "UAV(u0, numDescriptors = 12, flags = DESCRIPTORS_VOLATILE | DATA_STATIC_WHILE_SET_AT_EXECUTE)" \
   "),"                                                                                            \
-  "DescriptorTable( "                                                                             \
-  "Sampler(s0, offset = 0, numDescriptors = 8, flags = DESCRIPTORS_VOLATILE)"                     \
-  "),"                                                                                            \
   "StaticSampler(s100, addressU = TEXTURE_ADDRESS_CLAMP, addressV = TEXTURE_ADDRESS_CLAMP, "      \
   "addressW = TEXTURE_ADDRESS_CLAMP, filter = FILTER_MIN_MAG_MIP_LINEAR),"                        \
   "StaticSampler(s101, addressU = TEXTURE_ADDRESS_WRAP, addressV = TEXTURE_ADDRESS_WRAP, "        \

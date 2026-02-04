@@ -20,7 +20,7 @@
 SHADER_CONSTANT k_max_materials = 1024;
 SHADER_CONSTANT k_max_textures = 1024;
 SHADER_CONSTANT k_max_buffers = 1024;
-SHADER_CONSTANT k_max_samplers = 16;
+SHADER_CONSTANT k_max_samplers = 1024;
 SHADER_CONSTANT k_max_vertices_per_meshlet = 128;
 SHADER_CONSTANT k_max_triangles_per_meshlet = 128;
 

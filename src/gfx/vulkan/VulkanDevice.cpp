@@ -186,6 +186,8 @@ constexpr VkFormat convert_format(TextureFormat format) {
       return VK_FORMAT_R32_SFLOAT;
     case TextureFormat::R16G16B16A16Sfloat:
       return VK_FORMAT_R16G16B16A16_SFLOAT;
+    case TextureFormat::R32G32B32A32Sfloat:
+      return VK_FORMAT_R32G32B32A32_SFLOAT;
     case TextureFormat::Undefined:
       return VK_FORMAT_UNDEFINED;
     default:
@@ -209,6 +211,8 @@ constexpr TextureFormat convert_format(VkFormat format) {
       return TextureFormat::R32float;
     case VK_FORMAT_R16G16B16A16_SFLOAT:
       return TextureFormat::R16G16B16A16Sfloat;
+    case VK_FORMAT_R32G32B32A32_SFLOAT:
+      return TextureFormat::R32G32B32A32Sfloat;
     default:
       ASSERT(0);
       return TextureFormat::Undefined;

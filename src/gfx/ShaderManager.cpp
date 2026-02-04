@@ -382,7 +382,8 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
     return false;
   }
 
-  if (has_flag(options_.targets, rhi::ShaderTarget::Spirv)) {  // spirv
+  if (true) {  // spirv
+               // if (has_flag(options_.targets, rhi::ShaderTarget::Spirv)) {  // spirv
     auto spirv_path = out_filepath;
     spirv_path.replace_extension(".spv");
     auto compile_spirv = std::format(
@@ -411,7 +412,8 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
     }
   }
 
-  if (has_flag(options_.targets, rhi::ShaderTarget::MSL)) {
+  if (true) {
+    // if (has_flag(options_.targets, rhi::ShaderTarget::MSL)) {
     auto metallib_path =
         (fs::path("resources/shader_out/metal") / relative).replace_extension(".metallib");
     bool output_reflection = true;

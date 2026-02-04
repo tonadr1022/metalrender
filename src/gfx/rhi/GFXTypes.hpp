@@ -40,6 +40,7 @@ enum class TextureFormat : uint8_t {
   B8G8R8A8Unorm,
   B8G8R8A8Srgb,
   R16G16B16A16Sfloat,
+  R32G32B32A32Sfloat,
   D32float,
   R32float,
   ASTC4x4UnormBlock,

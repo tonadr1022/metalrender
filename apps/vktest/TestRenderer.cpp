@@ -73,6 +73,9 @@ void TestRenderer::render() {
     enc->barrier(&b);
   }
 
+  // enc->end_encoding();
+  // enc = device_->begin_cmd_encoder();
+
   glm::vec4 clear_color{0, 0, 1, 1};
   device_->begin_swapchain_rendering(swapchain_, enc, &clear_color);
   enc->set_cull_mode(rhi::CullMode::None);
@@ -106,7 +109,7 @@ TestRenderer::~TestRenderer() { shader_mgr_->shutdown(); }
 void TestRenderer::recreate_resources_on_swapchain_resize() {
   auto dims = glm::uvec2{swapchain_->desc_.width, swapchain_->desc_.height};
   test_full_screen_tex_ = device_->create_tex_h({
-      .format = rhi::TextureFormat::R16G16B16A16Sfloat,
+      .format = rhi::TextureFormat::R32G32B32A32Sfloat,
       .usage = (rhi::TextureUsage)(rhi::TextureUsageSample | rhi::TextureUsageStorage),
       .dims = {dims.x, dims.y, 1},
       .mip_levels = 1,

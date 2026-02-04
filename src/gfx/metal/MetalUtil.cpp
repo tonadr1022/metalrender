@@ -143,6 +143,8 @@ rhi::TextureFormat convert(MTL::PixelFormat format) {
       return TextureFormat::ASTC4x4UnormBlock;
     case MTL::PixelFormatRGBA16Float:
       return TextureFormat::R16G16B16A16Sfloat;
+    case MTL::PixelFormatRGBA32Float:
+      return TextureFormat::R32G32B32A32Sfloat;
     default:
       ASSERT(0 && "unhandled texture format");
       return TextureFormat::Undefined;
@@ -169,6 +171,8 @@ MTL::PixelFormat convert(rhi::TextureFormat format) {
       return MTL::PixelFormatASTC_4x4_LDR;
     case TextureFormat::R16G16B16A16Sfloat:
       return MTL::PixelFormatRGBA16Float;
+    case TextureFormat::R32G32B32A32Sfloat:
+      return MTL::PixelFormatRGBA32Float;
     default:
       ASSERT(0 && "unhandled texture format");
       return MTL::PixelFormatInvalid;

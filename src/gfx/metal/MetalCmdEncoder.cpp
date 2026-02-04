@@ -133,7 +133,6 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
   end_blit_encoder();
   end_compute_encoder();
   if constexpr (UseMTL4) {
-    LINFO("begin rendering");
     m4_state().render_enc = m4_state().cmd_buf->renderCommandEncoder(m4_desc.get());
     m4_state().render_enc->setArgumentTable(m4_state().arg_table,
                                             MTL::RenderStageVertex | MTL::RenderStageFragment |
@@ -733,7 +732,6 @@ void MetalCmdEncoderBase<UseMTL4>::dispatch_compute(glm::uvec3 thread_groups,
   flush_binds();
   pre_dispatch();
   // TODO: address misbindings of descriptor/sampler heap
-  LINFO("dispatch_compute");
   if constexpr (UseMTL4) {
     m4_state().compute_enc->dispatchThreadgroups(
         MTL::Size::Make(thread_groups.x, thread_groups.y, thread_groups.z),
@@ -915,7 +913,6 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
     root_layout_.resource_table_ptr = binding_table->gpuAddress() + binding_table_offset;
 
     struct SamplerTable {
-      IRDescriptorTableEntry sampler_table[8];
       IRDescriptorTableEntry static_samplers[10];
     };
     auto [sampler_table, sampler_table_offset] =
@@ -925,7 +922,6 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
         (SamplerTable*)((uint8_t*)sampler_table->contents() + sampler_table_offset);
     memcpy(dst_sampler_table->static_samplers, (void*)device_->static_sampler_entries_.data(),
            sizeof(SamplerTable::static_samplers));
-    LINFO("GPU VA: {}", dst_sampler_table->static_samplers[0].gpuVA);
     root_layout_.sampler_table_ptr = sampler_table->gpuAddress() + sampler_table_offset;
   }
 
