@@ -834,54 +834,40 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
       if (!generational_handle_u64_is_valid(binding_table_.SRV[i])) {
         continue;
       }
-      IRDescriptorTableEntry entry;
       const auto resource_id = binding_table_.SRV_subresources[i];
       if (resource_id == DescriptorBindingTable::k_buffer_resource) {
         const auto* buf = device_->get_mtl_buf(rhi::BufferHandle{binding_table_.SRV[i]});
         const size_t metadata = buf->length();
-        entry.gpuVA = buf->gpuAddress() + binding_table_.SRV_offsets[i];
-        entry.textureViewID = 0;
-        entry.metadata = metadata;
+        IRDescriptorTableSetBuffer(&table.srvs[i],
+                                   buf->gpuAddress() + binding_table_.SRV_offsets[i], metadata);
       } else if (resource_id == DescriptorBindingTable::k_tex_resource) {
-        const auto* tex = device_->get_mtl_tex(rhi::TextureHandle{binding_table_.SRV[i]});
-        entry.gpuVA = 0;
-        entry.textureViewID = tex->gpuResourceID()._impl;
-        entry.metadata = 0;
+        auto* tex = device_->get_mtl_tex(rhi::TextureHandle{binding_table_.SRV[i]});
+        IRDescriptorTableSetTexture(&table.srvs[i], tex, 0.0f, 0);
       } else {
         const auto* tex_view = device_->get_tex_view(rhi::TextureHandle{binding_table_.SRV[i]},
                                                      binding_table_.SRV_subresources[i]);
-        entry.gpuVA = 0;
-        entry.textureViewID = tex_view->tex->gpuResourceID()._impl;
-        entry.metadata = 0;
+        IRDescriptorTableSetTexture(&table.srvs[i], tex_view->tex, 0.0f, 0);
       }
-      table.srvs[i] = entry;
     }
 
     for (uint32_t i = 0; i < ARRAY_SIZE(binding_table_.UAV); i++) {
       if (!generational_handle_u64_is_valid(binding_table_.UAV[i])) {
         continue;
       }
-      IRDescriptorTableEntry entry;
       auto id = binding_table_.UAV_subresources[i];
       if (id == DescriptorBindingTable::k_buffer_resource) {
         const auto* buf = device_->get_mtl_buf(rhi::BufferHandle{binding_table_.UAV[i]});
         const size_t metadata = buf->length();
-        entry.gpuVA = buf->gpuAddress() + binding_table_.UAV_offsets[i];
-        entry.textureViewID = 0;
-        entry.metadata = metadata;
+        IRDescriptorTableSetBuffer(&table.uavs[i],
+                                   buf->gpuAddress() + binding_table_.UAV_offsets[i], metadata);
       } else if (id == DescriptorBindingTable::k_tex_resource) {
         auto* tex = device_->get_mtl_tex(rhi::TextureHandle{binding_table_.UAV[i]});
-        entry.gpuVA = 0;
-        entry.textureViewID = tex->gpuResourceID()._impl;
-        entry.metadata = 0;
+        IRDescriptorTableSetTexture(&table.uavs[i], tex, 0.0f, 0);
       } else {
         auto* tex_view = device_->get_tex_view(rhi::TextureHandle{binding_table_.UAV[i]},
                                                binding_table_.UAV_subresources[i]);
-        entry.gpuVA = 0;
-        entry.textureViewID = tex_view->tex->gpuResourceID()._impl;
-        entry.metadata = 0;
+        IRDescriptorTableSetTexture(&table.uavs[i], tex_view->tex, 0.0f, 0);
       }
-      table.uavs[i] = entry;
     }
 
     // TODO: dirty root flag instead of only dirty resources flag.

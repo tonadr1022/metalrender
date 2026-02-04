@@ -35,6 +35,13 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
       .usage = rhi::BufferUsage_Storage,
       .size = 1024ul * 1024,
   });
+  white_tex_ = device_->create_tex_h({
+      .format = rhi::TextureFormat::R8G8B8A8Unorm,
+      .dims = {1, 1, 1},
+      .mip_levels = 1,
+      .array_length = 1,
+      .name = "white texture",
+  });
   recreate_resources_on_swapchain_resize();
 
   std::vector<DefaultVertex> tri_verts;
@@ -48,6 +55,14 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
 void TestRenderer::render() {
   shader_mgr_->replace_dirty_pipelines();
   auto* enc = device_->begin_cmd_encoder();
+  static int frame_counter = 0;
+  if (frame_counter == 0) {
+    auto alloc = frame_gpu_upload_allocator_.alloc(4u * 4);  // vec4
+    uint32_t data = 0xffffffff;
+    memcpy(alloc.write_ptr, &data, 4);
+    enc->upload_texture_data(alloc.buf, alloc.offset, 4, white_tex_.handle);
+  }
+  frame_counter++;
 
   auto compute_clear_pass = [this](rhi::CmdEncoder* enc, rhi::TextureHandle tex_handle) {
     auto* tex = device_->get_tex(tex_handle);
@@ -83,7 +98,7 @@ void TestRenderer::render() {
   enc->set_viewport({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
   enc->set_scissor({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
   enc->bind_pipeline(test_gfx_pso_);
-  enc->bind_srv(test_full_screen_tex_.handle, 0);
+  enc->bind_srv(white_tex_.handle, 0);
   enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
 
   enc->bind_pipeline(test_geo_pso_);
