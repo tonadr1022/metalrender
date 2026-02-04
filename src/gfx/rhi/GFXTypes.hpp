@@ -389,7 +389,7 @@ enum ResourceState : uint32_t {
 enum class ShaderTarget : uint8_t {
   None = 0,
   Spirv = (1 << 0),
-  MSL = (1 << 0),
+  MSL = (1 << 1),
 };
 
 AUGMENT_ENUM_CLASS(ShaderTarget);

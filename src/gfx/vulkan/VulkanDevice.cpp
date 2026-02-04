@@ -217,6 +217,9 @@ void VulkanDevice::shutdown() {
       cmd->binder_pools_[pool_i].destroy(*this);
     }
   }
+  for (auto& [a, pipeline] : all_pipelines_) {
+    vkDestroyPipeline(device_, ((VulkanPipeline*)get_pipeline(pipeline))->pipeline_, nullptr);
+  }
 
   for (auto& [hash, layout] : set_layout_cache_) {
     vkDestroyDescriptorSetLayout(device_, layout, nullptr);
@@ -1180,7 +1183,6 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
 
     sets.resize(set_count);
     refl.EnumerateDescriptorSets(&set_count, sets.data());
-    ASSERT(set_count == 1);
     for (uint32_t i = 0; i < set_count; i++) {
       auto& set = sets[i];
       LINFO("set {}: binding count {}", set->set, set->binding_count);

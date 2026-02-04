@@ -23,14 +23,12 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
 
 void TestRenderer::render() {
   shader_mgr_->replace_dirty_pipelines();
-
   auto* enc = device_->begin_cmd_encoder();
   glm::vec4 clear_color{1, 1, 0, 1};
   device_->begin_swapchain_rendering(swapchain_, enc, &clear_color);
   enc->set_cull_mode(rhi::CullMode::None);
   enc->set_viewport({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
-  enc->set_scissor({swapchain_->desc_.width / 4, swapchain_->desc_.height / 4},
-                   {swapchain_->desc_.width * 3 / 4.f, swapchain_->desc_.height * 3 / 4.f});
+  enc->set_scissor({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
   enc->bind_pipeline(test_gfx_pso_);
   enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
   enc->end_rendering();
