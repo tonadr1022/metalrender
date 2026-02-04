@@ -30,6 +30,9 @@ void DeleteQueue::flush(size_t frame_num) {
   flush_queue(images_, [this](ImgEntry image) {
     vmaDestroyImage(allocator_, image.image, image.allocation);
   });
+  flush_queue(buffers_, [this](BufferEntry buffer) {
+    vmaDestroyBuffer(allocator_, buffer.buffer, buffer.allocation);
+  });
 }
 
 }  // namespace gfx::vk

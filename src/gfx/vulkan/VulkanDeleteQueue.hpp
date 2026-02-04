@@ -34,7 +34,14 @@ struct DeleteQueue {
     VkImage image;
     VmaAllocation allocation;
   };
+
+  struct BufferEntry {
+    VkBuffer buffer;
+    VmaAllocation allocation;
+  };
+
   void enqueue(ImgEntry entry) { images_.emplace(entry, curr_frame_); }
+  void enqueue(BufferEntry entry) { buffers_.emplace(entry, curr_frame_); }
 
  private:
   VmaAllocator allocator_{};
@@ -46,6 +53,7 @@ struct DeleteQueue {
   std::queue<Entry<VkPipeline>> pipelines_;
   std::queue<Entry<VkPipelineLayout>> pipeline_layouts_;
   std::queue<Entry<ImgEntry>> images_;
+  std::queue<Entry<BufferEntry>> buffers_;
 };
 
 }  // namespace gfx::vk

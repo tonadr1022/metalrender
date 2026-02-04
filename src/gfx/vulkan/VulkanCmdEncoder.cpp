@@ -132,7 +132,6 @@ void VulkanCmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
       if (it == device_->all_pipelines_.end()) {
         auto new_pipeline = device_->create_graphics_pipeline(new_desc);
         device_->all_pipelines_[hash] = new_pipeline;
-        LINFO("making pipeline");
         pipeline = reinterpret_cast<VulkanPipeline*>(device_->get_pipeline(new_pipeline));
       } else {
         pipeline = reinterpret_cast<VulkanPipeline*>(device_->get_pipeline(it->second));
@@ -443,7 +442,6 @@ void VulkanCmdEncoder::flush_binds() {
       auto& write = binder_.writes.emplace_back();
       write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
       write.pNext = nullptr;
-      // TODO: lollll
       write.dstSet = descriptor_set;
       write.dstBinding = binding.binding;
       write.dstArrayElement = 0;
@@ -482,6 +480,21 @@ void VulkanCmdEncoder::flush_binds() {
         }
         write.pImageInfo = &img_info;
 
+      } else if (binding.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
+        if (binding.binding >= k_srv_binding_start) {
+          // srv
+          auto table_index = binding.binding - k_srv_binding_start;
+          auto buf_handle = rhi::BufferHandle{binding_table_.SRV[table_index]};
+          ASSERT((table_index >= 0 && table_index < ARRAY_SIZE(binding_table_.SRV)));
+          auto& buf_info = binder_.buf_infos.emplace_back();
+          auto* buf = device_->get_vk_buf(buf_handle);
+          buf_info.buffer = buf->buffer();
+          buf_info.offset = binding_table_.SRV_offsets[table_index];
+          buf_info.range = VK_WHOLE_SIZE;
+          write.pBufferInfo = &buf_info;
+        } else {
+          ASSERT(0);
+        }
       } else if (binding.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) {
         LINFO("Failed descriptor type: {}", string_VkDescriptorType(binding.descriptorType));
         LINFO("Binding: {}", binding.binding);
@@ -562,6 +575,13 @@ void VulkanCmdEncoder::bind_srv(rhi::TextureHandle texture, uint32_t slot, int s
   ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
   binding_table_.SRV[slot] = texture.to64();
   binding_table_.SRV_subresources[slot] = subresource_id;
+  descriptors_dirty_ = true;
+}
+
+void VulkanCmdEncoder::bind_srv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) {
+  binding_table_.SRV[slot] = buffer.to64();
+  binding_table_.SRV_subresources[slot] = DescriptorBindingTable::k_buffer_resource;
+  binding_table_.SRV_offsets[slot] = offset_bytes;
   descriptors_dirty_ = true;
 }
 

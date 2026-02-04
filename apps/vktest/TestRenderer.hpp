@@ -42,6 +42,7 @@ class TestRenderer {
   rhi::Swapchain* swapchain_;
   rhi::PipelineHandleHolder clear_color_cmp_pso_;
   rhi::PipelineHandleHolder test_gfx_pso_;
+  rhi::PipelineHandleHolder test_geo_pso_;
   rhi::TextureHandleHolder test_full_screen_tex_;
   GPUFrameAllocator3 frame_gpu_upload_allocator_;
   BufferCopyMgr buffer_copy_mgr_;

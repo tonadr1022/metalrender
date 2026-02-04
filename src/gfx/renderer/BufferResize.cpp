@@ -1,10 +1,9 @@
 #include "BufferResize.hpp"
 
+#include "core/Config.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/Device.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -13,7 +12,8 @@ void gfx::BufferCopyMgr::copy_to_buffer(const void* src_data, size_t src_size,
   // if dst buffer is cpu visible, direct copy, otherwise copy to staging buffer
   // and enqueue staging -> dst buffer copy.
   auto* buf = device_->get_buf(dst_buffer);
-  if (buf->is_cpu_visible()) {
+  if (buf->is_cpu_visible() ||
+      has_flag(device_->get_graphics_capabilities(), rhi::GraphicsCapability::CacheCoherentUMA)) {
     ASSERT(dst_offset + src_size <= buf->desc().size);
     memcpy((uint8_t*)buf->contents() + dst_offset, src_data, src_size);
   } else {
@@ -41,4 +41,4 @@ void gfx::BufferCopyMgr::add_copy(const BufferCopy& copy) {
   }
 }
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

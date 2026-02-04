@@ -507,7 +507,7 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
     cinfo.usage |= VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT;
   }
   if (desc.usage & rhi::BufferUsage_Storage) {
-    cinfo.usage |= VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT;
+    cinfo.usage |= VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT;
   }
   if (desc.usage & rhi::BufferUsage_Uniform) {
     cinfo.usage |= VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT;
@@ -933,7 +933,7 @@ rhi::SwapchainHandle VulkanDevice::create_swapchain(const rhi::SwapchainDesc& de
 void VulkanDevice::destroy(rhi::BufferHandle handle) {
   auto* buf = (VulkanBuffer*)get_buf(handle);
   if (buf) {
-    vmaDestroyBuffer(allocator_, buf->buffer_, buf->allocation_);
+    del_q_.enqueue({buf->buffer_, buf->allocation_});
     buffer_pool_.destroy(handle);
   }
 }

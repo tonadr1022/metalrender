@@ -25,10 +25,14 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   clear_color_cmp_pso_ = device_->create_compute_pipeline_h({"vulkan_exp/clear_tex_to_color"});
   test_gfx_pso_ = device_->create_graphics_pipeline_h({
       .shaders = {{"fullscreen_quad", rhi::ShaderType::Vertex},
+                  {"vulkan_exp/single_tex", rhi::ShaderType::Fragment}},
+  });
+  test_geo_pso_ = device_->create_graphics_pipeline_h({
+      .shaders = {{"vulkan_exp/basic_geo", rhi::ShaderType::Vertex},
                   {"vulkan_exp/single_color", rhi::ShaderType::Fragment}},
   });
   test_vert_buf_ = device_->create_buf_h({
-      .usage = (rhi::BufferUsage)(rhi::BufferUsage_Storage),
+      .usage = rhi::BufferUsage_Storage,
       .size = 1024ul * 1024,
   });
   recreate_resources_on_swapchain_resize();
@@ -77,6 +81,11 @@ void TestRenderer::render() {
   enc->bind_pipeline(test_gfx_pso_);
   enc->bind_srv(test_full_screen_tex_.handle, 0);
   enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
+
+  enc->bind_pipeline(test_geo_pso_);
+  enc->bind_srv(test_vert_buf_.handle, 1);
+  enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
+
   enc->end_rendering();
 
   {

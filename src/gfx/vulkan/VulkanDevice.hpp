@@ -107,6 +107,9 @@ class VulkanDevice : public rhi::Device {
   VulkanTexture* get_vk_tex(rhi::TextureHandle handle) {
     return static_cast<VulkanTexture*>(get_tex(handle));
   }
+  VulkanBuffer* get_vk_buf(rhi::BufferHandle handle) {
+    return static_cast<VulkanBuffer*>(get_buf(handle));
+  }
 
  private:
   size_t frame_idx() const { return frame_num_ % info_.frames_in_flight; }
