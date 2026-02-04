@@ -44,7 +44,6 @@ class TestRenderer {
   rhi::PipelineHandleHolder test_gfx_pso_;
   rhi::PipelineHandleHolder test_geo_pso_;
   rhi::TextureHandleHolder test_full_screen_tex_;
-  rhi::TextureHandleHolder white_tex_;
   GPUFrameAllocator3 frame_gpu_upload_allocator_;
   BufferCopyMgr buffer_copy_mgr_;
   rhi::BufferHandleHolder test_vert_buf_;

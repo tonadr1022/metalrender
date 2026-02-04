@@ -1,5 +1,6 @@
 # TODOs
 
+- handle y-flip on metal vs vulkan
 - instead of acquiring next swapchain image in begin_swapchain_rendering(), maybe expose it?
 - in begin_rendering() use image view instead of assuming default view
 - modularize engine into separate libraries?
