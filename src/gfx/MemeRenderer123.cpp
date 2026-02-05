@@ -837,9 +837,7 @@ void InstanceMgr::free(const Alloc& alloc, uint32_t frame_in_flight) {
 }
 
 void InstanceMgr::flush_pending_frees(uint32_t curr_frame_in_flight, rhi::CmdEncoder* enc) {
-  auto previous_frame_idx =
-      curr_frame_in_flight == 0 ? frames_in_flight_ - 1 : curr_frame_in_flight - 1;
-  for (const auto& allocs : pending_frees_[previous_frame_idx]) {
+  for (const auto& allocs : pending_frees_[curr_frame_in_flight]) {
     const auto& alloc = allocs.instance_data_alloc;
     auto element_count = allocator_.allocationSize(alloc);
     enc->fill_buffer(instance_data_buf_.handle, alloc.offset * sizeof(InstanceData),
@@ -855,7 +853,7 @@ void InstanceMgr::flush_pending_frees(uint32_t curr_frame_in_flight, rhi::CmdEnc
       meshlet_vis_buf_.free(allocs.meshlet_vis_alloc);
     }
   }
-  pending_frees_[previous_frame_idx].clear();
+  pending_frees_[curr_frame_in_flight].clear();
 }
 
 void InstanceMgr::ensure_buffer_space(size_t element_count) {
@@ -1133,9 +1131,7 @@ TexAndViewHolder::~TexAndViewHolder() {
 }
 
 [[nodiscard]] bool InstanceMgr::has_pending_frees(uint32_t curr_frame_in_flight) const {
-  return !pending_frees_[curr_frame_in_flight == 0 ? frames_in_flight_ - 1
-                                                   : curr_frame_in_flight - 1]
-              .empty();
+  return !pending_frees_[curr_frame_in_flight].empty();
 }
 
 MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)

@@ -2,9 +2,8 @@
 
 #include <bit>
 
-#include "gfx/renderer/BufferResize.hpp"
-
 #include "core/Config.hpp"
+#include "gfx/renderer/BufferResize.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -47,6 +46,7 @@ OffsetAllocator::Allocation gfx::BackedGPUAllocator::allocate(uint32_t element_c
   }
   allocated_element_count_ += element_count;
   max_seen_size_ = std::max<uint32_t>(max_seen_size_, alloc.offset + element_count);
+  ASSERT(allocator_.allocationSize(alloc) >= element_count);
   return alloc;
 }
 
@@ -64,4 +64,4 @@ void gfx::BackedGPUAllocator::free(OffsetAllocator::Allocation alloc) {
   }
 }
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE
