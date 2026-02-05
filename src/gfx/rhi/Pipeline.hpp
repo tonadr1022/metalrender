@@ -55,7 +55,7 @@ struct GraphicsPipelineCreateInfo {
   };
   struct Blend {
     bool logic_op_enable{false};
-    LogicOp logic_op{LogicOpCopy};
+    LogicOp logic_op{LogicOp::Copy};
     gch::small_vector<ColorBlendAttachment, k_max_color_attachments> attachments;
     float blend_constants[k_max_color_attachments]{};
   };

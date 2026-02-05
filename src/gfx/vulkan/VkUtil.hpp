@@ -6,7 +6,7 @@
 namespace TENG_NAMESPACE {
 namespace gfx::vk {
 
-VkImageUsageFlags convert(rhi::TextureUsageFlags usage);
+VkImageUsageFlags convert(rhi::TextureUsage usage);
 VkPipelineStageFlags2 convert(rhi::PipelineStage stage);
 VkAccessFlags2 convert(rhi::AccessFlags access);
 VkPrimitiveTopology convert_prim_topology(rhi::PrimitiveTopology top);

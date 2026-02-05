@@ -32,7 +32,7 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
                   {"vulkan_exp/single_color", rhi::ShaderType::Fragment}},
   });
   test_vert_buf_ = device_->create_buf_h({
-      .usage = rhi::BufferUsage_Storage,
+      .usage = rhi::BufferUsage::Storage,
       .size = 1024ul * 1024,
   });
   recreate_resources_on_swapchain_resize();
@@ -110,8 +110,8 @@ void TestRenderer::recreate_resources_on_swapchain_resize() {
   auto dims = glm::uvec2{swapchain_->desc_.width, swapchain_->desc_.height};
   test_full_screen_tex_ = device_->create_tex_h({
       .format = rhi::TextureFormat::R32G32B32A32Sfloat,
-      .usage = (rhi::TextureUsage)(rhi::TextureUsageSample | rhi::TextureUsageStorage |
-                                   rhi::TextureUsageShaderWrite),
+      .usage =
+          rhi::TextureUsage::Sample | rhi::TextureUsage::Storage | rhi::TextureUsage::ShaderWrite,
       .dims = {dims.x, dims.y, 1},
       .mip_levels = 1,
       .array_length = 1,

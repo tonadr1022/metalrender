@@ -106,9 +106,6 @@ enum RGAccess : uint16_t {
   AnyWrite = ColorWrite | DepthStencilWrite | ComputeWrite | TransferWrite,
 };
 
-void convert_rg_access(RGAccess access, rhi::AccessFlagsBits& out_access,
-                       rhi::PipelineStageBits& out_stages);
-
 struct ResourceAndUsage {
   std::string name;
   RGResourceHandle handle;

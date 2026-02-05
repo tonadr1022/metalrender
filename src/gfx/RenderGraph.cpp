@@ -31,52 +31,52 @@ const char* to_string(RGPassType type) {
 }
 std::string rhi_pipeline_stage_to_string(rhi::PipelineStage stage) {
   std::string result;
-  if (stage & rhi::PipelineStage_TopOfPipe) {
+  if (has_flag(stage, rhi::PipelineStage::TopOfPipe)) {
     result += "PipelineStage_TopOfPipe | ";
   }
-  if (stage & rhi::PipelineStage_DrawIndirect) {
+  if (has_flag(stage, rhi::PipelineStage::DrawIndirect)) {
     result += "PipelineStage_DrawIndirect | ";
   }
-  if (stage & rhi::PipelineStage_VertexInput) {
+  if (has_flag(stage, rhi::PipelineStage::VertexInput)) {
     result += "PipelineStage_VertexInput | ";
   }
-  if (stage & rhi::PipelineStage_VertexShader) {
+  if (has_flag(stage, rhi::PipelineStage::VertexShader)) {
     result += "PipelineStage_VertexShader | ";
   }
-  if (stage & rhi::PipelineStage_TaskShader) {
+  if (has_flag(stage, rhi::PipelineStage::TaskShader)) {
     result += "PipelineStage_TaskShader | ";
   }
-  if (stage & rhi::PipelineStage_MeshShader) {
+  if (has_flag(stage, rhi::PipelineStage::MeshShader)) {
     result += "PipelineStage_MeshShader | ";
   }
-  if (stage & rhi::PipelineStage_FragmentShader) {
+  if (has_flag(stage, rhi::PipelineStage::FragmentShader)) {
     result += "PipelineStage_FragmentShader | ";
   }
-  if (stage & rhi::PipelineStage_EarlyFragmentTests) {
+  if (has_flag(stage, rhi::PipelineStage::EarlyFragmentTests)) {
     result += "PipelineStage_EarlyFragmentTests | ";
   }
-  if (stage & rhi::PipelineStage_LateFragmentTests) {
+  if (has_flag(stage, rhi::PipelineStage::LateFragmentTests)) {
     result += "PipelineStage_LateFragmentTests | ";
   }
-  if (stage & rhi::PipelineStage_ColorAttachmentOutput) {
+  if (has_flag(stage, rhi::PipelineStage::ColorAttachmentOutput)) {
     result += "PipelineStage_ColorAttachmentOutput | ";
   }
-  if (stage & rhi::PipelineStage_ComputeShader) {
+  if (has_flag(stage, rhi::PipelineStage::ComputeShader)) {
     result += "PipelineStage_ComputeShader | ";
   }
-  if (stage & rhi::PipelineStage_AllTransfer) {
+  if (has_flag(stage, rhi::PipelineStage::AllTransfer)) {
     result += "PipelineStage_AllTransfer | ";
   }
-  if (stage & rhi::PipelineStage_BottomOfPipe) {
+  if (has_flag(stage, rhi::PipelineStage::BottomOfPipe)) {
     result += "PipelineStage_BottomOfPipe | ";
   }
-  if (stage & rhi::PipelineStage_Host) {
+  if (has_flag(stage, rhi::PipelineStage::Host)) {
     result += "PipelineStage_Host | ";
   }
-  if (stage & rhi::PipelineStage_AllGraphics) {
+  if (has_flag(stage, rhi::PipelineStage::AllGraphics)) {
     result += "PipelineStage_AllGraphics | ";
   }
-  if (stage & rhi::PipelineStage_AllCommands) {
+  if (has_flag(stage, rhi::PipelineStage::AllCommands)) {
     result += "PipelineStage_AllCommands | ";
   }
   if (result.size()) {
@@ -85,68 +85,70 @@ std::string rhi_pipeline_stage_to_string(rhi::PipelineStage stage) {
   return result;
 }
 
-bool is_access_write(rhi::AccessFlags access) { return access & rhi::AccessFlags_AnyWrite; }
+bool is_access_write(rhi::AccessFlags access) {
+  return has_flag(access, rhi::AccessFlags::AnyWrite);
+}
 
 std::string rhi_access_to_string(rhi::AccessFlags access) {
   std::string result;
-  if (access & rhi::AccessFlags_IndirectCommandRead) {
+  if (has_flag(access, rhi::AccessFlags::IndirectCommandRead)) {
     result += "IndirectCommandRead | ";
   }
-  if (access & rhi::AccessFlags_IndexRead) {
+  if (has_flag(access, rhi::AccessFlags::IndexRead)) {
     result += "IndexRead | ";
   }
-  if (access & rhi::AccessFlags_VertexAttributeRead) {
+  if (has_flag(access, rhi::AccessFlags::VertexAttributeRead)) {
     result += "VertexAttributeRead | ";
   }
-  if (access & rhi::AccessFlags_UniformRead) {
+  if (has_flag(access, rhi::AccessFlags::UniformRead)) {
     result += "UniformRead | ";
   }
-  if (access & rhi::AccessFlags_InputAttachmentRead) {
+  if (has_flag(access, rhi::AccessFlags::InputAttachmentRead)) {
     result += "InputAttachmentRead | ";
   }
-  if (access & rhi::AccessFlags_ShaderRead) {
+  if (has_flag(access, rhi::AccessFlags::ShaderRead)) {
     result += "ShaderRead | ";
   }
-  if (access & rhi::AccessFlags_ShaderWrite) {
+  if (has_flag(access, rhi::AccessFlags::ShaderWrite)) {
     result += "ShaderWrite | ";
   }
-  if (access & rhi::AccessFlags_ColorAttachmentRead) {
+  if (has_flag(access, rhi::AccessFlags::ColorAttachmentRead)) {
     result += "ColorAttachmentRead | ";
   }
-  if (access & rhi::AccessFlags_ColorAttachmentWrite) {
+  if (has_flag(access, rhi::AccessFlags::ColorAttachmentWrite)) {
     result += "ColorAttachmentWrite | ";
   }
-  if (access & rhi::AccessFlags_DepthStencilRead) {
+  if (has_flag(access, rhi::AccessFlags::DepthStencilRead)) {
     result += "DepthStencilRead | ";
   }
-  if (access & rhi::AccessFlags_DepthStencilWrite) {
+  if (has_flag(access, rhi::AccessFlags::DepthStencilWrite)) {
     result += "DepthStencilWrite | ";
   }
-  if (access & rhi::AccessFlags_TransferRead) {
+  if (has_flag(access, rhi::AccessFlags::TransferRead)) {
     result += "TransferRead | ";
   }
-  if (access & rhi::AccessFlags_TransferWrite) {
+  if (has_flag(access, rhi::AccessFlags::TransferWrite)) {
     result += "TransferWrite | ";
   }
-  if (access & rhi::AccessFlags_HostRead) {
+  if (has_flag(access, rhi::AccessFlags::HostRead)) {
     result += "HostRead | ";
   }
-  if (access & rhi::AccessFlags_HostWrite) {
+  if (has_flag(access, rhi::AccessFlags::HostWrite)) {
     result += "HostWrite | ";
   }
-  if (access & rhi::AccessFlags_MemoryRead) {
+  if (has_flag(access, rhi::AccessFlags::MemoryRead)) {
     result += "MemoryRead | ";
   }
-  if (access & rhi::AccessFlags_MemoryWrite) {
+  if (has_flag(access, rhi::AccessFlags::MemoryWrite)) {
     result += "MemoryWrite | ";
   }
-  if (access & rhi::AccessFlags_ShaderSampledRead) {
+  if (has_flag(access, rhi::AccessFlags::ShaderSampledRead)) {
     result += "ShaderSampledRead | ";
   }
-  if (access & rhi::AccessFlags_ShaderStorageRead) {
+  if (has_flag(access, rhi::AccessFlags::ShaderStorageRead)) {
     result += "ShaderStorageRead | ";
   }
-  if (access & rhi::AccessFlags_ShaderStorageWrite) {
+  if (has_flag(access, rhi::AccessFlags::ShaderStorageWrite)) {
     result += "ShaderStorageWrite | ";
   }
   if (result.size()) {
@@ -164,66 +166,66 @@ constexpr Flags flag_or(Flags x, Bits y) noexcept {
 void convert_rg_access(RGAccess access, rhi::AccessFlags& out_access,
                        rhi::PipelineStage& out_stages) {
   if (access & ColorWrite) {
-    out_access = flag_or(out_access, rhi::AccessFlags_ColorAttachmentWrite);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_ColorAttachmentOutput);
+    out_access = flag_or(out_access, rhi::AccessFlags::ColorAttachmentWrite);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::ColorAttachmentOutput);
   }
   if (access & ShaderRead) {
-    out_access = flag_or(out_access, rhi::AccessFlags_ShaderRead);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_AllGraphics);
+    out_access = flag_or(out_access, rhi::AccessFlags::ShaderRead);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::AllGraphics);
   }
   if (access & ColorRead) {
-    out_access = flag_or(out_access, rhi::AccessFlags_ColorAttachmentRead);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_ColorAttachmentOutput);
+    out_access = flag_or(out_access, rhi::AccessFlags::ColorAttachmentRead);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::ColorAttachmentOutput);
   }
   if (access & DepthStencilRead) {
-    out_access = flag_or(out_access, rhi::AccessFlags_DepthStencilRead);
+    out_access = flag_or(out_access, rhi::AccessFlags::DepthStencilRead);
     out_stages = flag_or(
-        out_stages, rhi::PipelineStage_EarlyFragmentTests | rhi::PipelineStage_LateFragmentTests);
+        out_stages, rhi::PipelineStage::EarlyFragmentTests | rhi::PipelineStage::LateFragmentTests);
   }
   if (access & DepthStencilWrite) {
-    out_access = flag_or(out_access, rhi::AccessFlags_DepthStencilWrite);
+    out_access = flag_or(out_access, rhi::AccessFlags::DepthStencilWrite);
     out_stages = flag_or(
-        out_stages, rhi::PipelineStage_EarlyFragmentTests | rhi::PipelineStage_LateFragmentTests);
+        out_stages, rhi::PipelineStage::EarlyFragmentTests | rhi::PipelineStage::LateFragmentTests);
   }
   if (access & VertexRead) {
-    out_access = flag_or(out_access, rhi::AccessFlags_ShaderStorageRead);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_VertexShader);
+    out_access = flag_or(out_access, rhi::AccessFlags::ShaderStorageRead);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::VertexShader);
   }
   if (access & IndexRead) {
-    out_access = flag_or(out_access, rhi::AccessFlags_ShaderStorageRead);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_VertexShader);
+    out_access = flag_or(out_access, rhi::AccessFlags::ShaderStorageRead);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::VertexShader);
   }
   if (access & IndirectRead) {
-    out_access = flag_or(out_access, rhi::AccessFlags_IndirectCommandRead);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_DrawIndirect);
+    out_access = flag_or(out_access, rhi::AccessFlags::IndirectCommandRead);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::DrawIndirect);
   }
   if (access & ComputeRead) {
-    out_access = flag_or(out_access, rhi::AccessFlags_ShaderRead);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_ComputeShader);
+    out_access = flag_or(out_access, rhi::AccessFlags::ShaderRead);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::ComputeShader);
   }
   if (access & ComputeWrite) {
-    out_access = flag_or(out_access, rhi::AccessFlags_ShaderWrite);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_ComputeShader);
+    out_access = flag_or(out_access, rhi::AccessFlags::ShaderWrite);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::ComputeShader);
   }
   if (access & ComputeSample) {
-    out_access = flag_or(out_access, rhi::AccessFlags_ShaderSampledRead);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_ComputeShader);
+    out_access = flag_or(out_access, rhi::AccessFlags::ShaderSampledRead);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::ComputeShader);
   }
   if (access & FragmentSample) {
-    out_access = flag_or(out_access, rhi::AccessFlags_ShaderSampledRead);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_FragmentShader);
+    out_access = flag_or(out_access, rhi::AccessFlags::ShaderSampledRead);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::FragmentShader);
   }
   if (access & FragmentStorageRead) {
-    out_access = flag_or(out_access, rhi::AccessFlags_ShaderStorageRead);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_FragmentShader);
+    out_access = flag_or(out_access, rhi::AccessFlags::ShaderStorageRead);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::FragmentShader);
   }
   if (access & TransferWrite) {
-    out_access = flag_or(out_access, rhi::AccessFlags_TransferWrite);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_AllTransfer);
+    out_access = flag_or(out_access, rhi::AccessFlags::TransferWrite);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::AllTransfer);
   }
   if (access & TransferRead) {
-    out_access = flag_or(out_access, rhi::AccessFlags_TransferRead);
-    out_stages = flag_or(out_stages, rhi::PipelineStage_AllTransfer);
+    out_access = flag_or(out_access, rhi::AccessFlags::TransferRead);
+    out_stages = flag_or(out_stages, rhi::PipelineStage::AllTransfer);
   }
 }
 
@@ -429,8 +431,8 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
         auto dims = get_att_dims();
         auto att_tx_handle = device_->create_tex(rhi::TextureDesc{
             .format = att_info.format,
-            .usage = is_depth_format(att_info.format) ? rhi::TextureUsageColorAttachment
-                                                      : rhi::TextureUsageDepthStencilAttachment,
+            .usage = is_depth_format(att_info.format) ? rhi::TextureUsage::ColorAttachment
+                                                      : rhi::TextureUsage::DepthStencilAttachment,
             .dims = glm::uvec3{dims.x, dims.y, 1},
             .mip_levels = att_info.mip_levels,
             .array_length = att_info.array_layers,
@@ -462,7 +464,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       if (!actual_buf_handle.is_valid()) {
         auto buf_handle = device_->create_buf(rhi::BufferDesc{
             .storage_mode = rhi::StorageMode::GPUOnly,
-            .usage = (rhi::BufferUsage)(rhi::BufferUsage_Storage),
+            .usage = (rhi::BufferUsage)(rhi::BufferUsage::Storage),
             .size = binfo.size,
             .name = "render_graph_buffer",
         });
@@ -530,7 +532,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     for (const auto& write_use : pass.get_internal_writes()) {
       auto rg_resource_handle = resource_name_to_handle_.at(write_use.name);
       auto& resource_state = get_resource_state(rg_resource_handle);
-      if (write_use.acc & rhi::AccessFlags_AnyWrite) {
+      if (has_flag(write_use.acc, rhi::AccessFlags::AnyWrite)) {
         barriers.emplace_back(BarrierInfo{
             .resource = rg_resource_handle,
             .src_stage = resource_state.stage,
@@ -556,7 +558,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
           .dst_access = read_use.acc,
           .debug_name = read_use.name,
       });
-      if (read_use.acc & rhi::AccessFlags_AnyWrite) {
+      if (has_flag(read_use.acc, rhi::AccessFlags::AnyWrite)) {
         resource_state.access = flag_or(resource_state.access, read_use.acc);
         resource_state.stage = flag_or(resource_state.stage, read_use.stage);
       }
@@ -703,28 +705,28 @@ RGResourceHandle RGPass::sample_tex(const std::string& name) {
   ASSERT(!name.empty());
   rhi::PipelineStage stage{};
   if (type_ == RGPassType::Compute) {
-    stage = rhi::PipelineStage_ComputeShader;
+    stage = rhi::PipelineStage::ComputeShader;
   } else if (type_ == RGPassType::Graphics) {
-    stage = rhi::PipelineStage_FragmentShader;
+    stage = rhi::PipelineStage::FragmentShader;
   } else {
     ASSERT(0);
   }
   internal_reads_.emplace_back(
-      NameAndAccess{name, stage, rhi::AccessFlags_ShaderSampledRead, RGResourceType::Texture});
+      NameAndAccess{name, stage, rhi::AccessFlags::ShaderSampledRead, RGResourceType::Texture});
   return rg_->get_resource(name, RGResourceType::Texture);
 }
 
 RGResourceHandle RGPass::r_tex(const std::string& name) {
   rhi::PipelineStage stage{};
   if (type_ == RGPassType::Compute) {
-    stage = rhi::PipelineStage_ComputeShader;
+    stage = rhi::PipelineStage::ComputeShader;
   } else if (type_ == RGPassType::Graphics) {
-    stage = rhi::PipelineStage_FragmentShader;
+    stage = rhi::PipelineStage::FragmentShader;
   } else {
     ASSERT(0);
   }
   internal_reads_.emplace_back(
-      NameAndAccess{name, stage, rhi::AccessFlags_ShaderStorageRead, RGResourceType::Texture});
+      NameAndAccess{name, stage, rhi::AccessFlags::ShaderStorageRead, RGResourceType::Texture});
   return rg_->get_resource(name, RGResourceType::Texture);
 }
 
@@ -751,43 +753,38 @@ RGResourceHandle RGPass::read_tex(const std::string& name, RGAccess access) {
 RGResourceHandle RGPass::w_color_output(const std::string& name, const AttachmentInfo& att_info) {
   RGAccess access{RGAccess::ColorWrite};
   RGResourceHandle handle = rg_->add_tex_usage(name, att_info, access, *this);
-  internal_writes_.emplace_back(NameAndAccess{name, rhi::PipelineStage_ColorAttachmentOutput,
-                                              rhi::AccessFlags_ColorAttachmentWrite,
+  internal_writes_.emplace_back(NameAndAccess{name, rhi::PipelineStage::ColorAttachmentOutput,
+                                              rhi::AccessFlags::ColorAttachmentWrite,
                                               RGResourceType::Texture});
   return handle;
 }
 
 RGResourceHandle RGPass::rw_color_output(const std::string& name, const std::string& input_name) {
-  return rw_tex(name, input_name, rhi::PipelineStage_ColorAttachmentOutput,
-                (rhi::AccessFlags)(rhi::AccessFlags_ColorAttachmentRead |
-                                   rhi::AccessFlags_ColorAttachmentWrite));
+  return rw_tex(name, input_name, rhi::PipelineStage::ColorAttachmentOutput,
+                rhi::AccessFlags::ColorAttachmentRead | rhi::AccessFlags::ColorAttachmentWrite);
 }
 
 RGResourceHandle RGPass::rw_depth_output(const std::string& name, const std::string& input_name) {
-  return rw_tex(
-      name, input_name,
-      (rhi::PipelineStage)(rhi::PipelineStage_EarlyFragmentTests |
-                           rhi::PipelineStage_LateFragmentTests),
-      (rhi::AccessFlags)(rhi::AccessFlags_DepthStencilRead | rhi::AccessFlags_DepthStencilWrite));
+  return rw_tex(name, input_name,
+                rhi::PipelineStage::EarlyFragmentTests | rhi::PipelineStage::LateFragmentTests,
+                rhi::AccessFlags::DepthStencilRead | rhi::AccessFlags::DepthStencilWrite);
 }
 
 RGResourceHandle RGPass::w_depth_output(const std::string& name, const AttachmentInfo& att_info) {
   RGAccess access{RGAccess::DepthStencilWrite};
   RGResourceHandle handle = rg_->add_tex_usage(name, att_info, access, *this);
-  internal_writes_.emplace_back(
-      NameAndAccess{name,
-                    (rhi::PipelineStage)(rhi::PipelineStage_EarlyFragmentTests |
-                                         rhi::PipelineStage_LateFragmentTests),
-                    rhi::AccessFlags_ColorAttachmentWrite, RGResourceType::Texture});
+  internal_writes_.emplace_back(NameAndAccess{
+      name, rhi::PipelineStage::EarlyFragmentTests | rhi::PipelineStage::LateFragmentTests,
+      rhi::AccessFlags::ColorAttachmentWrite, RGResourceType::Texture});
   return handle;
 }
 
 void RGPass::sample_external_tex(std::string name) {
   rhi::PipelineStage stage{};
   if (type_ == RGPassType::Compute) {
-    stage = rhi::PipelineStage_ComputeShader;
+    stage = rhi::PipelineStage::ComputeShader;
   } else if (type_ == RGPassType::Graphics) {
-    stage = rhi::PipelineStage_FragmentShader;
+    stage = rhi::PipelineStage::FragmentShader;
   } else {
     ASSERT(0);
   }
@@ -796,16 +793,17 @@ void RGPass::sample_external_tex(std::string name) {
 
 void RGPass::sample_external_tex(std::string name, rhi::PipelineStage stage) {
   rg_->add_external_read_name(name);
-  external_reads_.emplace_back(NameAndAccess{
-      std::move(name), stage, rhi::AccessFlags_ShaderSampledRead, RGResourceType::ExternalTexture});
+  external_reads_.emplace_back(NameAndAccess{std::move(name), stage,
+                                             rhi::AccessFlags::ShaderSampledRead,
+                                             RGResourceType::ExternalTexture});
 }
 
 void RGPass::r_external_tex(std::string name) {
   rhi::PipelineStage stage{};
   if (type_ == RGPassType::Compute) {
-    stage = rhi::PipelineStage_ComputeShader;
+    stage = rhi::PipelineStage::ComputeShader;
   } else if (type_ == RGPassType::Graphics) {
-    stage = rhi::PipelineStage_FragmentShader;
+    stage = rhi::PipelineStage::FragmentShader;
   } else {
     ASSERT(0);
   }
@@ -814,8 +812,9 @@ void RGPass::r_external_tex(std::string name) {
 
 void RGPass::r_external_tex(std::string name, rhi::PipelineStage stage) {
   rg_->add_external_read_name(name);
-  external_reads_.emplace_back(NameAndAccess{
-      std::move(name), stage, rhi::AccessFlags_ShaderStorageRead, RGResourceType::ExternalTexture});
+  external_reads_.emplace_back(NameAndAccess{std::move(name), stage,
+                                             rhi::AccessFlags::ShaderStorageRead,
+                                             RGResourceType::ExternalTexture});
 }
 
 void RenderGraph::add_external_write_usage(const std::string& name, rhi::TextureHandle tex_handle,
@@ -840,8 +839,8 @@ void RGPass::w_external_tex_color_output(const std::string& name, rhi::TextureHa
   ASSERT(type_ == RGPassType::Graphics);
   // ASSERT(tex_handle.is_valid());
   rg_->add_external_write_usage(name, tex_handle, *this);
-  external_writes_.emplace_back(name, rhi::PipelineStage_ColorAttachmentOutput,
-                                rhi::AccessFlags_ColorAttachmentWrite,
+  external_writes_.emplace_back(name, rhi::PipelineStage::ColorAttachmentOutput,
+                                rhi::AccessFlags::ColorAttachmentWrite,
                                 RGResourceType::ExternalTexture);
 }
 
@@ -853,11 +852,11 @@ void RGPass::w_external_tex(const std::string& name, rhi::TextureHandle tex_hand
   rhi::PipelineStage stage{};
   rhi::AccessFlags access{};
   if (type_ == RGPassType::Compute) {
-    stage = rhi::PipelineStage_ComputeShader;
-    access = rhi::AccessFlags_ShaderWrite;
+    stage = rhi::PipelineStage::ComputeShader;
+    access = rhi::AccessFlags::ShaderWrite;
   } else {
-    stage = rhi::PipelineStage_AllTransfer;
-    access = rhi::AccessFlags_TransferWrite;
+    stage = rhi::PipelineStage::AllTransfer;
+    access = rhi::AccessFlags::TransferWrite;
   }
   external_writes_.emplace_back(name, stage, access, RGResourceType::ExternalTexture);
 }
@@ -865,11 +864,11 @@ void RGPass::w_external_tex(const std::string& name, rhi::TextureHandle tex_hand
 void RGPass::w_external_buf(const std::string& name, rhi::BufferHandle buf) {
   rhi::PipelineStage stage{};
   if (type_ == RGPassType::Compute) {
-    stage = rhi::PipelineStage_ComputeShader;
+    stage = rhi::PipelineStage::ComputeShader;
   } else if (type_ == RGPassType::Transfer) {
-    stage = rhi::PipelineStage_AllTransfer;
+    stage = rhi::PipelineStage::AllTransfer;
   } else if (type_ == RGPassType::Graphics) {
-    stage = rhi::PipelineStage_AllGraphics;
+    stage = rhi::PipelineStage::AllGraphics;
   } else {
     ASSERT(0);
   }
@@ -881,9 +880,9 @@ void RGPass::w_external_buf(const std::string& name, rhi::BufferHandle buf,
   rhi::AccessFlags access{};
   rg_->add_external_write_usage(name, buf, *this);
   if (type_ == RGPassType::Compute || type_ == RGPassType::Graphics) {
-    access = rhi::AccessFlags_ShaderWrite;
+    access = rhi::AccessFlags::ShaderWrite;
   } else {
-    access = rhi::AccessFlags_TransferWrite;
+    access = rhi::AccessFlags::TransferWrite;
   }
   external_writes_.emplace_back(name, stage, access, RGResourceType::ExternalBuffer);
 }
@@ -891,28 +890,28 @@ void RGPass::w_external_buf(const std::string& name, rhi::BufferHandle buf,
 void RGPass::r_external_buf(std::string name) {
   rhi::PipelineStage stage{};
   if (type_ == RGPassType::Compute) {
-    stage = rhi::PipelineStage_ComputeShader;
+    stage = rhi::PipelineStage::ComputeShader;
   } else if (type_ == RGPassType::Graphics) {
-    stage = rhi::PipelineStage_AllGraphics;
+    stage = rhi::PipelineStage::AllGraphics;
   } else if (type_ == RGPassType::Transfer) {
-    stage = rhi::PipelineStage_AllTransfer;
+    stage = rhi::PipelineStage::AllTransfer;
   }
   r_external_buf(std::move(name), stage);
 }
 
 void RGPass::r_external_buf(std::string name, rhi::PipelineStage stage) {
-  external_reads_.emplace_back(std::move(name), stage, rhi::AccessFlags_ShaderRead,
+  external_reads_.emplace_back(std::move(name), stage, rhi::AccessFlags::ShaderRead,
                                RGResourceType::ExternalBuffer);
 }
 
 void RGPass::rw_external_buf(std::string name, const std::string& input_name) {
   rhi::PipelineStage stage{};
   if (type_ == RGPassType::Compute) {
-    stage = rhi::PipelineStage_ComputeShader;
+    stage = rhi::PipelineStage::ComputeShader;
   } else if (type_ == RGPassType::Graphics) {
-    stage = rhi::PipelineStage_AllGraphics;
+    stage = rhi::PipelineStage::AllGraphics;
   } else if (type_ == RGPassType::Transfer) {
-    stage = rhi::PipelineStage_AllTransfer;
+    stage = rhi::PipelineStage::AllTransfer;
   } else {
     ASSERT(0);
   }
@@ -923,10 +922,9 @@ void RGPass::rw_external_buf(std::string name, const std::string& input_name,
                              rhi::PipelineStage stage) {
   uint32_t rw_read_name_i = add_read_write_resource(input_name);
   rg_->add_external_rw_buffer_usage(name, input_name, *this);
-  external_reads_.emplace_back(
-      std::move(name), stage,
-      (rhi::AccessFlags)(rhi::AccessFlags_ShaderRead | rhi::AccessFlags_ShaderWrite),
-      RGResourceType::ExternalBuffer, rw_read_name_i);
+  external_reads_.emplace_back(std::move(name), stage,
+                               rhi::AccessFlags::ShaderRead | rhi::AccessFlags::ShaderWrite,
+                               RGResourceType::ExternalBuffer, rw_read_name_i);
 }
 
 void RenderGraph::add_external_rw_buffer_usage(const std::string& name,
@@ -975,13 +973,13 @@ void RenderGraph::dfs(const std::vector<std::unordered_set<uint32_t>>& pass_depe
 RGResourceHandle RenderGraph::Pass::w_buf(const std::string& name, rhi::PipelineStage stage,
                                           size_t size, bool defer_reuse) {
   internal_writes_.emplace_back(
-      NameAndAccess{name, stage, rhi::AccessFlags_ShaderStorageWrite, RGResourceType::Buffer});
+      NameAndAccess{name, stage, rhi::AccessFlags::ShaderStorageWrite, RGResourceType::Buffer});
   return rg_->add_buf_usage(name, {.size = size, .defer_reuse = defer_reuse}, *this);
 }
 
 RGResourceHandle RenderGraph::Pass::r_buf(const std::string& name, rhi::PipelineStage stage) {
   internal_reads_.emplace_back(
-      NameAndAccess{name, stage, rhi::AccessFlags_ShaderStorageRead, RGResourceType::Buffer});
+      NameAndAccess{name, stage, rhi::AccessFlags::ShaderStorageRead, RGResourceType::Buffer});
   return rg_->get_resource(name, RGResourceType::Buffer);
 }
 
@@ -1005,8 +1003,7 @@ RGResourceHandle RenderGraph::Pass::rw_buf(const std::string& name, rhi::Pipelin
   uint32_t rw_read_name_i = add_read_write_resource(input_name);
   rg_->add_internal_rw_usage(name, handle, *this);
   auto name_access = NameAndAccess{
-      name, stage,
-      (rhi::AccessFlags)(rhi::AccessFlags_ShaderStorageRead | rhi::AccessFlags_ShaderStorageWrite),
+      name, stage, rhi::AccessFlags::ShaderStorageRead | rhi::AccessFlags::ShaderStorageWrite,
       RGResourceType::Buffer, rw_read_name_i};
   internal_writes_.emplace_back(name_access);
   internal_reads_.emplace_back(name_access);

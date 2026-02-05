@@ -3,6 +3,7 @@
 #include <cstddef>
 
 #include "RenderGraph.hpp"
+#include "core/Config.hpp"
 #include "core/EAssert.hpp"
 #include "core/Util.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
@@ -14,8 +15,6 @@
 #include "glm/ext/matrix_clip_space.hpp"
 #include "hlsl/shared_imgui.h"
 #include "imgui.h"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -152,7 +151,7 @@ rhi::BufferHandleHolder ImGuiRenderer::get_buffer_of_size(size_t size, size_t fr
 
   return device_->create_buf_h({
       .storage_mode = rhi::StorageMode::CPUAndGPU,
-      .usage = (rhi::BufferUsage)(rhi::BufferUsage_Storage | rhi::BufferUsage_Index),
+      .usage = (rhi::BufferUsage)(rhi::BufferUsage::Storage | rhi::BufferUsage::Index),
       .size = size * 2,
       .bindless = true,
       .name = name,
@@ -236,7 +235,7 @@ bool ImGuiRenderer::has_dirty_textures() {
       if (!handle.is_valid()) {
         auto tex_handle = device_->create_tex({
             .format = rhi::TextureFormat::R8G8B8A8Unorm,
-            .usage = rhi::TextureUsageSample,
+            .usage = rhi::TextureUsage::Sample,
             .dims = glm::uvec3{im_tex->Width, im_tex->Height, 1},
             .mip_levels = 1,
             .bindless = true,
@@ -282,4 +281,4 @@ void ImGuiRenderer::destroy_texture(ImTextureData* im_tex) {
 
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

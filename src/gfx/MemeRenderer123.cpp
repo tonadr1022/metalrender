@@ -45,8 +45,6 @@
 
 namespace TENG_NAMESPACE {
 
-using rhi::PipelineStage;
-
 namespace {
 
 using rhi::ShaderType;
@@ -156,7 +154,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     if (!culling_paused_) {
       auto& clear_bufs_pass = rg_.add_compute_pass("clear_bufs");
       auto out_draw_count_buf_rg_handle = clear_bufs_pass.w_buf(
-          "out_draw_count_buf1", rhi::PipelineStage_ComputeShader, sizeof(uint32_t) * 3);
+          "out_draw_count_buf1", rhi::PipelineStage::ComputeShader, sizeof(uint32_t) * 3);
       clear_bufs_pass.set_ex([this, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
         enc->bind_pipeline(reset_counts_buf_pso_);
         uint32_t pc = device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx();
@@ -173,15 +171,15 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     RGResourceHandle out_draw_count_buf_rg_handle;
     if (!culling_paused_) {
       out_draw_count_buf_rg_handle = prep_meshlets_pass.rw_buf(
-          output_buf_name, rhi::PipelineStage_ComputeShader, "out_draw_count_buf1");
+          output_buf_name, rhi::PipelineStage::ComputeShader, "out_draw_count_buf1");
     } else {
       out_draw_count_buf_rg_handle = prep_meshlets_pass.w_buf(
-          output_buf_name, rhi::PipelineStage_ComputeShader, sizeof(uint32_t) * 3);
+          output_buf_name, rhi::PipelineStage::ComputeShader, sizeof(uint32_t) * 3);
     }
     RGResourceHandle task_cmd_buf_rg_handle{};
     if (static_draw_batch_.get_stats().vertex_count > 0) {
       task_cmd_buf_rg_handle =
-          prep_meshlets_pass.w_buf("task_cmd_buf", rhi::PipelineStage_ComputeShader,
+          prep_meshlets_pass.w_buf("task_cmd_buf", rhi::PipelineStage::ComputeShader,
                                    static_draw_batch_.task_cmd_count * sizeof(TaskCmd));
     }
     prep_meshlets_pass.set_ex(
@@ -251,21 +249,20 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     RGResourceHandle out_draw_count_buf_rg_handle{};
     if (mesh_shaders_enabled_) {
       if (static_instance_mgr_.has_draws()) {
-        task_cmd_buf_rg_handle =
-            p.r_buf("task_cmd_buf",
-                    (PipelineStage)(rhi::PipelineStage_MeshShader | rhi::PipelineStage_TaskShader));
+        task_cmd_buf_rg_handle = p.r_buf(
+            "task_cmd_buf", rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader);
       }
-      out_draw_count_buf_rg_handle = p.r_buf("out_draw_count_buf2", rhi::PipelineStage_TaskShader);
+      out_draw_count_buf_rg_handle = p.r_buf("out_draw_count_buf2", rhi::PipelineStage::TaskShader);
       if (late) {
-        p.sample_external_tex(final_depth_pyramid_name, rhi::PipelineStage_TaskShader);
-        p.rw_external_buf("meshlet_vis_buf2", "meshlet_vis_buf", rhi::PipelineStage_TaskShader);
+        p.sample_external_tex(final_depth_pyramid_name, rhi::PipelineStage::TaskShader);
+        p.rw_external_buf("meshlet_vis_buf2", "meshlet_vis_buf", rhi::PipelineStage::TaskShader);
       } else {
         p.w_external_buf("meshlet_vis_buf",
                          static_instance_mgr_.get_meshlet_vis_buf().get_buffer_handle(),
-                         rhi::PipelineStage_TaskShader);
+                         rhi::PipelineStage::TaskShader);
       }
     } else {
-      p.r_external_buf("indirect_buffer", rhi::PipelineStage_DrawIndirect);
+      p.r_external_buf("indirect_buffer", rhi::PipelineStage::DrawIndirect);
     }
     RGResourceHandle rg_gbuffer_a_handle;
     RGResourceHandle rg_depth_handle;
@@ -278,12 +275,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       last_depth_name = new_depth_name;
       const char* next_out_counts_buf_name = "out_counts_buf3";
       p.rw_external_buf(next_out_counts_buf_name, out_counts_buf_name,
-                        rhi::PipelineStage_TaskShader);
+                        rhi::PipelineStage::TaskShader);
       out_counts_buf_name = next_out_counts_buf_name;
     } else {
       const char* next_out_counts_buf_name = "out_counts_buf2";
       p.rw_external_buf(next_out_counts_buf_name, out_counts_buf_name,
-                        rhi::PipelineStage_TaskShader);
+                        rhi::PipelineStage::TaskShader);
       out_counts_buf_name = next_out_counts_buf_name;
       rg_gbuffer_a_handle =
           p.w_color_output(last_gbuffer_a_name, {.format = rhi::TextureFormat::R16G16B16A16Sfloat});
@@ -867,7 +864,7 @@ void InstanceMgr::ensure_buffer_space(size_t element_count) {
       device_.get_buf(instance_data_buf_)->size() < element_count * sizeof(InstanceData)) {
     auto new_buf = device_.create_buf_h({
         .storage_mode = rhi::StorageMode::Default,
-        .usage = rhi::BufferUsage_Storage,
+        .usage = rhi::BufferUsage::Storage,
         .size = sizeof(InstanceData) * element_count,
         .name = "intance_data_buf",
     });
@@ -885,7 +882,7 @@ void InstanceMgr::ensure_buffer_space(size_t element_count) {
         device_.get_buf(draw_cmd_buf_)->size() < element_count * sizeof(IndexedIndirectDrawCmd)) {
       auto new_buf = device_.create_buf_h(rhi::BufferDesc{
           .storage_mode = rhi::StorageMode::Default,
-          .usage = rhi::BufferUsage_Indirect,
+          .usage = rhi::BufferUsage::Indirect,
           .size = sizeof(IndexedIndirectDrawCmd) * element_count,
           .name = "draw_indexed_indirect_cmd_buf",
       });
@@ -1102,13 +1099,13 @@ void MemeRenderer123::recreate_swapchain_sized_textures() {
       device_->destroy(depth_pyramid_tex_.handle, v);
     }
     depth_pyramid_tex_.views.clear();
-    depth_pyramid_tex_ = TexAndViewHolder{device_->create_tex_h(rhi::TextureDesc{
-        .format = rhi::TextureFormat::R32float,
-        .usage = (rhi::TextureUsage)(rhi::TextureUsageStorage | rhi::TextureUsageShaderWrite),
-        .dims = size,
-        .mip_levels = mip_levels,
-        .bindless = true,
-        .name = "depth_pyramid_tex"})};
+    depth_pyramid_tex_ = TexAndViewHolder{device_->create_tex_h(
+        rhi::TextureDesc{.format = rhi::TextureFormat::R32float,
+                         .usage = rhi::TextureUsage::Storage | rhi::TextureUsage::ShaderWrite,
+                         .dims = size,
+                         .mip_levels = mip_levels,
+                         .bindless = true,
+                         .name = "depth_pyramid_tex"})};
     depth_pyramid_tex_.views.reserve(mip_levels);
     for (size_t i = 0; i < mip_levels; i++) {
       depth_pyramid_tex_.views.emplace_back(
@@ -1147,7 +1144,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
       buffer_copy_mgr_(device_, frame_gpu_upload_allocator_),
       materials_buf_(*device_, buffer_copy_mgr_,
                      rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
-                                     .usage = rhi::BufferUsage_Storage,
+                                     .usage = rhi::BufferUsage::Storage,
                                      .size = k_max_materials * sizeof(M4Material),
                                      .bindless = true,
                                      .name = "all materials buf"},
@@ -1249,7 +1246,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
     // TODO: render graph this?
     out_counts_buf_[i] = device_->create_buf_h(rhi::BufferDesc{
         .storage_mode = rhi::StorageMode::GPUOnly,
-        .usage = rhi::BufferUsage_Storage,
+        .usage = rhi::BufferUsage::Storage,
         .size = sizeof(MeshletDrawStats),
         .name = "out_counts_buf",
     });
@@ -1275,7 +1272,7 @@ InstanceMgr::InstanceMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr,
     : allocator_(0),
       meshlet_vis_buf_(device, buffer_copy_mgr,
                        {.storage_mode = rhi::StorageMode::GPUOnly,
-                        .usage = rhi::BufferUsage_Storage,
+                        .usage = rhi::BufferUsage::Storage,
                         .name = "instance meshlet vis buf"},
                        sizeof(uint32_t)),
       buffer_copy_mgr_(buffer_copy_mgr),

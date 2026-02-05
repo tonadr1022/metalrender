@@ -196,17 +196,18 @@ MTL::ResourceOptions convert(rhi::StorageMode mode) {
   return MTL::StorageModePrivate;
 }
 
-MTL::TextureUsage convert(rhi::TextureUsageFlags usage) {
+MTL::TextureUsage convert(rhi::TextureUsage usage) {
   using namespace rhi;
   MTL::TextureUsage result{};
 
-  if (usage & TextureUsageSample || usage & rhi::TextureUsageStorage) {
+  if (has_flag(usage, TextureUsage::Sample | TextureUsage::Storage)) {
     result |= MTL::TextureUsageShaderRead;
   }
-  if (usage & rhi::TextureUsageColorAttachment || usage & rhi::TextureUsageDepthStencilAttachment) {
+  if (has_flag(usage, rhi::TextureUsage::ColorAttachment) ||
+      has_flag(usage, rhi::TextureUsage::DepthStencilAttachment)) {
     result |= MTL::TextureUsageRenderTarget;
   }
-  if (usage & TextureUsageShaderWrite) {
+  if (has_flag(usage, TextureUsage::ShaderWrite)) {
     result |= MTL::TextureUsageShaderWrite;
   }
 
@@ -215,28 +216,34 @@ MTL::TextureUsage convert(rhi::TextureUsageFlags usage) {
 
 MTL::Stages convert_stage(rhi::PipelineStage stage) {
   MTL::Stages result{};
-  if (stage & (rhi::PipelineStage_AllCommands)) {
+  if (has_flag(stage, rhi::PipelineStage::AllCommands)) {
     result |= MTL::StageAll;
   }
-  if (stage & (rhi::PipelineStage_FragmentShader | rhi::PipelineStage_EarlyFragmentTests |
-               rhi::PipelineStage_LateFragmentTests | rhi::PipelineStage_ColorAttachmentOutput |
-               rhi::PipelineStage_AllGraphics)) {
+  if (has_flag(stage, rhi::PipelineStage::FragmentShader) ||
+      has_flag(stage, rhi::PipelineStage::EarlyFragmentTests) ||
+      has_flag(stage, rhi::PipelineStage::LateFragmentTests) ||
+      has_flag(stage, rhi::PipelineStage::ColorAttachmentOutput) ||
+      has_flag(stage, rhi::PipelineStage::AllGraphics)) {
     result |= MTL::StageFragment;
   }
-  if (stage & (rhi::PipelineStage_MeshShader | rhi::PipelineStage_AllGraphics)) {
+  if (has_flag(stage, rhi::PipelineStage::MeshShader) ||
+      has_flag(stage, rhi::PipelineStage::AllGraphics)) {
     result |= MTL::StageMesh;
   }
-  if (stage & (rhi::PipelineStage_TaskShader | rhi::PipelineStage_AllGraphics)) {
+  if (has_flag(stage, rhi::PipelineStage::TaskShader) ||
+      has_flag(stage, rhi::PipelineStage::AllGraphics)) {
     result |= MTL::StageObject;
   }
-  if (stage & (rhi::PipelineStage_VertexShader | rhi::PipelineStage_VertexInput |
-               rhi::PipelineStage_AllGraphics | rhi::PipelineStage_DrawIndirect)) {
+  if (has_flag(stage, rhi::PipelineStage::VertexShader) ||
+      has_flag(stage, rhi::PipelineStage::VertexInput) ||
+      has_flag(stage, rhi::PipelineStage::AllGraphics) ||
+      has_flag(stage, rhi::PipelineStage::DrawIndirect)) {
     result |= MTL::StageVertex;
   }
-  if (stage & (rhi::PipelineStage_ComputeShader)) {
+  if (has_flag(stage, rhi::PipelineStage::ComputeShader)) {
     result |= MTL::StageDispatch;
   }
-  if (stage & (rhi::PipelineStage_AllTransfer)) {
+  if (has_flag(stage, rhi::PipelineStage::AllTransfer)) {
     result |= MTL::StageBlit;
   }
   return result;
@@ -244,28 +251,35 @@ MTL::Stages convert_stage(rhi::PipelineStage stage) {
 
 MTL::Stages convert_stages(rhi::ResourceState state) {
   MTL::Stages result{};
-  if (state & rhi::ColorRead || state & rhi::ColorWrite) {
+  if (has_flag(state, rhi::ResourceState::ColorRead) ||
+      has_flag(state, rhi::ResourceState::ColorWrite)) {
     result |= MTL::StageFragment;
   }
-  if (state & rhi::DepthStencilRead || state & rhi::DepthStencilWrite) {
+  if (has_flag(state, rhi::ResourceState::DepthStencilRead) ||
+      has_flag(state, rhi::ResourceState::DepthStencilWrite)) {
     result |= MTL::StageFragment;
   }
-  if (state & rhi::ComputeRead || state & rhi::ComputeWrite) {
+  if (has_flag(state, rhi::ResourceState::ComputeRead) ||
+      has_flag(state, rhi::ResourceState::ComputeWrite)) {
     result |= MTL::StageDispatch;
   }
-  if (state & rhi::VertexRead || state & rhi::IndexRead || state & rhi::IndirectRead) {
+  if (has_flag(state, rhi::ResourceState::VertexRead) ||
+      has_flag(state, rhi::ResourceState::IndexRead) ||
+      has_flag(state, rhi::ResourceState::IndirectRead)) {
     result |= MTL::StageVertex;
   }
-  if (state & rhi::TransferRead || state & rhi::TransferWrite) {
+  if (has_flag(state, rhi::ResourceState::TransferRead) ||
+      has_flag(state, rhi::ResourceState::TransferWrite)) {
     result |= MTL::StageBlit;
   }
-  if (state & rhi::FragmentStorageRead || state & rhi::FragmentSample) {
+  if (has_flag(state, rhi::ResourceState::FragmentStorageRead) ||
+      has_flag(state, rhi::ResourceState::FragmentSample)) {
     result |= MTL::StageFragment;
   }
-  if (state & rhi::ComputeSample) {
+  if (has_flag(state, rhi::ResourceState::ComputeSample)) {
     result |= MTL::StageDispatch;
   }
-  if (state & rhi::ShaderRead) {
+  if (has_flag(state, rhi::ResourceState::ShaderRead)) {
     result |= MTL::StageAll;
   }
 

@@ -1113,7 +1113,7 @@ MetalDevice::GPUFrameAllocator::GPUFrameAllocator(size_t size, MetalDevice* devi
   capacity_ = size;
   device_ = device;
   for (size_t i = 0; i < frames_in_flight; i++) {
-    buffers[i] = device->create_buf_h(rhi::BufferDesc{.usage = rhi::BufferUsage_Storage,
+    buffers[i] = device->create_buf_h(rhi::BufferDesc{.usage = rhi::BufferUsage::Storage,
                                                       .size = size,
                                                       .bindless = false,
                                                       .name = "gpu_frame_allocator"});
@@ -1165,7 +1165,7 @@ void MetalDevice::destroy_actual(rhi::BufferHandle handle) {
     resource_desc_heap_allocator_.free_idx(buf->bindless_idx());
   }
 
-  if (buf->desc().usage & rhi::BufferUsage_Indirect) {
+  if (has_flag(buf->desc().usage, rhi::BufferUsage::Indirect)) {
     // TODO: improve this cringe
     icb_mgr_draw_indexed_.remove(handle);
     icb_mgr_draw_mesh_threadgroups_.remove(handle);

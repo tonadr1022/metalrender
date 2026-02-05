@@ -55,16 +55,18 @@ enum class StorageMode : uint8_t {
 };
 
 using TextureUsageFlags = uint32_t;
-enum TextureUsage : TextureUsageFlags {
-  TextureUsageNone = 0,
-  TextureUsageStorage = 1 << 0,
-  TextureUsageSample = 1 << 1,
-  TextureUsageShaderWrite = 1 << 2,
-  TextureUsageColorAttachment = 1 << 3,
-  TextureUsageDepthStencilAttachment = 1 << 4,
-  TextureUsageTransferSrc = 1 << 5,
-  TextureUsageTransferDst = 1 << 6,
+enum class TextureUsage : TextureUsageFlags {
+  None = 0,
+  Storage = 1 << 0,
+  Sample = 1 << 1,
+  ShaderWrite = 1 << 2,
+  ColorAttachment = 1 << 3,
+  DepthStencilAttachment = 1 << 4,
+  TransferSrc = 1 << 5,
+  TransferDst = 1 << 6,
 };
+
+AUGMENT_ENUM_CLASS(TextureUsage);
 
 using DefaultIndexT = uint32_t;
 
@@ -78,7 +80,7 @@ enum TextureDescFlags { TextureDescFlags_None, TextureDescFlags_PixelFormatView 
 struct TextureDesc {
   TextureFormat format{TextureFormat::Undefined};
   StorageMode storage_mode{StorageMode::GPUOnly};
-  TextureUsageFlags usage{TextureUsageNone};
+  TextureUsage usage{TextureUsage::None};
   glm::uvec3 dims{1};
   uint32_t mip_levels{1};
   uint32_t array_length{1};
@@ -87,18 +89,20 @@ struct TextureDesc {
   const char* name{};
 };
 
-enum BufferUsage : uint8_t {
-  BufferUsage_None = 0,
-  BufferUsage_Storage = 1 << 0,
-  BufferUsage_Indirect = 1 << 1,
-  BufferUsage_Vertex = 1 << 2,
-  BufferUsage_Index = 1 << 3,
-  BufferUsage_Uniform = 1 << 4,
+enum class BufferUsage : uint8_t {
+  None = 0,
+  Storage = 1 << 0,
+  Indirect = 1 << 1,
+  Vertex = 1 << 2,
+  Index = 1 << 3,
+  Uniform = 1 << 4,
 };
+
+AUGMENT_ENUM_CLASS(BufferUsage);
 
 struct BufferDesc {
   StorageMode storage_mode{StorageMode::Default};
-  BufferUsage usage{BufferUsage_None};
+  BufferUsage usage{BufferUsage::None};
   size_t size{};
   bool bindless{true};
   bool random_host_access{};
@@ -192,24 +196,26 @@ enum ColorComponentFlagBits : uint8_t {
 
 using ColorComponentFlags = uint32_t;
 
-enum LogicOp : uint8_t {
-  LogicOpClear = 0,
-  LogicOpAnd = 1,
-  LogicOpAndReverse = 2,
-  LogicOpCopy = 3,
-  LogicOpAndInverted = 4,
-  LogicOpNoOp = 5,
-  LogicOpXor = 6,
-  LogicOpOr = 7,
-  LogicOpNor = 8,
-  LogicOpEquivalent = 9,
-  LogicOpInvert = 10,
-  LogicOpOrReverse = 11,
-  LogicOpCopyInverted = 12,
-  LogicOpOrInverted = 13,
-  LogicOpNand = 14,
-  LogicOpSet = 15,
+enum class LogicOp : uint8_t {
+  Clear = 0,
+  And = 1,
+  AndReverse = 2,
+  Copy = 3,
+  AndInverted = 4,
+  NoOp = 5,
+  Xor = 6,
+  Or = 7,
+  Nor = 8,
+  Equivalent = 9,
+  Invert = 10,
+  OrReverse = 11,
+  CopyInverted = 12,
+  OrInverted = 13,
+  Nand = 14,
+  Set = 15,
 };
+
+AUGMENT_ENUM_CLASS(LogicOp);
 
 enum SampleCountFlagBits : uint8_t {
   SampleCount1Bit = 0x00000001,
@@ -289,63 +295,65 @@ enum class WindOrder : uint8_t {
   CounterClockwise,
 };
 
-enum PipelineStage : uint64_t {
-  PipelineStage_None = 0,
-  PipelineStage_TopOfPipe = 0x1ull,
-  PipelineStage_DrawIndirect = 0x2ull,
-  PipelineStage_VertexInput = 0x4ull,
-  PipelineStage_VertexShader = 0x8ull,
-  PipelineStage_TaskShader = 0x00080000ULL,
-  PipelineStage_MeshShader = 0x00100000ULL,
-  PipelineStage_FragmentShader = 0x40ull,
-  PipelineStage_EarlyFragmentTests = 0x100ull,
-  PipelineStage_LateFragmentTests = 0x200ull,
-  PipelineStage_ColorAttachmentOutput = 0x400ull,
-  PipelineStage_ComputeShader = 0x800ull,
-  PipelineStage_AllTransfer = 0x1000ull,
-  PipelineStage_BottomOfPipe = 0x2000ull,
-  PipelineStage_Host = 0x4000ull,
-  PipelineStage_AllGraphics = 0x8000ull,
-  PipelineStage_AllCommands = 0x10000ull,
-  PipelineStage_Blit = 0x400000000ULL,
+enum class PipelineStage : uint64_t {
+  None = 0,
+  TopOfPipe = 0x1ull,
+  DrawIndirect = 0x2ull,
+  VertexInput = 0x4ull,
+  VertexShader = 0x8ull,
+  TaskShader = 0x00080000ULL,
+  MeshShader = 0x00100000ULL,
+  FragmentShader = 0x40ull,
+  EarlyFragmentTests = 0x100ull,
+  LateFragmentTests = 0x200ull,
+  ColorAttachmentOutput = 0x400ull,
+  ComputeShader = 0x800ull,
+  AllTransfer = 0x1000ull,
+  BottomOfPipe = 0x2000ull,
+  Host = 0x4000ull,
+  AllGraphics = 0x8000ull,
+  AllCommands = 0x10000ull,
+  Blit = 0x400000000ULL,
 };
 
-using PipelineStageBits = uint64_t;
+AUGMENT_ENUM_CLASS(PipelineStage);
 
-enum AccessFlags : uint64_t {
-  AccessFlags_None = 0ULL,
-  AccessFlags_IndirectCommandRead = 0X00000001ULL,
-  AccessFlags_IndexRead = 0X00000002ULL,
-  AccessFlags_VertexAttributeRead = 0X00000004ULL,
-  AccessFlags_UniformRead = 0X00000008ULL,
-  AccessFlags_InputAttachmentRead = 0X00000010ULL,
-  AccessFlags_ShaderRead = 0X00000020ULL,
-  AccessFlags_ShaderWrite = 0X00000040ULL,
-  AccessFlags_ColorAttachmentRead = 0X00000080ULL,
-  AccessFlags_ColorAttachmentWrite = 0X00000100ULL,
-  AccessFlags_DepthStencilRead = 0X00000200ULL,
-  AccessFlags_DepthStencilWrite = 0X00000400ULL,
-  AccessFlags_TransferRead = 0X00000800ULL,
-  AccessFlags_TransferWrite = 0X00001000ULL,
-  AccessFlags_HostRead = 0X00002000ULL,
-  AccessFlags_HostWrite = 0X00004000ULL,
-  AccessFlags_MemoryRead = 0X00008000ULL,
-  AccessFlags_MemoryWrite = 0X00010000ULL,
-  AccessFlags_ShaderSampledRead = 0X100000000ULL,
-  AccessFlags_ShaderStorageRead = 0X200000000ULL,
-  AccessFlags_ShaderStorageWrite = 0X400000000ULL,
-  AccessFlags_AnyRead = rhi::AccessFlags_IndirectCommandRead | rhi::AccessFlags_IndexRead |
-                        rhi::AccessFlags_VertexAttributeRead | rhi::AccessFlags_UniformRead |
-                        rhi::AccessFlags_InputAttachmentRead | rhi::AccessFlags_ShaderRead |
-                        rhi::AccessFlags_ColorAttachmentRead | rhi::AccessFlags_DepthStencilRead |
-                        rhi::AccessFlags_TransferRead | rhi::AccessFlags_HostRead |
-                        rhi::AccessFlags_MemoryRead | rhi::AccessFlags_ShaderSampledRead |
-                        rhi::AccessFlags_ShaderStorageRead,
-  AccessFlags_AnyWrite = rhi::AccessFlags_ShaderWrite | rhi::AccessFlags_ColorAttachmentWrite |
-                         rhi::AccessFlags_DepthStencilWrite | rhi::AccessFlags_TransferWrite |
-                         rhi::AccessFlags_HostWrite | rhi::AccessFlags_MemoryWrite |
-                         rhi::AccessFlags_ShaderStorageWrite,
+enum class AccessFlags : uint64_t {
+  None = 0ULL,
+  IndirectCommandRead = 0X00000001ULL,
+  IndexRead = 0X00000002ULL,
+  VertexAttributeRead = 0X00000004ULL,
+  UniformRead = 0X00000008ULL,
+  InputAttachmentRead = 0X00000010ULL,
+  ShaderRead = 0X00000020ULL,
+  ShaderWrite = 0X00000040ULL,
+  ColorAttachmentRead = 0X00000080ULL,
+  ColorAttachmentWrite = 0X00000100ULL,
+  DepthStencilRead = 0X00000200ULL,
+  DepthStencilWrite = 0X00000400ULL,
+  TransferRead = 0X00000800ULL,
+  TransferWrite = 0X00001000ULL,
+  HostRead = 0X00002000ULL,
+  HostWrite = 0X00004000ULL,
+  MemoryRead = 0X00008000ULL,
+  MemoryWrite = 0X00010000ULL,
+  ShaderSampledRead = 0X100000000ULL,
+  ShaderStorageRead = 0X200000000ULL,
+  ShaderStorageWrite = 0X400000000ULL,
+  AnyRead = rhi::AccessFlags::IndirectCommandRead | rhi::AccessFlags::IndexRead |
+            rhi::AccessFlags::VertexAttributeRead | rhi::AccessFlags::UniformRead |
+            rhi::AccessFlags::InputAttachmentRead | rhi::AccessFlags::ShaderRead |
+            rhi::AccessFlags::ColorAttachmentRead | rhi::AccessFlags::DepthStencilRead |
+            rhi::AccessFlags::TransferRead | rhi::AccessFlags::HostRead |
+            rhi::AccessFlags::MemoryRead | rhi::AccessFlags::ShaderSampledRead |
+            rhi::AccessFlags::ShaderStorageRead,
+  AnyWrite = rhi::AccessFlags::ShaderWrite | rhi::AccessFlags::ColorAttachmentWrite |
+             rhi::AccessFlags::DepthStencilWrite | rhi::AccessFlags::TransferWrite |
+             rhi::AccessFlags::HostWrite | rhi::AccessFlags::MemoryWrite |
+             rhi::AccessFlags::ShaderStorageWrite,
 };
+
+AUGMENT_ENUM_CLASS(AccessFlags);
 
 enum ImageAspect {
   ImageAspect_Color = (1 << 0),
@@ -353,7 +361,7 @@ enum ImageAspect {
   ImageAspect_Stencil = (1 << 2),
 };
 
-enum ResourceState : uint32_t {
+enum class ResourceState : uint32_t {
   None = 0,
   ColorWrite = 1ULL << 1,  // Stage == ColorAttachmentOutput, Access == ColorWrite
   ColorRead = 1ULL << 2,   // Stage == ColorAttachmentOutput, Access == ColorRead
@@ -381,6 +389,8 @@ enum ResourceState : uint32_t {
             TransferRead | FragmentSample | FragmentStorageRead | ComputeSample | ShaderRead,
   AnyWrite = ColorWrite | DepthStencilWrite | ComputeWrite | TransferWrite,
 };
+
+AUGMENT_ENUM_CLASS(ResourceState);
 
 // resource state implying src/dst access/stage inspiration from WickedEngine
 

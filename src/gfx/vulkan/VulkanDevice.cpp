@@ -19,7 +19,6 @@
 #include "gfx/vulkan/VkUtil.hpp"
 #include "gfx/vulkan/VulkanCommon.hpp"
 #include "spirv_reflect.h"
-#include "vulkan/vk_enum_string_helper.h"
 #include "vulkan/vulkan_core.h"
 
 namespace TENG_NAMESPACE {
@@ -581,7 +580,7 @@ void VulkanDevice::init(const InitInfo& init_info) {
 }
 
 rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
-  ALWAYS_ASSERT(desc.usage);
+  ALWAYS_ASSERT(desc.usage != rhi::BufferUsage::None);
   VkBufferCreateInfo cinfo{
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .size = desc.size,
@@ -590,19 +589,19 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
       .queueFamilyIndexCount = (uint32_t)queue_family_indices_.size(),
       .pQueueFamilyIndices = queue_family_indices_.data(),
   };
-  if (desc.usage & rhi::BufferUsage_Index) {
+  if (has_flag(desc.usage, rhi::BufferUsage::Index)) {
     cinfo.usage |= VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT;
   }
-  if (desc.usage & rhi::BufferUsage_Indirect) {
+  if (has_flag(desc.usage, rhi::BufferUsage::Indirect)) {
     cinfo.usage |= VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT;
   }
-  if (desc.usage & rhi::BufferUsage_Storage) {
+  if (has_flag(desc.usage, rhi::BufferUsage::Storage)) {
     cinfo.usage |= VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT;
   }
-  if (desc.usage & rhi::BufferUsage_Uniform) {
+  if (has_flag(desc.usage, rhi::BufferUsage::Uniform)) {
     cinfo.usage |= VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT;
   }
-  if (desc.usage & rhi::BufferUsage_Vertex) {
+  if (has_flag(desc.usage, rhi::BufferUsage::Vertex)) {
     cinfo.usage |= VK_BUFFER_USAGE_2_VERTEX_BUFFER_BIT;
   }
 
@@ -1262,8 +1261,8 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
              VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR) {
     composite = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
   }
-  rhi::TextureUsageFlags usage = rhi::TextureUsageColorAttachment | rhi::TextureUsageTransferSrc |
-                                 rhi::TextureUsageTransferDst | rhi::TextureUsageStorage;
+  rhi::TextureUsage usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::TransferSrc |
+                            rhi::TextureUsage::TransferDst | rhi::TextureUsage::Storage;
   VkSwapchainKHR old_swapchain = swapchain->swapchain_;
   VkSwapchainCreateInfoKHR swap_info{
       .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,

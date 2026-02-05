@@ -268,69 +268,69 @@ std::pair<VkPipelineStageFlags2, VkAccessFlags2> convert_pipeline_stage_and_acce
   VkPipelineStageFlags2 stage{};
   VkAccessFlags2 access{};
 
-  if (state & rhi::ColorWrite) {
+  if (has_flag(state, rhi::ResourceState::ColorWrite)) {
     stage |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     access |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
   }
-  if (state & rhi::ColorRead) {
+  if (has_flag(state, rhi::ResourceState::ColorRead)) {
     stage |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
     access |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
   }
-  if (state & rhi::DepthStencilRead) {
+  if (has_flag(state, rhi::ResourceState::DepthStencilRead)) {
     stage |=
         VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
     access |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
   }
-  if (state & rhi::DepthStencilWrite) {
+  if (has_flag(state, rhi::ResourceState::DepthStencilWrite)) {
     stage |=
         VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
     access |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
   }
-  if (state & rhi::VertexRead) {
+  if (has_flag(state, rhi::ResourceState::VertexRead)) {
     stage |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
     access |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
   }
-  if (state & rhi::IndexRead) {
+  if (has_flag(state, rhi::ResourceState::IndexRead)) {
     stage |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
     access |= VK_ACCESS_2_INDEX_READ_BIT;
   }
-  if (state & rhi::IndirectRead) {
+  if (has_flag(state, rhi::ResourceState::IndirectRead)) {
     stage |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
     access |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
   }
-  if (state & rhi::ComputeRead) {
+  if (has_flag(state, rhi::ResourceState::ComputeRead)) {
     stage |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     access |= VK_ACCESS_2_SHADER_READ_BIT;
   }
-  if (state & rhi::ComputeWrite) {
+  if (has_flag(state, rhi::ResourceState::ComputeWrite)) {
     stage |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     access |= VK_ACCESS_2_SHADER_WRITE_BIT;
   }
-  if (state & rhi::TransferRead) {
+  if (has_flag(state, rhi::ResourceState::TransferRead)) {
     stage |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
     access |= VK_ACCESS_2_TRANSFER_READ_BIT;
   }
-  if (state & rhi::TransferWrite) {
+  if (has_flag(state, rhi::ResourceState::TransferWrite)) {
     stage |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
     access |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
   }
-  if (state & rhi::FragmentStorageRead) {
+  if (has_flag(state, rhi::ResourceState::FragmentStorageRead)) {
     stage |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
     access |= VK_ACCESS_2_SHADER_READ_BIT;
   }
-  if (state & rhi::ComputeSample) {
+  if (has_flag(state, rhi::ResourceState::ComputeSample)) {
     stage |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
     access |= VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
   }
-  if (state & rhi::FragmentSample) {
+  if (has_flag(state, rhi::ResourceState::FragmentSample)) {
     stage |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
     access |= VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
   }
-  if (state & rhi::ShaderRead) {
+  if (has_flag(state, rhi::ResourceState::ShaderRead)) {
     stage |= VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
     access |= VK_ACCESS_2_SHADER_READ_BIT;
   }
-  if (state & rhi::SwapchainPresent) {
+  if (has_flag(state, rhi::ResourceState::SwapchainPresent)) {
     stage |= VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
     access |= 0;
   }
@@ -339,28 +339,30 @@ std::pair<VkPipelineStageFlags2, VkAccessFlags2> convert_pipeline_stage_and_acce
 }
 
 VkImageLayout convert_layout(rhi::ResourceState state) {
-  if (state & rhi::ColorWrite || state & rhi::ColorRead) {
+  if (has_flag(state, rhi::ResourceState::ColorWrite) ||
+      has_flag(state, rhi::ResourceState::ColorRead)) {
     return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   }
-  if (state & rhi::DepthStencilWrite) {
+  if (has_flag(state, rhi::ResourceState::DepthStencilWrite)) {
     return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
   }
-  if (state & rhi::DepthStencilRead) {
+  if (has_flag(state, rhi::ResourceState::DepthStencilRead)) {
     return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
   }
-  if (state & rhi::ShaderRead) {
+  if (has_flag(state, rhi::ResourceState::ShaderRead)) {
     return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   }
-  if (state & rhi::ComputeWrite || state & rhi::ComputeRead) {
+  if (has_flag(state, rhi::ResourceState::ComputeWrite) ||
+      has_flag(state, rhi::ResourceState::ComputeRead)) {
     return VK_IMAGE_LAYOUT_GENERAL;
   }
-  if (state & rhi::TransferRead) {
+  if (has_flag(state, rhi::ResourceState::TransferRead)) {
     return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
   }
-  if (state & rhi::TransferWrite) {
+  if (has_flag(state, rhi::ResourceState::TransferWrite)) {
     return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
   }
-  if (state & rhi::SwapchainPresent) {
+  if (has_flag(state, rhi::ResourceState::SwapchainPresent)) {
     return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
   }
   return VK_IMAGE_LAYOUT_UNDEFINED;

@@ -14,7 +14,7 @@ GPUFrameAllocator2::GPUFrameAllocator2(size_t size, rhi::Device* device) {
   device_ = device;
   for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
     buffers[i] = device->create_buf_h({.storage_mode = rhi::StorageMode::CPUAndGPU,
-                                       .usage = rhi::BufferUsage_Storage,
+                                       .usage = rhi::BufferUsage::Storage,
                                        .size = size,
                                        .bindless = true});
   }
@@ -99,7 +99,7 @@ void GPUFrameAllocator3::reset(uint32_t frame_idx) {
 GPUFrameAllocator3::StagingBuffer GPUFrameAllocator3::create_staging_buffer(uint32_t size) {
   return {device_->create_buf_h({
               .storage_mode = rhi::StorageMode::CPUAndGPU,
-              .usage = rhi::BufferUsage_Storage,
+              .usage = rhi::BufferUsage::Storage,
               .size = size,
               .bindless = true,
               .name = "gpu_frame_allocator3_staging_buf",

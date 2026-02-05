@@ -33,7 +33,7 @@ inline std::string string(NS::String *str) {
   return str->cString(NS::ASCIIStringEncoding);
 }
 
-MTL::TextureUsage convert(rhi::TextureUsageFlags usage);
+MTL::TextureUsage convert(rhi::TextureUsage usage);
 MTL::ResourceOptions convert(rhi::StorageMode mode);
 MTL::StorageMode convert_storage_mode(rhi::StorageMode mode);
 MTL::ResourceOptions convert_resource_storage_mode(rhi::StorageMode mode);
