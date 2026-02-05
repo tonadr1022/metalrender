@@ -146,6 +146,7 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
       m3_state().render_enc->setLabel(mtl::util::string(curr_debug_name_));
     }
   }
+  flush_barriers();
   set_buffer(kIRDescriptorHeapBindPoint, device_->get_mtl_buf(device_->resource_descriptor_table_),
              0,
              EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment |
