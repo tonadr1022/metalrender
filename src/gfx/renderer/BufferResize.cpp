@@ -14,9 +14,7 @@ void BufferCopyMgr::copy_to_buffer(const void* src_data, size_t src_size,
   // if dst buffer is cpu visible, direct copy, otherwise copy to staging buffer
   // and enqueue staging -> dst buffer copy.
   auto* buf = device_->get_buf(dst_buffer);
-  if (buf->is_cpu_visible() ||
-      // TODO: move this into is_cpu_visible() somehow
-      has_flag(device_->get_graphics_capabilities(), rhi::GraphicsCapability::CacheCoherentUMA)) {
+  if (buf->is_cpu_visible()) {
     ASSERT(dst_offset + src_size <= buf->desc().size);
     memcpy((uint8_t*)buf->contents() + dst_offset, src_data, src_size);
   } else {
@@ -36,7 +34,6 @@ void BufferCopyMgr::add_copy(const BufferCopy& copy) {
   // if both are CPU mapped, direct memcpy
   auto* src_buf = device_->get_buf(copy.src_buf);
   auto* dst_buf = device_->get_buf(copy.dst_buf);
-  ASSERT(0 && "todo: handle uma flag");
   if (src_buf->is_cpu_visible() && dst_buf->is_cpu_visible()) {
     memcpy((uint8_t*)dst_buf->contents() + copy.dst_offset,
            (uint8_t*)src_buf->contents() + copy.src_offset, copy.size);

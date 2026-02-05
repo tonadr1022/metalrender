@@ -11,6 +11,9 @@ VkImageUsageFlags convert(rhi::TextureUsage usage) {
   if (has_flag(usage, rhi::TextureUsage::Storage)) {
     flags |= VK_IMAGE_USAGE_STORAGE_BIT;
   }
+  if (has_flag(usage, rhi::TextureUsage::ShaderWrite)) {
+    flags |= VK_IMAGE_USAGE_STORAGE_BIT;
+  }
   if (has_flag(usage, rhi::TextureUsage::Sample)) {
     flags |= VK_IMAGE_USAGE_SAMPLED_BIT;
   }

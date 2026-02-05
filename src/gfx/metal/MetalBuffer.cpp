@@ -14,4 +14,9 @@ void* MetalBuffer::contents() {
   return buffer_->contents();
 }
 
-} // namespace TENG_NAMESPACE
+const void* MetalBuffer::contents() const {
+  assert(buffer_);
+  return buffer_->contents();
+}
+
+}  // namespace TENG_NAMESPACE

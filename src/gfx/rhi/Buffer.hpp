@@ -14,6 +14,7 @@ class Buffer {
   Buffer() = default;
   ~Buffer() = default;
   virtual void* contents() = 0;
+  [[nodiscard]] virtual const void* contents() const = 0;
   [[nodiscard]] size_t size() const { return desc_.size; }
   [[nodiscard]] const BufferDesc& desc() const { return desc_; }
   [[nodiscard]] uint32_t bindless_idx() const {
@@ -22,7 +23,7 @@ class Buffer {
   }
 
   [[nodiscard]] virtual bool is_cpu_visible() const {
-    return desc_.storage_mode == StorageMode::CPUAndGPU;
+    return desc_.storage_mode == StorageMode::CPUAndGPU || contents() != nullptr;
   }
 
  protected:

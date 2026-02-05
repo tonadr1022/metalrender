@@ -17,6 +17,7 @@ class MetalBuffer final : public rhi::Buffer {
   MetalBuffer() = default;
   ~MetalBuffer() = default;
   void* contents() override;
+  [[nodiscard]] const void* contents() const override;
   [[nodiscard]] MTL::Buffer* buffer() { return buffer_; }
 
   [[nodiscard]] bool is_cpu_visible() const override {

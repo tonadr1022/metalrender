@@ -22,6 +22,7 @@ class VulkanBuffer final : public rhi::Buffer {
   ~VulkanBuffer() = default;
 
   void* contents() override { return mapped_ptr_; }
+  [[nodiscard]] const void* contents() const override { return mapped_ptr_; }
   [[nodiscard]] VkBuffer buffer() const { return buffer_; }
   [[nodiscard]] VmaAllocation allocation() const { return allocation_; }
 
