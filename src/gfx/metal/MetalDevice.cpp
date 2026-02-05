@@ -242,6 +242,7 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
                               .mag_filter = rhi::FilterMode::Linear,
                               .mipmap_mode = rhi::FilterMode::Linear,
                               .address_mode = rhi::AddressMode::ClampToEdge,
+                              .bindless = false,
                           });
     add_static_sampler(1, {
                               .min_filter = rhi::FilterMode::Linear,

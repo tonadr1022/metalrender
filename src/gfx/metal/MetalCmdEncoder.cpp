@@ -191,8 +191,7 @@ void MetalCmdEncoderBase<UseMTL4>::flush_barriers() {
   if constexpr (UseMTL4) {
     if (m4_state().compute_enc && device_->compute_enc_flush_stages_) {
       constexpr MTL4::VisibilityOptions visibility_options = MTL4::VisibilityOptionNone;
-      m4_state().compute_enc->barrierAfterStages(MTL::StageDispatch | MTL::StageBlit, MTL::StageAll,
-                                                 visibility_options);
+      m4_state().compute_enc->barrierAfterStages(MTL::StageAll, MTL::StageAll, visibility_options);
       m4_state().compute_enc->barrierAfterEncoderStages(MTL::StageBlit | MTL::StageDispatch,
                                                         MTL::StageBlit | MTL::StageDispatch,
                                                         visibility_options);
@@ -809,6 +808,7 @@ void MetalCmdEncoderBase<UseMTL4>::copy_buffer_to_buffer(rhi::BufferHandle src_b
 
 template <bool UseMTL4>
 void MetalCmdEncoderBase<UseMTL4>::start_blit_equivalent_encoder() {
+  flush_barriers();
   if constexpr (UseMTL4) {
     start_compute_encoder();
   } else {
