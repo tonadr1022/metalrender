@@ -42,11 +42,7 @@ if(BUILD_VULKAN)
         gfx/vulkan/VkUtil.cpp
         gfx/vulkan/VulkanDeleteQueue.cpp
     )
-    target_compile_definitions(${target_name} PRIVATE VULKAN_BACKEND=1)
-    # target_include_directories(${target_name} SYSTEM PUBLIC
-    #     ${CMAKE_SOURCE_DIR}/third_party/vma/include
-    #     # ${Vulkan_INCLUDE_DIRS}
-    # )
+    target_compile_definitions(${target_name} PUBLIC VULKAN_BACKEND=1)
 endif()
 
 if(BUILD_METAL)

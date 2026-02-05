@@ -41,7 +41,10 @@ constexpr size_t align_256(size_t n) { return (n + 255) & ~size_t(255); }
     lhs = lhs ^ rhs;                                                          \
     return lhs;                                                               \
   }                                                                           \
-  constexpr bool has_flag(classname value, classname flag) { return (value & flag) == flag; }
+  [[nodiscard]] constexpr bool has_flag(classname value, classname flag) {    \
+    using T = std::underlying_type_t<classname>;                              \
+    return (static_cast<T>(value & flag) != 0ull);                            \
+  }
 
 // NOLINTEND
 

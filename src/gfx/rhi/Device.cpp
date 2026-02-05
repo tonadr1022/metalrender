@@ -23,14 +23,15 @@ std::unique_ptr<Device> create_device(GfxAPI api) {
     case rhi::GfxAPI::Metal:
 #ifndef METAL_BACKEND
       LCRITICAL("Metal backend not available");
-      exit(1);
+      std::exit(1);
       return nullptr;
 #else
       return std::make_unique<MetalDevice>();
 #endif
     case rhi::GfxAPI::Vulkan:
 #ifndef VULKAN_BACKEND
-      return std::make_unique<VulkanDevice>();
+      LCRITICAL("Vulkan backend not available");
+      std::exit(1);
 #else
       return std::make_unique<gfx::vk::VulkanDevice>();
 #endif
