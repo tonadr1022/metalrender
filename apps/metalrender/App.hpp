@@ -1,5 +1,6 @@
 #pragma once
 #include <filesystem>
+#include <span>
 
 #include "Camera.hpp"
 #include "gfx/RendererTypes.hpp"
@@ -38,8 +39,10 @@ struct App {
   void write_config();
   void on_imgui(float dt);
   void load_model(const std::string &path, const glm::mat4 &transform = glm::mat4{1});
+  void load_instances(const std::string &path, std::vector<glm::mat4> &&transforms);
   void init_camera();
   void write_camera();
+  std::filesystem::path resolve_model_path(const std::string &path);
 
   void load_grid(glm::ivec3 radius, float dist, const std::string &path, float scale = 1.0f);
   void load_random_of_model(size_t count, float scale, float radius, const std::string &path);

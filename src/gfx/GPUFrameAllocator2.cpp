@@ -85,8 +85,8 @@ GPUFrameAllocator3::Alloc GPUFrameAllocator3::alloc(uint32_t size) {
   return allocation;
 }
 
-void GPUFrameAllocator3::reset(uint32_t frame_idx) {
-  frame_idx_ = frame_idx;
+void GPUFrameAllocator3::advance_frame() {
+  frame_idx_ = (frame_idx_ + 1) % device_->get_info().frames_in_flight;
   for (auto& buf : curr_frame().full_staging_buffers) {
     curr_frame().free_staging_buffers.emplace_back(std::move(buf));
   }

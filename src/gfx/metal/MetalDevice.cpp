@@ -599,7 +599,6 @@ rhi::SamplerHandle MetalDevice::create_sampler(const rhi::SamplerDesc& desc) {
   uint32_t bindless_idx{rhi::k_invalid_bindless_idx};
   if (desc.bindless) {
     bindless_idx = sampler_desc_heap_allocator_.alloc_idx();
-    LINFO("Allocated bindless sampler idx {}", bindless_idx);
     auto* resource_table =
         (IRDescriptorTableEntry*)(get_mtl_buf(sampler_descriptor_table_))->contents();
     IRDescriptorTableSetSampler(&resource_table[bindless_idx], sampler, 0.0);

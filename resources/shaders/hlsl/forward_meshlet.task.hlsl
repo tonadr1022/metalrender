@@ -18,6 +18,7 @@ groupshared Payload s_Payload;
 groupshared uint s_count;
 
 CONSTANT_BUFFER(ViewData, view_data, VIEW_DATA_SLOT);
+CONSTANT_BUFFER(GlobalData, global_data, GLOBALS_SLOT);
 CONSTANT_BUFFER(CullData, cull_data, 4);
 StructuredBuffer<Meshlet> meshlet_buf : register(t6);
 StructuredBuffer<InstanceData> instance_data_buf : register(t10);
@@ -143,6 +144,13 @@ Texture2D depth_pyramid_tex : register(t3);
       }
 
       draw = visible && !skip_draw;
+    }
+    if (global_data.frame_num % 10 == 0) {
+      uint meshlet_idx = task_cmd.task_offset + gtid;
+      Meshlet meshlet = meshlet_buf[meshlet_idx];
+      uint tri_count = meshlet.vertex_count;
+      uint cnt;
+      InterlockedAdd(out_counts_buf[pass + 2], tri_count * (draw ? 1 : 0), cnt);
     }
   }
 

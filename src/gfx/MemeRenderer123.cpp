@@ -91,8 +91,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
       }
     }
   }
-
-  frame_gpu_upload_allocator_.reset(curr_frame_idx_);
+  frame_gpu_upload_allocator_.advance_frame();
   shader_mgr_->replace_dirty_pipelines();
 
   indirect_cmd_buf_ids_.clear();
@@ -112,8 +111,13 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   if (!buffer_copy_mgr_.get_copies().empty()) {
     auto* enc = device_->begin_cmd_encoder();
     for (const auto& copy : buffer_copy_mgr_.get_copies()) {
+      // TODO: this is horrendous.
+      enc->barrier(rhi::PipelineStage::AllCommands, rhi::AccessFlags::None,
+                   rhi::PipelineStage::AllCommands, rhi::AccessFlags::None);
       enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
                                  copy.size);
+      enc->barrier(rhi::PipelineStage::AllCommands, rhi::AccessFlags::None,
+                   rhi::PipelineStage::AllCommands, rhi::AccessFlags::None);
     }
     enc->end_encoding();
     buffer_copy_mgr_.clear_copies();
@@ -236,7 +240,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     p.w_external_buf(out_counts_buf_name, out_counts_buf_[curr_frame_idx_].handle);
     p.set_ex([this](rhi::CmdEncoder* enc) {
       enc->write_timestamp(get_query_pool(), 0);
-      enc->fill_buffer(out_counts_buf_[curr_frame_idx_].handle, 0, sizeof(MeshletDrawStats), 0);
+      if (frame_num_ % 10 == 0) {
+        enc->fill_buffer(out_counts_buf_[curr_frame_idx_].handle, 0, sizeof(MeshletDrawStats), 0);
+      } else {
+        enc->fill_buffer(out_counts_buf_[curr_frame_idx_].handle, 0, sizeof(MeshletDrawStats) / 2,
+                         0);
+      }
     });
   }
 
@@ -583,7 +592,6 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
                                     materials_buf_.get_buffer_handle(),
                                     material_alloc.offset * sizeof(M4Material));
     if (resized) {
-      LINFO("materials resized");
       ASSERT(0);
     }
   }
@@ -615,7 +623,8 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
       instance_id_to_node.push_back(node);
       curr_meshlet_vis_buf_i +=
           result.meshlet_process_result.meshlet_datas[mesh_id].meshlets.size();
-      total_instance_vertices += result.meshes[mesh_id].vertex_count;
+      total_instance_vertices +=
+          result.meshlet_process_result.meshlet_datas[mesh_id].meshlet_vertices.size();
       total_instance_meshlets += result.meshes[mesh_id].meshlet_count;
       task_cmd_count += align_divide_up(result.meshes[mesh_id].meshlet_count, K_TASK_TG_SIZE);
     }
@@ -724,11 +733,23 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
                               .meshlet_vertices_alloc = meshlet_vertices_alloc};
 }
 
+void MemeRenderer123::reserve_space_for(std::span<std::pair<ModelGPUHandle, uint32_t>> models) {
+  size_t total_instance_meshlets{};
+  size_t total_instance_datas{};
+  for (auto& [model_handle, instance_count] : models) {
+    auto* model_resources = model_gpu_resource_pool_.get(model_handle);
+    ASSERT(model_resources);
+    total_instance_meshlets += (size_t)model_resources->totals.instance_meshlets * instance_count;
+    total_instance_datas += model_resources->base_instance_datas.size() * instance_count;
+  }
+  static_instance_mgr_.reserve_space(total_instance_datas, total_instance_meshlets);
+}
+
 ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& model,
                                                            ModelGPUHandle model_gpu_handle) {
   ZoneScoped;
   auto* model_resources = model_gpu_resource_pool_.get(model_gpu_handle);
-  ALWAYS_ASSERT(model_resources);
+  ASSERT(model_resources);
   auto& model_instance_datas = model_resources->base_instance_datas;
   auto& instance_id_to_node = model_resources->instance_id_to_node;
   std::vector<TRS> instance_transforms;
@@ -856,21 +877,27 @@ void InstanceMgr::flush_pending_frees(uint32_t curr_frame_in_flight, rhi::CmdEnc
   pending_frees_[curr_frame_in_flight].clear();
 }
 
-void InstanceMgr::ensure_buffer_space(size_t element_count) {
-  if (element_count == 0) return;
+bool InstanceMgr::ensure_buffer_space(size_t element_count) {
+  bool resized{};
+  if (element_count == 0) return resized;
   if (!instance_data_buf_.is_valid() ||
       device_.get_buf(instance_data_buf_)->size() < element_count * sizeof(InstanceData)) {
     auto new_buf = device_.create_buf_h({
-        .storage_mode = rhi::StorageMode::Default,
+        .storage_mode = rhi::StorageMode::GPUOnly,
         .usage = rhi::BufferUsage::Storage,
         .size = sizeof(InstanceData) * element_count,
         .name = "intance_data_buf",
     });
 
     if (instance_data_buf_.is_valid()) {
-      buffer_copy_mgr_.copy_to_buffer(device_.get_buf(instance_data_buf_)->contents(),
-                                      device_.get_buf(instance_data_buf_)->size(), new_buf.handle,
-                                      0);
+      buffer_copy_mgr_.add_copy(BufferCopy{
+          .src_buf = instance_data_buf_.handle,
+          .dst_buf = new_buf.handle,
+          .size = device_.get_buf(instance_data_buf_)->size(),
+          .src_offset = 0,
+          .dst_offset = 0,
+      });
+      resized = true;
     }
     instance_data_buf_ = std::move(new_buf);
   }
@@ -891,6 +918,7 @@ void InstanceMgr::ensure_buffer_space(size_t element_count) {
       draw_cmd_buf_ = std::move(new_buf);
     }
   }
+  return resized;
 }
 
 void MemeRenderer123::init_imgui() {
@@ -900,14 +928,13 @@ void MemeRenderer123::init_imgui() {
   ImPlot::CreateContext();
 
   ImGuiIO& io = ImGui::GetIO();
-  auto path = (resource_dir_ / "fonts" / "ComicMono.ttf");
-  ALWAYS_ASSERT(std::filesystem::exists(path));
-
-  const float sizes[] = {16.f, 32.f, 48.f};
-  for (auto size : sizes) {
-    auto* font = io.Fonts->AddFontFromFileTTF(path.string().c_str(), size, nullptr,
-                                              io.Fonts->GetGlyphRangesDefault());
-    add_font(font, size);
+  for (const auto& entry : std::filesystem::directory_iterator(resource_dir_ / "fonts")) {
+    if (entry.path().extension() == ".ttf") {
+      auto* font = io.Fonts->AddFontFromFileTTF(entry.path().string().c_str(), 16, nullptr,
+                                                io.Fonts->GetGlyphRangesDefault());
+      // strip .ttf
+      add_font(entry.path().stem().string(), font);
+    }
   }
 
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -921,14 +948,15 @@ void MemeRenderer123::shutdown_imgui() { ZoneScoped; }
 void MemeRenderer123::on_imgui() {
   ZoneScoped;
   if (ImGui::TreeNodeEx("Config")) {
-    ImGui::Text("mesh shaders enabled: %d", mesh_shaders_enabled_);
+    ImGui::Text("Mesh shaders enabled: %d", mesh_shaders_enabled_);
     ImGui::TreePop();
   }
   if (ImGui::TreeNodeEx("Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
                 stats_.total_instance_vertices, stats_.total_instances);
     ImGui::Text("Total total instance meshlets: %d", stats_.total_instance_meshlets);
-    ImGui::Text("GPU Frame Time: %.2f", stats_.avg_gpu_frame_time);
+    ImGui::Text("GPU Frame Time: %.2f (%.2f FPS)", stats_.avg_gpu_frame_time,
+                1000.f / stats_.avg_gpu_frame_time);
 
     MeshletDrawStats stats{};
     constexpr int frames_ago = 2;
@@ -1066,6 +1094,11 @@ bool MemeRenderer123::on_key_event(int key, int action, int mods) {
         debug_render_mode_ =
             (DebugRenderMode)(((int)debug_render_mode_ + 1) % (int)DebugRenderMode::Count);
       }
+      return true;
+    }
+
+    if (key == GLFW_KEY_M && mods & GLFW_MOD_CONTROL && mods & GLFW_MOD_SHIFT) {
+      meshlet_occlusion_culling_enabled_ = !meshlet_occlusion_culling_enabled_;
       return true;
     }
 
@@ -1277,13 +1310,14 @@ InstanceMgr::InstanceMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr,
       renderer_(renderer) {}
 
 OffsetAllocator::Allocation InstanceMgr::allocate_instance_data(uint32_t element_count) {
+  // TODO: this is cursed go back to recursion or something pls
   const OffsetAllocator::Allocation alloc = allocator_.allocate(element_count);
   if (alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
     auto old_capacity = allocator_.capacity();
-    auto new_capacity = std::max(old_capacity * 2, element_count);
+    auto new_capacity = std::max(old_capacity * 2, element_count * 2);
     allocator_.grow(new_capacity - old_capacity);
     ASSERT(new_capacity <= allocator_.capacity());
-    ensure_buffer_space(new_capacity);
+    ensure_buffer_space(allocator_.capacity());
     return allocate_instance_data(element_count);
   }
   ensure_buffer_space(allocator_.capacity());
@@ -1291,6 +1325,58 @@ OffsetAllocator::Allocation InstanceMgr::allocate_instance_data(uint32_t element
   stats_.max_instance_data_count =
       std::max<uint32_t>(stats_.max_instance_data_count, alloc.offset + element_count);
   return alloc;
+}
+
+void InstanceMgr::reserve_space(uint32_t instance_data_count, uint32_t meshlet_instance_count) {
+  // TODO: consolidate capacity logic
+  auto old_capacity = allocator_.capacity();
+  auto new_capacity = std::max(old_capacity * 2, instance_data_count * 2);
+  ensure_buffer_space(new_capacity);
+  meshlet_vis_buf_.reserve_buffer_space(meshlet_instance_count, false);
+}
+
+void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
+  auto add_commas = [](uint64_t n) -> std::string {
+    std::string s = std::to_string(n);
+    int pos = s.length() - 3;
+    while (pos > 0) {
+      s.insert(pos, ",");
+      pos -= 3;
+    }
+    return s;
+  };
+
+  MeshletDrawStats stats{};
+  constexpr int frames_ago = 2;
+  auto* readback_buf =
+      device_->get_buf(out_counts_buf_readback_[get_frames_ago_idx(frames_ago)].handle);
+  stats = *(MeshletDrawStats*)readback_buf->contents();
+  size_t tot_drawn_meshlets = stats.meshlets_drawn_early + stats.meshlets_drawn_late;
+  ImGui::Text(
+      "Culling Paused:             %d\n"
+      "Culling Enabled:            %d\n"
+      "Meshlet Occlusion Enabled:  %d",
+      culling_paused_, culling_enabled_, meshlet_occlusion_culling_enabled_);
+
+  ImGui::Text(
+      "Meshlets drawn: %10s of %10s \n"
+      "Culled: (%5.2f %%)\n"
+      "Early: %7s\tLate %7s",
+      add_commas(tot_drawn_meshlets).c_str(), add_commas(stats_.total_instance_meshlets).c_str(),
+      tot_drawn_meshlets == 0
+          ? 0
+          : 100.f - (float)tot_drawn_meshlets / (float)stats_.total_instance_meshlets * 100.f,
+      add_commas(stats.meshlets_drawn_early).c_str(),
+      add_commas(stats.meshlets_drawn_late).c_str());
+
+  ImGui::Text(
+      "Triangles: %12s\n"
+      "Vertices:  %12s\n"
+      "Objects:   %12s\n"
+      "Models:    %12s",
+      add_commas(stats.triangles_drawn_early + stats.triangles_drawn_late).c_str(),
+      add_commas(stats_.total_instance_vertices).c_str(),
+      add_commas(stats_.total_instances).c_str(), add_commas(total_scene_models).c_str());
 }
 
 }  // namespace gfx

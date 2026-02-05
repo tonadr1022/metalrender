@@ -2,6 +2,7 @@
 #include <cassert>
 #include <filesystem>
 #include <glm/mat4x4.hpp>
+#include <span>
 
 #include "core/Config.hpp"
 #include "core/Handle.hpp"
@@ -48,23 +49,39 @@ class ResourceManager {
 
   ModelHandle load_model(const std::filesystem::path &path,
                          const glm::mat4 &root_transform = glm::mat4{1});
+  struct ModelLoadRequest {
+    std::filesystem::path path;
+    glm::mat4 root_transform{1};
+  };
+
+  struct InstancedModelLoadRequest {
+    std::filesystem::path path;
+    std::vector<glm::mat4> instance_transforms;
+  };
+
+  std::vector<std::vector<ModelHandle>> load_instanced_models(
+      const std::span<const InstancedModelLoadRequest> &models_to_load);
   void free_model(ModelHandle handle);
+  void update();
 
  private:
   struct ModelCacheEntry {
     ModelInstance model;
     ModelGPUHandle gpu_resource_handle;
     size_t use_count{};
+    size_t path_hash{};
   };
+  ModelCacheEntry *get_model_from_cache(const std::filesystem::path &path);
 
   std::unordered_map<size_t, ModelCacheEntry> model_cache_;
 
   struct ModelInstancePoolEntry {
     ModelInstance instance;
     ModelInstanceGPUHandle instance_gpu_handle;
+    size_t model_path_hash;
   };
-  Pool<ModelHandle, ModelInstancePoolEntry> model_instance_pool_;
-  std::vector<size_t> model_to_resource_cache_key_;
+  BlockPool<ModelHandle, ModelInstancePoolEntry> model_instance_pool_{128, 16, true};
+  // std::vector<size_t> model_to_resource_cache_key_;
 
   gfx::MemeRenderer123 *renderer_{};
   inline static ResourceManager *instance_{};

@@ -6,6 +6,7 @@
 #include <random>
 
 #include "ResourceManager.hpp"
+#include "UI.hpp"
 #include "Util.hpp"
 #include "Window.hpp"
 #include "core/Logger.hpp"
@@ -21,6 +22,11 @@
 using namespace teng;
 
 namespace {
+
+constexpr const char* sponza_path = "Models/Sponza/glTF_ktx2/Sponza.gltf";
+constexpr const char* chessboard_path = "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf";
+constexpr const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
+constexpr const char* cube_path = "Models/Cube/glTF/Cube.gltf";
 
 namespace random {
 
@@ -85,16 +91,12 @@ App::App() {
       .config_file_path = local_resource_dir_ / "renderer_config.txt",
   });
   ResourceManager::init(ResourceManager::CreateInfo{.renderer = renderer_.get()});
-  // voxel_renderer_ = std::make_unique<vox::Renderer>();
-  // voxel_renderer_->init(&renderer_);
-  // voxel_world_ = std::make_unique<vox::World>();
-  // voxel_world_->init(voxel_renderer_.get(), &renderer_, resource_dir_);
   camera_.pos.x = -5;
   init_camera();
 
   load_scene_presets();
   random::seed(10000000);
-  run_preset_scene(0);
+  run_preset_scene(1);
 }
 
 App::~App() = default;
@@ -145,6 +147,7 @@ void App::run() {
       ImGui::Render();
     }
 
+    ResourceManager::get().update();
     renderer_->render({
         .view_mat = camera_.get_view_mat(),
         .camera_pos = camera_.pos,
@@ -202,7 +205,7 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
       }
     } else if (key == GLFW_KEY_L && mods & GLFW_MOD_CONTROL) {
       static float h = 40.f;
-      load_model(config_.paths[1], glm::translate(glm::mat4{1}, glm::vec3{0, h, 0}));
+      load_model(sponza_path, glm::translate(glm::mat4{1}, glm::vec3{0, h, 0}));
       h += 40.f;
     }
   }
@@ -298,41 +301,45 @@ struct ScrollingBuffer {
 }  // namespace
 
 void App::on_imgui(float dt) {
+  push_font("ComicMono", 16);
   ImPlot::ShowDemoWindow();
+
+  constexpr int num_times = 2000;
+  static ScrollingBuffer frame_times{num_times};
+  static float t = 0;
+  frame_times.AddPoint(t, dt * 1000.f);
+  t += dt;
+  float history = 10;
+  static ImPlotAxisFlags flags = 0;
+  auto get_mean = [](std::span<ImVec2> data) {
+    float sum = 0.f;
+    for (auto v : data) sum += v.y;
+    return sum / data.size();
+  };
+
+  auto std_dev = [](std::span<ImVec2> data, float mean) {
+    float variance_sum = 0.f;
+    for (auto v : data) {
+      float diff = v.y - mean;
+      float variance = diff * diff;
+      variance_sum += variance;
+    }
+    return sqrt(variance_sum / data.size());
+  };
+
+  float total = 0.f;
+  int n = std::min(10, frame_times.data.size());
+  for (int i = 0; i < n; i++) {
+    total +=
+        frame_times
+            .data[(frame_times.offset + frame_times.data.size() - 1 - i) % frame_times.data.size()]
+            .y;
+  }
+  auto frame_time_ms = total / n;
+
   ImGui::Begin("Renderer");
   {  // frame times
-    constexpr int num_times = 2000;
-    static ScrollingBuffer frame_times{num_times};
-    static float t = 0;
-    frame_times.AddPoint(t, dt * 1000.f);
-    t += dt;
-    float history = 10;
-    static ImPlotAxisFlags flags = 0;
-    auto get_mean = [](std::span<ImVec2> data) {
-      float sum = 0.f;
-      for (auto v : data) sum += v.y;
-      return sum / data.size();
-    };
-
-    auto std_dev = [](std::span<ImVec2> data, float mean) {
-      float variance_sum = 0.f;
-      for (auto v : data) {
-        float diff = v.y - mean;
-        float variance = diff * diff;
-        variance_sum += variance;
-      }
-      return sqrt(variance_sum / data.size());
-    };
-
-    float total = 0.f;
-    int n = std::min(10, frame_times.data.size());
-    for (int i = 0; i < n; i++) {
-      total += frame_times
-                   .data[(frame_times.offset + frame_times.data.size() - 1 - i) %
-                         frame_times.data.size()]
-                   .y;
-    }
-    ImGui::Text("Last %u Avg time %f (ms)", n, total / n);
+    ImGui::Text("Avg CPU time %f (ms), %.2f FPS", frame_time_ms, 1000.f / frame_time_ms);
     if (ImGui::TreeNode("Frame Times")) {
       auto mean = get_mean(frame_times.data);
       auto stddev = std_dev(frame_times.data, mean);
@@ -384,7 +391,7 @@ void App::on_imgui(float dt) {
   }
   if (ImGui::TreeNode("Scene")) {
     ImGui::Text("Loaded Models: %zu", ResourceManager::get().get_tot_models_loaded());
-    ImGui::Text("Total Instances: %zu", ResourceManager::get().get_tot_instances_loaded());
+    ImGui::Text("Total Model Instances: %zu", ResourceManager::get().get_tot_instances_loaded());
     ImGui::TreePop();
   }
   if (ImGui::TreeNode("Load Scene")) {
@@ -399,17 +406,29 @@ void App::on_imgui(float dt) {
   }
   ImGui::ColorEdit4("Clear Color", &config_.clear_color.r, ImGuiColorEditFlags_Float);
   ImGui::End();
+
+  ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.f, 0.f, 0.f, 0.8f});
+  ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
+  if (ImGui::Begin("Meshlet Stats", nullptr,
+                   ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar |
+                       ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
+    ImGui::PushFont(ImGui::GetFont(), 36);
+    // push_font("RobotoMono-Regular", 36.0f);
+    ImGui::Text("CPU: %5.2f ms/frame (%5.2f FPS)", frame_time_ms, 1000.f / frame_time_ms);
+    ImGui::Text("GPU: %5.2f ms/frame (%5.2f FPS)", renderer_->get_stats().avg_gpu_frame_time,
+                1000.f / renderer_->get_stats().avg_gpu_frame_time);
+    renderer_->meshlet_stats_imgui(ResourceManager::get().get_tot_instances_loaded());
+
+    ImGui::PopFont();
+  }
+  ImGui::End();
+  ImGui::PopStyleColor();
   ImGui::ShowDemoWindow();
+  ImGui::PopFont();
 }
 
 void App::load_model(const std::string& path, const glm::mat4& transform) {
-  std::string full_path;
-  if (path.starts_with("Models")) {
-    full_path = resource_dir_ / "models" / "gltf" / path;
-  } else {
-    full_path = path;
-  }
-  models_.emplace_back(ResourceManager::get().load_model(full_path, transform));
+  models_.emplace_back(ResourceManager::get().load_model(resolve_model_path(path), transform));
 }
 
 void App::init_camera() {
@@ -460,25 +479,31 @@ void App::shutdown() {
 void App::load_grid(glm::ivec3 radius, float dist, const std::string& path, float scale) {
   glm::ivec3 iter{};
   glm::ivec3 dims{radius};
+  std::vector<glm::mat4> transforms;
+  transforms.reserve((2ull * dims.x + 1) * (2 * dims.y + 1) * (2 * dims.z + 1));
   for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
     for (iter.y = -dims.y; iter.y <= dims.y; iter.y++) {
       for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
         glm::vec3 pos = glm::vec3{iter} * dist;
-        load_model(path, glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
+        transforms.emplace_back(glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
       }
     }
   }
+  load_instances(path, std::move(transforms));
 };
 
 void App::load_grid(int radius, float dist, const std::string& path, float scale) {
   glm::ivec3 iter{};
   glm::ivec3 dims{radius, 1, radius};
+  std::vector<glm::mat4> transforms;
+  transforms.reserve((2ull * dims.x + 1) * (2 * dims.z + 1));
   for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
     for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
       glm::vec3 pos = glm::vec3{iter} * dist;
-      load_model(path, glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
+      transforms.emplace_back(glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
     }
   }
+  load_instances(path, std::move(transforms));
 };
 
 void App::clear_all_models() {
@@ -489,10 +514,6 @@ void App::clear_all_models() {
 }
 
 void App::load_scene_presets() {
-  constexpr const char* sponza_path = "Models/Sponza/glTF_ktx2/Sponza.gltf";
-  constexpr const char* chessboard_path = "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf";
-  constexpr const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
-  constexpr const char* cube_path = "Models/Cube/glTF/Cube.gltf";
   scene_presets_.clear();
   scene_presets_.reserve(10);
   scene_presets_.emplace_back([&, this]() { load_model(sponza_path); }, "sponza",
@@ -516,14 +537,26 @@ void App::load_scene_presets() {
                               Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});
   scene_presets_.emplace_back([this]() { load_model("/Users/tony/models/Bistro_Godot_opt.glb"); },
                               "bistro");
-  scene_presets_.emplace_back([this]() { load_grid(glm::ivec3{18, 0, 18}, 40.0, sponza_path); },
-                              "many many sponzas");
+  scene_presets_.emplace_back(
+      [this]() {
+        int n = 22;
+        load_grid(glm::ivec3{n, 0, n}, 40.0, sponza_path);
+      },
+      "many many sponzas",
+      Camera{.pos = {900, 300, -900}, .pitch = -28, .yaw = 134, .move_speed = 15.f});
 }
 void App::run_preset_scene(int idx) {
   auto& preset = scene_presets_[idx];
-  clear_all_models();
+  auto old_models = std::move(models_);
+  models_ = {};
   camera_ = preset.cam;
+
   preset.load_fn();
+
+  for (auto& m : old_models) {
+    LINFO("freeing");
+    ResourceManager::get().free_model(m);
+  }
 }
 
 void App::load_random_of_model(size_t count, float scale, float radius, const std::string& path) {
@@ -535,5 +568,23 @@ void App::load_random_of_model(size_t count, float scale, float radius, const st
     auto rot = glm::angleAxis(randomAngle, glm::normalize(randomAxis));
     load_model(path, glm::translate(glm::mat4{1}, pos) * glm::mat4_cast(rot) *
                          glm::scale(glm::mat4{1}, glm::vec3{scale}));
+  }
+}
+
+std::filesystem::path App::resolve_model_path(const std::string& path) {
+  if (path.starts_with("Models")) {
+    return resource_dir_ / "models" / "gltf" / path;
+  }
+  return path;
+}
+
+void App::load_instances(const std::string& path, std::vector<glm::mat4>&& transforms) {
+  ResourceManager::InstancedModelLoadRequest req{.path = resolve_model_path(path),
+                                                 .instance_transforms = std::move(transforms)};
+  auto result = ResourceManager::get().load_instanced_models(std::span(&req, 1));
+  for (auto& r : result) {
+    models_.reserve(models_.size() + r.size());
+    models_.insert(models_.end(), std::make_move_iterator(r.begin()),
+                   std::make_move_iterator(r.end()));
   }
 }

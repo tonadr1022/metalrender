@@ -1,22 +1,33 @@
 #include "UI.hpp"
 
-#include <map>
+#include <unordered_map>
 
 #include "core/Config.hpp"
+#include "core/EAssert.hpp"
 #include "imgui.h"
 
 namespace TENG_NAMESPACE {
 
 namespace {
-std::multimap<float, ImFont*> font_size_map;
-
+std::unordered_map<std::string, ImFont*> fonts;
 }
 
-void push_big_font() {
-  ImFont* biggest_font = font_size_map.rbegin()->second;
-  ImGui::PushFont(biggest_font);
+void add_font(const std::string& name, ImFont* font) { fonts.emplace(name, font); }
+
+void push_font(const std::string& name, float size) {
+  auto it = fonts.find(name);
+  ASSERT(it != fonts.end());
+  if (it != fonts.end()) {
+    ImGui::PushFont(it->second, size);
+  }
 }
 
-void add_font(ImFont* font, float size) { font_size_map.emplace(size, font); }
+void push_font(const std::string& name) {
+  auto it = fonts.find(name);
+  ASSERT(it != fonts.end());
+  if (it != fonts.end()) {
+    ImGui::PushFont(it->second);
+  }
+}
 
 }  // namespace TENG_NAMESPACE

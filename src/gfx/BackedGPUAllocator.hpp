@@ -26,6 +26,7 @@ class BackedGPUAllocator {
   BackedGPUAllocator& operator=(BackedGPUAllocator&& other) = delete;
 
   OffsetAllocator::Allocation allocate(uint32_t element_count, bool& resize_occured);
+  void reserve_buffer_space(uint32_t element_count, bool need_copy = true);
 
   [[nodiscard]] rhi::Buffer* get_buffer() const { return device_.get_buf(backing_buffer_); }
   [[nodiscard]] rhi::BufferHandle get_buffer_handle() const { return backing_buffer_.handle; }

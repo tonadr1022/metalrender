@@ -90,9 +90,12 @@ class InstanceMgr {
 
   [[nodiscard]] const Stats& stats() const { return stats_; }
 
+  void reserve_space(uint32_t instance_data_count, uint32_t meshlet_instance_count);
+
  private:
   OffsetAllocator::Allocation allocate_instance_data(uint32_t element_count);
-  void ensure_buffer_space(size_t element_count);
+  // returns true if resize occured
+  bool ensure_buffer_space(size_t element_count);
   OffsetAllocator::Allocator allocator_;
   rhi::BufferHandleHolder instance_data_buf_;
   rhi::BufferHandleHolder draw_cmd_buf_;
@@ -155,15 +158,33 @@ class MemeRenderer123 {
   void render(const RenderArgs& args);
   void draw_minimal_triangle();
   void on_imgui();
+  void meshlet_stats_imgui(size_t total_scene_models);
   bool on_key_event(int key, int action, int mods);
   bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
                   ModelInstance& model, ModelGPUHandle& out_handle);
+  void reserve_space_for(std::span<std::pair<ModelGPUHandle, uint32_t>> models);
   [[nodiscard]] ModelInstanceGPUHandle add_model_instance(const ModelInstance& model,
                                                           ModelGPUHandle model_gpu_handle);
   void free_instance(ModelInstanceGPUHandle handle);
   void free_model(ModelGPUHandle handle);
   bool mesh_shaders_enabled() const { return mesh_shaders_enabled_; }
   void set_imgui_enabled(bool enabled) { imgui_enabled_ = enabled; }
+
+  struct FinalDrawResults {
+    uint32_t drawn_meshlets;
+    uint32_t drawn_vertices;
+  };
+  // TODO: this is instance data mgr
+  struct Stats {
+    uint32_t total_instance_meshlets;
+    uint32_t total_instance_vertices;
+    uint32_t total_instances;
+    FinalDrawResults draw_results;
+    float gpu_frame_time_last_ms;
+    float avg_gpu_frame_time;
+  };
+
+  const Stats& get_stats() const { return stats_; }
 
  private:
   void init_imgui();
@@ -191,22 +212,7 @@ class MemeRenderer123 {
     return device_->get_info().frames_in_flight + curr_frame_idx_ - frames_ago;
   }
 
-  struct FinalDrawResults {
-    uint32_t drawn_meshlets;
-    uint32_t drawn_vertices;
-  };
-  // TODO: this is instance data mgr
-  struct Stats {
-    uint32_t total_instance_meshlets;
-    uint32_t total_instance_vertices;
-    uint32_t total_instances;
-    FinalDrawResults draw_results;
-    float gpu_frame_time_last_ms;
-    float avg_gpu_frame_time;
-  };
-
   Stats stats_{};
-
   std::unique_ptr<gfx::ShaderManager> shader_mgr_;
   rhi::Device* device_{};
   Window* window_{};
@@ -278,6 +284,8 @@ class MemeRenderer123 {
   struct MeshletDrawStats {
     uint32_t meshlets_drawn_early;
     uint32_t meshlets_drawn_late;
+    uint32_t triangles_drawn_early;
+    uint32_t triangles_drawn_late;
   };
   rhi::QueryPoolHandleHolder query_pools_[k_max_frames_in_flight];
   rhi::QueryPoolHandle get_query_pool() { return query_pools_[curr_frame_idx_].handle; }
