@@ -371,7 +371,7 @@ void MetalCmdEncoderBase<UseMTL4>::push_constants(void* data, size_t size) {
   if constexpr (UseMTL4) {
     // TODO: address potential misbindings as a result of ICB management
   }
-  ASSERT(size <= sizeof(root_layout_.constants) - 8);
+  ASSERT(size <= sizeof(root_layout_.constants));
   memcpy(root_layout_.constants, data, size);
   push_constant_dirty_ = true;
 }
@@ -381,8 +381,8 @@ void MetalCmdEncoderBase<UseMTL4>::draw_indexed_primitives(
     rhi::PrimitiveTopology topology, rhi::BufferHandle index_buf, size_t index_start, size_t count,
     size_t instance_count, size_t base_vertex_idx, size_t base_instance,
     rhi::IndexType index_type) {
-  root_layout_.constants[20] = base_instance;
-  root_layout_.constants[21] = base_vertex_idx;
+  root_layout_.first_instance = base_instance;
+  root_layout_.vertex_offset = base_vertex_idx;
   push_constant_dirty_ = true;
   binding_table_dirty_ = true;
   flush_binds();
@@ -485,7 +485,7 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
     rhi::BufferHandle indirect_buf, size_t offset, size_t tot_draw_cnt, rhi::BufferHandle index_buf,
     size_t index_buf_offset, void* push_constant_data, size_t push_constant_size,
     size_t vertex_stride) {
-  ASSERT(push_constant_size <= sizeof(RootLayout) - 8);
+  ASSERT(push_constant_size <= sizeof(RootLayout::constants));
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(sizeof(RootLayout));
   auto* root_layout_ptr = (RootLayout*)((uint8_t*)pc_buf->contents() + pc_buf_offset);
   memcpy(root_layout_ptr->constants, push_constant_data, push_constant_size);
@@ -553,26 +553,21 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
     uint32_t threads_per_tg_x = 64;
     uint32_t tg_x = (draw_cnt + threads_per_tg_x - 1) / threads_per_tg_x;
     if constexpr (UseMTL4) {
-      m4_state().compute_enc->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll,
-                                                      MTL4::VisibilityOptionDevice);
       m4_state().compute_enc->dispatchThreadgroups(MTL::Size::Make(tg_x, 1, 1),
                                                    MTL::Size::Make(threads_per_tg_x, 1, 1));
-      m4_state().compute_enc->barrierAfterStages(MTL::StageAll, MTL::StageAll,
-                                                 MTL4::VisibilityOptionDevice);
-      m4_state().compute_enc->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll,
-                                                      MTL4::VisibilityOptionDevice);
     } else {
       m3_state().compute_enc->dispatchThreadgroups(MTL::Size::Make(tg_x, 1, 1),
                                                    MTL::Size::Make(threads_per_tg_x, 1, 1));
-      m3_state().compute_enc->barrierAfterQueueStages(MTL::StageDispatch, MTL::StageAll);
     }
   }
+
   if constexpr (UseMTL4) {
-    m4_state().compute_enc->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll,
+    m4_state().compute_enc->barrierAfterQueueStages(MTL::StageDispatch, MTL::StageAll,
                                                     MTL4::VisibilityOptionDevice);
   } else {
     m3_state().compute_enc->barrierAfterQueueStages(MTL::StageDispatch, MTL::StageAll);
   }
+
   end_compute_encoder();
 
   return indirect_buf_id;

@@ -96,7 +96,7 @@ App::App() {
 
   load_scene_presets();
   random::seed(10000000);
-  run_preset_scene(0);
+  run_preset_scene(4);
 }
 
 App::~App() = default;

@@ -19,7 +19,9 @@ struct Args2 {
 };
 
 struct RootLayout {
-    packed_uint2 pad[11]; // 160 bytes
+    uint2 constants[10]; // 160 bytes
+    uint first_instance;
+    uint vertex_offset;
     device void* root_cbvs[3];
     device void* resource_table_ptr;
     device void* sampler_table_ptr;
@@ -41,14 +43,14 @@ kernel void comp_main(const device uint8_t* resource_desc_heap [[buffer(0)]],
     if (gid >= draw_cnt) {
             return;
     }
-    device packed_uint2* out_ptr = reinterpret_cast<device packed_uint2*>(out_args + gid * sizeof(RootLayout));
+    device uint2* out_ptr = reinterpret_cast<device uint2*>(out_args + gid * sizeof(RootLayout));
     for (uint i = 0; i < 10; i++) {
         out_ptr[i] = pc[i];
     }
     const device IndexedIndirectDrawCmd& cmd = in_cmds[gid];
     device RootLayout* root_layout = reinterpret_cast<device RootLayout*>(out_ptr);
-    root_layout->pad[10].x = cmd.first_instance;
-    root_layout->pad[10].y = cmd.vertex_offset / args2.stride;
+    root_layout->first_instance = cmd.first_instance;
+    root_layout->vertex_offset = cmd.vertex_offset / args2.stride;
 
     render_command ren_cmd(args.cmd_buf, gid);
     ren_cmd.reset();
