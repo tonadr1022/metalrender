@@ -300,6 +300,7 @@ enum class PipelineStage : uint64_t {
   TopOfPipe = 0x1ull,
   DrawIndirect = 0x2ull,
   VertexInput = 0x4ull,
+  IndexInput = 0x1000000000ULL,
   VertexShader = 0x8ull,
   TaskShader = 0x00080000ULL,
   MeshShader = 0x00100000ULL,

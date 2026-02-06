@@ -67,11 +67,8 @@ void BackedGPUAllocator::reserve_buffer_space(uint32_t element_count, bool need_
   new_buffer_desc.size = std::bit_ceil(required_size);
   auto new_buf_handle = device_.create_buf_h(new_buffer_desc);
   if (backing_buffer_.is_valid() && need_copy) {
-    buffer_copy_mgr_.add_copy({
-        .src_buf = backing_buffer_.handle,
-        .dst_buf = new_buf_handle.handle,
-        .size = buf->size(),
-    });
+    buffer_copy_mgr_.add_copy(backing_buffer_.handle, 0, new_buf_handle.handle, 0, buf->size(),
+                              rhi::PipelineStage::AllCommands, rhi::AccessFlags::AnyRead);
   }
   backing_buffer_ = std::move(new_buf_handle);
 }

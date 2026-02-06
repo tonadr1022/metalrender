@@ -215,71 +215,61 @@ MTL::TextureUsage convert(rhi::TextureUsage usage) {
 }
 
 MTL::Stages convert_stage(rhi::PipelineStage stage) {
+  using enum rhi::PipelineStage;
   MTL::Stages result{};
-  if (has_flag(stage, rhi::PipelineStage::AllCommands)) {
+  if (has_flag(stage, AllCommands)) {
     result |= MTL::StageAll;
   }
-  if (has_flag(stage, rhi::PipelineStage::FragmentShader) ||
-      has_flag(stage, rhi::PipelineStage::EarlyFragmentTests) ||
-      has_flag(stage, rhi::PipelineStage::LateFragmentTests) ||
-      has_flag(stage, rhi::PipelineStage::ColorAttachmentOutput) ||
-      has_flag(stage, rhi::PipelineStage::AllGraphics)) {
+  if (has_flag(stage, FragmentShader) || has_flag(stage, EarlyFragmentTests) ||
+      has_flag(stage, LateFragmentTests) || has_flag(stage, ColorAttachmentOutput) ||
+      has_flag(stage, AllGraphics)) {
     result |= MTL::StageFragment;
   }
-  if (has_flag(stage, rhi::PipelineStage::MeshShader) ||
-      has_flag(stage, rhi::PipelineStage::AllGraphics)) {
+  if (has_flag(stage, MeshShader) || has_flag(stage, AllGraphics)) {
     result |= MTL::StageMesh;
   }
-  if (has_flag(stage, rhi::PipelineStage::TaskShader) ||
-      has_flag(stage, rhi::PipelineStage::AllGraphics)) {
+  if (has_flag(stage, TaskShader) || has_flag(stage, AllGraphics)) {
     result |= MTL::StageObject;
   }
-  if (has_flag(stage, rhi::PipelineStage::VertexShader) ||
-      has_flag(stage, rhi::PipelineStage::VertexInput) ||
-      has_flag(stage, rhi::PipelineStage::AllGraphics) ||
-      has_flag(stage, rhi::PipelineStage::DrawIndirect)) {
+  if (has_flag(stage, VertexShader) || has_flag(stage, VertexInput) ||
+      has_flag(stage, IndexInput) || has_flag(stage, AllGraphics) ||
+      has_flag(stage, DrawIndirect)) {
     result |= MTL::StageVertex;
   }
-  if (has_flag(stage, rhi::PipelineStage::ComputeShader)) {
+  if (has_flag(stage, ComputeShader)) {
     result |= MTL::StageDispatch;
   }
-  if (has_flag(stage, rhi::PipelineStage::AllTransfer)) {
+  if (has_flag(stage, AllTransfer)) {
     result |= MTL::StageBlit;
   }
   return result;
 }
 
 MTL::Stages convert_stages(rhi::ResourceState state) {
+  using enum rhi::ResourceState;
   MTL::Stages result{};
-  if (has_flag(state, rhi::ResourceState::ColorRead) ||
-      has_flag(state, rhi::ResourceState::ColorWrite)) {
+  if (has_flag(state, ColorRead) || has_flag(state, ColorWrite)) {
     result |= MTL::StageFragment;
   }
-  if (has_flag(state, rhi::ResourceState::DepthStencilRead) ||
-      has_flag(state, rhi::ResourceState::DepthStencilWrite)) {
+  if (has_flag(state, DepthStencilRead) || has_flag(state, DepthStencilWrite)) {
     result |= MTL::StageFragment;
   }
-  if (has_flag(state, rhi::ResourceState::ComputeRead) ||
-      has_flag(state, rhi::ResourceState::ComputeWrite)) {
+  if (has_flag(state, ComputeRead) || has_flag(state, ComputeWrite)) {
     result |= MTL::StageDispatch;
   }
-  if (has_flag(state, rhi::ResourceState::VertexRead) ||
-      has_flag(state, rhi::ResourceState::IndexRead) ||
-      has_flag(state, rhi::ResourceState::IndirectRead)) {
+  if (has_flag(state, VertexRead) || has_flag(state, IndexRead) || has_flag(state, IndirectRead)) {
     result |= MTL::StageVertex;
   }
-  if (has_flag(state, rhi::ResourceState::TransferRead) ||
-      has_flag(state, rhi::ResourceState::TransferWrite)) {
+  if (has_flag(state, TransferRead) || has_flag(state, TransferWrite)) {
     result |= MTL::StageBlit;
   }
-  if (has_flag(state, rhi::ResourceState::FragmentStorageRead) ||
-      has_flag(state, rhi::ResourceState::FragmentSample)) {
+  if (has_flag(state, FragmentStorageRead) || has_flag(state, FragmentSample)) {
     result |= MTL::StageFragment;
   }
-  if (has_flag(state, rhi::ResourceState::ComputeSample)) {
+  if (has_flag(state, ComputeSample)) {
     result |= MTL::StageDispatch;
   }
-  if (has_flag(state, rhi::ResourceState::ShaderRead)) {
+  if (has_flag(state, ShaderRead)) {
     result |= MTL::StageAll;
   }
 

@@ -1,7 +1,6 @@
 #include "BufferResize.hpp"
 
 #include "core/Config.hpp"
-#include "core/Logger.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -11,7 +10,8 @@ namespace TENG_NAMESPACE {
 namespace gfx {
 
 void BufferCopyMgr::copy_to_buffer(const void* src_data, size_t src_size,
-                                   rhi::BufferHandle dst_buffer, size_t dst_offset) {
+                                   rhi::BufferHandle dst_buffer, size_t dst_offset,
+                                   rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) {
   // if dst buffer is cpu visible, direct copy, otherwise copy to staging buffer
   // and enqueue staging -> dst buffer copy.
   auto* buf = device_->get_buf(dst_buffer);
@@ -22,25 +22,30 @@ void BufferCopyMgr::copy_to_buffer(const void* src_data, size_t src_size,
     auto upload_buf = staging_buffer_allocator_.alloc(src_size);
     memcpy((uint8_t*)upload_buf.write_ptr, src_data, src_size);
     ASSERT(dst_offset + src_size <= buf->desc().size);
-    add_copy({
-        .src_buf = upload_buf.buf,
-        .dst_buf = dst_buffer,
-        .size = src_size,
-        .src_offset = upload_buf.offset,
-        .dst_offset = dst_offset,
-    });
+    add_copy(upload_buf.buf, upload_buf.offset, dst_buffer, dst_offset, src_size, dst_stage,
+             dst_access);
   }
 }
 
-void BufferCopyMgr::add_copy(const BufferCopy& copy) {
+void BufferCopyMgr::add_copy(rhi::BufferHandle src_buf, size_t src_offset,
+                             rhi::BufferHandle dst_buf, size_t dst_offset, size_t size,
+                             rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) {
   // if both are CPU mapped, direct memcpy
-  auto* src_buf = device_->get_buf(copy.src_buf);
-  auto* dst_buf = device_->get_buf(copy.dst_buf);
-  if (src_buf->is_cpu_visible() && dst_buf->is_cpu_visible()) {
-    memcpy((uint8_t*)dst_buf->contents() + copy.dst_offset,
-           (uint8_t*)src_buf->contents() + copy.src_offset, copy.size);
+  auto* src_b = device_->get_buf(src_buf);
+  auto* dst_b = device_->get_buf(dst_buf);
+  if (src_b->is_cpu_visible() && dst_b->is_cpu_visible()) {
+    memcpy((uint8_t*)dst_b->contents() + dst_offset, (uint8_t*)src_b->contents() + src_offset,
+           size);
   } else {
-    copies_.push_back(copy);
+    copies_.push_back(BufferCopy{
+        .src_buf = src_buf,
+        .dst_buf = dst_buf,
+        .size = size,
+        .src_offset = src_offset,
+        .dst_offset = dst_offset,
+        .dst_stage = dst_stage,
+        .dst_access = dst_access,
+    });
   }
 }
 

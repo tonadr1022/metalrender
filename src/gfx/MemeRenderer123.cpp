@@ -45,9 +45,9 @@
 
 namespace TENG_NAMESPACE {
 
-namespace {
+using namespace rhi;
 
-using rhi::ShaderType;
+namespace {
 
 glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
   // clang-format off
@@ -111,13 +111,16 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   if (!buffer_copy_mgr_.get_copies().empty()) {
     auto* enc = device_->begin_cmd_encoder();
     for (const auto& copy : buffer_copy_mgr_.get_copies()) {
-      // TODO: this is horrendous.
-      enc->barrier(rhi::PipelineStage::AllCommands, rhi::AccessFlags::None,
-                   rhi::PipelineStage::AllCommands, rhi::AccessFlags::None);
+      enc->barrier(copy.src_buf, PipelineStage::AllCommands,
+                   AccessFlags::AnyRead | AccessFlags::AnyWrite, PipelineStage::AllTransfer,
+                   AccessFlags::TransferRead);
+      enc->barrier(copy.dst_buf, PipelineStage::AllCommands,
+                   AccessFlags::AnyRead | AccessFlags::AnyWrite, PipelineStage::AllTransfer,
+                   AccessFlags::TransferWrite);
       enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
                                  copy.size);
-      enc->barrier(rhi::PipelineStage::AllCommands, rhi::AccessFlags::None,
-                   rhi::PipelineStage::AllCommands, rhi::AccessFlags::None);
+      enc->barrier(copy.dst_buf, PipelineStage::AllTransfer, AccessFlags::TransferWrite,
+                   copy.dst_stage, copy.dst_access);
     }
     enc->end_encoding();
     buffer_copy_mgr_.clear_copies();
@@ -588,9 +591,10 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
       mats.push_back(M4Material{.albedo_tex_idx = img_upload_bindless_indices[m.albedo_tex],
                                 .color = glm::vec4{m.albedo_factors}});
     }
-    buffer_copy_mgr_.copy_to_buffer(mats.data(), mats.size() * sizeof(M4Material),
-                                    materials_buf_.get_buffer_handle(),
-                                    material_alloc.offset * sizeof(M4Material));
+    buffer_copy_mgr_.copy_to_buffer(
+        mats.data(), mats.size() * sizeof(M4Material), materials_buf_.get_buffer_handle(),
+        material_alloc.offset * sizeof(M4Material), rhi::PipelineStage::FragmentShader,
+        rhi::AccessFlags::ShaderRead);
     if (resized) {
       ASSERT(0);
     }
@@ -662,14 +666,17 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
   const auto vertex_alloc = draw_batch.vertex_buf.allocate(vertices.size(), resized);
   buffer_copy_mgr_.copy_to_buffer(vertices.data(), vertices.size() * sizeof(DefaultVertex),
                                   draw_batch.vertex_buf.get_buffer_handle(),
-                                  vertex_alloc.offset * sizeof(DefaultVertex));
+                                  vertex_alloc.offset * sizeof(DefaultVertex),
+                                  rhi::PipelineStage::VertexShader | rhi::PipelineStage::MeshShader,
+                                  rhi::AccessFlags::ShaderRead);
 
   OffsetAllocator::Allocation index_alloc{};
   if (!indices.empty()) {
     index_alloc = draw_batch.index_buf.allocate(indices.size(), resized);
     buffer_copy_mgr_.copy_to_buffer(indices.data(), indices.size() * sizeof(rhi::DefaultIndexT),
                                     draw_batch.index_buf.get_buffer_handle(),
-                                    index_alloc.offset * sizeof(rhi::DefaultIndexT));
+                                    index_alloc.offset * sizeof(rhi::DefaultIndexT),
+                                    rhi::PipelineStage::VertexInput, rhi::AccessFlags::IndexRead);
   }
 
   const auto meshlet_alloc = draw_batch.meshlet_buf.allocate(meshlets.tot_meshlet_count, resized);
@@ -690,14 +697,18 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
     buffer_copy_mgr_.copy_to_buffer(meshlet_data.meshlets.data(),
                                     meshlet_data.meshlets.size() * sizeof(Meshlet),
                                     draw_batch.meshlet_buf.get_buffer_handle(),
-                                    (meshlet_alloc.offset + meshlet_offset) * sizeof(Meshlet));
+                                    (meshlet_alloc.offset + meshlet_offset) * sizeof(Meshlet),
+                                    rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader,
+                                    rhi::AccessFlags::ShaderRead);
     meshlet_offset += meshlet_data.meshlets.size();
 
     buffer_copy_mgr_.copy_to_buffer(
         meshlet_data.meshlet_vertices.data(),
         meshlet_data.meshlet_vertices.size() * sizeof(uint32_t),
         draw_batch.meshlet_vertices_buf.get_buffer_handle(),
-        (meshlet_vertices_alloc.offset + meshlet_vertices_offset) * sizeof(uint32_t));
+        (meshlet_vertices_alloc.offset + meshlet_vertices_offset) * sizeof(uint32_t),
+        rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader,
+        rhi::AccessFlags::ShaderRead);
 
     meshlet_vertices_offset += meshlet_data.meshlet_vertices.size();
 
@@ -705,7 +716,9 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
         meshlet_data.meshlet_triangles.data(),
         meshlet_data.meshlet_triangles.size() * sizeof(uint8_t),
         draw_batch.meshlet_triangles_buf.get_buffer_handle(),
-        (meshlet_triangles_alloc.offset + meshlet_triangles_offset) * sizeof(uint8_t));
+        (meshlet_triangles_alloc.offset + meshlet_triangles_offset) * sizeof(uint8_t),
+        rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader,
+        rhi::AccessFlags::ShaderRead);
 
     meshlet_triangles_offset += meshlet_data.meshlet_triangles.size();
 
@@ -721,7 +734,11 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
         .radius = meshes[mesh_i].radius,
     };
     buffer_copy_mgr_.copy_to_buffer(&d, sizeof(d), draw_batch.mesh_buf.get_buffer_handle(),
-                                    (mesh_i + mesh_alloc.offset) * sizeof(MeshData));
+                                    (mesh_i + mesh_alloc.offset) * sizeof(MeshData),
+                                    rhi::PipelineStage::ComputeShader |
+                                        rhi::PipelineStage::MeshShader |
+                                        rhi::PipelineStage::TaskShader,
+                                    rhi::AccessFlags::ShaderRead);
     mesh_i++;
   }
 
@@ -799,12 +816,15 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   buffer_copy_mgr_.copy_to_buffer(
       instance_datas.data(), instance_datas.size() * sizeof(InstanceData),
       static_instance_mgr_.get_instance_data_buf(),
-      instance_data_gpu_alloc.instance_data_alloc.offset * sizeof(InstanceData));
+      instance_data_gpu_alloc.instance_data_alloc.offset * sizeof(InstanceData),
+      rhi::PipelineStage::AllCommands, rhi::AccessFlags::ShaderRead);
   if (!mesh_shaders_enabled_) {
     buffer_copy_mgr_.copy_to_buffer(
         cmds.data(), cmds.size() * sizeof(IndexedIndirectDrawCmd),
         static_instance_mgr_.get_draw_cmd_buf(),
-        instance_data_gpu_alloc.instance_data_alloc.offset * sizeof(IndexedIndirectDrawCmd));
+        instance_data_gpu_alloc.instance_data_alloc.offset * sizeof(IndexedIndirectDrawCmd),
+        rhi::PipelineStage::ComputeShader | rhi::PipelineStage::DrawIndirect,
+        rhi::AccessFlags::IndirectCommandRead);
   }
   ASSERT(model_gpu_handle.is_valid());
   return model_instance_gpu_resource_pool_.alloc(ModelInstanceGPUResources{
@@ -890,13 +910,10 @@ bool InstanceMgr::ensure_buffer_space(size_t element_count) {
     });
 
     if (instance_data_buf_.is_valid()) {
-      buffer_copy_mgr_.add_copy(BufferCopy{
-          .src_buf = instance_data_buf_.handle,
-          .dst_buf = new_buf.handle,
-          .size = device_.get_buf(instance_data_buf_)->size(),
-          .src_offset = 0,
-          .dst_offset = 0,
-      });
+      buffer_copy_mgr_.add_copy(instance_data_buf_.handle, 0, new_buf.handle, 0,
+                                device_.get_buf(instance_data_buf_)->size(),
+                                rhi::PipelineStage::ComputeShader | rhi::PipelineStage::AllGraphics,
+                                rhi::AccessFlags::ShaderRead);
       resized = true;
     }
     instance_data_buf_ = std::move(new_buf);
@@ -912,8 +929,10 @@ bool InstanceMgr::ensure_buffer_space(size_t element_count) {
           .name = "draw_indexed_indirect_cmd_buf",
       });
       if (draw_cmd_buf_.is_valid()) {
-        buffer_copy_mgr_.copy_to_buffer(device_.get_buf(draw_cmd_buf_)->contents(),
-                                        device_.get_buf(draw_cmd_buf_)->size(), new_buf.handle, 0);
+        buffer_copy_mgr_.copy_to_buffer(
+            device_.get_buf(draw_cmd_buf_)->contents(), device_.get_buf(draw_cmd_buf_)->size(),
+            new_buf.handle, 0, rhi::PipelineStage::ComputeShader | rhi::PipelineStage::DrawIndirect,
+            rhi::AccessFlags::IndirectCommandRead);
       }
       draw_cmd_buf_ = std::move(new_buf);
     }

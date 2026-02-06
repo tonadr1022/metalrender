@@ -791,8 +791,7 @@ void MetalCmdEncoderBase<UseMTL4>::copy_buffer_to_buffer(rhi::BufferHandle src_b
   start_blit_equivalent_encoder();
   auto* src_b = (MetalBuffer*)device_->get_buf(src_buf);
   auto* dst_b = (MetalBuffer*)device_->get_buf(dst_buf);
-  if (src_b->desc().storage_mode != rhi::StorageMode::GPUOnly &&
-      dst_b->desc().storage_mode != rhi::StorageMode::GPUOnly) {
+  if (src_b->is_cpu_visible() && dst_b->is_cpu_visible()) {
     // both buffers are CPU accessible, do a memcpy
     memcpy((uint8_t*)dst_b->buffer()->contents() + dst_offset,
            (uint8_t*)src_b->buffer()->contents() + src_offset, size);

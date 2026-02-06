@@ -42,7 +42,8 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   tri_verts.emplace_back(glm::vec4{.5f, -0.5f, 0.0f, 1.f}, glm::vec2{1.f, 0.f});
   tri_verts.emplace_back(glm::vec4{0.0f, .5f, 0.0f, 1.f}, glm::vec2{0.5f, 1.f});
   buffer_copy_mgr_.copy_to_buffer(tri_verts.data(), tri_verts.size() * sizeof(DefaultVertex),
-                                  test_vert_buf_.handle, 0);
+                                  test_vert_buf_.handle, 0, PipelineStage::VertexShader,
+                                  AccessFlags::ShaderRead);
 }
 
 void TestRenderer::render() {

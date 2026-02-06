@@ -44,6 +44,9 @@ VkPipelineStageFlags2 convert(rhi::PipelineStage stage) {
   if (has_flag(stage, rhi::PipelineStage::VertexInput)) {
     flags |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
   }
+  if (has_flag(stage, rhi::PipelineStage::IndexInput)) {
+    flags |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
+  }
   if (has_flag(stage, rhi::PipelineStage::VertexShader)) {
     flags |= VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT;
   }
