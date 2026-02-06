@@ -110,8 +110,9 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
     for (const auto& att : attachments) {
       if (att.type == rhi::RenderingAttachmentInfo::Type::DepthStencil) {
         depth_desc = NS::TransferPtr(MTL::RenderPassDepthAttachmentDescriptor::alloc()->init());
-        depth_desc->setTexture(
-            reinterpret_cast<MetalTexture*>(device_->get_tex(att.image))->texture());
+        auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
+        curr_render_target_info_.depth_format = tex->desc().format;
+        depth_desc->setTexture(tex->texture());
         depth_desc->setLoadAction(mtl::util::convert(att.load_op));
         depth_desc->setStoreAction(mtl::util::convert(att.store_op));
         depth_desc->setClearDepth(att.clear_value.depth_stencil.depth);
@@ -119,6 +120,7 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
       } else {
         auto* color_desc = m3_desc->colorAttachments()->object(color_att_i);
         auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
+        curr_render_target_info_.color_formats.push_back(tex->desc().format);
         color_desc->setTexture(tex->texture());
         color_desc->setLoadAction(mtl::util::convert(att.load_op));
         color_desc->setStoreAction(mtl::util::convert(att.store_op));
@@ -293,6 +295,7 @@ void MetalCmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
         auto new_pipeline = device_->create_graphics_pipeline(new_desc);
         device_->all_pipelines[hash] = new_pipeline;
         pipeline = reinterpret_cast<MetalPipeline*>(device_->get_pipeline(new_pipeline));
+        LINFO("Made new pipeline");
       } else {
         pipeline = reinterpret_cast<MetalPipeline*>(device_->get_pipeline(it->second));
       }
@@ -301,6 +304,7 @@ void MetalCmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
       ASSERT(m4_state().render_enc);
       m4_state().render_enc->setRenderPipelineState(pipeline->render_pso);
     } else {
+      ASSERT(m3_state().render_enc);
       m3_state().render_enc->setRenderPipelineState(pipeline->render_pso);
     }
   } else if (pipeline->compute_pso) {
@@ -484,8 +488,9 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
     size_t index_buf_offset, void* push_constant_data, size_t push_constant_size,
     size_t vertex_stride) {
   ASSERT(push_constant_size <= sizeof(RootLayout) - 8);
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(sizeof(RootLayout));
-  auto* root_layout_ptr = (RootLayout*)((uint8_t*)pc_buf->contents() + pc_buf_offset);
+  auto [pc_buf, pc_buf_offset, pc_buf_ptr] =
+      device_->push_constant_allocator_->alloc(sizeof(RootLayout));
+  auto* root_layout_ptr = (RootLayout*)(pc_buf_ptr);
   memcpy(root_layout_ptr->constants, push_constant_data, push_constant_size);
 
   start_compute_encoder();
@@ -504,7 +509,11 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
 
   auto [indirect_buf_id, icbs] = device_->icb_mgr_draw_indexed_.alloc(indirect_buf, tot_draw_cnt);
 
-  m4_state().compute_enc->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
+  if constexpr (UseMTL4) {
+    m4_state().compute_enc->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
+  } else {
+    m3_state().compute_enc->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
+  }
 
   for (int i = 0, rem_draw_count = tot_draw_cnt; i < (int)icbs.size();
        i++, rem_draw_count -= k_max_draws_per_icb) {
@@ -514,26 +523,27 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
 
     cmd_icb_mgr_.init_icb_arg_encoder_and_buf_and_set_icb(icbs, i);
 
-    set_buffer(0, pc_buf, pc_buf_offset, EncoderSetBufferStage::Compute);
+    set_buffer(0, device_->get_mtl_buf(pc_buf), pc_buf_offset, EncoderSetBufferStage::Compute);
 
     struct Args2 {
       uint32_t draw_cnt;
       uint32_t stride;
     };
 
-    auto [args2_buf, args2_offset] = device_->test_allocator_->alloc(sizeof(Args2));
-    auto* args2 = (Args2*)((uint8_t*)args2_buf->contents() + args2_offset);
+    auto [args2_buf, args2_offset, args2_ptr] = device_->test_allocator_->alloc(sizeof(Args2));
+    auto* args2 = (Args2*)(args2_ptr);
     args2->draw_cnt = draw_cnt;
     args2->stride = vertex_stride;
 
-    set_buffer(1, args2_buf, args2_offset, EncoderSetBufferStage::Compute);
+    set_buffer(1, device_->get_mtl_buf(args2_buf), args2_offset, EncoderSetBufferStage::Compute);
 
     set_buffer(2, cmd_icb_mgr_.get_icb(i), 0, EncoderSetBufferStage::Compute);
 
-    auto [out_pc_arg_buf, out_pc_arg_buf_offset] =
+    auto [out_pc_arg_buf, out_pc_arg_buf_offset, out_pc_arg_buf_ptr] =
         device_->test_allocator_->alloc(draw_cnt * sizeof(RootLayout));
 
-    set_buffer(3, out_pc_arg_buf, out_pc_arg_buf_offset, EncoderSetBufferStage::Compute);
+    set_buffer(3, device_->get_mtl_buf(out_pc_arg_buf), out_pc_arg_buf_offset,
+               EncoderSetBufferStage::Compute);
 
     auto* indirect_buffer = device_->get_mtl_buf(indirect_buf);
     ASSERT(indirect_buffer);
@@ -553,8 +563,12 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
     }
   }
 
-  m4_state().compute_enc->barrierAfterQueueStages(MTL::StageDispatch, MTL::StageAll,
-                                                  MTL4::VisibilityOptionDevice);
+  if constexpr (UseMTL4) {
+    m4_state().compute_enc->barrierAfterQueueStages(MTL::StageDispatch, MTL::StageAll,
+                                                    MTL4::VisibilityOptionDevice);
+  } else {
+    m3_state().compute_enc->barrierAfterQueueStages(MTL::StageDispatch, MTL::StageAll);
+  }
 
   return indirect_buf_id;
 }
@@ -879,44 +893,48 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
     }
 
     binding_table_dirty_ = false;
-    auto [binding_table, binding_table_offset] =
+    auto [binding_table, binding_table_offset, binding_table_ptr] =
         device_->push_constant_allocator_->alloc(sizeof(ResourceTable));
-    memcpy((uint8_t*)binding_table->contents() + binding_table_offset, &table,
-           sizeof(ResourceTable));
-    root_layout_.resource_table_ptr = binding_table->gpuAddress() + binding_table_offset;
+    memcpy(binding_table_ptr, &table, sizeof(ResourceTable));
+    root_layout_.resource_table_ptr =
+        device_->get_mtl_buf(binding_table)->gpuAddress() + binding_table_offset;
 
     struct SamplerTable {
       IRDescriptorTableEntry static_samplers[10];
     };
-    auto [sampler_table, sampler_table_offset] =
+    auto [sampler_table, sampler_table_offset, sampler_table_ptr] =
         device_->push_constant_allocator_->alloc(sizeof(SamplerTable));
 
-    auto* dst_sampler_table =
-        (SamplerTable*)((uint8_t*)sampler_table->contents() + sampler_table_offset);
+    auto* dst_sampler_table = (SamplerTable*)(sampler_table_ptr);
     memcpy(dst_sampler_table->static_samplers, (void*)device_->static_sampler_entries_.data(),
            sizeof(SamplerTable::static_samplers));
-    root_layout_.sampler_table_ptr = sampler_table->gpuAddress() + sampler_table_offset;
+    root_layout_.sampler_table_ptr =
+        device_->get_mtl_buf(sampler_table)->gpuAddress() + sampler_table_offset;
   }
 
-  auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(sizeof(RootLayout));
-  auto* root_layout = reinterpret_cast<RootLayout*>((uint8_t*)pc_buf->contents() + pc_buf_offset);
+  auto [pc_buf, pc_buf_offset, pc_buf_ptr] =
+      device_->push_constant_allocator_->alloc(sizeof(RootLayout));
+  auto* root_layout = reinterpret_cast<RootLayout*>(pc_buf_ptr);
   memcpy(root_layout, &root_layout_, sizeof(RootLayout));
 
+  auto* pc_buf_mtl = device_->get_mtl_buf(pc_buf);
   if constexpr (UseMTL4) {
     if (m4_state().compute_enc) {
-      set_buffer(kIRArgumentBufferBindPoint, pc_buf, pc_buf_offset, EncoderSetBufferStage::Compute);
+      set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
+                 EncoderSetBufferStage::Compute);
     } else {
       ASSERT(m4_state().render_enc);
-      set_buffer(kIRArgumentBufferBindPoint, pc_buf, pc_buf_offset,
+      set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
                  EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment |
                      EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh);
     }
   } else {
     if (m3_state().compute_enc) {
-      set_buffer(kIRArgumentBufferBindPoint, pc_buf, pc_buf_offset, EncoderSetBufferStage::Compute);
+      set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
+                 EncoderSetBufferStage::Compute);
     } else {
       ASSERT(m3_state().render_enc);
-      set_buffer(kIRArgumentBufferBindPoint, pc_buf, pc_buf_offset,
+      set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
                  EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment |
                      EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh);
     }
@@ -985,8 +1003,6 @@ void MetalCmdEncoderBase<UseMTL4>::write_timestamp(rhi::QueryPoolHandle query_po
     } else {
       m4_state().cmd_buf->writeTimestampIntoHeap(pool->heap_.get(), query_index);
     }
-  } else {
-    LWARN("query pools not supported in Metal3");
   }
 }
 

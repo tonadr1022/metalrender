@@ -37,6 +37,7 @@ GPUFrameAllocator2::Alloc GPUFrameAllocator2::alloc(size_t size, void* data) {
 
 GPUFrameAllocator3::GPUFrameAllocator3(rhi::Device* device) : device_(device) {
   device_ = device;
+  ASSERT(device_);
   for (uint32_t i = 0; i < device_->get_info().frames_in_flight; i++) {
     frames_[i].free_staging_buffers.reserve(5);
     frames_[i].free_staging_buffers.emplace_back(create_staging_buffer(16u * 1024 * 1024));

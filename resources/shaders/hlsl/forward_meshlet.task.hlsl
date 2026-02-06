@@ -88,9 +88,12 @@ Texture2D depth_pyramid_tex : register(t3);
                            127.0;
         float cone_cutoff = float(int(meshlet.cone_axis_cutoff) >> 24) / 127.0;
         cone_axis = rotate_quat(cone_axis, instance_data.rotation);
+        /*
         cone_axis =
             mul(float3x3(view_data.view[0].xyz, view_data.view[1].xyz, view_data.view[2].xyz),
                 cone_axis);
+        */
+        cone_axis = mul((float3x3)view_data.view, cone_axis);
         visible = visible && !cone_cull(center, radius, cone_axis, cone_cutoff, float3(0, 0, 0));
       }
 

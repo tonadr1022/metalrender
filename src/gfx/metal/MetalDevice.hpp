@@ -11,6 +11,7 @@
 #include "core/Config.hpp"
 #include "core/Handle.hpp"
 #include "core/Pool.hpp"
+#include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/metal/MetalCmdEncoder.hpp"
 #include "gfx/metal/MetalQueryPool.hpp"
 #include "gfx/metal/MetalSampler.hpp"
@@ -164,6 +165,8 @@ class MetalDevice : public rhi::Device {
   struct Queue {
     NS::SharedPtr<MTL4::CommandQueue> queue;
     std::vector<MTL4::CommandBuffer*> submit_cmd_bufs;
+    NS::SharedPtr<MTL::CommandQueue> mtl3_queue;
+    std::vector<MTL::CommandBuffer*> mtl3_submit_cmd_bufs;
 
     void signal(const Semaphore& sem) const {
       if (is_valid()) {
@@ -183,7 +186,17 @@ class MetalDevice : public rhi::Device {
         submit_cmd_bufs.clear();
       }
     }
-    [[nodiscard]] bool is_valid() const { return queue.get() != nullptr; }
+    void m3_submit() {
+      if (is_valid() && !mtl3_submit_cmd_bufs.empty()) {
+        for (auto* cmd_buf : mtl3_submit_cmd_bufs) {
+          cmd_buf->commit();
+        }
+        mtl3_submit_cmd_bufs.clear();
+      }
+    }
+    [[nodiscard]] bool is_valid() const {
+      return queue.get() != nullptr || mtl3_queue.get() != nullptr;
+    }
   };
 
   Queue queues_[(int)rhi::QueueType::Count];
@@ -205,8 +218,8 @@ class MetalDevice : public rhi::Device {
   std::optional<MTL4_Resources> mtl4_resources_;
 
   struct MTL3_Resources {
-    MTL::CommandBuffer* main_cmd_buf{};
-    MTL::CommandQueue* main_cmd_q{};
+    // MTL::CommandBuffer* main_cmd_buf{};
+    // MTL::CommandQueue* main_cmd_q{};
     std::vector<std::unique_ptr<Metal3CmdEncoder>> cmd_lists_;
 
     MTL::Event* present_event_{};
@@ -226,27 +239,27 @@ class MetalDevice : public rhi::Device {
 
   MetalPSOs psos_;
 
-  struct GPUFrameAllocator {
-    struct Alloc {
-      MTL::Buffer* buf;
-      size_t offset;
-    };
-
-    GPUFrameAllocator(size_t size, MetalDevice* device, size_t frames_in_flight);
-
-    Alloc alloc(size_t size);
-
-    void reset(size_t frame_idx) {
-      frame_idx_ = frame_idx;
-      offset_ = 0;
-    }
-
-    std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> buffers;
-    size_t capacity_{};
-    size_t offset_{};
-    size_t frame_idx_{};
-    MetalDevice* device_;
-  };
+  // struct GPUFrameAllocator {
+  //   struct Alloc {
+  //     MTL::Buffer* buf;
+  //     size_t offset;
+  //   };
+  //
+  //   GPUFrameAllocator(size_t size, MetalDevice* device, size_t frames_in_flight);
+  //
+  //   Alloc alloc(size_t size);
+  //
+  //   void reset(size_t frame_idx) {
+  //     frame_idx_ = frame_idx;
+  //     offset_ = 0;
+  //   }
+  //
+  //   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> buffers;
+  //   size_t capacity_{};
+  //   size_t offset_{};
+  //   size_t frame_idx_{};
+  //   MetalDevice* device_;
+  // };
 
   bool mtl4_enabled_{};
   std::filesystem::path shader_lib_dir_;
@@ -254,9 +267,10 @@ class MetalDevice : public rhi::Device {
   // TODO: no public members pls
   // public to other implementation classes
  public:
-  std::optional<GPUFrameAllocator> arg_buf_allocator_;
-  std::optional<GPUFrameAllocator> push_constant_allocator_;
-  std::optional<GPUFrameAllocator> test_allocator_;
+  // TODO: circular dependency
+  std::optional<gfx::GPUFrameAllocator3> arg_buf_allocator_;
+  std::optional<gfx::GPUFrameAllocator3> push_constant_allocator_;
+  std::optional<gfx::GPUFrameAllocator3> test_allocator_;
   rhi::BufferHandleHolder resource_descriptor_table_;
   rhi::BufferHandleHolder sampler_descriptor_table_;
   void write_bindless_resource_descriptor(uint32_t bindless_idx, MTL::Texture* tex);

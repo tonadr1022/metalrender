@@ -1,5 +1,8 @@
 # TODOs
 
+- queue management between metal 3 and 4 is actually awful. I let it go just to get metal 3
+  working again
+- fix cone culling
 - handle y-flip on metal vs vulkan
 - instead of acquiring next swapchain image in begin_swapchain_rendering(), maybe expose it?
 - in begin_rendering() use image view instead of assuming default view

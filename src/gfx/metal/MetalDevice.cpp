@@ -197,15 +197,20 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
     m4res().cmd_encoders_.reserve(20);
   } else {
     mtl3_resources_.emplace(MTL3_Resources{});
-    m3res().main_cmd_q = device_->newCommandQueue();
+    auto init_queue = [this](Queue& queue) {
+      queue.mtl3_queue = NS::TransferPtr(device_->newCommandQueue());
+      queue.mtl3_queue->addResidencySet(main_res_set_);
+    };
+    init_queue(get_queue(rhi::QueueType::Graphics));
+
     m3res().cmd_lists_.reserve(20);
   }
 
-  push_constant_allocator_.emplace(1024ul * 1024, this, frames_in_flight());
-  test_allocator_.emplace(1024ul * 1024, this, frames_in_flight());
-  arg_buf_allocator_.emplace(1024ul * 1024, this, frames_in_flight());
-
   init_bindless();
+
+  push_constant_allocator_.emplace(this);
+  test_allocator_.emplace(this);
+  arg_buf_allocator_.emplace(this);
 
   psos_.dispatch_indirect_pso =
       compile_mtl_compute_pipeline(shader_lib_dir_ / "dispatch_indirect.metallib");
@@ -334,7 +339,6 @@ void MetalDevice::shutdown() {
     m4res().shader_compiler->release();
     mtl4_resources_.reset();
   } else {
-    m3res().main_cmd_q->release();
     m3res().cmd_lists_.clear();
   }
 
@@ -675,16 +679,25 @@ rhi::CmdEncoder* MetalDevice::begin_cmd_encoder() {
   ASSERT(curr_cmd_list_idx_ < m3res().cmd_lists_.size());
   auto* ret = (Metal3CmdEncoder*)m3res().cmd_lists_[curr_cmd_list_idx_].get();
   ret->reset(this);
-  ret->m3_state().cmd_buf = m3res().main_cmd_buf;
+  ret->m3_state().cmd_buf = queues_[(int)rhi::QueueType::Graphics].mtl3_queue->commandBuffer();
+  ret->done_ = false;
+  ret->presents_.clear();
+  ret->queue_ = rhi::QueueType::Graphics;
+  // ret->m3_state().cmd_buf = m3res().main_cmd_buf;
   curr_cmd_list_idx_++;
 
   return ret;
 }
 
 void MetalDevice::end_command_list(rhi::CmdEncoder* cmd_enc) {
-  ASSERT(mtl4_enabled_);
-  auto* cmd = (Metal4CmdEncoder*)cmd_enc;
-  get_queue(rhi::QueueType::Graphics).submit_cmd_bufs.push_back(cmd->m4_state().cmd_buf);
+  if (mtl4_enabled_) {
+    auto* cmd = (Metal4CmdEncoder*)cmd_enc;
+    get_queue(rhi::QueueType::Graphics).submit_cmd_bufs.push_back(cmd->m4_state().cmd_buf);
+  } else {
+    auto* cmd = (Metal3CmdEncoder*)cmd_enc;
+    // cmd->m3_state().cmd_buf->commit();
+    get_queue(rhi::QueueType::Graphics).mtl3_submit_cmd_bufs.push_back(cmd->m3_state().cmd_buf);
+  }
 }
 
 void MetalDevice::submit_frame() {
@@ -725,6 +738,39 @@ void MetalDevice::submit_frame() {
         present->present();
       }
     }
+  } else {
+    for (size_t cmd_list_i = 0; cmd_list_i < curr_cmd_list_idx_; cmd_list_i++) {
+      auto* list = m3res().cmd_lists_[cmd_list_i].get();
+      for (auto& present : list->presents_) {
+        list->m3_state().cmd_buf->presentDrawable(present.get());
+      }
+    }
+
+    for (auto& queue : queues_) {
+      if (queue.is_valid()) {
+        queue.m3_submit();
+      }
+    }
+
+    // dummy encoders that signal frame fences
+    for (size_t queue_type = 0; queue_type < (size_t)rhi::QueueType::Count; queue_type++) {
+      auto& queue = queues_[queue_type];
+      if (!queue.is_valid()) {
+        continue;
+      }
+      auto* cmd_buf = queue.mtl3_queue->commandBuffer();
+      cmd_buf->encodeSignalEvent(frame_fences_[queue_type][frame_idx()].get(),
+                                 frame_fence_values_[frame_idx()]);
+      cmd_buf->commit();
+    }
+
+    // presents
+    for (size_t cmd_list_i = 0; cmd_list_i < curr_cmd_list_idx_; cmd_list_i++) {
+      auto* list = m3res().cmd_lists_[cmd_list_i].get();
+      for (auto& present : list->presents_) {
+        present->present();
+      }
+    }
   }
 
   frame_num_++;
@@ -751,9 +797,9 @@ void MetalDevice::submit_frame() {
   icb_mgr_draw_indexed_.reset_for_frame();
   icb_mgr_draw_mesh_threadgroups_.reset_for_frame();
 
-  push_constant_allocator_->reset(frame_idx());
-  test_allocator_->reset(frame_idx());
-  arg_buf_allocator_->reset(frame_idx());
+  push_constant_allocator_->advance_frame();
+  test_allocator_->advance_frame();
+  arg_buf_allocator_->advance_frame();
 }
 
 void MetalDevice::init_bindless() {
@@ -1108,28 +1154,6 @@ MTL::ComputePipelineState* MetalDevice::create_compute_pipeline_internal(
   return compile_mtl_compute_pipeline(path, "main");
 }
 
-MetalDevice::GPUFrameAllocator::GPUFrameAllocator(size_t size, MetalDevice* device,
-                                                  size_t frames_in_flight) {
-  capacity_ = size;
-  device_ = device;
-  for (size_t i = 0; i < frames_in_flight; i++) {
-    buffers[i] = device->create_buf_h(rhi::BufferDesc{.usage = rhi::BufferUsage::Storage,
-                                                      .size = size,
-                                                      .bindless = false,
-                                                      .name = "gpu_frame_allocator"});
-  }
-}
-
-MetalDevice::GPUFrameAllocator::Alloc MetalDevice::GPUFrameAllocator::alloc(size_t size) {
-  size = align_up(size, 8);
-  ASSERT(size + offset_ <= capacity_);
-  auto* buf = device_->get_mtl_buf(buffers[frame_idx_]);
-  ASSERT(buf);
-  size_t offset = offset_;
-  offset_ += size;
-  return {buf, offset};
-}
-
 void MetalDevice::DeleteQueues::flush_deletions(size_t curr_frame_num) {
   while (!to_delete_buffers.empty() &&
          to_delete_buffers.front().valid_to_delete_frame_num <= curr_frame_num) {
@@ -1215,9 +1239,7 @@ rhi::QueryPool* MetalDevice::get_query_pool(const rhi::QueryPoolHandle& handle) 
 
 void MetalDevice::resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t start_query,
                                      uint32_t query_count, std::span<uint64_t> out_timestamps) {
-  ASSERT(mtl4_enabled_);
   if (!mtl4_enabled_) {
-    LERROR("resolve_query_data requires Metal 4");
     return;
   }
   auto* pool = (MetalQueryPool*)get_query_pool(query_pool);
@@ -1235,8 +1257,6 @@ void MetalDevice::resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t s
 
 void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
                                             glm::vec4* clear_color) {
-  ASSERT(mtl4_enabled_);
-  auto* enc = (Metal4CmdEncoder*)cmd_enc;
   auto* swap = (MetalSwapchain*)swapchain;
   CA::MetalDrawable* drawable = swap->metal_layer_->nextDrawable();
   while (!drawable) {
@@ -1244,7 +1264,6 @@ void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdE
   }
 
   swap->drawable_ = NS::TransferPtr(drawable->retain());
-  enc->presents_.emplace_back(swap->drawable_);
 
   rhi::TextureDesc swap_img_desc{};
   auto* tex = drawable->texture();
@@ -1260,16 +1279,33 @@ void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdE
     t = rhi::TextureHandleHolder{
         texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
   }
-  // auto tex_handle = texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true);
-  if (clear_color) {
-    enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(
-        swap->textures_[0].handle, rhi::LoadOp::Clear, rhi::ClearValue{.color = *clear_color})});
+
+  if (mtl4_enabled_) {
+    auto* enc = (Metal4CmdEncoder*)cmd_enc;
+    enc->presents_.emplace_back(swap->drawable_);
+
+    // auto tex_handle = texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true);
+    if (clear_color) {
+      enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(
+          swap->textures_[0].handle, rhi::LoadOp::Clear, rhi::ClearValue{.color = *clear_color})});
+    } else {
+      enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(swap->textures_[0].handle,
+                                                                    rhi::LoadOp::DontCare)});
+    }
   } else {
-    enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(swap->textures_[0].handle,
-                                                                  rhi::LoadOp::DontCare)});
+    auto* enc = (Metal3CmdEncoder*)cmd_enc;
+    enc->presents_.emplace_back(swap->drawable_);
+
+    // TODO: remove dup
+    // auto tex_handle = texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true);
+    if (clear_color) {
+      enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(
+          swap->textures_[0].handle, rhi::LoadOp::Clear, rhi::ClearValue{.color = *clear_color})});
+    } else {
+      enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(swap->textures_[0].handle,
+                                                                    rhi::LoadOp::DontCare)});
+    }
   }
-  // // TODO: is this bad
-  // texture_pool_.destroy();
 }
 
 rhi::SwapchainHandle MetalDevice::create_swapchain(const rhi::SwapchainDesc& desc) {
