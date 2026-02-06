@@ -8,7 +8,8 @@ cbuffer BasicIndirectPC HLSL_PC_REG {
   uint vert_buf_idx;
   uint instance_data_buf_idx;
   uint mat_buf_idx;
-  uint inst_id;
+  //  uint inst_id;
+  // uint base_vert;
 };
 
 #ifdef __HLSL__

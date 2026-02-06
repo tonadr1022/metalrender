@@ -20,6 +20,13 @@ CONSTANT_BUFFER(DrawID, gDrawID, 999);
       gDrawID.did * sizeof(InstanceData));
   DefaultVertex v = bindless_buffers[vert_buf_idx].Load<DefaultVertex>((vert_id + gDrawID.vert_id) *
                                                                        sizeof(DefaultVertex));
+
+  /*
+  InstanceData instance_data =
+      bindless_buffers[instance_data_buf_idx].Load<InstanceData>(inst_id * sizeof(InstanceData));
+  DefaultVertex v = bindless_buffers[vert_buf_idx].Load<DefaultVertex>((vert_id + base_vert) *
+                                                                       sizeof(DefaultVertex));
+  */
   VOut o;
   o.uv = v.uv;
   float3 pos = rotate_quat(instance_data.scale * v.pos.xyz, instance_data.rotation) +

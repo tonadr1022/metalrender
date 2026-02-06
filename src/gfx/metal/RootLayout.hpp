@@ -22,13 +22,13 @@ constexpr uint32_t TOTAL_SRV_BINDINGS = 12;
 constexpr uint32_t TOTAL_UAV_BINDINGS = 12;
 
 struct RootLayout {
-  uint32_t constants[22];
+  uint32_t constants[28];
   MTL::GPUAddress root_cbvs[ROOT_CBV_COUNT]{};
   MTL::GPUAddress resource_table_ptr{};
   MTL::GPUAddress sampler_table_ptr{};
 };
 
-static_assert(sizeof(RootLayout) == 128);
+// static_assert(sizeof(RootLayout) == 128);
 
 struct DescriptorBindingTable {
   rhi::BufferHandle CBV[TOTAL_CBV_BINDINGS] = {};

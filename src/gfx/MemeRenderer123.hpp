@@ -19,6 +19,7 @@
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "hlsl/shared_globals.h"
+#include "hlsl/shared_indirect.h"
 #include "hlsl/shared_instance_data.h"
 #include "offsetAllocator.hpp"
 
@@ -226,6 +227,7 @@ class MemeRenderer123 {
 
   GPUFrameAllocator3 frame_gpu_upload_allocator_;
   BufferCopyMgr buffer_copy_mgr_;
+  std::vector<IndexedIndirectDrawCmd> cmds_;
   BackedGPUAllocator materials_buf_;
 
   TexAndViewHolder depth_pyramid_tex_;

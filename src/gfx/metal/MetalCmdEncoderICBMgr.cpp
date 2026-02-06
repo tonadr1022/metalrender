@@ -2,9 +2,8 @@
 
 #include <metal/Metal.hpp>
 
-#include "gfx/metal/MetalDevice.hpp"
-
 #include "core/Config.hpp"
+#include "gfx/metal/MetalDevice.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -48,4 +47,4 @@ MTL::Buffer* MetalCmdEncoderICBMgr::get_icb(size_t i) {
   return device_->get_mtl_buf(main_icb_container_buf_[i]);
 }
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE
