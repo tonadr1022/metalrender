@@ -496,6 +496,7 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
   auto* root_layout_ptr = (RootLayout*)(pc_buf_ptr);
   memcpy(root_layout_ptr->constants, push_constant_data, push_constant_size);
 
+  flush_barriers();
   start_compute_encoder();
 
   ASSERT(index_buf.is_valid());
@@ -514,12 +515,16 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
 
   if constexpr (UseMTL4) {
     m4_state().compute_enc->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
+    m4_state().compute_enc->barrierAfterStages(MTL::StageAll, MTL::StageAll,
+                                               MTL4::VisibilityOptionDevice);
   } else {
     m3_state().compute_enc->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
+    m3_state().compute_enc->memoryBarrier(MTL::BarrierScopeBuffers);
   }
 
   for (int i = 0, rem_draw_count = tot_draw_cnt; i < (int)icbs.size();
        i++, rem_draw_count -= k_max_draws_per_icb) {
+    if (i >= 1) break;
     uint32_t draw_cnt = std::min<uint32_t>(k_max_draws_per_icb, rem_draw_count);
     auto* icb = icbs[i];
     ASSERT((icb && icb->size() == draw_cnt));
@@ -570,7 +575,8 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
     m4_state().compute_enc->barrierAfterQueueStages(MTL::StageDispatch, MTL::StageAll,
                                                     MTL4::VisibilityOptionDevice);
   } else {
-    m3_state().compute_enc->barrierAfterQueueStages(MTL::StageDispatch, MTL::StageAll);
+    m3_state().compute_enc->barrierAfterQueueStages(MTL::StageAll, MTL::StageAll);
+    m3_state().compute_enc->memoryBarrier(MTL::BarrierScopeBuffers);
   }
 
   return indirect_buf_id;

@@ -40,15 +40,6 @@ namespace TENG_NAMESPACE {
 
 class MetalDevice;
 
-template <typename API>
-struct EncoderState {
-  API::RenderEnc render_enc{};
-  API::ComputeEnc compute_enc{};
-  API::BlitEnc blit_enc{};
-  API::CommandBuffer cmd_buf{};
-  API::ArgTable arg_table{};
-};
-
 struct MTL3_State {
   MTL::RenderCommandEncoder* render_enc;
   MTL::ComputeCommandEncoder* compute_enc;

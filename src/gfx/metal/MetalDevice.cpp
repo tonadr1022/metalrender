@@ -325,7 +325,7 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
-  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = true});
+  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = false});
 }
 
 void MetalDevice::shutdown() {
@@ -877,8 +877,8 @@ MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle in
       desc->setInheritPipelineState(true);
       desc->setCommandTypes(cmd_types_);
       if (cmd_types_ & MTL::IndirectCommandTypeDrawIndexed) {
-        desc->setMaxVertexBufferBindCount(5);
-        desc->setMaxFragmentBufferBindCount(5);
+        desc->setMaxVertexBufferBindCount(3);
+        desc->setMaxFragmentBufferBindCount(3);
       } else if (cmd_types_ & MTL::IndirectCommandTypeDrawMeshThreadgroups) {
         desc->setMaxObjectBufferBindCount(3);
         desc->setMaxMeshBufferBindCount(3);
