@@ -370,28 +370,27 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                                              {K_MESH_TG_SIZE, 1, 1});
       } else {
         enc->bind_pipeline(test2_pso_);
-        ASSERT(indirect_cmd_buf_ids_.size());
-        BasicIndirectPC pc{
-            .vp = get_proj_matrix() * args.view_mat,
-            .vert_buf_idx = static_draw_batch_.vertex_buf.get_buffer()->bindless_idx(),
-            .instance_data_buf_idx =
-                device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
-            .mat_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
-        };
-        enc->push_constants(&pc, sizeof(pc));
-
-        for (auto& cmd : cmds_) {
-          // TODO: make no indirect an option.
-          enc->draw_indexed_primitives(rhi::PrimitiveTopology::TriangleList,
-                                       static_draw_batch_.index_buf.get_buffer_handle(),
-                                       cmd.first_index * sizeof(DefaultIndexT), cmd.index_count, 1,
-                                       cmd.vertex_offset / sizeof(DefaultVertex),
-                                       cmd.first_instance, rhi::IndexType::Uint32);
-        }
-        // ASSERT(!indirect_cmd_buf_ids_.empty());
-        // enc->draw_indexed_indirect(static_instance_mgr_.get_draw_cmd_buf(),
-        //                            indirect_cmd_buf_ids_[0],
-        //                            static_instance_mgr_.stats().max_instance_data_count, 0);
+        // ASSERT(indirect_cmd_buf_ids_.size());
+        // BasicIndirectPC pc{
+        //     .vp = get_proj_matrix() * args.view_mat,
+        //     .vert_buf_idx = static_draw_batch_.vertex_buf.get_buffer()->bindless_idx(),
+        //     .instance_data_buf_idx =
+        //         device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
+        //     .mat_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
+        // };
+        // enc->push_constants(&pc, sizeof(pc));
+        // for (auto& cmd : cmds_) {
+        //   // TODO: make no indirect an option.
+        //   enc->draw_indexed_primitives(rhi::PrimitiveTopology::TriangleList,
+        //                                static_draw_batch_.index_buf.get_buffer_handle(),
+        //                                cmd.first_index * sizeof(DefaultIndexT), cmd.index_count,
+        //                                1, cmd.vertex_offset / sizeof(DefaultVertex),
+        //                                cmd.first_instance, rhi::IndexType::Uint32);
+        // }
+        ASSERT(!indirect_cmd_buf_ids_.empty());
+        enc->draw_indexed_indirect(static_instance_mgr_.get_draw_cmd_buf(),
+                                   indirect_cmd_buf_ids_[0],
+                                   static_instance_mgr_.stats().max_instance_data_count, 0);
       }
       enc->end_rendering();
     });

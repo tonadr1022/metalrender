@@ -30,14 +30,14 @@ struct RootLayout {
 static_assert(sizeof(RootLayout) == 128);
 
 
-kernel void comp_main(const device uint8_t* resource_desc_heap [[buffer(0)]],
-                      const device uint8_t* sampler_desc_heap [[buffer(1)]],
+kernel void comp_main(const device uint8_t* resource_desc_heap [[buffer(6)]],
+                      const device uint8_t* sampler_desc_heap [[buffer(7)]],
                       device Args& args [[buffer(2)]],
                       device uint8_t* out_args [[buffer(3)]],
                       const device IndexedIndirectDrawCmd* in_cmds [[buffer(4)]],
                       const device uint8_t* index_buf [[buffer(5)]],
-                      const device uint2* pc [[buffer(6)]],
-                      constant Args2& args2 [[buffer(7)]],
+                      const device uint2* pc [[buffer(0)]],
+                      constant Args2& args2 [[buffer(1)]],
                       uint gid [[thread_position_in_grid]]) {
     uint draw_cnt = args2.draw_cnt;
     if (gid >= draw_cnt) {

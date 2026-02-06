@@ -485,12 +485,11 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
     rhi::BufferHandle indirect_buf, size_t offset, size_t tot_draw_cnt, rhi::BufferHandle index_buf,
     size_t index_buf_offset, void* push_constant_data, size_t push_constant_size,
     size_t vertex_stride) {
-  ASSERT(push_constant_size <= sizeof(RootLayout::constants));
+  ASSERT(push_constant_size <= sizeof(RootLayout) - 8);
   auto [pc_buf, pc_buf_offset] = device_->push_constant_allocator_->alloc(sizeof(RootLayout));
   auto* root_layout_ptr = (RootLayout*)((uint8_t*)pc_buf->contents() + pc_buf_offset);
   memcpy(root_layout_ptr->constants, push_constant_data, push_constant_size);
 
-  flush_barriers();
   start_compute_encoder();
 
   ASSERT(index_buf.is_valid());
@@ -498,21 +497,16 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
   ASSERT(index_buffer);
   set_buffer(5, index_buffer, index_buf_offset, EncoderSetBufferStage::Compute);
 
-  set_buffer(0, device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
+  set_buffer(6, device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
              EncoderSetBufferStage::Compute);
-  set_buffer(1, device_->get_mtl_buf(device_->sampler_descriptor_table_), 0,
+  set_buffer(7, device_->get_mtl_buf(device_->sampler_descriptor_table_), 0,
              EncoderSetBufferStage::Compute);
 
   ASSERT(device_->get_psos().dispatch_indirect_pso);
-  ASSERT(has_flag(device_->get_buf(indirect_buf)->desc().usage, rhi::BufferUsage::Indirect));
 
   auto [indirect_buf_id, icbs] = device_->icb_mgr_draw_indexed_.alloc(indirect_buf, tot_draw_cnt);
 
-  if constexpr (UseMTL4) {
-    m4_state().compute_enc->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
-  } else {
-    m3_state().compute_enc->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
-  }
+  m4_state().compute_enc->setComputePipelineState(device_->get_psos().dispatch_indirect_pso);
 
   for (int i = 0, rem_draw_count = tot_draw_cnt; i < (int)icbs.size();
        i++, rem_draw_count -= k_max_draws_per_icb) {
@@ -522,7 +516,7 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
 
     cmd_icb_mgr_.init_icb_arg_encoder_and_buf_and_set_icb(icbs, i);
 
-    set_buffer(6, pc_buf, pc_buf_offset, EncoderSetBufferStage::Compute);
+    set_buffer(0, pc_buf, pc_buf_offset, EncoderSetBufferStage::Compute);
 
     struct Args2 {
       uint32_t draw_cnt;
@@ -534,7 +528,7 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
     args2->draw_cnt = draw_cnt;
     args2->stride = vertex_stride;
 
-    set_buffer(7, args2_buf, args2_offset, EncoderSetBufferStage::Compute);
+    set_buffer(1, args2_buf, args2_offset, EncoderSetBufferStage::Compute);
 
     set_buffer(2, cmd_icb_mgr_.get_icb(i), 0, EncoderSetBufferStage::Compute);
 
@@ -561,14 +555,8 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
     }
   }
 
-  if constexpr (UseMTL4) {
-    m4_state().compute_enc->barrierAfterQueueStages(MTL::StageDispatch, MTL::StageAll,
-                                                    MTL4::VisibilityOptionDevice);
-  } else {
-    m3_state().compute_enc->barrierAfterQueueStages(MTL::StageDispatch, MTL::StageAll);
-  }
-
-  end_compute_encoder();
+  m4_state().compute_enc->barrierAfterQueueStages(MTL::StageDispatch, MTL::StageAll,
+                                                  MTL4::VisibilityOptionDevice);
 
   return indirect_buf_id;
 }
