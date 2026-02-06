@@ -383,8 +383,6 @@ void MetalCmdEncoderBase<UseMTL4>::draw_indexed_primitives(
     rhi::IndexType index_type) {
   root_layout_.first_instance = base_instance;
   root_layout_.vertex_offset = base_vertex_idx;
-  push_constant_dirty_ = true;
-  binding_table_dirty_ = true;
   flush_binds();
   auto* buf = device_->get_mtl_buf(index_buf);
   if constexpr (UseMTL4) {
