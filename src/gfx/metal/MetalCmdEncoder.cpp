@@ -657,6 +657,8 @@ void MetalCmdEncoderBase<UseMTL4>::draw_indexed_indirect(rhi::BufferHandle indir
       m4_state().render_enc->executeCommandsInBuffer(
           icbs[i], NS::Range::Make(offset_i, std::min<uint32_t>(k_max_draws_per_icb, rem_draws)));
     } else {
+      LINFO("executing indirect draw with icb {}, draw count in this icb: {}", i,
+            std::min<uint32_t>(k_max_draws_per_icb, rem_draws));
       m3_state().render_enc->executeCommandsInBuffer(
           icbs[i], NS::Range::Make(offset_i, std::min<uint32_t>(k_max_draws_per_icb, rem_draws)));
     }

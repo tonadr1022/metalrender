@@ -371,7 +371,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                                              {K_MESH_TG_SIZE, 1, 1});
       } else {
         enc->bind_pipeline(test2_pso_);
-        bool use_indirect = true;
+        bool use_indirect = false;
         if (use_indirect) {
           ASSERT(!indirect_cmd_buf_ids_.empty());
           enc->draw_indexed_indirect(static_instance_mgr_.get_draw_cmd_buf(),
@@ -1267,7 +1267,6 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
       }
     }
   }
-  mesh_shaders_enabled_ = true;
 
   // TODO: renderer shouldn't own this
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();

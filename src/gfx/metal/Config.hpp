@@ -6,6 +6,6 @@
 
 namespace TENG_NAMESPACE {
 
-constexpr size_t k_max_draws_per_icb = 10000;
+constexpr size_t k_max_draws_per_icb = 5000;
 
 }  // namespace TENG_NAMESPACE

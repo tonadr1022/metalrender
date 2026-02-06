@@ -753,16 +753,16 @@ void MetalDevice::submit_frame() {
     }
 
     // dummy encoders that signal frame fences
-    for (size_t queue_type = 0; queue_type < (size_t)rhi::QueueType::Count; queue_type++) {
-      auto& queue = queues_[queue_type];
-      if (!queue.is_valid()) {
-        continue;
-      }
-      auto* cmd_buf = queue.mtl3_queue->commandBuffer();
-      cmd_buf->encodeSignalEvent(frame_fences_[queue_type][frame_idx()].get(),
-                                 frame_fence_values_[frame_idx()]);
-      cmd_buf->commit();
-    }
+    // for (size_t queue_type = 0; queue_type < (size_t)rhi::QueueType::Count; queue_type++) {
+    //   auto& queue = queues_[queue_type];
+    //   if (!queue.is_valid()) {
+    //     continue;
+    //   }
+    //   auto* cmd_buf = queue.mtl3_queue->commandBuffer();
+    //   cmd_buf->encodeSignalEvent(frame_fences_[queue_type][frame_idx()].get(),
+    //                              frame_fence_values_[frame_idx()]);
+    //   cmd_buf->commit();
+    // }
 
     // presents
     for (size_t cmd_list_i = 0; cmd_list_i < curr_cmd_list_idx_; cmd_list_i++) {
@@ -775,7 +775,7 @@ void MetalDevice::submit_frame() {
 
   frame_num_++;
 
-  {
+  if (mtl4_enabled_) {
     // wait for N-frames--in-flight-ago frame to complete
     for (size_t queue_type = 0; queue_type < (size_t)rhi::QueueType::Count; queue_type++) {
       if (queues_[queue_type].is_valid()) {

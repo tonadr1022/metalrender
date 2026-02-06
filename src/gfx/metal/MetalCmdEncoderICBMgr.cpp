@@ -24,6 +24,7 @@ void MetalCmdEncoderICBMgr::init_icb_arg_encoder_and_buf_and_set_icb(
     std::array<NS::Object*, 1> args_arr{arg};
     const NS::Array* args = NS::Array::array(args_arr.data(), args_arr.size());
     main_icb_container_arg_enc_ = device_->get_device()->newArgumentEncoder(args);
+    arg->release();
   }
 
   if (i < main_icb_container_buf_.size()) {
@@ -31,7 +32,7 @@ void MetalCmdEncoderICBMgr::init_icb_arg_encoder_and_buf_and_set_icb(
     return;
   }
   main_icb_container_buf_.emplace_back(
-      device_->create_buf_h({.size = main_icb_container_arg_enc_->encodedLength()}));
+      device_->create_buf_h({.size = align_up(main_icb_container_arg_enc_->encodedLength(), 256)}));
 
   encode_icb();
 }
