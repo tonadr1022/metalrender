@@ -5,6 +5,7 @@
 // clang-format off
 #include <Metal/MTLComputeCommandEncoder.hpp>
 #include <Metal/Metal.hpp>
+#include <tracy/Tracy.hpp>
 #include "core/Hash.hpp"
 #include "gfx/metal/Config.hpp"
 #include "gfx/metal/RootLayout.hpp"
@@ -385,8 +386,10 @@ void MetalCmdEncoderBase<UseMTL4>::draw_indexed_primitives(
     rhi::PrimitiveTopology topology, rhi::BufferHandle index_buf, size_t index_start, size_t count,
     size_t instance_count, size_t base_vertex_idx, size_t base_instance,
     rhi::IndexType index_type) {
+  ZoneScoped;
   root_layout_.first_instance = base_instance;
   root_layout_.vertex_offset = base_vertex_idx;
+  push_constant_dirty_ = true;
   flush_binds();
   auto* buf = device_->get_mtl_buf(index_buf);
   if constexpr (UseMTL4) {
@@ -831,117 +834,120 @@ void MetalCmdEncoderBase<UseMTL4>::end_rendering() {
 
 template <bool UseMTL4>
 void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
-  if (binding_table_dirty_) {
-    ResourceTable table = {};
-    for (uint32_t i = 0; i < ARRAY_SIZE(binding_table_.SRV); i++) {
-      if (!generational_handle_u64_is_valid(binding_table_.SRV[i])) {
-        continue;
+  if (binding_table_dirty_ || push_constant_dirty_) {
+    if (binding_table_dirty_) {
+      ResourceTable table = {};
+      for (uint32_t i = 0; i < ARRAY_SIZE(binding_table_.SRV); i++) {
+        if (!generational_handle_u64_is_valid(binding_table_.SRV[i])) {
+          continue;
+        }
+        const auto resource_id = binding_table_.SRV_subresources[i];
+        if (resource_id == DescriptorBindingTable::k_buffer_resource) {
+          const auto* buf = device_->get_mtl_buf(rhi::BufferHandle{binding_table_.SRV[i]});
+          const size_t metadata = buf->length();
+          IRDescriptorTableSetBuffer(&table.srvs[i],
+                                     buf->gpuAddress() + binding_table_.SRV_offsets[i], metadata);
+        } else if (resource_id == DescriptorBindingTable::k_tex_resource) {
+          auto* tex = device_->get_mtl_tex(rhi::TextureHandle{binding_table_.SRV[i]});
+          IRDescriptorTableSetTexture(&table.srvs[i], tex, 0.0f, 0);
+        } else {
+          const auto* tex_view = device_->get_tex_view(rhi::TextureHandle{binding_table_.SRV[i]},
+                                                       binding_table_.SRV_subresources[i]);
+          IRDescriptorTableSetTexture(&table.srvs[i], tex_view->tex, 0.0f, 0);
+        }
       }
-      const auto resource_id = binding_table_.SRV_subresources[i];
-      if (resource_id == DescriptorBindingTable::k_buffer_resource) {
-        const auto* buf = device_->get_mtl_buf(rhi::BufferHandle{binding_table_.SRV[i]});
+
+      for (uint32_t i = 0; i < ARRAY_SIZE(binding_table_.UAV); i++) {
+        if (!generational_handle_u64_is_valid(binding_table_.UAV[i])) {
+          continue;
+        }
+        auto id = binding_table_.UAV_subresources[i];
+        if (id == DescriptorBindingTable::k_buffer_resource) {
+          const auto* buf = device_->get_mtl_buf(rhi::BufferHandle{binding_table_.UAV[i]});
+          const size_t metadata = buf->length();
+          IRDescriptorTableSetBuffer(&table.uavs[i],
+                                     buf->gpuAddress() + binding_table_.UAV_offsets[i], metadata);
+        } else if (id == DescriptorBindingTable::k_tex_resource) {
+          auto* tex = device_->get_mtl_tex(rhi::TextureHandle{binding_table_.UAV[i]});
+          IRDescriptorTableSetTexture(&table.uavs[i], tex, 0.0f, 0);
+        } else {
+          auto* tex_view = device_->get_tex_view(rhi::TextureHandle{binding_table_.UAV[i]},
+                                                 binding_table_.UAV_subresources[i]);
+          IRDescriptorTableSetTexture(&table.uavs[i], tex_view->tex, 0.0f, 0);
+        }
+      }
+
+      // TODO: dirty root flag instead of only dirty resources flag.
+      for (uint32_t i = 0; i < ROOT_CBV_COUNT; i++) {
+        if (!binding_table_.CBV[i].is_valid()) {
+          continue;
+        }
+        auto* buf = device_->get_mtl_buf(binding_table_.CBV[i]);
+        root_layout_.root_cbvs[i] = buf->gpuAddress() + binding_table_.CBV_offsets[i];
+      }
+
+      for (uint32_t i = ARRAY_SIZE(root_layout_.root_cbvs); i < ARRAY_SIZE(binding_table_.CBV);
+           i++) {
+        if (!binding_table_.CBV[i].is_valid()) {
+          continue;
+        }
+        const auto* buf = device_->get_mtl_buf(binding_table_.CBV[i]);
+        const auto gpu_va = buf->gpuAddress() + binding_table_.CBV_offsets[i];
         const size_t metadata = buf->length();
-        IRDescriptorTableSetBuffer(&table.srvs[i],
-                                   buf->gpuAddress() + binding_table_.SRV_offsets[i], metadata);
-      } else if (resource_id == DescriptorBindingTable::k_tex_resource) {
-        auto* tex = device_->get_mtl_tex(rhi::TextureHandle{binding_table_.SRV[i]});
-        IRDescriptorTableSetTexture(&table.srvs[i], tex, 0.0f, 0);
+        ASSERT(i - ROOT_CBV_COUNT < ARRAY_SIZE(table.cbvs));
+        IRDescriptorTableSetBuffer(table.cbvs + (i - ARRAY_SIZE(root_layout_.root_cbvs)), gpu_va,
+                                   metadata);
+      }
+      auto [binding_table, binding_table_offset, binding_table_ptr] =
+          device_->push_constant_allocator_->alloc(sizeof(ResourceTable));
+      memcpy(binding_table_ptr, &table, sizeof(ResourceTable));
+      root_layout_.resource_table_ptr =
+          device_->get_mtl_buf(binding_table)->gpuAddress() + binding_table_offset;
+
+      struct SamplerTable {
+        IRDescriptorTableEntry static_samplers[10];
+      };
+      auto [sampler_table, sampler_table_offset, sampler_table_ptr] =
+          device_->push_constant_allocator_->alloc(sizeof(SamplerTable));
+
+      auto* dst_sampler_table = (SamplerTable*)(sampler_table_ptr);
+      memcpy(dst_sampler_table->static_samplers, (void*)device_->static_sampler_entries_.data(),
+             sizeof(SamplerTable::static_samplers));
+      root_layout_.sampler_table_ptr =
+          device_->get_mtl_buf(sampler_table)->gpuAddress() + sampler_table_offset;
+      binding_table_dirty_ = false;
+    }
+
+    auto [pc_buf, pc_buf_offset, pc_buf_ptr] =
+        device_->push_constant_allocator_->alloc(sizeof(RootLayout));
+    auto* root_layout = reinterpret_cast<RootLayout*>(pc_buf_ptr);
+    memcpy(root_layout, &root_layout_, sizeof(RootLayout));
+
+    auto* pc_buf_mtl = device_->get_mtl_buf(pc_buf);
+    if constexpr (UseMTL4) {
+      if (m4_state().compute_enc) {
+        set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
+                   EncoderSetBufferStage::Compute);
       } else {
-        const auto* tex_view = device_->get_tex_view(rhi::TextureHandle{binding_table_.SRV[i]},
-                                                     binding_table_.SRV_subresources[i]);
-        IRDescriptorTableSetTexture(&table.srvs[i], tex_view->tex, 0.0f, 0);
+        ASSERT(m4_state().render_enc);
+        set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
+                   EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment |
+                       EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh);
       }
-    }
-
-    for (uint32_t i = 0; i < ARRAY_SIZE(binding_table_.UAV); i++) {
-      if (!generational_handle_u64_is_valid(binding_table_.UAV[i])) {
-        continue;
-      }
-      auto id = binding_table_.UAV_subresources[i];
-      if (id == DescriptorBindingTable::k_buffer_resource) {
-        const auto* buf = device_->get_mtl_buf(rhi::BufferHandle{binding_table_.UAV[i]});
-        const size_t metadata = buf->length();
-        IRDescriptorTableSetBuffer(&table.uavs[i],
-                                   buf->gpuAddress() + binding_table_.UAV_offsets[i], metadata);
-      } else if (id == DescriptorBindingTable::k_tex_resource) {
-        auto* tex = device_->get_mtl_tex(rhi::TextureHandle{binding_table_.UAV[i]});
-        IRDescriptorTableSetTexture(&table.uavs[i], tex, 0.0f, 0);
+    } else {
+      if (m3_state().compute_enc) {
+        set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
+                   EncoderSetBufferStage::Compute);
       } else {
-        auto* tex_view = device_->get_tex_view(rhi::TextureHandle{binding_table_.UAV[i]},
-                                               binding_table_.UAV_subresources[i]);
-        IRDescriptorTableSetTexture(&table.uavs[i], tex_view->tex, 0.0f, 0);
+        ASSERT(m3_state().render_enc);
+        set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
+                   EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment |
+                       EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh);
       }
     }
-
-    // TODO: dirty root flag instead of only dirty resources flag.
-    for (uint32_t i = 0; i < ROOT_CBV_COUNT; i++) {
-      if (!binding_table_.CBV[i].is_valid()) {
-        continue;
-      }
-      auto* buf = device_->get_mtl_buf(binding_table_.CBV[i]);
-      root_layout_.root_cbvs[i] = buf->gpuAddress() + binding_table_.CBV_offsets[i];
-    }
-
-    for (uint32_t i = ARRAY_SIZE(root_layout_.root_cbvs); i < ARRAY_SIZE(binding_table_.CBV); i++) {
-      if (!binding_table_.CBV[i].is_valid()) {
-        continue;
-      }
-      const auto* buf = device_->get_mtl_buf(binding_table_.CBV[i]);
-      const auto gpu_va = buf->gpuAddress() + binding_table_.CBV_offsets[i];
-      const size_t metadata = buf->length();
-      ASSERT(i - ROOT_CBV_COUNT < ARRAY_SIZE(table.cbvs));
-      IRDescriptorTableSetBuffer(table.cbvs + (i - ARRAY_SIZE(root_layout_.root_cbvs)), gpu_va,
-                                 metadata);
-    }
-
+    push_constant_dirty_ = false;
     binding_table_dirty_ = false;
-    auto [binding_table, binding_table_offset, binding_table_ptr] =
-        device_->push_constant_allocator_->alloc(sizeof(ResourceTable));
-    memcpy(binding_table_ptr, &table, sizeof(ResourceTable));
-    root_layout_.resource_table_ptr =
-        device_->get_mtl_buf(binding_table)->gpuAddress() + binding_table_offset;
-
-    struct SamplerTable {
-      IRDescriptorTableEntry static_samplers[10];
-    };
-    auto [sampler_table, sampler_table_offset, sampler_table_ptr] =
-        device_->push_constant_allocator_->alloc(sizeof(SamplerTable));
-
-    auto* dst_sampler_table = (SamplerTable*)(sampler_table_ptr);
-    memcpy(dst_sampler_table->static_samplers, (void*)device_->static_sampler_entries_.data(),
-           sizeof(SamplerTable::static_samplers));
-    root_layout_.sampler_table_ptr =
-        device_->get_mtl_buf(sampler_table)->gpuAddress() + sampler_table_offset;
   }
-
-  auto [pc_buf, pc_buf_offset, pc_buf_ptr] =
-      device_->push_constant_allocator_->alloc(sizeof(RootLayout));
-  auto* root_layout = reinterpret_cast<RootLayout*>(pc_buf_ptr);
-  memcpy(root_layout, &root_layout_, sizeof(RootLayout));
-
-  auto* pc_buf_mtl = device_->get_mtl_buf(pc_buf);
-  if constexpr (UseMTL4) {
-    if (m4_state().compute_enc) {
-      set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
-                 EncoderSetBufferStage::Compute);
-    } else {
-      ASSERT(m4_state().render_enc);
-      set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
-                 EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment |
-                     EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh);
-    }
-  } else {
-    if (m3_state().compute_enc) {
-      set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
-                 EncoderSetBufferStage::Compute);
-    } else {
-      ASSERT(m3_state().render_enc);
-      set_buffer(kIRArgumentBufferBindPoint, pc_buf_mtl, pc_buf_offset,
-                 EncoderSetBufferStage::Vertex | EncoderSetBufferStage::Fragment |
-                     EncoderSetBufferStage::Object | EncoderSetBufferStage::Mesh);
-    }
-  }
-  push_constant_dirty_ = false;
 }
 
 template <bool UseMTL4>

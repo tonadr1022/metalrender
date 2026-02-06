@@ -221,6 +221,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     prepare_indirect_pass.w_external_buf("indirect_buffer",
                                          static_instance_mgr_.get_draw_cmd_buf());
     prepare_indirect_pass.set_ex([this](rhi::CmdEncoder* enc) {
+      enc->write_timestamp(get_query_pool(), 0);
       BasicIndirectPC pc{
           .view_data_buf_idx = frame_view_buf_info_.idx,
           .view_data_buf_offset = frame_view_buf_info_.offset_bytes,
@@ -379,6 +380,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                                      static_instance_mgr_.stats().max_instance_data_count, 0);
 
         } else {
+          ZoneScopedN("Draw indirect");
           ASSERT(indirect_cmd_buf_ids_.size());
           BasicIndirectPC pc{
               .view_data_buf_idx = frame_view_buf_info_.idx,

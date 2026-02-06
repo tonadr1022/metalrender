@@ -1,5 +1,7 @@
 # TODOs
 
+- timestamp query better organization
+- flat map for gpu per-frame upload allocator
 - queue management between metal 3 and 4 is actually awful. I let it go just to get metal 3
   working again
 - fix cone culling
