@@ -244,6 +244,7 @@ void RenderGraph::execute() {
   ZoneScoped;
   rhi::CmdEncoder* enc = device_->begin_cmd_encoder();
   for (auto pass_i : pass_stack_) {
+    ZoneScopedN("Execute Pass");
     // enc->set_label(passes_[pass_i].get_name());
     for (auto& barrier : pass_barrier_infos_[pass_i]) {
       enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
@@ -262,7 +263,10 @@ void RenderGraph::execute() {
 
     auto& pass = passes_[pass_i];
     enc->set_debug_name(pass.get_name().c_str());
-    pass.get_execute_fn()(enc);
+    {
+      ZoneScopedN("Execute Fn");
+      pass.get_execute_fn()(enc);
+    }
   }
   enc->end_encoding();
 

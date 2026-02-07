@@ -17,7 +17,6 @@
 
 #include "Window.hpp"
 #include "core/Util.hpp"
-#include "gfx/metal/Config.hpp"
 #include "imgui.h"
 #include "platform/apple/AppleWindow.hpp"
 #include "util/Timer.hpp"
@@ -325,7 +324,7 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
-  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = false});
+  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = true});
 }
 
 void MetalDevice::shutdown() {
@@ -864,12 +863,11 @@ MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle in
   uint32_t indirect_buf_id = it->second.curr_id;
   it->second.curr_id++;
 
-  std::vector<MTL::IndirectCommandBuffer*> icbs{};
+  std::array<MTL::IndirectCommandBuffer*, k_max_frames_in_flight> icbs{};
   if (indirect_buf_id < it->second.icbs.size()) {
     icbs = it->second.icbs[indirect_buf_id];
   } else {
-    for (int curr_draw_cnt_offset = 0, rem_draws = draw_cnt; curr_draw_cnt_offset < (int)draw_cnt;
-         curr_draw_cnt_offset += k_max_draws_per_icb, rem_draws -= k_max_draws_per_icb) {
+    for (size_t i = 0; i < k_max_frames_in_flight; i++) {
       MTL::IndirectCommandBufferDescriptor* desc =
           MTL::IndirectCommandBufferDescriptor::alloc()->init();
       // TODO: try not to do this at least for mesh shaders
@@ -884,15 +882,15 @@ MetalDevice::ICB_Mgr::ICB_Alloc MetalDevice::ICB_Mgr::alloc(rhi::BufferHandle in
         desc->setMaxMeshBufferBindCount(3);
         desc->setMaxFragmentBufferBindCount(3);
       }
-      auto* icb = device_->get_device()->newIndirectCommandBuffer(
-          desc, std::min<uint32_t>(k_max_draws_per_icb, rem_draws), MTL::ResourceStorageModeShared);
+      auto* icb = device_->get_device()->newIndirectCommandBuffer(desc, draw_cnt,
+                                                                  MTL::ResourceStorageModeShared);
       if (device_->mtl4_enabled_) {
         icb->retain();
       }
       device_->get_main_residency_set()->addAllocation(icb);
       device_->get_main_residency_set()->commit();
 
-      icbs.emplace_back(icb);
+      icbs[i] = icb;
       desc->release();
     }
     it->second.icbs.emplace_back(icbs);
@@ -1257,9 +1255,11 @@ void MetalDevice::resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t s
 
 void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
                                             glm::vec4* clear_color) {
+  ZoneScoped;
   auto* swap = (MetalSwapchain*)swapchain;
-  CA::MetalDrawable* drawable = swap->metal_layer_->nextDrawable();
+  CA::MetalDrawable* drawable{};
   while (!drawable) {
+    ZoneScopedN("Waiting for drawable");
     drawable = swap->metal_layer_->nextDrawable();
   }
 

@@ -50,7 +50,7 @@ struct MetalDeviceInitInfo {
   bool prefer_mtl4{};
 };
 
-using ICBs = std::vector<MTL::IndirectCommandBuffer*>;
+using ICBs = std::array<MTL::IndirectCommandBuffer*, k_max_frames_in_flight>;
 
 class MetalDevice : public rhi::Device {
  public:

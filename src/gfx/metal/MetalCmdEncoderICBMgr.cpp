@@ -10,12 +10,10 @@ namespace TENG_NAMESPACE {
 void MetalCmdEncoderICBMgr::init_icb_arg_encoder_and_buf_and_set_icb(
     std::span<MTL::IndirectCommandBuffer*> icbs, size_t i) {
   auto encode_icb = [this, i, icbs]() {
-    ASSERT(i < icbs.size());
     main_icb_container_arg_enc_->setArgumentBuffer(device_->get_mtl_buf(main_icb_container_buf_[i]),
                                                    0);
     main_icb_container_arg_enc_->setIndirectCommandBuffer(icbs[i], 0);
   };
-
   if (!main_icb_container_arg_enc_) {
     MTL::ArgumentDescriptor* arg = MTL::ArgumentDescriptor::alloc()->init();
     arg->setIndex(0);
@@ -26,14 +24,12 @@ void MetalCmdEncoderICBMgr::init_icb_arg_encoder_and_buf_and_set_icb(
     main_icb_container_arg_enc_ = device_->get_device()->newArgumentEncoder(args);
     arg->release();
   }
-
-  if (i < main_icb_container_buf_.size()) {
-    encode_icb();
-    return;
+  if (main_icb_container_buf_.empty()) {
+    for (size_t j = 0; j < k_max_frames_in_flight; j++) {
+      main_icb_container_buf_.emplace_back(device_->create_buf_h(
+          {.size = align_up(main_icb_container_arg_enc_->encodedLength(), 256)}));
+    }
   }
-  main_icb_container_buf_.emplace_back(
-      device_->create_buf_h({.size = align_up(main_icb_container_arg_enc_->encodedLength(), 256)}));
-
   encode_icb();
 }
 

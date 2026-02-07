@@ -221,6 +221,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     prepare_indirect_pass.w_external_buf("indirect_buffer",
                                          static_instance_mgr_.get_draw_cmd_buf());
     prepare_indirect_pass.set_ex([this](rhi::CmdEncoder* enc) {
+      ZoneScopedN("Prepare indirect");
       enc->write_timestamp(get_query_pool(), 0);
       BasicIndirectPC pc{
           .view_data_buf_idx = frame_view_buf_info_.idx,
@@ -258,6 +259,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   const char* last_depth_name = "depth_tex";
   auto add_draw_pass = [&args, this, &final_depth_pyramid_name, &last_gbuffer_a_name,
                         &last_depth_name, &out_counts_buf_name](bool late, const char* name) {
+    ZoneScopedN("Draw pass");
     auto& p = rg_.add_graphics_pass(name);
     RGResourceHandle task_cmd_buf_rg_handle;
     RGResourceHandle out_draw_count_buf_rg_handle{};
@@ -380,7 +382,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                                      static_instance_mgr_.stats().max_instance_data_count, 0);
 
         } else {
-          ZoneScopedN("Draw indirect");
           ASSERT(indirect_cmd_buf_ids_.size());
           BasicIndirectPC pc{
               .view_data_buf_idx = frame_view_buf_info_.idx,
@@ -485,6 +486,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     }
     p.w_swapchain_tex(swapchain_);
     p.set_ex([this, gbuffer_a_rg_handle, meshlet_occlusion_culling_enabled](rhi::CmdEncoder* enc) {
+      ZoneScopedN("Final pass");
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
       auto dims = gbuffer_a_tex->desc().dims;
       device_->begin_swapchain_rendering(swapchain_, enc);
