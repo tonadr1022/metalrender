@@ -4,7 +4,6 @@
 #include <span>
 
 #include "GFXTypes.hpp"
-#include "Sampler.hpp"
 #include "core/Config.hpp"
 
 namespace MTL {

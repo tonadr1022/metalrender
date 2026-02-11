@@ -238,6 +238,8 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
     static_sampler_entries_.resize(k_static_sampler_count);
     auto* static_table = static_sampler_entries_.data();
     auto add_static_sampler = [&](uint32_t offset, const rhi::SamplerDesc& desc) {
+      auto actual_desc = desc;
+      actual_desc.flags |= rhi::SamplerDescFlags::NoBindless;
       static_samplers_.emplace_back(create_sampler_h(desc));
       auto* sampler = sampler_pool_.get(static_samplers_.back().handle)->sampler();
       IRDescriptorTableSetSampler(&static_table[offset], sampler, 0.0);
@@ -248,42 +250,36 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
                               .mag_filter = rhi::FilterMode::Linear,
                               .mipmap_mode = rhi::FilterMode::Linear,
                               .address_mode = rhi::AddressMode::ClampToEdge,
-                              .bindless = false,
                           });
     add_static_sampler(1, {
                               .min_filter = rhi::FilterMode::Linear,
                               .mag_filter = rhi::FilterMode::Linear,
                               .mipmap_mode = rhi::FilterMode::Linear,
                               .address_mode = rhi::AddressMode::Repeat,
-                              .bindless = false,
                           });
     add_static_sampler(2, {
                               .min_filter = rhi::FilterMode::Linear,
                               .mag_filter = rhi::FilterMode::Linear,
                               .mipmap_mode = rhi::FilterMode::Linear,
                               .address_mode = rhi::AddressMode::MirroredRepeat,
-                              .bindless = false,
                           });
     add_static_sampler(3, {
                               .min_filter = rhi::FilterMode::Nearest,
                               .mag_filter = rhi::FilterMode::Nearest,
                               .mipmap_mode = rhi::FilterMode::Nearest,
                               .address_mode = rhi::AddressMode::ClampToEdge,
-                              .bindless = false,
                           });
     add_static_sampler(4, {
                               .min_filter = rhi::FilterMode::Nearest,
                               .mag_filter = rhi::FilterMode::Nearest,
                               .mipmap_mode = rhi::FilterMode::Nearest,
                               .address_mode = rhi::AddressMode::Repeat,
-                              .bindless = false,
                           });
     add_static_sampler(5, {
                               .min_filter = rhi::FilterMode::Nearest,
                               .mag_filter = rhi::FilterMode::Nearest,
                               .mipmap_mode = rhi::FilterMode::Nearest,
                               .address_mode = rhi::AddressMode::MirroredRepeat,
-                              .bindless = false,
                           });
     add_static_sampler(6, {
                               .min_filter = rhi::FilterMode::Linear,
@@ -292,7 +288,6 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
                               .address_mode = rhi::AddressMode::ClampToEdge,
                               .anisotropy_enable = true,
                               .max_anisotropy = 16.0f,
-                              .bindless = false,
                           });
     add_static_sampler(7, {
                               .min_filter = rhi::FilterMode::Linear,
@@ -301,7 +296,6 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
                               .address_mode = rhi::AddressMode::Repeat,
                               .anisotropy_enable = true,
                               .max_anisotropy = 16.0f,
-                              .bindless = false,
                           });
     add_static_sampler(8, {
                               .min_filter = rhi::FilterMode::Linear,
@@ -310,7 +304,6 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
                               .address_mode = rhi::AddressMode::MirroredRepeat,
                               .anisotropy_enable = true,
                               .max_anisotropy = 16.0f,
-                              .bindless = false,
                           });
     add_static_sampler(9, {
                               .min_filter = rhi::FilterMode::Linear,
@@ -319,7 +312,6 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
                               .address_mode = rhi::AddressMode::ClampToEdge,
                               .compare_enable = true,
                               .compare_op = rhi::CompareOp::GreaterOrEqual,
-                              .bindless = false,
                           });
   }
   return true;
@@ -630,7 +622,7 @@ rhi::SamplerHandle MetalDevice::create_sampler(const rhi::SamplerDesc& desc) {
   samp_desc->release();
 
   uint32_t bindless_idx{rhi::k_invalid_bindless_idx};
-  if (desc.bindless) {
+  if (!has_flag(desc.flags, rhi::SamplerDescFlags::NoBindless)) {
     bindless_idx = sampler_desc_heap_allocator_.alloc_idx();
     auto* resource_table =
         (IRDescriptorTableEntry*)(get_mtl_buf(sampler_descriptor_table_))->contents();

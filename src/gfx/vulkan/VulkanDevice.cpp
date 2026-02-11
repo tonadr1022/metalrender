@@ -497,6 +497,8 @@ void VulkanDevice::init(const InitInfo& init_info) {
   del_q_.init(device_, allocator_, info_.frames_in_flight);
   {
     auto add_immutable_sampler = [&](const rhi::SamplerDesc& desc) {
+      auto actual_desc = desc;
+      actual_desc.flags |= rhi::SamplerDescFlags::NoBindless;
       immutable_samplers_.emplace_back(create_vk_sampler(desc));
     };
     add_immutable_sampler({
@@ -504,42 +506,36 @@ void VulkanDevice::init(const InitInfo& init_info) {
         .mag_filter = rhi::FilterMode::Linear,
         .mipmap_mode = rhi::FilterMode::Linear,
         .address_mode = rhi::AddressMode::ClampToEdge,
-        .bindless = false,
     });
     add_immutable_sampler({
         .min_filter = rhi::FilterMode::Linear,
         .mag_filter = rhi::FilterMode::Linear,
         .mipmap_mode = rhi::FilterMode::Linear,
         .address_mode = rhi::AddressMode::Repeat,
-        .bindless = false,
     });
     add_immutable_sampler({
         .min_filter = rhi::FilterMode::Linear,
         .mag_filter = rhi::FilterMode::Linear,
         .mipmap_mode = rhi::FilterMode::Linear,
         .address_mode = rhi::AddressMode::MirroredRepeat,
-        .bindless = false,
     });
     add_immutable_sampler({
         .min_filter = rhi::FilterMode::Nearest,
         .mag_filter = rhi::FilterMode::Nearest,
         .mipmap_mode = rhi::FilterMode::Nearest,
         .address_mode = rhi::AddressMode::ClampToEdge,
-        .bindless = false,
     });
     add_immutable_sampler({
         .min_filter = rhi::FilterMode::Nearest,
         .mag_filter = rhi::FilterMode::Nearest,
         .mipmap_mode = rhi::FilterMode::Nearest,
         .address_mode = rhi::AddressMode::Repeat,
-        .bindless = false,
     });
     add_immutable_sampler({
         .min_filter = rhi::FilterMode::Nearest,
         .mag_filter = rhi::FilterMode::Nearest,
         .mipmap_mode = rhi::FilterMode::Nearest,
         .address_mode = rhi::AddressMode::MirroredRepeat,
-        .bindless = false,
     });
     add_immutable_sampler({
         .min_filter = rhi::FilterMode::Linear,
@@ -548,7 +544,6 @@ void VulkanDevice::init(const InitInfo& init_info) {
         .address_mode = rhi::AddressMode::ClampToEdge,
         .anisotropy_enable = true,
         .max_anisotropy = 16.0f,
-        .bindless = false,
     });
     add_immutable_sampler({
         .min_filter = rhi::FilterMode::Linear,
@@ -557,7 +552,6 @@ void VulkanDevice::init(const InitInfo& init_info) {
         .address_mode = rhi::AddressMode::Repeat,
         .anisotropy_enable = true,
         .max_anisotropy = 16.0f,
-        .bindless = false,
     });
     add_immutable_sampler({
         .min_filter = rhi::FilterMode::Linear,
@@ -566,7 +560,6 @@ void VulkanDevice::init(const InitInfo& init_info) {
         .address_mode = rhi::AddressMode::MirroredRepeat,
         .anisotropy_enable = true,
         .max_anisotropy = 16.0f,
-        .bindless = false,
     });
     add_immutable_sampler({
         .min_filter = rhi::FilterMode::Linear,
@@ -575,7 +568,6 @@ void VulkanDevice::init(const InitInfo& init_info) {
         .address_mode = rhi::AddressMode::ClampToEdge,
         .compare_enable = true,
         .compare_op = rhi::CompareOp::GreaterOrEqual,
-        .bindless = false,
     });
   }
 }
