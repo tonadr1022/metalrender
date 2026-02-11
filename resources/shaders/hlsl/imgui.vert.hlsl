@@ -16,7 +16,7 @@ float4 ConvertUint32RGBAtoFloat4(uint c) {
   return float4(r, g, b, a);
 }
 
-[RootSignature(ROOT_SIGNATURE)] VOut main(uint vert_id : SV_VertexID) {
+VOut main(uint vert_id : SV_VertexID) {
   VOut o;
   ImGuiVertex vert = bindless_buffers[vert_buf_idx].Load<ImGuiVertex>((vert_id + gDrawID.vert_id) *
                                                                       sizeof(ImGuiVertex));

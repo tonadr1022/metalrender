@@ -17,7 +17,7 @@ struct DispatchIndirectCmd {
   uint tg_z;
 };
 
-[RootSignature(ROOT_SIGNATURE)][NumThreads(64, 1, 1)] void main(uint dtid : SV_DispatchThreadID) {
+[NumThreads(64, 1, 1)] void main(uint dtid : SV_DispatchThreadID) {
   if (dtid >= max_draws) {
     return;
   }

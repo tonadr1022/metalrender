@@ -368,6 +368,7 @@ MTL::ResourceOptions convert_resource_storage_mode(rhi::BufferDescFlags flags, b
 }  // namespace
 
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
+  ASSERT(desc.size > 0);
   auto resource_opts = convert_resource_storage_mode(
       desc.flags, rhi::has_flag(capabilities_, rhi::GraphicsCapability::CacheCoherentUMA) &&
                       !has_flag(desc.flags, rhi::BufferDescFlags::DisableCPUAccessOnUMA));

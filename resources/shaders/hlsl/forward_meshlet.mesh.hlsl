@@ -84,10 +84,10 @@ uint3 LoadThreeBytes(ByteAddressBuffer buf, uint byte_offset) {
   return uint3(i0, i1, i2);
 }
 
-[RootSignature(ROOT_SIGNATURE)][NumThreads(K_MESH_TG_SIZE, 1, 1)][outputtopology("triangle")] void
-main(uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload payload,
-     out indices uint3 tris[K_MAX_TRIS_PER_MESHLET],
-     out vertices VOut verts[K_MAX_VERTS_PER_MESHLET]) {
+[NumThreads(K_MESH_TG_SIZE, 1, 1)][outputtopology("triangle")] void main(
+    uint gtid : SV_GroupThreadID, uint gid : SV_GroupID, in payload Payload payload,
+    out indices uint3 tris[K_MAX_TRIS_PER_MESHLET],
+    out vertices VOut verts[K_MAX_VERTS_PER_MESHLET]) {
   uint task_i = payload.meshlet_indices[gid];
   TaskCmd task_cmd = task_cmd_buf[task_i & 0xffffff];
   uint meshlet_idx = task_cmd.task_offset + (task_i >> 24);

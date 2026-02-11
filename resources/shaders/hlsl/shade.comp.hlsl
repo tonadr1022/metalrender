@@ -6,7 +6,7 @@
 
 PUSHCONSTANT(ShadePC, pc);
 
-[RootSignature(ROOT_SIGNATURE)][NumThreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
+[NumThreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
   if (dtid.x >= pc.img_dims.x || dtid.y >= pc.img_dims.y) {
     return;
   }

@@ -13,7 +13,7 @@ struct FOut {
   float4 gbuffer_b : SV_Target1;
 };
 
-[RootSignature(ROOT_SIGNATURE)] FOut main(VOut input) {
+FOut main(VOut input) {
   FOut fout;
 #ifdef DEBUG_MODE
   // GlobalData globals = load_globals();

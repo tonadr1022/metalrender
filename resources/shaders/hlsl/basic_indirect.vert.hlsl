@@ -15,8 +15,7 @@ struct DrawID {
 
 CONSTANT_BUFFER(DrawID, gDrawID, 999);
 
-[RootSignature(ROOT_SIGNATURE)] VOut main(uint vert_id : SV_VertexID,
-                                          uint instance_id : SV_InstanceID) {
+VOut main(uint vert_id : SV_VertexID, uint instance_id : SV_InstanceID) {
   ViewData view_data = bindless_buffers[view_data_buf_idx].Load<ViewData>(view_data_buf_offset);
   InstanceData instance_data = bindless_buffers[instance_data_buf_idx].Load<InstanceData>(
       gDrawID.did * sizeof(InstanceData));

@@ -375,8 +375,9 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
   fs::create_directories(out_filepath.parent_path());
   fs::create_directories(dep_filepath.parent_path());
   std::string compile_dxil =
-      std::format("dxc {} -Fo {} -T {} -E main {}", path.string(), out_filepath.string(),
-                  shader_model, debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");
+      std::format("dxc {} -Fo {} -T {} -E main {}  -rootsig-define ROOT_SIGNATURE", path.string(),
+                  out_filepath.string(), shader_model,
+                  debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");
   if (std::system(compile_dxil.c_str())) {
     LINFO("dxc failed for {}", path.string());
     return false;
@@ -394,6 +395,7 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
         " -fvk-use-dx-layout"
         " -fvk-u-shift 1000 0"
         " -fvk-t-shift 2000 0"
+        " -rootsig-define ROOT_SIGNATURE"
         " -D VULKAN",
         path.string(), spirv_path.string(), shader_model,
         debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");

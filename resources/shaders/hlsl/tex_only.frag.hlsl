@@ -9,7 +9,7 @@ struct VOut {
   float2 uv : TEXCOORD0;
 };
 
-[RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target {
+float4 main(VOut input) : SV_Target {
   Texture2D tex = bindless_textures[tex_idx];
   Texture2D gbuffer_b_tex = bindless_textures[gbuffer_b_idx];
   SamplerState samp = bindless_samplers[NEAREST_SAMPLER_IDX];

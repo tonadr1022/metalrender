@@ -4,7 +4,7 @@
 #include "shared_basic_indirect.h"
 // clang-format on
 
-[RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target0 {
+float4 main(VOut input) : SV_Target0 {
   M4Material material =
       bindless_buffers[mat_buf_idx].Load<M4Material>(input.material_id * sizeof(M4Material));
   SamplerState samp = SamplerDescriptorHeap[LINEAR_SAMPLER_IDX];

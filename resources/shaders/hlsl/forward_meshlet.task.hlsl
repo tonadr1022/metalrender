@@ -28,8 +28,9 @@ RWStructuredBuffer<uint> meshlet_vis_buf : register(u1);
 RWStructuredBuffer<uint> out_counts_buf : register(u2);
 Texture2D depth_pyramid_tex : register(t3);
 
-[RootSignature(ROOT_SIGNATURE)][NumThreads(K_TASK_TG_SIZE, 1, 1)] void main(
-    uint gtid : SV_GroupThreadID, uint dtid : SV_DispatchThreadID, uint gid : SV_GroupID) {
+[NumThreads(K_TASK_TG_SIZE, 1, 1)] void main(uint gtid : SV_GroupThreadID,
+                                             uint dtid : SV_DispatchThreadID,
+                                             uint gid : SV_GroupID) {
   // pass 1: draw meshlets visible last frame and write to depth buffer
   // pass 2: draw  meshlets not visible last frame that pass the cull test against depth pyramid.
   uint task_group_id = gid;

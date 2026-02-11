@@ -10,7 +10,7 @@ struct DispatchIndirectCmd {
   uint tg_z;
 };
 
-[RootSignature(ROOT_SIGNATURE)][NumThreads(1, 1, 1)] void main(uint dtid : SV_DispatchThreadID) {
+[NumThreads(1, 1, 1)] void main(uint dtid : SV_DispatchThreadID) {
   if (dtid == 0) {
     DispatchIndirectCmd cmd;
     cmd.tg_x = 0;
