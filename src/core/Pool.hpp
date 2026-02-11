@@ -278,9 +278,6 @@ struct BlockPool {
   }
 
   void add_block() {
-    if (all_entries_.size() >= std::numeric_limits<uint16_t>::max()) {
-      throw std::runtime_error("max number of blocks reached");
-    }
     auto block = static_cast<uint16_t>(all_entries_.size());
     for (uint16_t i = 0; i < element_count_per_block_; i++) {
       free_list_.emplace_back(EntryKey{.block = block, .idx = i});

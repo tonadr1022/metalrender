@@ -24,6 +24,8 @@ set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_SOURCE_DIR}/cmake")
 include(Warnings)
 add_project_warnings(project_warnings)
 
+set(POSITION_INDEPENDENT_CODE ON)
+
 add_subdirectory(third_party)
 add_subdirectory(src)
 add_subdirectory(apps)

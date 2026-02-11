@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 #include "GFXTypes.hpp"
 #include "core/Config.hpp"
 #include "gfx/rhi/Barrier.hpp"

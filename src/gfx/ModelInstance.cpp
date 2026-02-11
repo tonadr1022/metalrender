@@ -1,10 +1,9 @@
 #include "ModelInstance.hpp"
 
+#include "core/Config.hpp"
 #include "core/EAssert.hpp"
 #include "core/MathUtil.hpp"
 #include "glm/gtc/type_ptr.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -65,4 +64,4 @@ bool ModelInstance::update_transforms() {
   return dirty;
 }
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

@@ -6,6 +6,7 @@
 
 #include "core/Config.hpp"
 #include "gfx/metal/MetalCmdEncoderICBMgr.hpp"
+#include "gfx/metal/MetalRootLayout.hpp"
 #include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Pipeline.hpp"

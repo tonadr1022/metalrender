@@ -298,7 +298,7 @@ void check_vkb_result(const char* err_msg, const auto& vkb_result) {
 void VulkanDevice::shutdown() {
   vkDeviceWaitIdle(device_);
 
-  del_q_.flush(SIZE_T_MAX);
+  del_q_.flush(SIZE_MAX);
 
   for (VkSampler sampler : immutable_samplers_) {
     vkDestroySampler(device_, sampler, nullptr);
@@ -1234,7 +1234,7 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
     composite = VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
   }
   rhi::TextureUsage usage = rhi::TextureUsage::ColorAttachment | rhi::TextureUsage::TransferSrc |
-                            rhi::TextureUsage::TransferDst | rhi::TextureUsage::Storage;
+                            rhi::TextureUsage::TransferDst;
   VkSwapchainKHR old_swapchain = swapchain->swapchain_;
   VkSwapchainCreateInfoKHR swap_info{
       .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,

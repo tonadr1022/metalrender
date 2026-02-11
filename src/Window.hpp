@@ -42,7 +42,7 @@ class Window {
   glm::uvec2 get_window_not_framebuffer_size();
   [[nodiscard]] GLFWwindow* get_handle() const { return window_; }
   virtual void set_fullscreen([[maybe_unused]] bool fullscreen) {}
-  [[nodiscard]] virtual bool get_fullscreen() const = 0;
+  [[nodiscard]] virtual bool get_fullscreen() const { return false; }
 
  protected:
   KeyCallbackFn key_callback_fn_;

@@ -129,7 +129,7 @@ void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t fram
 rhi::BufferHandleHolder ImGuiRenderer::get_buffer_of_size(size_t size, size_t frame_in_flight,
                                                           const char* name) {
   auto& bufs = buffers_[frame_in_flight];
-  size_t best_i{SIZE_T_MAX};
+  size_t best_i{SIZE_MAX};
 
   for (size_t i = 0; i < bufs.size(); i++) {
     auto* buf = device_->get_buf(bufs[i]);
@@ -140,7 +140,7 @@ rhi::BufferHandleHolder ImGuiRenderer::get_buffer_of_size(size_t size, size_t fr
     }
   }
 
-  if (best_i != SIZE_T_MAX) {
+  if (best_i != SIZE_MAX) {
     auto buf_handle = std::move(bufs[best_i]);
     if (best_i != bufs.size() - 1) {
       bufs[best_i] = std::move(bufs.back());

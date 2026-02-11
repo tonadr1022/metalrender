@@ -20,7 +20,6 @@ add_library(${target_name} SHARED
     gfx/RenderGraph.cpp
     gfx/BackedGPUAllocator.cpp
     gfx/renderer/BufferResize.cpp
-    platform/apple/AppleWindow.mm # TODO: move this please
 
     gfx/texture/KtxLoad.cpp
     gfx/rhi/Pipeline.cpp
@@ -47,6 +46,7 @@ endif()
 
 if(BUILD_METAL)
     target_sources(${target_name} PRIVATE
+        platform/apple/AppleWindow.mm
         gfx/metal/MetalCpp.cpp
         gfx/metal/MetalCmdEncoderICBMgr.cpp
         gfx/metal/MetalDevice.cpp
@@ -60,14 +60,14 @@ if(BUILD_METAL)
     target_compile_definitions(${target_name} PRIVATE METAL_BACKEND=1)
     set_source_files_properties(gfx/metal/MetalDevice.cpp PROPERTIES COMPILE_FLAGS "-x objective-c++")
     set_source_files_properties(gfx/metal/MetalWindow.cpp PROPERTIES COMPILE_FLAGS "-x objective-c++")
+
+    add_custom_target(compile_metal_backend_shaders ALL
+        COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/compile_custom_mtl_shaders.sh
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    )
+    add_dependencies(${target_name} compile_metal_backend_shaders)
 endif()
 
-add_custom_target(compile_shaders ALL
-    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/compile_custom_mtl_shaders.sh
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
-add_dependencies(${target_name} compile_shaders)
 
 target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/resources/shaders)
 target_include_directories(${target_name} PUBLIC ${CMAKE_SOURCE_DIR}/third_party/vendored)
@@ -80,7 +80,6 @@ target_link_libraries(${target_name} PUBLIC
     meshoptimizer
     Tracy::TracyClient
     implot
-    METAL_CPP
     offsetAllocator
     FastNoise
     bs_thread_pool
@@ -101,5 +100,6 @@ endif()
 if (BUILD_METAL)
     target_link_libraries(${target_name} PRIVATE
         metal_irconverter_runtime
+        METAL_CPP
     )
 endif()

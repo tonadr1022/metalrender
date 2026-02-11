@@ -17,6 +17,7 @@ if (BUILD_VULKAN)
 
     add_subdirectory(VulkanMemoryAllocator)
     add_subdirectory(volk)
+    set(VK_BOOTSTRAP_POSITION_INDEPENDENT_CODE ON)
     add_subdirectory(vk-bootstrap)
 endif()
 

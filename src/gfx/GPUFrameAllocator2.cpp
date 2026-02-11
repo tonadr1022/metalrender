@@ -1,5 +1,7 @@
 #include "GPUFrameAllocator2.hpp"
 
+#include <cstring>
+
 #include "core/Config.hpp"
 #include "core/Util.hpp"
 #include "gfx/rhi/Buffer.hpp"

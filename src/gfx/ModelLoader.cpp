@@ -21,7 +21,6 @@
 #define CGLTF_IMPLEMENTATION
 #include <cgltf/cgltf.h>
 
-#include <Metal/Metal.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 #include <span>

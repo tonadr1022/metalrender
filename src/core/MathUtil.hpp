@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstring>
+
 #include "core/Config.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include "glm/vec3.hpp"

@@ -1,5 +1,7 @@
 #include "BufferResize.hpp"
 
+#include <cstring>
+
 #include "core/Config.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/rhi/Buffer.hpp"
