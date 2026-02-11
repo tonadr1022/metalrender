@@ -6,6 +6,7 @@
 #include "core/Util.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/Device.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -15,10 +16,11 @@ GPUFrameAllocator2::GPUFrameAllocator2(size_t size, rhi::Device* device) {
   capacity_ = size;
   device_ = device;
   for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
-    buffers[i] = device->create_buf_h({.storage_mode = rhi::StorageMode::CPUAndGPU,
-                                       .usage = rhi::BufferUsage::Storage,
-                                       .size = size,
-                                       .bindless = true});
+    buffers[i] = device->create_buf_h({
+        .usage = rhi::BufferUsage::Storage,
+        .size = size,
+        .flags = rhi::BufferDescFlags::CPUAccessible,
+    });
   }
 }
 
@@ -101,10 +103,9 @@ void GPUFrameAllocator3::advance_frame() {
 
 GPUFrameAllocator3::StagingBuffer GPUFrameAllocator3::create_staging_buffer(uint32_t size) {
   return {device_->create_buf_h({
-              .storage_mode = rhi::StorageMode::CPUAndGPU,
               .usage = rhi::BufferUsage::Storage,
               .size = size,
-              .bindless = true,
+              .flags = rhi::BufferDescFlags::CPUAccessible,
               .name = "gpu_frame_allocator3_staging_buf",
           }),
           0, size};

@@ -3,10 +3,13 @@
 #include <Metal/MTLGPUAddress.hpp>
 #include <Metal/Metal.hpp>
 
+#include "RootLayout.hpp"
+
 #define IR_RUNTIME_METALCPP
 #include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
 
 #include "core/Config.hpp"
+#include "core/Util.hpp"
 
 namespace TENG_NAMESPACE {
 

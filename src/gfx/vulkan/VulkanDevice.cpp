@@ -504,6 +504,7 @@ void VulkanDevice::init(const InitInfo& init_info) {
         .mag_filter = rhi::FilterMode::Linear,
         .mipmap_mode = rhi::FilterMode::Linear,
         .address_mode = rhi::AddressMode::ClampToEdge,
+        .bindless = false,
     });
     add_immutable_sampler({
         .min_filter = rhi::FilterMode::Linear,
@@ -606,12 +607,15 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
   }
 
   VmaAllocationCreateInfo vma_cinfo{};
-  if (desc.storage_mode == rhi::StorageMode::CPUAndGPU ||
-      has_flag(capabilities_, rhi::GraphicsCapability::CacheCoherentUMA)) {
-    vma_cinfo.flags |=
-        VMA_ALLOCATION_CREATE_MAPPED_BIT |
-        (desc.random_host_access ? VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
-                                 : VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+  if (rhi::has_flag(desc.flags, rhi::BufferDescFlags::CPUAccessible) ||
+      (has_flag(capabilities_, rhi::GraphicsCapability::CacheCoherentUMA) &&
+       !has_flag(desc.flags, rhi::BufferDescFlags::DisableCPUAccessOnUMA))) {
+    vma_cinfo.flags |= VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    if (has_flag(desc.flags, rhi::BufferDescFlags::CPURandomAccess)) {
+      vma_cinfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT;
+    } else {
+      vma_cinfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    }
   } else {
     cinfo.usage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
   }
@@ -623,7 +627,7 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
   VmaAllocationInfo allocation_info{};
   vmaGetAllocationInfo(allocator_, allocation, &allocation_info);
 
-  return buffer_pool_.alloc(desc, rhi::k_invalid_bindless_idx, buffer, allocation,
+  return buffer_pool_.alloc(desc, rhi::k_invalid_bindless_idx, buffer, allocation, vma_cinfo.flags,
                             allocation_info.pMappedData);
 }
 

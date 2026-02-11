@@ -105,7 +105,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_verbose_ = i++ == 0;
+  rg_verbose_ = i++ == -2;
   device_->acquire_next_swapchain_image(swapchain_);
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
@@ -137,7 +137,6 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   rg_.execute();
 
   device_->submit_frame();
-
   frame_num_++;
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
 }
@@ -627,6 +626,7 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
       mats.push_back(M4Material{.albedo_tex_idx = img_upload_bindless_indices[m.albedo_tex],
                                 .color = glm::vec4{m.albedo_factors}});
     }
+    ASSERT(materials_buf_.get_buffer()->is_cpu_visible());
     buffer_copy_mgr_.copy_to_buffer(
         mats.data(), mats.size() * sizeof(M4Material), materials_buf_.get_buffer_handle(),
         material_alloc.offset * sizeof(M4Material), rhi::PipelineStage::FragmentShader,
@@ -940,9 +940,9 @@ bool InstanceMgr::ensure_buffer_space(size_t element_count) {
   if (!instance_data_buf_.is_valid() ||
       device_.get_buf(instance_data_buf_)->size() < element_count * sizeof(InstanceData)) {
     auto new_buf = device_.create_buf_h({
-        .storage_mode = rhi::StorageMode::GPUOnly,
         .usage = rhi::BufferUsage::Storage,
         .size = sizeof(InstanceData) * element_count,
+        .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
         .name = "intance_data_buf",
     });
 
@@ -960,9 +960,9 @@ bool InstanceMgr::ensure_buffer_space(size_t element_count) {
     if (!draw_cmd_buf_.is_valid() ||
         device_.get_buf(draw_cmd_buf_)->size() < element_count * sizeof(IndexedIndirectDrawCmd)) {
       auto new_buf = device_.create_buf_h(rhi::BufferDesc{
-          .storage_mode = rhi::StorageMode::Default,
           .usage = rhi::BufferUsage::Indirect,
           .size = sizeof(IndexedIndirectDrawCmd) * element_count,
+          .flags = rhi::BufferDescFlags::CPUAccessible,
           .name = "draw_indexed_indirect_cmd_buf",
       });
       if (draw_cmd_buf_.is_valid()) {
@@ -1191,7 +1191,6 @@ void MemeRenderer123::recreate_swapchain_sized_textures() {
                          .usage = rhi::TextureUsage::Storage | rhi::TextureUsage::ShaderWrite,
                          .dims = size,
                          .mip_levels = mip_levels,
-                         .bindless = true,
                          .name = "depth_pyramid_tex"})};
     depth_pyramid_tex_.views.reserve(mip_levels);
     for (size_t i = 0; i < mip_levels; i++) {
@@ -1228,11 +1227,10 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
       frame_gpu_upload_allocator_(device_),
       buffer_copy_mgr_(device_, frame_gpu_upload_allocator_),
       materials_buf_(*device_, buffer_copy_mgr_,
-                     rhi::BufferDesc{.storage_mode = rhi::StorageMode::Default,
-                                     .usage = rhi::BufferUsage::Storage,
-                                     .size = k_max_materials * sizeof(M4Material),
-                                     .bindless = true,
-                                     .name = "all materials buf"},
+                     {.usage = rhi::BufferUsage::Storage,
+                      .size = k_max_materials * sizeof(M4Material),
+                      // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
+                      .name = "all materials buf"},
                      sizeof(M4Material)),
       static_instance_mgr_(*device_, buffer_copy_mgr_, device_->get_info().frames_in_flight, *this),
       static_draw_batch_(GeometryBatchType::Static, *device_, buffer_copy_mgr_,
@@ -1334,14 +1332,13 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
   for (size_t i = 0; i < device_->get_info().frames_in_flight; i++) {
     // TODO: render graph this?
     out_counts_buf_[i] = device_->create_buf_h(rhi::BufferDesc{
-        .storage_mode = rhi::StorageMode::GPUOnly,
         .usage = rhi::BufferUsage::Storage,
         .size = sizeof(MeshletDrawStats),
         .name = "out_counts_buf",
     });
     out_counts_buf_readback_[i] = device_->create_buf_h(rhi::BufferDesc{
-        .storage_mode = rhi::StorageMode::CPUAndGPU,
         .size = sizeof(MeshletDrawStats),
+        .flags = rhi::BufferDescFlags::CPUAccessible,
         .name = "out_counts_buf_readback",
     });
   }
@@ -1350,8 +1347,8 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
     query_pools_[i] = device_->create_query_pool_h(
         rhi::QueryPoolDesc{.count = k_query_count, .name = "query_pool_[i]"});
     query_resolve_bufs_[curr_frame_idx_] =
-        device_->create_buf_h({.storage_mode = rhi::StorageMode::CPUAndGPU,
-                               .size = sizeof(uint64_t) * k_query_count,
+        device_->create_buf_h({.size = sizeof(uint64_t) * k_query_count,
+                               .flags = rhi::BufferDescFlags::CPUAccessible,
                                .name = "query"});
   }
 }
@@ -1360,9 +1357,7 @@ InstanceMgr::InstanceMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr,
                          uint32_t frames_in_flight, MemeRenderer123& renderer)
     : allocator_(0),
       meshlet_vis_buf_(device, buffer_copy_mgr,
-                       {.storage_mode = rhi::StorageMode::GPUOnly,
-                        .usage = rhi::BufferUsage::Storage,
-                        .name = "instance meshlet vis buf"},
+                       {.usage = rhi::BufferUsage::Storage, .name = "instance meshlet vis buf"},
                        sizeof(uint32_t)),
       buffer_copy_mgr_(buffer_copy_mgr),
       frames_in_flight_(frames_in_flight),

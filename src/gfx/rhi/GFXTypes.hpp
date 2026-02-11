@@ -100,13 +100,21 @@ enum class BufferUsage : uint8_t {
 
 AUGMENT_ENUM_CLASS(BufferUsage);
 
+enum class BufferDescFlags : uint8_t {
+  None = 0,
+  CPUAccessible = 1 << 0,    // buffer memory is mappable to CPU address space
+  CPURandomAccess = 1 << 1,  // buffer memory is optimized for random access from CPU (only
+                             // relevant if CPUAccessible is set)
+  NoBindless = 1 << 2,
+  DisableCPUAccessOnUMA = 1 << 3,
+};
+
+AUGMENT_ENUM_CLASS(BufferDescFlags);
+
 struct BufferDesc {
-  StorageMode storage_mode{StorageMode::Default};
   BufferUsage usage{BufferUsage::None};
   size_t size{};
-  bool bindless{true};
-  bool random_host_access{};
-  bool force_gpu_only{};
+  BufferDescFlags flags{BufferDescFlags::None};
   const char* name{};
 };
 

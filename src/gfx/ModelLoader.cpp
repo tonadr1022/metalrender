@@ -44,13 +44,14 @@ void load_stb_image(const void *data, size_t data_size, const std::filesystem::p
     img_data = stbi_load(path.string().c_str(), &w, &h, &comp, 4);
   }
   const uint32_t mip_levels = math::get_mip_levels(w, h);
-  const rhi::TextureDesc desc{.format = rhi::TextureFormat::R8G8B8A8Unorm,
-                              .storage_mode = rhi::StorageMode::Default,
-                              .usage = rhi::TextureUsage::Sample,
-                              .dims = glm::uvec3{w, h, 1},
-                              .mip_levels = mip_levels,
-                              .array_length = 1,
-                              .bindless = true};
+  const rhi::TextureDesc desc{
+      .format = rhi::TextureFormat::R8G8B8A8Unorm,
+      .storage_mode = rhi::StorageMode::Default,
+      .usage = rhi::TextureUsage::Sample,
+      .dims = glm::uvec3{w, h, 1},
+      .mip_levels = mip_levels,
+      .array_length = 1,
+  };
   if (!img_data) {
     ASSERT(0);
   }
@@ -83,7 +84,7 @@ void load_ktx(const void *data, size_t data_size, const std::filesystem::path &p
       .dims = glm::uvec3{ktx_tex->baseWidth, ktx_tex->baseHeight, ktx_tex->baseDepth},
       .mip_levels = ktx_tex->numLevels,
       .array_length = 1,
-      .bindless = true};
+  };
   ASSERT(ktx_tex);
   ASSERT(ktx_tex->numLevels > 0);
 

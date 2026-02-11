@@ -6,6 +6,7 @@
 #include "gfx/ShaderManager.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
 #include "hlsl/default_vertex.h"
@@ -36,6 +37,7 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   test_vert_buf_ = device_->create_buf_h({
       .usage = rhi::BufferUsage::Storage,
       .size = 1024ul * 1024,
+      .flags = rhi::BufferDescFlags::CPUAccessible,
   });
   recreate_resources_on_swapchain_resize();
 

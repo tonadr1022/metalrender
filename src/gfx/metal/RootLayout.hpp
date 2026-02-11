@@ -4,7 +4,6 @@
 #include <cstdint>
 
 #include "core/Config.hpp"
-#include "core/Util.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
 namespace TENG_NAMESPACE {

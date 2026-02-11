@@ -150,10 +150,9 @@ rhi::BufferHandleHolder ImGuiRenderer::get_buffer_of_size(size_t size, size_t fr
   }
 
   return device_->create_buf_h({
-      .storage_mode = rhi::StorageMode::CPUAndGPU,
       .usage = (rhi::BufferUsage)(rhi::BufferUsage::Storage | rhi::BufferUsage::Index),
       .size = size * 2,
-      .bindless = true,
+      .flags = rhi::BufferDescFlags::CPUAccessible,
       .name = name,
   });
 }
@@ -238,7 +237,6 @@ bool ImGuiRenderer::has_dirty_textures() {
             .usage = rhi::TextureUsage::Sample,
             .dims = glm::uvec3{im_tex->Width, im_tex->Height, 1},
             .mip_levels = 1,
-            .bindless = true,
             .name = "imgui_tex",
         });
         im_tex->SetTexID(tex_handle.to64());

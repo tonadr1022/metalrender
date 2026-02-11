@@ -21,7 +21,7 @@ StructuredBuffer<M4Material> material_buf : register(t11);
   M4Material material = material_buf[input.material_id];
   SamplerState samp = bindless_samplers[LINEAR_SAMPLER_IDX];
   float4 albedo = material.color;
-  albedo = float4(1, 1, 1, 1);
+  //  albedo = float4(1, 1, 1, 1);
   if (material.albedo_tex_idx != 0) {
     albedo *= (bindless_textures[material.albedo_tex_idx]).Sample(samp, input.uv);
   }

@@ -498,7 +498,6 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
             .dims = glm::uvec3{dims.x, dims.y, 1},
             .mip_levels = att_info.mip_levels,
             .array_length = att_info.array_layers,
-            .bindless = true,
             .name = "render_graph_tex_att"});
         actual_att_handle = att_tx_handle;
       }
@@ -525,7 +524,6 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       }
       if (!actual_buf_handle.is_valid()) {
         auto buf_handle = device_->create_buf(rhi::BufferDesc{
-            .storage_mode = rhi::StorageMode::GPUOnly,
             .usage = (rhi::BufferUsage)(rhi::BufferUsage::Storage),
             .size = binfo.size,
             .name = "render_graph_buffer",

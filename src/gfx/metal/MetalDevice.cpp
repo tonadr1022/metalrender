@@ -359,10 +359,26 @@ void MetalDevice::shutdown() {
   device_->release();
 }
 
+namespace {
+
+MTL::ResourceOptions convert_resource_storage_mode(rhi::BufferDescFlags flags, bool coherent_uma) {
+  MTL::ResourceOptions options{};
+  if (rhi::has_flag(flags, rhi::BufferDescFlags::CPUAccessible) || coherent_uma) {
+    options |= MTL::ResourceStorageModeShared;
+  } else {
+    options |= MTL::ResourceStorageModePrivate;
+  }
+  return options;
+}
+
+}  // namespace
+
 rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
-  auto options = mtl::util::convert(desc.storage_mode);
-  options |= MTL::ResourceHazardTrackingModeUntracked;
-  auto* mtl_buf = device_->newBuffer(desc.size, options);
+  auto resource_opts = convert_resource_storage_mode(
+      desc.flags, rhi::has_flag(capabilities_, rhi::GraphicsCapability::CacheCoherentUMA) &&
+                      !has_flag(desc.flags, rhi::BufferDescFlags::DisableCPUAccessOnUMA));
+  resource_opts |= MTL::ResourceHazardTrackingModeUntracked;
+  auto* mtl_buf = device_->newBuffer(desc.size, resource_opts);
   ALWAYS_ASSERT(mtl_buf);
   if (desc.name) {
     mtl_buf->setLabel(mtl::util::string(desc.name));
@@ -372,7 +388,7 @@ rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   }
 
   uint32_t idx = rhi::k_invalid_bindless_idx;
-  if (desc.bindless) {
+  if (!has_flag(desc.flags, rhi::BufferDescFlags::NoBindless)) {
     idx = resource_desc_heap_allocator_.alloc_idx();
     IRBufferView bview{};
     bview.buffer = mtl_buf;
@@ -388,7 +404,7 @@ rhi::BufferHandle MetalDevice::create_buf(const rhi::BufferDesc& desc) {
   main_res_set_->commit();
   req_alloc_sizes_.total_buffer_space_allocated += desc.size;
 
-  return buffer_pool_.alloc(desc, mtl_buf, idx);
+  return buffer_pool_.alloc(desc, mtl_buf, resource_opts, idx);
 }
 
 namespace {
@@ -804,8 +820,9 @@ void MetalDevice::submit_frame() {
 void MetalDevice::init_bindless() {
   auto create_descriptor_table = [this](rhi::BufferHandleHolder* out_buf, size_t count,
                                         const char* name) {
-    *out_buf = create_buf_h(rhi::BufferDesc{
-        .size = sizeof(IRDescriptorTableEntry) * count, .bindless = false, .name = name});
+    *out_buf = create_buf_h(rhi::BufferDesc{.size = sizeof(IRDescriptorTableEntry) * count,
+                                            .flags = rhi::BufferDescFlags::NoBindless,
+                                            .name = name});
   };
 
   create_descriptor_table(&resource_descriptor_table_, k_max_buffers + k_max_textures,
@@ -1182,7 +1199,7 @@ void MetalDevice::destroy_actual(rhi::BufferHandle handle) {
     }
   }
 
-  if (buf->desc().bindless) {
+  if (!has_flag(buf->desc().flags, rhi::BufferDescFlags::NoBindless)) {
     ASSERT(buf->bindless_idx() != rhi::k_invalid_bindless_idx);
     resource_desc_heap_allocator_.free_idx(buf->bindless_idx());
   }

@@ -3,6 +3,7 @@
 #include "core/Config.hpp"
 #include "core/Hash.hpp"
 #include "core/Logger.hpp"
+#include "core/Util.hpp"
 #include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/vulkan/VkUtil.hpp"

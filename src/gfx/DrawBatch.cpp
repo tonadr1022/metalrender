@@ -1,60 +1,62 @@
 #include "DrawBatch.hpp"
 
+#include "core/Config.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 #include "hlsl/default_vertex.h"
 #include "hlsl/shared_mesh_data.h"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
 namespace gfx {
 
+// TODO: coalesce buffer descs
+
 GeometryBatch::GeometryBatch(GeometryBatchType type, rhi::Device& device,
                              BufferCopyMgr& buffer_copier, const CreateInfo& cinfo)
     : vertex_buf(device, buffer_copier,
                  {
-                     .storage_mode = rhi::StorageMode::Default,
                      .size = cinfo.initial_vertex_capacity * sizeof(DefaultVertex),
+                     .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                      .name = "vertex buf",
                  },
                  sizeof(DefaultVertex)),
       index_buf(device, buffer_copier,
 
                 {
-                    .storage_mode = rhi::StorageMode::Default,
                     .size = cinfo.initial_index_capacity * sizeof(rhi::DefaultIndexT),
+                    .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                     .name = "index buf",
                 },
                 sizeof(rhi::DefaultIndexT)),
       meshlet_buf(device, buffer_copier,
 
                   {
-                      .storage_mode = rhi::StorageMode::Default,
                       .size = cinfo.initial_meshlet_capacity * sizeof(Meshlet),
+                      .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                       .name = "meshlet buf",
                   },
                   sizeof(Meshlet)),
       mesh_buf(device, buffer_copier,
 
                {
-                   .storage_mode = rhi::StorageMode::Default,
                    .size = cinfo.initial_mesh_capacity * sizeof(MeshData),
+                   .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                    .name = "mesh buf",
                },
                sizeof(MeshData)),
       meshlet_triangles_buf(device, buffer_copier,
 
                             {
-                                .storage_mode = rhi::StorageMode::Default,
                                 .size = cinfo.initial_meshlet_triangle_capacity * sizeof(uint8_t),
+                                .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                                 .name = "meshlet_triangles_buf",
                             },
                             sizeof(uint8_t)),
       meshlet_vertices_buf(device, buffer_copier,
 
                            {
-                               .storage_mode = rhi::StorageMode::Default,
                                .size = cinfo.initial_meshlet_vertex_capacity * sizeof(uint32_t),
+                               .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                                .name = "meshlet_vertices_buf",
                            },
                            sizeof(uint32_t)),
@@ -94,4 +96,4 @@ GeometryBatch::Stats GeometryBatch::get_stats() const {
 
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE
