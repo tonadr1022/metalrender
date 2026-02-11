@@ -95,6 +95,7 @@ class VulkanDevice : public rhi::Device {
 
   void begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
                                  glm::vec4* clear_color) override;
+  void acquire_next_swapchain_image(rhi::Swapchain* swapchain) override;
   void resolve_query_data(rhi::QueryPoolHandle /*query_pool*/, uint32_t /*start_query*/,
                           uint32_t /*query_count*/,
                           std::span<uint64_t> /*out_timestamps*/) override {

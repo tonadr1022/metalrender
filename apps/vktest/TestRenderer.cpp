@@ -1,5 +1,6 @@
 #include "TestRenderer.hpp"
 
+#include "Window.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
 #include "core/Util.hpp"
 #include "gfx/ShaderManager.hpp"
@@ -18,7 +19,8 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
     : device_(cinfo.device),
       swapchain_(cinfo.swapchain),
       frame_gpu_upload_allocator_(device_),
-      buffer_copy_mgr_(device_, frame_gpu_upload_allocator_) {
+      buffer_copy_mgr_(device_, frame_gpu_upload_allocator_),
+      window_(cinfo.window) {
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
   shader_mgr_->init(
       device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
@@ -44,64 +46,17 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   buffer_copy_mgr_.copy_to_buffer(tri_verts.data(), tri_verts.size() * sizeof(DefaultVertex),
                                   test_vert_buf_.handle, 0, PipelineStage::VertexShader,
                                   AccessFlags::ShaderRead);
+  rg_.init(device_);
 }
 
 void TestRenderer::render() {
   shader_mgr_->replace_dirty_pipelines();
-  auto* enc = device_->begin_cmd_encoder();
-
-  auto compute_clear_pass = [this](rhi::CmdEncoder* enc, rhi::TextureHandle tex_handle) {
-    auto* tex = device_->get_tex(tex_handle);
-    enc->bind_pipeline(clear_color_cmp_pso_);
-    struct {
-      glm::uvec2 dims;
-    } pc;
-    pc.dims = tex->desc().dims;
-    enc->push_constants(&pc, sizeof(pc));
-    enc->bind_uav(tex_handle, 0);
-    enc->dispatch_compute(
-        glm::uvec3{align_divide_up(pc.dims.x, 8), align_divide_up(pc.dims.y, 8), 1},
-        glm::uvec3{8, 8, 1});
-  };
-
-  {  // compute clear
-    auto b = rhi::GPUBarrier::tex_barrier(test_full_screen_tex_.handle, rhi::ResourceState::None,
-                                          rhi::ResourceState::ComputeWrite);
-    enc->barrier(&b);
-    compute_clear_pass(enc, test_full_screen_tex_.handle);
-    b = rhi::GPUBarrier::tex_barrier(test_full_screen_tex_.handle, rhi::ResourceState::ComputeWrite,
-                                     rhi::ResourceState::ShaderRead);
-    enc->barrier(&b);
-  }
-
-  // enc->end_encoding();
-  // enc = device_->begin_cmd_encoder();
-
-  glm::vec4 clear_color{0.5, 0.5, 0, 1};
-  device_->begin_swapchain_rendering(swapchain_, enc, &clear_color);
-  enc->set_cull_mode(rhi::CullMode::None);
-  enc->set_wind_order(rhi::WindOrder::CounterClockwise);
-  enc->set_viewport({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
-  enc->set_scissor({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
-  enc->bind_pipeline(test_gfx_pso_);
-  enc->bind_srv(test_full_screen_tex_.handle, 0);
-  enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
-
-  enc->bind_pipeline(test_geo_pso_);
-  enc->bind_srv(test_vert_buf_.handle, 0);
-  enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
-
-  enc->end_rendering();
-
-  {
-    auto b = rhi::GPUBarrier::tex_barrier(swapchain_->get_current_texture(),
-                                          rhi::ResourceState::ColorWrite,
-                                          rhi::ResourceState::SwapchainPresent);
-    enc->barrier(&b);
-  }
-
-  enc->end_encoding();
-
+  add_render_graph_passes();
+  static int i = 0;
+  bool verbose = i++ == 0;
+  device_->acquire_next_swapchain_image(swapchain_);
+  rg_.bake(window_->get_window_size(), verbose);
+  rg_.execute();
   device_->submit_frame();
 }
 
@@ -118,6 +73,49 @@ void TestRenderer::recreate_resources_on_swapchain_resize() {
       .array_length = 1,
       .name = "test full screen texture",
   });
+}
+
+void TestRenderer::add_render_graph_passes() {
+  {
+    auto& p = rg_.add_compute_pass("compute_clear_pass");
+    p.w_external_tex("test_full_screen_tex_", test_full_screen_tex_.handle);
+    p.set_ex([this](rhi::CmdEncoder* enc) {
+      auto tex_handle = test_full_screen_tex_.handle;
+
+      auto* tex = device_->get_tex(tex_handle);
+      enc->bind_pipeline(clear_color_cmp_pso_);
+      struct {
+        glm::uvec2 dims;
+      } pc;
+      pc.dims = tex->desc().dims;
+      enc->push_constants(&pc, sizeof(pc));
+      enc->bind_uav(tex_handle, 0);
+      enc->dispatch_compute(
+          glm::uvec3{align_divide_up(pc.dims.x, 8), align_divide_up(pc.dims.y, 8), 1},
+          glm::uvec3{8, 8, 1});
+    });
+  }
+  {
+    auto& p = rg_.add_graphics_pass("fullscreen");
+    p.r_external_tex("test_full_screen_tex_", rhi::PipelineStage::FragmentShader);
+    p.w_swapchain_tex(swapchain_);
+    p.set_ex([this](rhi::CmdEncoder* enc) {
+      glm::vec4 clear_color{0.5, 0.5, 0, 1};
+      device_->begin_swapchain_rendering(swapchain_, enc, &clear_color);
+      enc->set_cull_mode(rhi::CullMode::None);
+      enc->set_wind_order(rhi::WindOrder::CounterClockwise);
+      enc->set_viewport({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
+      enc->set_scissor({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
+      enc->bind_pipeline(test_gfx_pso_);
+      enc->bind_srv(test_full_screen_tex_.handle, 0);
+      enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
+
+      enc->bind_pipeline(test_geo_pso_);
+      enc->bind_srv(test_vert_buf_.handle, 0);
+      enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
+      enc->end_rendering();
+    });
+  }
 }
 
 }  // namespace teng::gfx

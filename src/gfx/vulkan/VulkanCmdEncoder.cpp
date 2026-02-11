@@ -18,6 +18,145 @@ namespace gfx::vk {
 
 namespace {
 
+std::pair<VkPipelineStageFlags2, VkAccessFlags2> convert_pipeline_stage_and_access(
+    rhi::ResourceState state) {
+  VkPipelineStageFlags2 stage{};
+  VkAccessFlags2 access{};
+
+  if (has_flag(state, rhi::ResourceState::ColorWrite)) {
+    stage |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    access |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::ColorRead)) {
+    stage |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+    access |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::DepthStencilRead)) {
+    stage |=
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    access |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::DepthStencilWrite)) {
+    stage |=
+        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+    access |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::VertexRead)) {
+    stage |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
+    access |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::IndexRead)) {
+    stage |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
+    access |= VK_ACCESS_2_INDEX_READ_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::IndirectRead)) {
+    stage |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
+    access |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::ComputeRead)) {
+    stage |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    access |= VK_ACCESS_2_SHADER_READ_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::ComputeWrite)) {
+    stage |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    access |= VK_ACCESS_2_SHADER_WRITE_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::TransferRead)) {
+    stage |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    access |= VK_ACCESS_2_TRANSFER_READ_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::TransferWrite)) {
+    stage |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    access |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::FragmentStorageRead)) {
+    stage |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    access |= VK_ACCESS_2_SHADER_READ_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::ComputeSample)) {
+    stage |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+    access |= VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::FragmentSample)) {
+    stage |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    access |= VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::ShaderRead)) {
+    stage |= VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    access |= VK_ACCESS_2_SHADER_READ_BIT;
+  }
+  if (has_flag(state, rhi::ResourceState::SwapchainPresent)) {
+    stage |= VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
+    access |= 0;
+  }
+
+  return {stage, access};
+}
+
+VkImageLayout convert_layout(rhi::ResourceState state) {
+  if (has_flag(state, rhi::ResourceState::ColorWrite) ||
+      has_flag(state, rhi::ResourceState::ColorRead)) {
+    return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  }
+  if (has_flag(state, rhi::ResourceState::DepthStencilWrite)) {
+    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  }
+  if (has_flag(state, rhi::ResourceState::DepthStencilRead)) {
+    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+  }
+  if (has_flag(state, rhi::ResourceState::ShaderRead)) {
+    return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  }
+  if (has_flag(state, rhi::ResourceState::ComputeWrite) ||
+      has_flag(state, rhi::ResourceState::ComputeRead)) {
+    return VK_IMAGE_LAYOUT_GENERAL;
+  }
+  if (has_flag(state, rhi::ResourceState::TransferRead)) {
+    return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  }
+  if (has_flag(state, rhi::ResourceState::TransferWrite)) {
+    return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  }
+  if (has_flag(state, rhi::ResourceState::SwapchainPresent)) {
+    return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  }
+  return VK_IMAGE_LAYOUT_UNDEFINED;
+}
+
+VkImageLayout layout_from_vk_access(VkAccessFlags2 access) {
+  if (access & VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT) {
+    return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  }
+  if (access & VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT) {
+    return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  }
+  if (access & VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT) {
+    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  }
+  if (access & VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT) {
+    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+  }
+  if (access & VK_ACCESS_2_SHADER_READ_BIT) {
+    return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  }
+  if (access & VK_ACCESS_2_SHADER_STORAGE_READ_BIT) {
+    return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  }
+  if (access & VK_ACCESS_2_SHADER_WRITE_BIT) {
+    return VK_IMAGE_LAYOUT_GENERAL;
+  }
+  if (access & VK_ACCESS_2_SHADER_SAMPLED_READ_BIT) {
+    return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  }
+  if (access & VK_ACCESS_2_TRANSFER_READ_BIT) {
+    return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  }
+  if (access & VK_ACCESS_2_TRANSFER_WRITE_BIT) {
+    return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  }
+  return VK_IMAGE_LAYOUT_UNDEFINED;
+}
+
 VkImageAspectFlags convert(rhi::ImageAspect aspect) {
   VkImageAspectFlags flags{};
   if (aspect & rhi::ImageAspect_Color) {
@@ -136,8 +275,6 @@ void VulkanCmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
       } else {
         pipeline = reinterpret_cast<VulkanPipeline*>(device_->get_pipeline(it->second));
       }
-    } else {
-      LINFO("eq");
     }
   }
 
@@ -212,7 +349,9 @@ void VulkanCmdEncoder::copy_tex_to_buf(rhi::TextureHandle /*src_tex*/, size_t /*
                                        size_t /*dst_offset*/) {}
 
 void VulkanCmdEncoder::barrier(rhi::PipelineStage /*src_stage*/, rhi::AccessFlags /*src_access*/,
-                               rhi::PipelineStage /*dst_stage*/, rhi::AccessFlags /*dst_access*/) {}
+                               rhi::PipelineStage /*dst_stage*/, rhi::AccessFlags /*dst_access*/) {
+  ASSERT(0 && "TODO");
+}
 void VulkanCmdEncoder::draw_indexed_indirect(rhi::BufferHandle /*indirect_buf*/,
                                              uint32_t /* indirect_buf_id */, size_t /*draw_cnt*/,
                                              size_t /*offset_i*/) {}
@@ -247,6 +386,44 @@ void VulkanCmdEncoder::barrier(rhi::BufferHandle buf, rhi::PipelineStage src_sta
   });
 }
 
+void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage,
+                               rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
+                               rhi::AccessFlags dst_access) {
+  // get old and new image layouts
+
+  VkImageAspectFlags aspect_mask = 0;
+  auto* texture = (VulkanTexture*)device_->get_tex(tex);
+
+  bool is_depth_stencil = false;
+  if (is_depth_format(texture->desc().format)) {
+    aspect_mask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+    is_depth_stencil = true;
+  }
+  if (is_stencil_format(texture->desc().format)) {
+    aspect_mask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+    is_depth_stencil = true;
+  }
+  if (!is_depth_stencil) {
+    aspect_mask |= VK_IMAGE_ASPECT_COLOR_BIT;
+  }
+
+  img_barriers_.emplace_back(VkImageMemoryBarrier2{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+      .srcStageMask = convert(src_stage),
+      .srcAccessMask = convert(src_access),
+      .dstStageMask = convert(dst_stage),
+      .dstAccessMask = convert(dst_access),
+      .oldLayout = layout_from_vk_access(convert(src_access)),
+      .newLayout = layout_from_vk_access(convert(dst_access)),
+      .image = ((VulkanTexture*)device_->get_tex(tex))->image(),
+      .subresourceRange = VkImageSubresourceRange{.aspectMask = aspect_mask,
+                                                  .baseMipLevel = 0,
+                                                  .levelCount = VK_REMAINING_MIP_LEVELS,
+                                                  .baseArrayLayer = 0,
+                                                  .layerCount = VK_REMAINING_ARRAY_LAYERS},
+  });
+}
+
 void VulkanCmdEncoder::flush_barriers() {
   if (!buf_barriers_.empty() || !img_barriers_.empty()) {
     VkDependencyInfo info{
@@ -261,114 +438,6 @@ void VulkanCmdEncoder::flush_barriers() {
     img_barriers_.clear();
   }
 }
-
-namespace {
-std::pair<VkPipelineStageFlags2, VkAccessFlags2> convert_pipeline_stage_and_access(
-    rhi::ResourceState state) {
-  VkPipelineStageFlags2 stage{};
-  VkAccessFlags2 access{};
-
-  if (has_flag(state, rhi::ResourceState::ColorWrite)) {
-    stage |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    access |= VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::ColorRead)) {
-    stage |= VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-    access |= VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::DepthStencilRead)) {
-    stage |=
-        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-    access |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::DepthStencilWrite)) {
-    stage |=
-        VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-    access |= VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::VertexRead)) {
-    stage |= VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT;
-    access |= VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::IndexRead)) {
-    stage |= VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT;
-    access |= VK_ACCESS_2_INDEX_READ_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::IndirectRead)) {
-    stage |= VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT;
-    access |= VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::ComputeRead)) {
-    stage |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-    access |= VK_ACCESS_2_SHADER_READ_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::ComputeWrite)) {
-    stage |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-    access |= VK_ACCESS_2_SHADER_WRITE_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::TransferRead)) {
-    stage |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    access |= VK_ACCESS_2_TRANSFER_READ_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::TransferWrite)) {
-    stage |= VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-    access |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::FragmentStorageRead)) {
-    stage |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-    access |= VK_ACCESS_2_SHADER_READ_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::ComputeSample)) {
-    stage |= VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-    access |= VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::FragmentSample)) {
-    stage |= VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-    access |= VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::ShaderRead)) {
-    stage |= VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-    access |= VK_ACCESS_2_SHADER_READ_BIT;
-  }
-  if (has_flag(state, rhi::ResourceState::SwapchainPresent)) {
-    stage |= VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT;
-    access |= 0;
-  }
-
-  return {stage, access};
-}
-
-VkImageLayout convert_layout(rhi::ResourceState state) {
-  if (has_flag(state, rhi::ResourceState::ColorWrite) ||
-      has_flag(state, rhi::ResourceState::ColorRead)) {
-    return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-  }
-  if (has_flag(state, rhi::ResourceState::DepthStencilWrite)) {
-    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-  }
-  if (has_flag(state, rhi::ResourceState::DepthStencilRead)) {
-    return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-  }
-  if (has_flag(state, rhi::ResourceState::ShaderRead)) {
-    return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  }
-  if (has_flag(state, rhi::ResourceState::ComputeWrite) ||
-      has_flag(state, rhi::ResourceState::ComputeRead)) {
-    return VK_IMAGE_LAYOUT_GENERAL;
-  }
-  if (has_flag(state, rhi::ResourceState::TransferRead)) {
-    return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-  }
-  if (has_flag(state, rhi::ResourceState::TransferWrite)) {
-    return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-  }
-  if (has_flag(state, rhi::ResourceState::SwapchainPresent)) {
-    return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  }
-  return VK_IMAGE_LAYOUT_UNDEFINED;
-}
-
-}  // namespace
 
 void VulkanCmdEncoder::barrier(rhi::GPUBarrier* gpu_barrier, size_t barrier_count) {
   for (size_t i = 0; i < barrier_count; i++) {

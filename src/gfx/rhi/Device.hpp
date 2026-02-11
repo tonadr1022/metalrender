@@ -129,6 +129,8 @@ class Device {
   void begin_swapchain_rendering(Swapchain *swapchain, CmdEncoder *cmd_enc) {
     begin_swapchain_rendering(swapchain, cmd_enc, nullptr);
   }
+
+  virtual void acquire_next_swapchain_image(rhi::Swapchain *) = 0;
   virtual void resolve_query_data(QueryPoolHandle query_pool, uint32_t start_query,
                                   uint32_t query_count, std::span<uint64_t> out_timestamps) = 0;
 

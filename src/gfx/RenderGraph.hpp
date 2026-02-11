@@ -129,6 +129,7 @@ enum class RGPassType { None, Compute, Graphics, Transfer };
 //
 // Misc notes:
 // - not thread safe
+// - must acquire swapchain image before baking, since barriers depend on having the correct handle
 //
 class RenderGraph {
  public:
@@ -149,10 +150,7 @@ class RenderGraph {
     void r_external_tex(std::string name, rhi::PipelineStage stage);
     void w_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
     void w_external_tex_color_output(const std::string& name, rhi::TextureHandle tex_handle);
-    void w_swapchain_tex(rhi::Swapchain* swapchain) {
-      ASSERT(swapchain);
-      swapchain_write_ = swapchain;
-    }
+    void w_swapchain_tex(rhi::Swapchain* swapchain);
     void w_external_buf(const std::string& name, rhi::BufferHandle buf);
     void w_external_buf(const std::string& name, rhi::BufferHandle buf, rhi::PipelineStage stage);
     RGResourceHandle r_tex(const std::string& name);
@@ -179,6 +177,7 @@ class RenderGraph {
       rhi::AccessFlags acc;
       RGResourceType type;
       uint32_t rw_read_name_i;
+      bool is_swapchain_write;
     };
 
     [[nodiscard]] const std::vector<NameAndAccess>& get_external_reads() const {
@@ -262,6 +261,10 @@ class RenderGraph {
     ASSERT(handle.type == RGResourceType::ExternalBuffer);
     return external_buffers_[handle.idx];
   }
+  rhi::TextureHandle get_external_tex(RGResourceHandle handle) {
+    ASSERT(handle.type == RGResourceType::ExternalTexture);
+    return external_textures_[handle.idx];
+  }
 
   void find_deps_recursive(uint32_t pass_i, uint32_t stack_size);
   static void dfs(const std::vector<std::unordered_set<uint32_t>>& pass_dependencies,
@@ -283,6 +286,7 @@ class RenderGraph {
     rhi::AccessFlags src_access;
     rhi::AccessFlags dst_access;
     std::string debug_name;
+    bool is_swapchain_write;
   };
   std::vector<Pass> passes_;
   std::vector<std::vector<BarrierInfo>> pass_barrier_infos_;
@@ -293,6 +297,7 @@ class RenderGraph {
   std::unordered_set<std::string> external_read_names_;
   std::vector<rhi::TextureHandle> external_textures_;
   std::vector<rhi::BufferHandle> external_buffers_;
+  std::vector<rhi::TextureHandle> curr_submitted_swapchain_textures_;
 
   std::unordered_map<AttachmentInfo, std::vector<rhi::TextureHandle>, AttachmentInfoHash>
       free_atts_;

@@ -106,6 +106,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   add_render_graph_passes(args);
   static int i = 0;
   rg_verbose_ = i++ == 0;
+  device_->acquire_next_swapchain_image(swapchain_);
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
   if (!buffer_copy_mgr_.get_copies().empty()) {
@@ -374,7 +375,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                                              {K_MESH_TG_SIZE, 1, 1});
       } else {
         enc->bind_pipeline(test2_pso_);
-        bool use_indirect = true;
+        bool use_indirect = false;
         if (use_indirect) {
           ASSERT(!indirect_cmd_buf_ids_.empty());
           enc->draw_indexed_indirect(static_instance_mgr_.get_draw_cmd_buf(),

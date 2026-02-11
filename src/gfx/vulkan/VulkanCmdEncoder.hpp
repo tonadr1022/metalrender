@@ -33,7 +33,7 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
  public:
   explicit VulkanCmdEncoder(VulkanDevice* device);
 
-  void set_debug_name(const char* /*name*/) override { exit(1); }
+  void set_debug_name(const char* /*name*/) override {}
   void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
   void end_rendering() override;
 
@@ -90,6 +90,8 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
   void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
+               rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
+  void barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
   void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access, size_t offset,

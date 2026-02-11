@@ -975,8 +975,6 @@ void VulkanDevice::submit_frame() {
     }
   }
 
-  // presents
-
   frame_num_++;
 
   // wait for fences that frame number N - (frames_in_flight) signaled
@@ -1080,35 +1078,9 @@ VkImageView VulkanDevice::create_img_view(VulkanTexture& img, VkImageViewType ty
 
 void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
                                              glm::vec4* clear_color) {
-  // acquire next swapchain image
-  auto* swap = (VulkanSwapchain*)swapchain;
-  swap->acquire_semaphore_idx_ = (swap->acquire_semaphore_idx_ + 1) % swap->swapchain_tex_count_;
-
-  // TODO: while loop
-  constexpr int k_timeout_value = 1'000'000'000;
-  ASSERT(swap->acquire_semaphores_[swap->acquire_semaphore_idx_]);
-
-  VkResult acquire_result;
-  do {
-    acquire_result = vkAcquireNextImageKHR(device_, swap->swapchain_, k_timeout_value,
-                                           swap->acquire_semaphores_[swap->acquire_semaphore_idx_],
-                                           nullptr, &swap->curr_img_idx_);
-    if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR || acquire_result == VK_SUBOPTIMAL_KHR) {
-      recreate_swapchain(swapchain->desc_, swapchain);
-    }
-  } while (acquire_result == VK_TIMEOUT || acquire_result == VK_ERROR_OUT_OF_DATE_KHR ||
-           acquire_result == VK_SUBOPTIMAL_KHR);
-  if (acquire_result != VK_SUCCESS && acquire_result != VK_SUBOPTIMAL_KHR &&
-      acquire_result != VK_ERROR_OUT_OF_DATE_KHR) {
-    LCRITICAL("Failed to acquire swapchain image!");
-    ALWAYS_ASSERT(0);
-  }
-
   auto* vk_enc = (VulkanCmdEncoder*)cmd_enc;
   vk_enc->submit_swapchains_.emplace_back(swapchain);
-
-  VkImage curr_image =
-      ((VulkanTexture*)get_tex(swapchain->get_texture(swap->curr_img_idx_)))->image();
+  VkImage curr_image = ((VulkanTexture*)get_tex(swapchain->get_current_texture()))->image();
   VkImageMemoryBarrier2 img_barriers[] = {
       VkImageMemoryBarrier2{
           .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -1132,7 +1104,7 @@ void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::Cmd
 
   cmd_enc->begin_rendering({
       rhi::RenderingAttachmentInfo{
-          .image = swapchain->get_texture(swap->curr_img_idx_),
+          .image = swapchain->get_current_texture(),
           .load_op = clear_color ? rhi::LoadOp::Clear : rhi::LoadOp::DontCare,
           .store_op = rhi::StoreOp::Store,
           .clear_value = clear_color ? rhi::ClearValue{.color = *clear_color} : rhi::ClearValue{},
@@ -1559,6 +1531,31 @@ VkSampler VulkanDevice::create_vk_sampler(const rhi::SamplerDesc& desc) {
   VK_CHECK(vkCreateSampler(device_, &cinfo, nullptr, &sampler));
   ASSERT(sampler);
   return sampler;
+}
+
+void VulkanDevice::acquire_next_swapchain_image(rhi::Swapchain* swapchain) {
+  // acquire next swapchain image
+  auto* swap = (VulkanSwapchain*)swapchain;
+  swap->acquire_semaphore_idx_ = (swap->acquire_semaphore_idx_ + 1) % swap->swapchain_tex_count_;
+
+  constexpr int k_timeout_value = 1'000'000'000;
+  ASSERT(swap->acquire_semaphores_[swap->acquire_semaphore_idx_]);
+
+  VkResult acquire_result;
+  do {
+    acquire_result = vkAcquireNextImageKHR(device_, swap->swapchain_, k_timeout_value,
+                                           swap->acquire_semaphores_[swap->acquire_semaphore_idx_],
+                                           nullptr, &swap->curr_img_idx_);
+    if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR || acquire_result == VK_SUBOPTIMAL_KHR) {
+      recreate_swapchain(swapchain->desc_, swapchain);
+    }
+  } while (acquire_result == VK_TIMEOUT || acquire_result == VK_ERROR_OUT_OF_DATE_KHR ||
+           acquire_result == VK_SUBOPTIMAL_KHR);
+  if (acquire_result != VK_SUCCESS && acquire_result != VK_SUBOPTIMAL_KHR &&
+      acquire_result != VK_ERROR_OUT_OF_DATE_KHR) {
+    LCRITICAL("Failed to acquire swapchain image!");
+    ALWAYS_ASSERT(0);
+  }
 }
 
 }  // namespace gfx::vk

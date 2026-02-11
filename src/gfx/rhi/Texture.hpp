@@ -9,6 +9,8 @@ namespace gfx {
 
 uint32_t get_block_width_bytes(rhi::TextureFormat format);
 uint32_t get_bytes_per_block(rhi::TextureFormat format);
+bool is_depth_format(rhi::TextureFormat format);
+bool is_stencil_format(rhi::TextureFormat format);
 
 }  // namespace gfx
 

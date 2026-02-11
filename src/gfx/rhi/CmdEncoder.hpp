@@ -69,6 +69,9 @@ class CmdEncoder {
   virtual void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage,
                        rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
                        rhi::AccessFlags dst_access) = 0;
+  virtual void barrier(rhi::TextureHandle buf, rhi::PipelineStage src_stage,
+                       rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
+                       rhi::AccessFlags dst_access) = 0;
   virtual void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage,
                        rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
                        rhi::AccessFlags dst_access, size_t offset, size_t size) = 0;

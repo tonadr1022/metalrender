@@ -120,6 +120,7 @@ class MetalDevice : public rhi::Device {
 
   rhi::SwapchainHandle create_swapchain(const rhi::SwapchainDesc& desc) override;
   bool recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapchain* swapchain) override;
+  void acquire_next_swapchain_image(rhi::Swapchain* swapchain) override;
   void begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
                                  glm::vec4* clear_color) override;
 

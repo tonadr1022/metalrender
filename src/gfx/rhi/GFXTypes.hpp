@@ -378,6 +378,7 @@ enum class ResourceState : uint32_t {
   IndirectRead = 1ULL << 7,                  // Stage == DrawIndirect, Access == IndirectRead
   ComputeRead = 1ULL << 8,                   // Stage == Compute, Access == ComputeRead
   ComputeWrite = 1ULL << 9,                  // Stage == Compute, Access == ComputeWrite
+  ShaderWrite = 1ULL << 17,                  // Stage == AllCommands, Access == ShaderWrite,
   ComputeRW = ComputeRead | ComputeWrite,  // Stage == Compute, Access == ComputeRead | ComputeWrite
   TransferRead = 1ULL << 10,               // Stage == Transfer, Access == TransferRead
   TransferWrite = 1ULL << 11,              // Stage == Transfer, Access == TransferWrite

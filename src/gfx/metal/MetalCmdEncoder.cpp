@@ -644,6 +644,28 @@ void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::BufferHandle, rhi::PipelineStage
 }
 
 template <bool UseMTL4>
+void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::TextureHandle, rhi::PipelineStage src_stage,
+                                           rhi::AccessFlags, rhi::PipelineStage dst_stage,
+                                           rhi::AccessFlags) {
+  auto src_mtl_stage = mtl::util::convert_stage(src_stage);
+  auto dst_mtl_stage = mtl::util::convert_stage(dst_stage);
+  if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
+    device_->compute_enc_flush_stages_ |= src_mtl_stage;
+    device_->compute_enc_dst_stages_ |= dst_mtl_stage;
+  }
+  if (dst_mtl_stage & (MTL::StageVertex | MTL::StageFragment | MTL::StageObject | MTL::StageMesh)) {
+    device_->render_enc_flush_stages_ |= src_mtl_stage;
+    device_->render_enc_dst_stages_ |= dst_mtl_stage;
+  }
+  if constexpr (UseMTL4) {
+    if (dst_mtl_stage & MTL::StageBlit) {
+      device_->blit_enc_flush_stages_ |= src_mtl_stage;
+      device_->blit_enc_dst_stages_ |= dst_mtl_stage;
+    }
+  }
+}
+
+template <bool UseMTL4>
 void MetalCmdEncoderBase<UseMTL4>::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
                                                          uint32_t indirect_buf_id, size_t draw_cnt,
                                                          size_t offset_i) {

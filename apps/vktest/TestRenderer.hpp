@@ -4,6 +4,7 @@
 #include <memory>
 
 #include "gfx/GPUFrameAllocator2.hpp"
+#include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/BufferResize.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
@@ -36,6 +37,7 @@ class TestRenderer {
 
  private:
   void recreate_resources_on_swapchain_resize();
+  void add_render_graph_passes();
 
   std::unique_ptr<gfx::ShaderManager> shader_mgr_;
   rhi::Device* device_;
@@ -47,6 +49,8 @@ class TestRenderer {
   GPUFrameAllocator3 frame_gpu_upload_allocator_;
   BufferCopyMgr buffer_copy_mgr_;
   rhi::BufferHandleHolder test_vert_buf_;
+  RenderGraph rg_;
+  Window* window_;
 };
 
 }  // namespace gfx

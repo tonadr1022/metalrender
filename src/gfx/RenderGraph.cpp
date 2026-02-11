@@ -9,7 +9,9 @@
 #include "core/Logger.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
+#include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
+#include "small_vector/small_vector.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -229,6 +231,47 @@ void convert_rg_access(RGAccess access, rhi::AccessFlags& out_access,
   }
 }
 
+[[maybe_unused]] rhi::ResourceState convert_resource_state(rhi::AccessFlags access) {
+  if (has_flag(access, rhi::AccessFlags::ColorAttachmentWrite)) {
+    return rhi::ResourceState::ColorWrite;
+  }
+  if (has_flag(access, rhi::AccessFlags::DepthStencilWrite)) {
+    return rhi::ResourceState::DepthStencilWrite;
+  }
+  if (has_flag(access, rhi::AccessFlags::ShaderWrite)) {
+    return rhi::ResourceState::ShaderWrite;
+  }
+  if (has_flag(access, rhi::AccessFlags::TransferWrite)) {
+    return rhi::ResourceState::TransferWrite;
+  }
+  if (has_flag(access, rhi::AccessFlags::ShaderRead)) {
+    return rhi::ResourceState::ShaderRead;
+  }
+  if (has_flag(access, rhi::AccessFlags::ColorAttachmentRead)) {
+    return rhi::ResourceState::ColorRead;
+  }
+  if (has_flag(access, rhi::AccessFlags::DepthStencilRead)) {
+    return rhi::ResourceState::DepthStencilRead;
+  }
+  if (has_flag(access, rhi::AccessFlags::IndirectCommandRead)) {
+    return rhi::ResourceState::IndirectRead;
+  }
+  if (has_flag(access, rhi::AccessFlags::IndexRead)) {
+    return rhi::ResourceState::IndexRead;
+  }
+  if (has_flag(access, rhi::AccessFlags::VertexAttributeRead)) {
+    return rhi::ResourceState::VertexRead;
+  }
+  if (has_flag(access, rhi::AccessFlags::UniformRead)) {
+    return rhi::ResourceState::ShaderRead;
+  }
+  if (has_flag(access, rhi::AccessFlags::InputAttachmentRead)) {
+    ASSERT(0);
+  }
+  ASSERT(0);
+  return rhi::ResourceState::None;
+}
+
 }  // namespace
 
 RenderGraph::Pass::Pass(std::string name, RenderGraph* rg, uint32_t pass_i, RGPassType type)
@@ -243,29 +286,43 @@ RenderGraph::Pass& RenderGraph::add_pass(const std::string& name, RGPassType typ
 void RenderGraph::execute() {
   ZoneScoped;
   rhi::CmdEncoder* enc = device_->begin_cmd_encoder();
+  gch::small_vector<rhi::GPUBarrier, 8> post_pass_barriers;
   for (auto pass_i : pass_stack_) {
+    post_pass_barriers.clear();
+    auto& pass = passes_[pass_i];
     ZoneScopedN("Execute Pass");
-    // enc->set_label(passes_[pass_i].get_name());
     for (auto& barrier : pass_barrier_infos_[pass_i]) {
-      enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
       if (barrier.resource.type == RGResourceType::Buffer ||
           barrier.resource.type == RGResourceType::ExternalBuffer) {
         auto buf_handle = barrier.resource.type == RGResourceType::Buffer
                               ? get_buf(barrier.resource)
                               : get_external_buf(barrier.resource);
-        ASSERT(buf_handle.is_valid());
         enc->barrier(buf_handle, barrier.src_stage, barrier.src_access, barrier.dst_stage,
                      barrier.dst_access);
       } else {
-        enc->barrier(barrier.src_stage, barrier.src_access, barrier.dst_stage, barrier.dst_access);
+        auto tex_handle = barrier.resource.type == RGResourceType::Texture
+                              ? get_att_img(barrier.resource)
+                              : get_external_tex(barrier.resource);
+
+        if (barrier.is_swapchain_write) {
+          tex_handle = pass.swapchain_write_->get_current_texture();
+          ASSERT(pass.swapchain_write_);
+          post_pass_barriers.emplace_back(rhi::GPUBarrier::tex_barrier(
+              pass.swapchain_write_->get_current_texture(), rhi::ResourceState::ColorWrite,
+              rhi::ResourceState::SwapchainPresent));
+        }
+        enc->barrier(tex_handle, barrier.src_stage, barrier.src_access, barrier.dst_stage,
+                     barrier.dst_access);
       }
     }
 
-    auto& pass = passes_[pass_i];
     enc->set_debug_name(pass.get_name().c_str());
     {
       ZoneScopedN("Execute Fn");
       pass.get_execute_fn()(enc);
+    }
+    for (auto& b : post_pass_barriers) {
+      enc->barrier(&b);
     }
   }
   enc->end_encoding();
@@ -305,6 +362,7 @@ void RenderGraph::execute() {
   resource_use_name_to_writer_pass_idx_.clear();
   external_buffers_.clear();
   external_textures_.clear();
+  curr_submitted_swapchain_textures_.clear();
 }
 
 void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
@@ -523,12 +581,18 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     for (const auto& write_use : pass.get_external_writes()) {
       auto rg_resource_handle = RGResourceHandle{
           .idx = external_name_to_handle_idx_.at(write_use.name), .type = write_use.type};
-      // if (write_use.name == "out_counts_buf3") {
-      //   LINFO("write {} {} state stage: {}, state access: {}", pass.get_name(), write_use.name,
-      //         rhi_pipeline_stage_to_string(write_use.stage),
-      //         rhi_access_to_string(write_use.acc));
-      // }
       auto& resource_state = get_resource_state(rg_resource_handle);
+      if (has_flag(write_use.acc, rhi::AccessFlags::AnyWrite)) {
+        barriers.emplace_back(BarrierInfo{
+            .resource = rg_resource_handle,
+            .src_stage = resource_state.stage,
+            .dst_stage = write_use.stage,
+            .src_access = resource_state.access,
+            .dst_access = write_use.acc,
+            .debug_name = write_use.name,
+            .is_swapchain_write = write_use.is_swapchain_write,
+        });
+      }
       resource_state.access = flag_or(resource_state.access, write_use.acc);
       resource_state.stage = flag_or(resource_state.stage, write_use.stage);
     }
@@ -841,7 +905,6 @@ void RenderGraph::add_external_write_usage(const std::string& name, rhi::BufferH
 
 void RGPass::w_external_tex_color_output(const std::string& name, rhi::TextureHandle tex_handle) {
   ASSERT(type_ == RGPassType::Graphics);
-  // ASSERT(tex_handle.is_valid());
   rg_->add_external_write_usage(name, tex_handle, *this);
   external_writes_.emplace_back(name, rhi::PipelineStage::ColorAttachmentOutput,
                                 rhi::AccessFlags::ColorAttachmentWrite,
@@ -849,9 +912,6 @@ void RGPass::w_external_tex_color_output(const std::string& name, rhi::TextureHa
 }
 
 void RGPass::w_external_tex(const std::string& name, rhi::TextureHandle tex_handle) {
-  ALWAYS_ASSERT((type_ == RGPassType::Compute ||
-                 type_ == RGPassType::Transfer &&
-                     "Need compute or transfer pass to write external texture."));
   rg_->add_external_write_usage(name, tex_handle, *this);
   rhi::PipelineStage stage{};
   rhi::AccessFlags access{};
@@ -1029,6 +1089,18 @@ RGResourceHandle RenderGraph::Pass::rw_tex(const std::string& name, const std::s
   internal_writes_.emplace_back(name_access);
   internal_reads_.emplace_back(name_access);
   return handle;
+}
+
+void RenderGraph::Pass::w_swapchain_tex(rhi::Swapchain* swapchain) {
+  ASSERT(swapchain);
+  swapchain_write_ = swapchain;
+  auto curr_tex = swapchain->get_current_texture();
+  ASSERT(type_ == RGPassType::Graphics);
+  const char* name = "swapchain_todo_change_name";
+  rg_->add_external_write_usage(name, curr_tex, *this);
+  external_writes_.emplace_back(name, rhi::PipelineStage::ColorAttachmentOutput,
+                                rhi::AccessFlags::ColorAttachmentWrite,
+                                RGResourceType::ExternalTexture, -1, true);
 }
 
 }  // namespace gfx

@@ -28,6 +28,22 @@ uint32_t get_bytes_per_block(rhi::TextureFormat format) {
   }
 }
 
+bool is_depth_format(rhi::TextureFormat format) {
+  switch (format) {
+    case rhi::TextureFormat::D32float:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool is_stencil_format(rhi::TextureFormat format) {
+  switch (format) {
+    default:
+      return false;
+  }
+}
+
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

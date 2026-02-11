@@ -2,7 +2,6 @@
 
 #include "TestRenderer.hpp"
 #include "Util.hpp"
-#include "core/Logger.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 
@@ -12,7 +11,6 @@ using namespace teng;
 TestApp::TestApp() {
   resource_dir_ = get_resource_dir();
   std::filesystem::current_path(resource_dir_.parent_path());
-  LINFO("Current path: {}", std::filesystem::current_path().string());
 
   window_ = create_platform_window();
 

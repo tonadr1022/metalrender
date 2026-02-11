@@ -1253,9 +1253,7 @@ void MetalDevice::resolve_query_data(rhi::QueryPoolHandle query_pool, uint32_t s
   pool->heap_->invalidateCounterRange(NS::Range::Make(start_query, query_count));
 }
 
-void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
-                                            glm::vec4* clear_color) {
-  ZoneScoped;
+void MetalDevice::acquire_next_swapchain_image(rhi::Swapchain* swapchain) {
   auto* swap = (MetalSwapchain*)swapchain;
   CA::MetalDrawable* drawable{};
   while (!drawable) {
@@ -1279,7 +1277,12 @@ void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdE
     t = rhi::TextureHandleHolder{
         texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
   }
+}
 
+void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
+                                            glm::vec4* clear_color) {
+  ZoneScoped;
+  auto* swap = (MetalSwapchain*)swapchain;
   if (mtl4_enabled_) {
     auto* enc = (Metal4CmdEncoder*)cmd_enc;
     enc->presents_.emplace_back(swap->drawable_);
