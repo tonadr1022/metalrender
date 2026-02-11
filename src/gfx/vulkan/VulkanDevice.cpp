@@ -499,7 +499,7 @@ void VulkanDevice::init(const InitInfo& init_info) {
     auto add_immutable_sampler = [&](const rhi::SamplerDesc& desc) {
       auto actual_desc = desc;
       actual_desc.flags |= rhi::SamplerDescFlags::NoBindless;
-      immutable_samplers_.emplace_back(create_vk_sampler(desc));
+      immutable_samplers_.emplace_back(create_vk_sampler(actual_desc));
     };
     add_immutable_sampler({
         .min_filter = rhi::FilterMode::Linear,

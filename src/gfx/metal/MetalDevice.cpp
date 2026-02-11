@@ -239,8 +239,8 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
     auto* static_table = static_sampler_entries_.data();
     auto add_static_sampler = [&](uint32_t offset, const rhi::SamplerDesc& desc) {
       auto actual_desc = desc;
-      actual_desc.flags |= rhi::SamplerDescFlags::NoBindless;
-      static_samplers_.emplace_back(create_sampler_h(desc));
+      actual_desc.flags = rhi::SamplerDescFlags::NoBindless;
+      static_samplers_.emplace_back(create_sampler_h(actual_desc));
       auto* sampler = sampler_pool_.get(static_samplers_.back().handle)->sampler();
       IRDescriptorTableSetSampler(&static_table[offset], sampler, 0.0);
     };

@@ -141,7 +141,7 @@ Texture2D depth_pyramid_tex : register(t3);
         if (pass != 0 && meshlet_vis_i != UINT_MAX) {
           meshlet_vis_buf[meshlet_vis_i] = visible;
         }
-      } else {
+      } else if (cull_data.paused != 0) {
         // When paused, use the last frame's visibility state
         visible = visible_last_frame;
       }

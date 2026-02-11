@@ -942,6 +942,9 @@ bool InstanceMgr::ensure_buffer_space(size_t element_count) {
     auto new_buf = device_.create_buf_h({
         .usage = rhi::BufferUsage::Storage,
         .size = sizeof(InstanceData) * element_count,
+        // Don't enable CPU access for copying since this copy should be delayed until a copy
+        // happens on the GPU timeline, otherwise artifacts can appear when the buffer is updated
+        // (objects added/removed).
         .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
         .name = "intance_data_buf",
     });
@@ -1283,7 +1286,6 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
         .mipmap_mode = rhi::FilterMode::Nearest,
         .address_mode = rhi::AddressMode::Repeat,
     }));
-
     samplers_.emplace_back(device_->create_sampler_h({
         .min_filter = rhi::FilterMode::Linear,
         .mag_filter = rhi::FilterMode::Linear,
