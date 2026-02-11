@@ -8,14 +8,21 @@
 CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
 StructuredBuffer<M4Material> material_buf : register(t11);
 
-[RootSignature(ROOT_SIGNATURE)] float4 main(VOut input) : SV_Target0 {
+struct FOut {
+  float4 gbuffer_a : SV_Target0;
+  float4 gbuffer_b : SV_Target1;
+};
+
+[RootSignature(ROOT_SIGNATURE)] FOut main(VOut input) {
+  FOut fout;
 #ifdef DEBUG_MODE
   // GlobalData globals = load_globals();
   uint render_mode = globals.render_mode;
   if (render_mode == DEBUG_RENDER_MODE_TRIANGLE_COLORS ||
       render_mode == DEBUG_RENDER_MODE_MESHLET_COLORS ||
       render_mode == DEBUG_RENDER_MODE_INSTANCE_COLORS) {
-    return input.color;
+    fout.gbuffer_a = input.color;
+    return fout;
   }
 #endif
   M4Material material = material_buf[input.material_id];
@@ -28,5 +35,7 @@ StructuredBuffer<M4Material> material_buf : register(t11);
   if (albedo.a < 0.5) {
     //    discard;
   }
-  return float4(albedo.xyz, 1.0);
+  fout.gbuffer_a = float4(albedo.xyz, 1.0);
+  fout.gbuffer_b = float4(1, 0, 0, 1);
+  return fout;
 }

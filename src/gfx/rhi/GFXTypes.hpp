@@ -135,7 +135,7 @@ union ClearValue {
   } depth_stencil;
 };
 
-struct RenderingAttachmentInfo {
+struct RenderAttInfo {
   enum class Type : uint8_t { Color, DepthStencil };
 
   TextureHandle image;
@@ -145,10 +145,9 @@ struct RenderingAttachmentInfo {
   StoreOp store_op{StoreOp::Store};
   ClearValue clear_value{};
 
-  static RenderingAttachmentInfo color_att(TextureHandle image, LoadOp load_op = LoadOp::Load,
-                                           ClearValue clear_value = {},
-                                           StoreOp store_op = StoreOp::Store,
-                                           int subresource = -1) {
+  static RenderAttInfo color_att(TextureHandle image, LoadOp load_op = LoadOp::Load,
+                                 ClearValue clear_value = {}, StoreOp store_op = StoreOp::Store,
+                                 int subresource = -1) {
     return {.image = image,
             .subresource = subresource,
             .type = Type::Color,
@@ -157,11 +156,9 @@ struct RenderingAttachmentInfo {
             .clear_value = clear_value};
   }
 
-  static RenderingAttachmentInfo depth_stencil_att(TextureHandle image,
-                                                   LoadOp load_op = LoadOp::Load,
-                                                   ClearValue clear_value = {},
-                                                   StoreOp store_op = StoreOp::Store,
-                                                   int subresource = -1) {
+  static RenderAttInfo depth_stencil_att(TextureHandle image, LoadOp load_op = LoadOp::Load,
+                                         ClearValue clear_value = {},
+                                         StoreOp store_op = StoreOp::Store, int subresource = -1) {
     return {.image = image,
             .subresource = subresource,
             .type = Type::DepthStencil,

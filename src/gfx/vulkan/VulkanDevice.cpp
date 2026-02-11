@@ -1099,7 +1099,7 @@ void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::Cmd
   vkCmdPipelineBarrier2KHR(vk_enc->cmd(), &info);
 
   cmd_enc->begin_rendering({
-      rhi::RenderingAttachmentInfo{
+      rhi::RenderAttInfo{
           .image = swapchain->get_current_texture(),
           .load_op = clear_color ? rhi::LoadOp::Clear : rhi::LoadOp::DontCare,
           .store_op = rhi::StoreOp::Store,

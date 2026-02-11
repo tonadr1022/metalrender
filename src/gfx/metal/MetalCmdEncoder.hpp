@@ -63,8 +63,8 @@ struct EncoderState2 {
 };
 
 template <typename API>
-typename API::RPDesc* create_render_pass(
-    MetalDevice* device, const std::vector<rhi::RenderingAttachmentInfo>& attachments);
+typename API::RPDesc* create_render_pass(MetalDevice* device,
+                                         const std::vector<rhi::RenderAttInfo>& attachments);
 
 template <bool UseMTL4 = true>
 class MetalCmdEncoderBase : public rhi::CmdEncoder {
@@ -78,7 +78,7 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
 
   void set_label(const std::string& label) override;
   void set_debug_name(const char* name) override;
-  void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
+  void begin_rendering(std::initializer_list<rhi::RenderAttInfo> attachments) override;
   void end_rendering() override;
   void end_encoding() override;
   void bind_pipeline(rhi::PipelineHandle handle) override;

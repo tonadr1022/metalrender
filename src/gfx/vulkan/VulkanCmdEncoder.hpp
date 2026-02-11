@@ -34,7 +34,7 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   explicit VulkanCmdEncoder(VulkanDevice* device);
 
   void set_debug_name(const char* /*name*/) override {}
-  void begin_rendering(std::initializer_list<rhi::RenderingAttachmentInfo> attachments) override;
+  void begin_rendering(std::initializer_list<rhi::RenderAttInfo> attachments) override;
   void end_rendering() override;
 
   void bind_pipeline(rhi::PipelineHandle handle) override;

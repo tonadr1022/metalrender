@@ -256,9 +256,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   }
 
   const char* last_gbuffer_a_name = "gbuffer_a";
+  const char* last_gbuffer_b_name = "gbuffer_b";
   const char* last_depth_name = "depth_tex";
   auto add_draw_pass = [&args, this, &final_depth_pyramid_name, &last_gbuffer_a_name,
-                        &last_depth_name, &out_counts_buf_name](bool late, const char* name) {
+                        &last_gbuffer_b_name, &last_depth_name,
+                        &out_counts_buf_name](bool late, const char* name) {
     ZoneScopedN("Draw pass");
     auto& p = rg_.add_graphics_pass(name);
     RGResourceHandle task_cmd_buf_rg_handle;
@@ -281,11 +283,15 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       p.r_external_buf("indirect_buffer", rhi::PipelineStage::DrawIndirect);
     }
     RGResourceHandle rg_gbuffer_a_handle;
+    RGResourceHandle rg_gbuffer_b_handle;
     RGResourceHandle rg_depth_handle;
     if (late) {
       const char* new_gbuffer_a_name = "gbuffer_a2";
+      const char* new_gbuffer_b_name = "gbuffer_b2";
       rg_gbuffer_a_handle = p.rw_color_output(new_gbuffer_a_name, last_gbuffer_a_name);
+      rg_gbuffer_b_handle = p.rw_color_output(new_gbuffer_b_name, last_gbuffer_b_name);
       last_gbuffer_a_name = new_gbuffer_a_name;
+      last_gbuffer_b_name = new_gbuffer_b_name;
       const char* new_depth_name = "depth_tex2";
       rg_depth_handle = p.rw_depth_output(new_depth_name, last_depth_name);
       last_depth_name = new_depth_name;
@@ -306,11 +312,13 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
       rg_gbuffer_a_handle =
           p.w_color_output(last_gbuffer_a_name, {.format = rhi::TextureFormat::R16G16B16A16Sfloat});
+      rg_gbuffer_b_handle =
+          p.w_color_output(last_gbuffer_b_name, {.format = rhi::TextureFormat::R8G8B8A8Unorm});
       rg_depth_handle = p.w_depth_output(last_depth_name, {.format = rhi::TextureFormat::D32float});
     }
 
-    p.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, &args, late, task_cmd_buf_rg_handle,
-              out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
+    p.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, rg_gbuffer_b_handle, &args, late,
+              task_cmd_buf_rg_handle, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
       if (!static_instance_mgr_.has_draws()) {
         return;
       }
@@ -318,12 +326,13 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       auto depth_handle = rg_.get_att_img(rg_depth_handle);
       ASSERT(depth_handle.is_valid());
       auto gbuffer_a_tex = rg_.get_att_img(rg_gbuffer_a_handle);
+      auto gbuffer_b_tex = rg_.get_att_img(rg_gbuffer_b_handle);
       auto load_op = late ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
       enc->begin_rendering({
-          rhi::RenderingAttachmentInfo::color_att(gbuffer_a_tex, load_op,
-                                                  {.color = args.clear_color}),
-          rhi::RenderingAttachmentInfo::depth_stencil_att(
-              depth_handle, load_op, {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
+          RenderAttInfo::color_att(gbuffer_a_tex, load_op, {.color = args.clear_color}),
+          RenderAttInfo::color_att(gbuffer_b_tex, load_op, {.color = args.clear_color}),
+          RenderAttInfo::depth_stencil_att(depth_handle, load_op,
+                                           {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
       });
       enc->set_depth_stencil_state(reverse_z_ ? rhi::CompareOp::Greater : rhi::CompareOp::Less,
                                    true);
@@ -480,14 +489,17 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   {
     auto& p = rg_.add_graphics_pass("shade");
     auto gbuffer_a_rg_handle = p.sample_tex(last_gbuffer_a_name);
+    auto gbuffer_b_rg_handle = p.sample_tex(last_gbuffer_b_name);
     if (meshlet_occlusion_culling_enabled &&
         debug_render_mode_ == DebugRenderMode::DepthReduceMips) {
       p.sample_external_tex(final_depth_pyramid_name);
     }
     p.w_swapchain_tex(swapchain_);
-    p.set_ex([this, gbuffer_a_rg_handle, meshlet_occlusion_culling_enabled](rhi::CmdEncoder* enc) {
+    p.set_ex([this, gbuffer_a_rg_handle, gbuffer_b_rg_handle,
+              meshlet_occlusion_culling_enabled](rhi::CmdEncoder* enc) {
       ZoneScopedN("Final pass");
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
+      auto* gbuffer_b_tex = device_->get_tex(rg_.get_att_img(gbuffer_b_rg_handle));
       auto dims = gbuffer_a_tex->desc().dims;
       device_->begin_swapchain_rendering(swapchain_, enc);
       enc->bind_pipeline(tex_only_pso_);
@@ -508,6 +520,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       TexOnlyPC pc{
           .color_mult = glm::vec4{mult, mult, mult, 1},
           .tex_idx = tex_idx,
+          .gbuffer_b_idx = gbuffer_b_tex->bindless_idx(),
           .mip_level = static_cast<uint32_t>(debug_view_mip_),
       };
       enc->push_constants(&pc, sizeof(pc));

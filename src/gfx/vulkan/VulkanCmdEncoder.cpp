@@ -199,8 +199,7 @@ VkAttachmentStoreOp convert_store_op(rhi::StoreOp store_op) {
 VulkanCmdEncoder::VulkanCmdEncoder(VulkanDevice* device)
     : device_(device), vk_device_(device_->vk_device()) {}
 
-void VulkanCmdEncoder::begin_rendering(
-    std::initializer_list<rhi::RenderingAttachmentInfo> attachments) {
+void VulkanCmdEncoder::begin_rendering(std::initializer_list<rhi::RenderAttInfo> attachments) {
   flush_barriers();
   VkRenderingAttachmentInfo color_attachments[8]{};
   VkRenderingAttachmentInfo ds_att{};
@@ -209,7 +208,7 @@ void VulkanCmdEncoder::begin_rendering(
   glm::uvec2 extent{0, 0};
   curr_render_target_info_ = {};
   for (const auto& att : attachments) {
-    if (att.type == rhi::RenderingAttachmentInfo::Type::Color) {
+    if (att.type == rhi::RenderAttInfo::Type::Color) {
       auto* vk_att = &color_attachments[color_attachment_count++];
       auto* tex = (VulkanTexture*)device_->get_tex(att.image);
       curr_render_target_info_.color_formats.push_back(tex->desc().format);

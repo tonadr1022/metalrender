@@ -1312,11 +1312,11 @@ void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdE
 
     // auto tex_handle = texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true);
     if (clear_color) {
-      enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(
+      enc->begin_rendering({rhi::RenderAttInfo::color_att(
           swap->textures_[0].handle, rhi::LoadOp::Clear, rhi::ClearValue{.color = *clear_color})});
     } else {
-      enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(swap->textures_[0].handle,
-                                                                    rhi::LoadOp::DontCare)});
+      enc->begin_rendering(
+          {rhi::RenderAttInfo::color_att(swap->textures_[0].handle, rhi::LoadOp::DontCare)});
     }
   } else {
     auto* enc = (Metal3CmdEncoder*)cmd_enc;
@@ -1325,11 +1325,11 @@ void MetalDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdE
     // TODO: remove dup
     // auto tex_handle = texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true);
     if (clear_color) {
-      enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(
+      enc->begin_rendering({rhi::RenderAttInfo::color_att(
           swap->textures_[0].handle, rhi::LoadOp::Clear, rhi::ClearValue{.color = *clear_color})});
     } else {
-      enc->begin_rendering({rhi::RenderingAttachmentInfo::color_att(swap->textures_[0].handle,
-                                                                    rhi::LoadOp::DontCare)});
+      enc->begin_rendering(
+          {rhi::RenderAttInfo::color_att(swap->textures_[0].handle, rhi::LoadOp::DontCare)});
     }
   }
 }

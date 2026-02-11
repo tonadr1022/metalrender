@@ -70,7 +70,7 @@ void MetalCmdEncoderBase<UseMTL4>::set_buffer(uint32_t bind_point, MTL::Buffer* 
 }
 template <bool UseMTL4>
 void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
-    std::initializer_list<rhi::RenderingAttachmentInfo> attachments) {
+    std::initializer_list<rhi::RenderAttInfo> attachments) {
   // TODO: consolidate
   NS::SharedPtr<MTL4::RenderPassDescriptor> m4_desc;
   NS::SharedPtr<MTL::RenderPassDescriptor> m3_desc;
@@ -80,7 +80,7 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
     size_t color_att_i = 0;
     NS::SharedPtr<MTL::RenderPassDepthAttachmentDescriptor> depth_desc;
     for (const auto& att : attachments) {
-      if (att.type == rhi::RenderingAttachmentInfo::Type::DepthStencil) {
+      if (att.type == rhi::RenderAttInfo::Type::DepthStencil) {
         depth_desc = NS::TransferPtr(MTL::RenderPassDepthAttachmentDescriptor::alloc()->init());
         auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
         curr_render_target_info_.depth_format = tex->desc().format;
@@ -107,7 +107,7 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
     size_t color_att_i = 0;
     NS::SharedPtr<MTL::RenderPassDepthAttachmentDescriptor> depth_desc;
     for (const auto& att : attachments) {
-      if (att.type == rhi::RenderingAttachmentInfo::Type::DepthStencil) {
+      if (att.type == rhi::RenderAttInfo::Type::DepthStencil) {
         depth_desc = NS::TransferPtr(MTL::RenderPassDepthAttachmentDescriptor::alloc()->init());
         auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
         curr_render_target_info_.depth_format = tex->desc().format;
