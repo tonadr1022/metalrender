@@ -46,7 +46,6 @@ void load_stb_image(const void *data, size_t data_size, const std::filesystem::p
   const uint32_t mip_levels = math::get_mip_levels(w, h);
   const rhi::TextureDesc desc{
       .format = rhi::TextureFormat::R8G8B8A8Unorm,
-      .storage_mode = rhi::StorageMode::Default,
       .usage = rhi::TextureUsage::Sample,
       .dims = glm::uvec3{w, h, 1},
       .mip_levels = mip_levels,
@@ -79,7 +78,6 @@ void load_ktx(const void *data, size_t data_size, const std::filesystem::path &p
   auto *ktx_tex = load_result.texture;
   const rhi::TextureDesc desc{
       .format = load_result.format,
-      .storage_mode = rhi::StorageMode::Default,
       .usage = rhi::TextureUsage::Sample,
       .dims = glm::uvec3{ktx_tex->baseWidth, ktx_tex->baseHeight, ktx_tex->baseDepth},
       .mip_levels = ktx_tex->numLevels,

@@ -75,16 +75,22 @@ enum class IndexType : uint8_t {
   Uint32,
 };
 
-enum TextureDescFlags { TextureDescFlags_None, TextureDescFlags_PixelFormatView };
+enum class TextureDescFlags : uint8_t {
+  None = 0,
+  PixelFormatView = 1 << 0,
+  NoBindless = 1 << 1,
+  CPUAccessible = 1 << 2,
+  DisableCPUAccessOnUMA = 1 << 3,
+};
+
+AUGMENT_ENUM_CLASS(TextureDescFlags);
 
 struct TextureDesc {
   TextureFormat format{TextureFormat::Undefined};
-  StorageMode storage_mode{StorageMode::GPUOnly};
   TextureUsage usage{TextureUsage::None};
   glm::uvec3 dims{1};
   uint32_t mip_levels{1};
   uint32_t array_length{1};
-  bool bindless{true};
   TextureDescFlags flags{};
   const char* name{};
 };

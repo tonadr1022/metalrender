@@ -3,7 +3,9 @@
 #include <QuartzCore/QuartzCore.h>
 
 #include <Foundation/NSSharedPtr.hpp>
+#include <Metal/MTLResource.hpp>
 
+#include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Queue.hpp"
 
 #define NS_PRIVATE_IMPLEMENTATION
@@ -428,17 +430,28 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   texture_desc->setDepth(desc.dims.z);
   texture_desc->setTextureType(get_texture_type(desc.dims, desc.array_length));
   texture_desc->setPixelFormat(mtl::util::convert(desc.format));
-  texture_desc->setStorageMode(mtl::util::convert_storage_mode(desc.storage_mode));
+  MTL::StorageMode storage_mode{};
+  MTL::ResourceOptions resource_opts{};
+  if (has_flag(desc.flags, rhi::TextureDescFlags::CPUAccessible) ||
+      (has_flag(capabilities_, rhi::GraphicsCapability::CacheCoherentUMA) &&
+       !has_flag(desc.flags, rhi::TextureDescFlags::DisableCPUAccessOnUMA))) {
+    storage_mode = MTL::StorageModeShared;
+    resource_opts |= MTL::ResourceStorageModeShared;
+  } else {
+    storage_mode = MTL::StorageModePrivate;
+    resource_opts |= MTL::ResourceStorageModePrivate;
+  }
+  texture_desc->setStorageMode(storage_mode);
   texture_desc->setMipmapLevelCount(desc.mip_levels);
   texture_desc->setArrayLength(desc.array_length);
   texture_desc->setHazardTrackingMode(MTL::HazardTrackingModeUntracked);
   texture_desc->setAllowGPUOptimizedContents(true);
   auto usage = mtl::util::convert(desc.usage);
-  if (desc.flags & rhi::TextureDescFlags_PixelFormatView) {
+  if (has_flag(desc.flags, rhi::TextureDescFlags::PixelFormatView)) {
     usage |= MTL::TextureUsagePixelFormatView;
   }
   texture_desc->setUsage(usage);
-  texture_desc->setResourceOptions(mtl::util::convert_resource_storage_mode(desc.storage_mode));
+  texture_desc->setResourceOptions(resource_opts);
   auto* tex = device_->newTexture(texture_desc);
   ALWAYS_ASSERT(tex);
   if (mtl4_enabled_) {
@@ -449,7 +462,7 @@ rhi::TextureHandle MetalDevice::create_tex(const rhi::TextureDesc& desc) {
   }
   texture_desc->release();
   uint32_t idx = rhi::k_invalid_bindless_idx;
-  if (desc.bindless) {
+  if (!has_flag(desc.flags, rhi::TextureDescFlags::NoBindless)) {
     idx = resource_desc_heap_allocator_.alloc_idx();
     write_bindless_resource_descriptor(idx, tex);
   }
@@ -470,7 +483,8 @@ void MetalDevice::destroy(rhi::TextureHandle handle) {
     return;
   }
   ASSERT(tex->texture());
-  if (tex->desc().bindless) {
+
+  if (!has_flag(tex->desc().flags, rhi::TextureDescFlags::NoBindless)) {
     resource_desc_heap_allocator_.free_idx(tex->bindless_idx());
   }
   for (auto& view : tex->tex_views) {
@@ -1286,7 +1300,7 @@ void MetalDevice::acquire_next_swapchain_image(rhi::Swapchain* swapchain) {
   swap_img_desc.format = mtl::util::convert(tex->pixelFormat());
   swap_img_desc.mip_levels = 1;
   swap_img_desc.array_length = 1;
-  swap_img_desc.bindless = false;
+  swap_img_desc.flags |= rhi::TextureDescFlags::NoBindless;
   // auto tex_handle_h = rhi::TextureHandleHolder{
   //     texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true), this};
   // TODO: fix

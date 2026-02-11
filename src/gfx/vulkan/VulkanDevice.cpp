@@ -1275,12 +1275,11 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
                                      swapchain_images));
     rhi::TextureDesc tex_desc{
         .format = convert_format(selected_format),
-        .storage_mode = rhi::StorageMode::GPUOnly,
         .usage = usage,
         .dims = {swap_info.imageExtent.width, swap_info.imageExtent.height, 1},
         .mip_levels = 1,
         .array_length = 1,
-        .bindless = false,
+        .flags = rhi::TextureDescFlags::NoBindless | rhi::TextureDescFlags::DisableCPUAccessOnUMA,
     };
     swapchain->desc_.width = swap_info.imageExtent.width;
     swapchain->desc_.height = swap_info.imageExtent.height;
