@@ -636,8 +636,18 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
     std::vector<M4Material> mats;
     mats.reserve(result.materials.size());
     for (const auto& m : result.materials) {
-      mats.push_back(M4Material{.albedo_tex_idx = img_upload_bindless_indices[m.albedo_tex],
-                                .color = glm::vec4{m.albedo_factors}});
+      auto& mat = mats.emplace_back();
+      if (m.albedo_tex != INVALID_TEX_ID) {
+        mat.albedo_tex_idx = img_upload_bindless_indices[m.albedo_tex];
+      } else {
+        mat.albedo_tex_idx = INVALID_TEX_ID;
+      }
+      if (m.normal_tex != INVALID_TEX_ID) {
+        mat.normal_tex_idx = img_upload_bindless_indices[m.normal_tex];
+      } else {
+        mat.normal_tex_idx = INVALID_TEX_ID;
+      }
+      mat.color = m.albedo_factors;
     }
     ASSERT(materials_buf_.get_buffer()->is_cpu_visible());
     buffer_copy_mgr_.copy_to_buffer(

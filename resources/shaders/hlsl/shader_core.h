@@ -3,6 +3,8 @@
 
 #define DEBUG_MODE 1
 
+#define INVALID_TEX_ID 0xFFFFFFFF
+
 #ifdef __HLSL__
 
 #define alignas(x)

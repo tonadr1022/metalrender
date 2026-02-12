@@ -27,15 +27,18 @@ FOut main(VOut input) {
 #endif
   M4Material material = material_buf[input.material_id];
   SamplerState samp = bindless_samplers[LINEAR_SAMPLER_IDX];
+  if (material.normal_tex_idx != INVALID_TEX_ID) {
+    float4 normal = bindless_textures[material.normal_tex_idx].Sample(samp, input.uv);
+    fout.gbuffer_b = normal;
+  }
   float4 albedo = material.color;
   //  albedo = float4(1, 1, 1, 1);
-  if (material.albedo_tex_idx != 0) {
+  if (material.albedo_tex_idx != INVALID_TEX_ID) {
     albedo *= (bindless_textures[material.albedo_tex_idx]).Sample(samp, input.uv);
   }
   if (albedo.a < 0.5) {
     //    discard;
   }
   fout.gbuffer_a = float4(albedo.xyz, 1.0);
-  fout.gbuffer_b = float4(1, 0, 0, 1);
   return fout;
 }

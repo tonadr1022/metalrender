@@ -41,8 +41,8 @@ struct TextureArrayUpload {
 };
 
 struct Material {
-  uint32_t albedo_tex{};
-  uint32_t normal_tex{};
+  uint32_t albedo_tex{INVALID_TEX_ID};
+  uint32_t normal_tex{INVALID_TEX_ID};
   glm::vec4 albedo_factors{1};
 };
 

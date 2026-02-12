@@ -357,6 +357,8 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
         };
         set_and_load_material_img(&gltf_mat->pbr_metallic_roughness.base_color_texture,
                                   material.albedo_tex, rhi::TextureFormat::R8G8B8A8Srgb);
+        set_and_load_material_img(&gltf_mat->normal_texture, material.normal_tex,
+                                  rhi::TextureFormat::R8G8B8A8Srgb);
         materials[material_i] = material;
       }));
     }
