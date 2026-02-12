@@ -1,5 +1,6 @@
 # TODOs
 
+- in render graph, track texture usages instead of adding sample/storage automatically
 - timestamp query better organization
 - flat map for gpu per-frame upload allocator
 - queue management between metal 3 and 4 is actually awful. I let it go just to get metal 3

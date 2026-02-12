@@ -74,6 +74,7 @@ namespace gfx {
 
 void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   ZoneScoped;
+  // LINFO("rendering frame {}", frame_num_);
   {
     if (frame_num_ >= device_->get_info().frames_in_flight) {
       // 3 frames in flight ago is ready to be read back to the cpu, since we waited on fence for
@@ -1429,9 +1430,11 @@ void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
 
     MeshletDrawStats stats{};
     constexpr int frames_ago = 2;
-    auto* readback_buf =
-        device_->get_buf(out_counts_buf_readback_[get_frames_ago_idx(frames_ago)].handle);
-    stats = *(MeshletDrawStats*)readback_buf->contents();
+    if (frame_num_ >= device_->get_info().frames_in_flight) {
+      auto* readback_buf =
+          device_->get_buf(out_counts_buf_readback_[get_frames_ago_idx(frames_ago)].handle);
+      stats = *(MeshletDrawStats*)readback_buf->contents();
+    }
     size_t tot_drawn_meshlets = stats.meshlets_drawn_early + stats.meshlets_drawn_late;
     ImGui::Text(
         "Culling Paused:             %d\n"

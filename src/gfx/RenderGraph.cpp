@@ -9,6 +9,7 @@
 #include "core/Logger.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
 #include "small_vector/small_vector.hpp"
@@ -493,8 +494,11 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
         auto dims = get_att_dims();
         auto att_tx_handle = device_->create_tex(rhi::TextureDesc{
             .format = att_info.format,
-            .usage = is_depth_format(att_info.format) ? rhi::TextureUsage::ColorAttachment
-                                                      : rhi::TextureUsage::DepthStencilAttachment,
+            .usage =
+                (!is_depth_format(att_info.format) ? rhi::TextureUsage::ColorAttachment
+                                                   : rhi::TextureUsage::DepthStencilAttachment) |
+                // TODO: track usages
+                rhi::TextureUsage::Sample | rhi::TextureUsage::Storage,
             .dims = glm::uvec3{dims.x, dims.y, 1},
             .mip_levels = att_info.mip_levels,
             .array_length = att_info.array_layers,
@@ -841,7 +845,7 @@ RGResourceHandle RGPass::w_depth_output(const std::string& name, const Attachmen
   RGResourceHandle handle = rg_->add_tex_usage(name, att_info, access, *this);
   internal_writes_.emplace_back(NameAndAccess{
       name, rhi::PipelineStage::EarlyFragmentTests | rhi::PipelineStage::LateFragmentTests,
-      rhi::AccessFlags::ColorAttachmentWrite, RGResourceType::Texture});
+      rhi::AccessFlags::DepthStencilWrite, RGResourceType::Texture});
   return handle;
 }
 

@@ -79,6 +79,8 @@ MTL::BlendFactor convert(rhi::BlendFactor factor) {
     case rhi::BlendFactor::Src1Alpha:
       return MTL::BlendFactorSource1Alpha;
       break;
+    default:
+      return MTL::BlendFactorOne;
   }
 }
 
@@ -1073,7 +1075,11 @@ MTL::RenderPipelineState* MetalDevice::create_graphics_pipeline_internal(
     }
 
     for (size_t i = 0; i < color_att_count; i++) {
+      if (cinfo.blend.attachments.size() <= i) {
+        break;
+      }
       const auto& info_att = cinfo.blend.attachments[i];
+      ASSERT(i < cinfo.blend.attachments.size());
       auto* att = desc->colorAttachments()->object(i);
       att->setSourceRGBBlendFactor(convert(info_att.src_color_factor));
       att->setDestinationRGBBlendFactor(convert(info_att.dst_color_factor));
