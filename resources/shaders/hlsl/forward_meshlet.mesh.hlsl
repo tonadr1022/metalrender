@@ -49,6 +49,7 @@ VOut get_vertex_attributes(in InstanceData instance_data, in float4x4 vp, uint r
   VOut v;
   v.pos = mul(vp, float4(pos, 1.0));
   v.uv = vert.uv;
+  v.normal = normalize(vert.normal);
 #ifdef DEBUG_MODE
 #define COLOR_MULTIPLIER 1.71f
   if (render_mode == DEBUG_RENDER_MODE_TRIANGLE_COLORS) {

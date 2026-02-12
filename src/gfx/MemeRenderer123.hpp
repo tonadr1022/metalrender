@@ -279,6 +279,7 @@ class MemeRenderer123 {
     MeshletColors = DEBUG_RENDER_MODE_MESHLET_COLORS,
     TriangleColors = DEBUG_RENDER_MODE_TRIANGLE_COLORS,
     InstanceColors = DEBUG_RENDER_MODE_INSTANCE_COLORS,
+    Albedo = DEBUG_RENDER_MODE_ALBEDO,
     Count = DEBUG_RENDER_MODE_COUNT,
   } debug_render_mode_{DebugRenderMode::None};
 

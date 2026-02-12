@@ -24,6 +24,7 @@ struct Payload {
 
 struct VOut {
   float4 pos : SV_Position;
+  float3 normal : NORMAL;
   float2 uv : TEXCOORD0;
   nointerpolation float4 color : COLOR;
   nointerpolation uint material_id : MATERIAL_ID;
