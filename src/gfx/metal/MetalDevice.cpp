@@ -320,7 +320,7 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
-  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = true});
+  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = false});
 }
 
 void MetalDevice::shutdown() {
@@ -1067,11 +1067,23 @@ MTL::RenderPipelineState* MetalDevice::create_graphics_pipeline_internal(
   }
 
   auto set_color_blend_atts = [&cinfo](auto desc) {
-    size_t color_att_count = 0;
+    size_t color_att_count = cinfo.rendering.color_formats.size();
+    if constexpr (std::is_same_v<decltype(desc), MTL4::RenderPipelineDescriptor*> ||
+                  std::is_same_v<decltype(desc), MTL4::MeshRenderPipelineDescriptor*>) {
+      for (size_t i = 0; i < color_att_count; i++) {
+        auto* att = MTL4::RenderPipelineColorAttachmentDescriptor::alloc()->init();
+        desc->colorAttachments()->setObject(att, i);
+      }
+    } else {
+      for (size_t i = 0; i < color_att_count; i++) {
+        auto* att = MTL::RenderPipelineColorAttachmentDescriptor::alloc()->init();
+        desc->colorAttachments()->setObject(att, i);
+      }
+    }
+
+    size_t i = 0;
     for (const auto& format : cinfo.rendering.color_formats) {
-      desc->colorAttachments()
-          ->object(color_att_count++)
-          ->setPixelFormat(mtl::util::convert(format));
+      desc->colorAttachments()->object(i)->setPixelFormat(mtl::util::convert(format));
     }
 
     for (size_t i = 0; i < color_att_count; i++) {

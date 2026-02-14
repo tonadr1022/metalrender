@@ -27,6 +27,7 @@ float4 main(VOut input) : SV_Target {
     float4 albedo = tex.SampleLevel(samp, input.uv, 0);
     float ambient_intensity = 0.2;
     float3 ambient = albedo.xyz * ambient_intensity;
+    return albedo;
     float4 light_out = float4(albedo.xyz * NdotL, albedo.a) + float4(ambient, 0);
     light_out = float4(tonemap(light_out.xyz), light_out.a);
     return light_out;

@@ -106,7 +106,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_verbose_ = i++ == -2;
+  rg_verbose_ = i++ == 2;
   device_->acquire_next_swapchain_image(swapchain_);
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
