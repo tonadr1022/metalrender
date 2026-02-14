@@ -26,6 +26,7 @@ VOut main(uint vert_id : SV_VertexID, uint instance_id : SV_InstanceID) {
   float3 pos = rotate_quat(instance_data.scale * v.pos.xyz, instance_data.rotation) +
                instance_data.translation;
   o.pos = mul(view_data.vp, float4(pos, 1.0));
+  o.normal = normalize(v.normal);
   o.material_id = instance_data.mat_id;
   return o;
 }

@@ -1083,7 +1083,7 @@ MTL::RenderPipelineState* MetalDevice::create_graphics_pipeline_internal(
 
     size_t i = 0;
     for (const auto& format : cinfo.rendering.color_formats) {
-      desc->colorAttachments()->object(i)->setPixelFormat(mtl::util::convert(format));
+      desc->colorAttachments()->object(i++)->setPixelFormat(mtl::util::convert(format));
     }
 
     for (size_t i = 0; i < color_att_count; i++) {

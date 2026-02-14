@@ -117,7 +117,8 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
         depth_desc->setClearDepth(att.clear_value.depth_stencil.depth);
         m3_desc->setDepthAttachment(depth_desc.get());
       } else {
-        auto* color_desc = m3_desc->colorAttachments()->object(color_att_i);
+        auto color_desc =
+            NS::TransferPtr(MTL::RenderPassColorAttachmentDescriptor::alloc()->init());
         auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
         curr_render_target_info_.color_formats.push_back(tex->desc().format);
         color_desc->setTexture(tex->texture());
@@ -126,6 +127,8 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
         color_desc->setClearColor(
             MTL::ClearColor::Make(att.clear_value.color.r, att.clear_value.color.g,
                                   att.clear_value.color.b, att.clear_value.color.a));
+        m3_desc->colorAttachments()->setObject(color_desc.get(), color_att_i);
+        // auto* color_desc = m3_desc->colorAttachments()->object(color_att_i);
         color_att_i++;
       }
     }

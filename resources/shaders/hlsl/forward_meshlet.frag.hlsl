@@ -34,7 +34,7 @@ FOut main(VOut input) {
       normal_tex_normal = bindless_textures[material.normal_tex_idx].Sample(samp, input.uv);
     }
   */
-  float4 normal = float4(input.normal, 0);
+  float4 normal = float4(input.normal, 1);
   fout.gbuffer_b = normal;
   float4 albedo = material.color;
   //  albedo = float4(1, 1, 1, 1);

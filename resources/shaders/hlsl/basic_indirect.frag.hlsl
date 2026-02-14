@@ -4,7 +4,12 @@
 #include "shared_basic_indirect.h"
 // clang-format on
 
-float4 main(VOut input) : SV_Target0 {
+struct FOut {
+  float4 gbuffer_a : SV_Target0;
+  float4 gbuffer_b : SV_Target1;
+};
+FOut main(VOut input) {
+  FOut fout;
   M4Material material =
       bindless_buffers[mat_buf_idx].Load<M4Material>(input.material_id * sizeof(M4Material));
   SamplerState samp = SamplerDescriptorHeap[LINEAR_SAMPLER_IDX];
@@ -15,5 +20,7 @@ float4 main(VOut input) : SV_Target0 {
   if (albedo.a < 0.5) {
     discard;
   }
-  return float4(albedo.xyz, 1.0);
+  fout.gbuffer_a = float4(albedo.xyz, 1.0);
+  fout.gbuffer_b = float4(input.normal, 1);
+  return fout;
 }

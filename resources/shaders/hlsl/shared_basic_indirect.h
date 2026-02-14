@@ -15,6 +15,7 @@ cbuffer BasicIndirectPC HLSL_PC_REG {
 
 struct VOut {
   float4 pos : SV_Position;
+  float3 normal : NORMAL;
   float2 uv : TEXCOORD0;
   nointerpolation uint material_id : MATERIAL_ID;
 };
