@@ -314,6 +314,7 @@ void MetalCmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
       if (!m4_state().compute_enc) {
         m4_state().compute_enc = m4_state().cmd_buf->computeCommandEncoder();
         m4_state().compute_enc->setArgumentTable(m4_state().arg_table);
+        // TODO: move somewhere else
         set_buffer(kIRDescriptorHeapBindPoint,
                    device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
                    EncoderSetBufferStage::Compute);
@@ -327,6 +328,13 @@ void MetalCmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
       if (!m3_state().compute_enc) {
         m3_state().compute_enc = m3_state().cmd_buf->computeCommandEncoder();
       }
+      // TODO: move somewhere else
+      set_buffer(kIRDescriptorHeapBindPoint,
+                 device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
+                 EncoderSetBufferStage::Compute);
+      set_buffer(kIRSamplerHeapBindPoint,
+                 device_->get_mtl_buf(device_->sampler_descriptor_table_), 0,
+                 EncoderSetBufferStage::Compute);
       m3_state().compute_enc->setComputePipelineState(pipeline->compute_pso);
     }
   }

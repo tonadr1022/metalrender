@@ -16,6 +16,7 @@ GeometryBatch::GeometryBatch(GeometryBatchType type, rhi::Device& device,
     : vertex_buf(device, buffer_copier,
                  {
                      .size = cinfo.initial_vertex_capacity * sizeof(DefaultVertex),
+                     // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                      .name = "vertex buf",
                  },
                  sizeof(DefaultVertex)),
@@ -23,6 +24,7 @@ GeometryBatch::GeometryBatch(GeometryBatchType type, rhi::Device& device,
 
                 {
                     .size = cinfo.initial_index_capacity * sizeof(rhi::DefaultIndexT),
+                    // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                     .name = "index buf",
                 },
                 sizeof(rhi::DefaultIndexT)),
@@ -30,6 +32,7 @@ GeometryBatch::GeometryBatch(GeometryBatchType type, rhi::Device& device,
 
                   {
                       .size = cinfo.initial_meshlet_capacity * sizeof(Meshlet),
+                      // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                       .name = "meshlet buf",
                   },
                   sizeof(Meshlet)),
@@ -37,6 +40,7 @@ GeometryBatch::GeometryBatch(GeometryBatchType type, rhi::Device& device,
 
                {
                    .size = cinfo.initial_mesh_capacity * sizeof(MeshData),
+                   // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                    .name = "mesh buf",
                },
                sizeof(MeshData)),
@@ -44,6 +48,7 @@ GeometryBatch::GeometryBatch(GeometryBatchType type, rhi::Device& device,
 
                             {
                                 .size = cinfo.initial_meshlet_triangle_capacity * sizeof(uint8_t),
+                                // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                                 .name = "meshlet_triangles_buf",
                             },
                             sizeof(uint8_t)),
@@ -51,6 +56,7 @@ GeometryBatch::GeometryBatch(GeometryBatchType type, rhi::Device& device,
 
                            {
                                .size = cinfo.initial_meshlet_vertex_capacity * sizeof(uint32_t),
+                               // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                                .name = "meshlet_vertices_buf",
                            },
                            sizeof(uint32_t)),

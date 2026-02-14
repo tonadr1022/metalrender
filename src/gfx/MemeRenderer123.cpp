@@ -650,7 +650,6 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
       }
       mat.color = m.albedo_factors;
     }
-    ASSERT(materials_buf_.get_buffer()->is_cpu_visible());
     buffer_copy_mgr_.copy_to_buffer(
         mats.data(), mats.size() * sizeof(M4Material), materials_buf_.get_buffer_handle(),
         material_alloc.offset * sizeof(M4Material), rhi::PipelineStage::FragmentShader,
@@ -1034,6 +1033,15 @@ void MemeRenderer123::on_imgui() {
     ImGui::Text("Mesh shaders enabled: %d", mesh_shaders_enabled_);
     ImGui::TreePop();
   }
+  if (ImGui::TreeNodeEx("Textures", ImGuiTreeNodeFlags_DefaultOpen)) {
+    model_gpu_resource_pool_.iterate_entries([this](const ModelGPUResources& gpu_resource) {
+      for (const auto& tex : gpu_resource.textures) {
+        ImGui::Text("%s", device_->get_tex(tex)->desc().name);
+        ImGui::Image((ImTextureRef)tex.handle.to64(), ImVec2{64, 64}, ImVec2{0, 0}, ImVec2{1, 1});
+      }
+    });
+    ImGui::TreePop();
+  }
   if (ImGui::TreeNodeEx("Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
     ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
                 stats_.total_instance_vertices, stats_.total_instances);
@@ -1383,7 +1391,9 @@ InstanceMgr::InstanceMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr,
                          uint32_t frames_in_flight, MemeRenderer123& renderer)
     : allocator_(0),
       meshlet_vis_buf_(device, buffer_copy_mgr,
-                       {.usage = rhi::BufferUsage::Storage, .name = "instance meshlet vis buf"},
+                       {.usage = rhi::BufferUsage::Storage,
+                        // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
+                        .name = "instance meshlet vis buf"},
                        sizeof(uint32_t)),
       buffer_copy_mgr_(buffer_copy_mgr),
       frames_in_flight_(frames_in_flight),
