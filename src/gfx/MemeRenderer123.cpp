@@ -106,7 +106,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_verbose_ = i++ == 2;
+  rg_verbose_ = i++ == -2;
   device_->acquire_next_swapchain_image(swapchain_);
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
@@ -735,7 +735,7 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
     buffer_copy_mgr_.copy_to_buffer(indices.data(), indices.size() * sizeof(rhi::DefaultIndexT),
                                     draw_batch.index_buf.get_buffer_handle(),
                                     index_alloc.offset * sizeof(rhi::DefaultIndexT),
-                                    rhi::PipelineStage::VertexInput, rhi::AccessFlags::IndexRead);
+                                    rhi::PipelineStage::IndexInput, rhi::AccessFlags::IndexRead);
   }
 
   const auto meshlet_alloc = draw_batch.meshlet_buf.allocate(meshlets.tot_meshlet_count, resized);
@@ -1033,7 +1033,7 @@ void MemeRenderer123::on_imgui() {
     ImGui::Text("Mesh shaders enabled: %d", mesh_shaders_enabled_);
     ImGui::TreePop();
   }
-  if (ImGui::TreeNodeEx("Textures", ImGuiTreeNodeFlags_DefaultOpen)) {
+  if (ImGui::TreeNodeEx("Textures")) {
     model_gpu_resource_pool_.iterate_entries([this](const ModelGPUResources& gpu_resource) {
       for (const auto& tex : gpu_resource.textures) {
         ImGui::Text("%s", device_->get_tex(tex)->desc().name);

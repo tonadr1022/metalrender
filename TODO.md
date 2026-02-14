@@ -1,5 +1,6 @@
 # TODOs
 
+- maybe the reason for weird graphics crash is tied to disable cpu access on uma flag in drawbatch.cpp
 - in render graph, track texture usages instead of adding sample/storage automatically
 - timestamp query better organization
 - flat map for gpu per-frame upload allocator

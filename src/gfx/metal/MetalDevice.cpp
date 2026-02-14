@@ -320,7 +320,7 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
 }
 
 void MetalDevice::init(const InitInfo& init_info) {
-  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = false});
+  init(init_info, MetalDeviceInitInfo{.prefer_mtl4 = true});
 }
 
 void MetalDevice::shutdown() {

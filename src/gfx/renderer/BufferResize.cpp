@@ -22,6 +22,7 @@ void BufferCopyMgr::copy_to_buffer(const void* src_data, size_t src_size,
     memcpy((uint8_t*)buf->contents() + dst_offset, src_data, src_size);
   } else {
     auto upload_buf = staging_buffer_allocator_.alloc(src_size);
+    ASSERT(device_->get_buf(upload_buf.buf)->size() >= upload_buf.offset + src_size);
     memcpy((uint8_t*)upload_buf.write_ptr, src_data, src_size);
     ASSERT(dst_offset + src_size <= buf->desc().size);
     add_copy(upload_buf.buf, upload_buf.offset, dst_buffer, dst_offset, src_size, dst_stage,
