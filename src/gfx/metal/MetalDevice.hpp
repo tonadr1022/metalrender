@@ -15,6 +15,7 @@
 #include "gfx/metal/MetalCmdEncoder.hpp"
 #include "gfx/metal/MetalQueryPool.hpp"
 #include "gfx/metal/MetalSampler.hpp"
+#include "gfx/metal/MetalSemaphore.hpp"
 #include "gfx/metal/MetalSwapchain.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -68,7 +69,8 @@ class MetalDevice : public rhi::Device {
 
   rhi::BufferHandle create_buf(const rhi::BufferDesc& desc) override;
   rhi::Buffer* get_buf(rhi::BufferHandle handle) override { return buffer_pool_.get(handle); }
-  void cmd_encoder_wait_for(rhi::CmdEncoder* cmd_enc, rhi::CmdEncoder* wait_for) override;
+  void cmd_encoder_wait_for(rhi::CmdEncoder* cmd_enc_first,
+                            rhi::CmdEncoder* cmd_enc_second) override;
 
   rhi::TextureHandle create_tex(const rhi::TextureDesc& desc) override;
   rhi::TextureViewHandle create_tex_view(rhi::TextureHandle handle, uint32_t base_mip_level,
@@ -112,7 +114,7 @@ class MetalDevice : public rhi::Device {
   [[nodiscard]] const Info& get_info() const override { return info_; }
 
   void use_bindless_buffer(MTL::RenderCommandEncoder* enc);
-  rhi::CmdEncoder* begin_cmd_encoder() override;
+  rhi::CmdEncoder* begin_cmd_encoder(rhi::QueueType queue_type) override;
   void end_command_list(rhi::CmdEncoder* cmd_enc);
 
   [[nodiscard]] size_t frame_num() const { return frame_num_; }
@@ -158,10 +160,6 @@ class MetalDevice : public rhi::Device {
 
   Info info_{};
   std::filesystem::path metal_shader_dir_;
-  struct Semaphore {
-    NS::SharedPtr<MTL::SharedEvent> event;
-    size_t value;
-  };
 
   struct Queue {
     NS::SharedPtr<MTL4::CommandQueue> queue;
@@ -169,24 +167,19 @@ class MetalDevice : public rhi::Device {
     NS::SharedPtr<MTL::CommandQueue> mtl3_queue;
     std::vector<MTL::CommandBuffer*> mtl3_submit_cmd_bufs;
 
-    void signal(const Semaphore& sem) const {
+    void signal(const MetalSemaphore& sem) const {
       if (is_valid()) {
         queue->signalEvent(sem.event.get(), sem.value);
       }
     }
 
-    void wait(const Semaphore& sem) const {
+    void wait(const MetalSemaphore& sem) const {
       if (is_valid()) {
         queue->wait(sem.event.get(), sem.value);
       }
     }
 
-    void submit() {
-      if (is_valid() && !submit_cmd_bufs.empty()) {
-        queue->commit(submit_cmd_bufs.data(), submit_cmd_bufs.size());
-        submit_cmd_bufs.clear();
-      }
-    }
+    void submit();
     void m3_submit() {
       if (is_valid() && !mtl3_submit_cmd_bufs.empty()) {
         for (auto* cmd_buf : mtl3_submit_cmd_bufs) {
@@ -337,6 +330,19 @@ class MetalDevice : public rhi::Device {
   std::vector<IRDescriptorTableEntry> static_sampler_entries_;
 
   void destroy_actual(rhi::BufferHandle handle);
+
+  MetalSemaphore create_semaphore() {
+    if (free_semaphores_.empty()) {
+      return MetalSemaphore{NS::TransferPtr(device_->newEvent()->retain()), 0};
+    }
+    auto sem = free_semaphores_.back();
+    free_semaphores_.pop_back();
+    sem.value++;
+    return sem;
+  }
+  void free_semaphore(const MetalSemaphore& sem) { free_semaphores_.push_back(sem); }
+
+  std::vector<MetalSemaphore> free_semaphores_;
 
  private:
   struct DeleteQueues {

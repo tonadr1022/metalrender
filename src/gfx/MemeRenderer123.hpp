@@ -227,6 +227,7 @@ class MemeRenderer123 {
 
   GPUFrameAllocator3 frame_gpu_upload_allocator_;
   BufferCopyMgr buffer_copy_mgr_;
+  std::vector<rhi::CmdEncoder*> main_wait_fors_;
   std::vector<IndexedIndirectDrawCmd> cmds_;
   BackedGPUAllocator materials_buf_;
 

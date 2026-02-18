@@ -5,6 +5,7 @@
 
 #include "GFXTypes.hpp"
 #include "core/Config.hpp"
+#include "gfx/rhi/Queue.hpp"
 
 namespace MTL {
 class Texture;
@@ -112,8 +113,9 @@ class Device {
   virtual void destroy(SamplerHandle handle) = 0;
   virtual void destroy(SwapchainHandle handle) = 0;
 
-  virtual void cmd_encoder_wait_for(CmdEncoder *cmd_enc, CmdEncoder *wait_for) = 0;
-  virtual CmdEncoder *begin_cmd_encoder() = 0;
+  virtual void cmd_encoder_wait_for(CmdEncoder *cmd_enc_first, CmdEncoder *cmd_enc_second) = 0;
+  virtual CmdEncoder *begin_cmd_encoder(rhi::QueueType queue_type) = 0;
+  CmdEncoder *begin_cmd_encoder() { return begin_cmd_encoder(rhi::QueueType::Graphics); }
   virtual void submit_frame() = 0;
 
   // does actual swapchain recreation, ideally only call this when something

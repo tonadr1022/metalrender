@@ -56,9 +56,9 @@ struct GeometryBatch {
   };
 
   void free(const Alloc& alloc) {
-    // if (alloc.mesh_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
-    //   mesh_buf.free(alloc.mesh_alloc);
-    // }
+    if (alloc.mesh_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
+      mesh_buf.free(alloc.mesh_alloc);
+    }
     if (alloc.meshlet_alloc.offset != OffsetAllocator::Allocation::NO_SPACE) {
       meshlet_buf.free(alloc.meshlet_alloc);
     }

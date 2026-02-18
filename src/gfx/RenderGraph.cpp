@@ -285,8 +285,13 @@ RenderGraph::Pass& RenderGraph::add_pass(const std::string& name, RGPassType typ
 }
 
 void RenderGraph::execute() {
-  ZoneScoped;
   rhi::CmdEncoder* enc = device_->begin_cmd_encoder();
+  execute(enc);
+  enc->end_encoding();
+}
+
+void RenderGraph::execute(rhi::CmdEncoder* enc) {
+  ZoneScoped;
   gch::small_vector<rhi::GPUBarrier, 8> post_pass_barriers;
   for (auto pass_i : pass_stack_) {
     post_pass_barriers.clear();
@@ -326,7 +331,6 @@ void RenderGraph::execute() {
       enc->barrier(&b);
     }
   }
-  enc->end_encoding();
 
   {
     passes_.clear();

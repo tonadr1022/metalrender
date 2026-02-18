@@ -196,6 +196,7 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
       queue.queue->addResidencySet(main_res_set_);
     };
     init_queue(get_queue(rhi::QueueType::Graphics));
+    init_queue(get_queue(rhi::QueueType::Copy));
 
     m4res().cmd_encoders_.reserve(20);
   } else {
@@ -205,6 +206,7 @@ bool MetalDevice::init(const InitInfo& init_info, const MetalDeviceInitInfo& met
       queue.mtl3_queue->addResidencySet(main_res_set_);
     };
     init_queue(get_queue(rhi::QueueType::Graphics));
+    init_queue(get_queue(rhi::QueueType::Copy));
 
     m3res().cmd_lists_.reserve(20);
   }
@@ -670,7 +672,7 @@ MTL::Library* MetalDevice::create_or_get_lib(const std::filesystem::path& path, 
   return lib;
 }
 
-rhi::CmdEncoder* MetalDevice::begin_cmd_encoder() {
+rhi::CmdEncoder* MetalDevice::begin_cmd_encoder(rhi::QueueType queue_type) {
   if (mtl4_enabled_) {
     if (curr_cmd_list_idx_ == m4res().cmd_encoders_.size()) {
       m4res().cmd_encoders_.emplace_back(std::make_unique<Metal4CmdEncoder>());
@@ -688,11 +690,13 @@ rhi::CmdEncoder* MetalDevice::begin_cmd_encoder() {
     }
     res.cmd_buf->beginCommandBuffer(res.cmd_allocators[frame_idx()].get());
     curr_cmd_list_idx_++;
+    cmd_list->waits_.clear();
+    cmd_list->signals_.clear();
     cmd_list->reset(this);
     cmd_list->m4_state().cmd_buf = res.cmd_buf.get();
     cmd_list->done_ = false;
     cmd_list->presents_.clear();
-    cmd_list->queue_ = rhi::QueueType::Graphics;
+    cmd_list->queue_ = queue_type;
     return m4res().cmd_encoders_[curr_cmd_list_idx_ - 1].get();
   }
 
@@ -706,7 +710,7 @@ rhi::CmdEncoder* MetalDevice::begin_cmd_encoder() {
   ret->m3_state().cmd_buf = queues_[(int)rhi::QueueType::Graphics].mtl3_queue->commandBuffer();
   ret->done_ = false;
   ret->presents_.clear();
-  ret->queue_ = rhi::QueueType::Graphics;
+  ret->queue_ = queue_type;
   // ret->m3_state().cmd_buf = m3res().main_cmd_buf;
   curr_cmd_list_idx_++;
 
@@ -716,11 +720,10 @@ rhi::CmdEncoder* MetalDevice::begin_cmd_encoder() {
 void MetalDevice::end_command_list(rhi::CmdEncoder* cmd_enc) {
   if (mtl4_enabled_) {
     auto* cmd = (Metal4CmdEncoder*)cmd_enc;
-    get_queue(rhi::QueueType::Graphics).submit_cmd_bufs.push_back(cmd->m4_state().cmd_buf);
+    get_queue(cmd->queue_).submit_cmd_bufs.push_back(cmd->m4_state().cmd_buf);
   } else {
     auto* cmd = (Metal3CmdEncoder*)cmd_enc;
-    // cmd->m3_state().cmd_buf->commit();
-    get_queue(rhi::QueueType::Graphics).mtl3_submit_cmd_bufs.push_back(cmd->m3_state().cmd_buf);
+    get_queue(cmd->queue_).mtl3_submit_cmd_bufs.push_back(cmd->m3_state().cmd_buf);
   }
 }
 
@@ -733,6 +736,29 @@ void MetalDevice::submit_frame() {
       for (auto& present : list->presents_) {
         queues_[(int)list->queue_].queue->wait(present.get());
       }
+    }
+
+    for (size_t cmd_list_i = 0; cmd_list_i < curr_cmd_list_idx_; cmd_list_i++) {
+      auto* list = m4res().cmd_encoders_[cmd_list_i].get();
+      auto& queue = get_queue(list->queue_);
+      ASSERT(queue.is_valid());
+      auto* cmd = (Metal4CmdEncoder*)list;
+      if (!cmd->waits_.empty()) {
+        for (auto& wait : cmd->waits_) {
+          queue.wait(wait);
+        }
+      }
+
+      if (!cmd->waits_.empty()) {
+        queue.submit();
+      }
+      cmd->waits_.clear();
+
+      for (auto& signal : cmd->signals_) {
+        queue.signal(signal);
+        free_semaphore(signal);
+      }
+      cmd->signals_.clear();
     }
 
     for (auto& queue : queues_) {
@@ -1240,12 +1266,13 @@ void MetalDevice::destroy_actual(rhi::BufferHandle handle) {
 
 // Ensures cmd_enc2 executes after cmd_enc1.
 // No-op when both encoders are recorded into the same command buffer.
-void MetalDevice::cmd_encoder_wait_for(rhi::CmdEncoder*, rhi::CmdEncoder*) {
-  if (mtl4_enabled_) {
-    // } else {
-    // auto* mtl_cmd_enc1 = static_cast<Metal3CmdEncoder*>(cmd_enc1);
-    // auto* mtl_cmd_enc2 = static_cast<Metal3CmdEncoder*>(cmd_enc2);
-  }
+void MetalDevice::cmd_encoder_wait_for(rhi::CmdEncoder* cmd_enc_first,
+                                       rhi::CmdEncoder* cmd_enc_second) {
+  auto sema = create_semaphore();
+  auto* enc1 = static_cast<Metal4CmdEncoder*>(cmd_enc_first);
+  enc1->signals_.emplace_back(sema);
+  auto* enc2 = static_cast<Metal4CmdEncoder*>(cmd_enc_second);
+  enc2->waits_.emplace_back(sema);
 }
 MetalTexture::TexView* MetalDevice::get_tex_view(rhi::TextureHandle handle, int subresource_id) {
   auto* tex = reinterpret_cast<MetalTexture*>(get_tex(handle));
@@ -1383,8 +1410,27 @@ bool MetalDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapch
     }
     swap.metal_layer_->setDrawableSize(CGSizeMake(desc.width, desc.height));
   }
+
   swap.desc_ = desc;
   return true;
+}
+
+void MetalDevice::Queue::submit() {
+  if (is_valid() && !submit_cmd_bufs.empty()) {
+    // MTL4::CommitOptions* opts = MTL4::CommitOptions::alloc()->init();
+    // MTL4::CommitFeedbackHandlerFunction func = [](MTL4::CommitFeedback* feedback) {
+    //   if (feedback) {
+    //     if (feedback->error()) {
+    //       auto* err = feedback->error();
+    //       ASSERT(err->localizedDescription());
+    //       LERROR("Command buffer commit error: {}", err->localizedDescription()->utf8String());
+    //     }
+    //   }
+    // };
+    // opts->addFeedbackHandler(func);
+    queue->commit(submit_cmd_bufs.data(), submit_cmd_bufs.size());
+    submit_cmd_bufs.clear();
+  }
 }
 
 }  // namespace TENG_NAMESPACE

@@ -7,6 +7,7 @@
 #include "core/Config.hpp"
 #include "gfx/metal/MetalCmdEncoderICBMgr.hpp"
 #include "gfx/metal/MetalRootLayout.hpp"
+#include "gfx/metal/MetalSemaphore.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Pipeline.hpp"
 #include "gfx/rhi/Queue.hpp"
@@ -142,6 +143,8 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
                      rhi::BufferHandle dst_buffer, size_t dst_offset) override;
 
   EncoderState2 state_;
+  std::vector<MetalSemaphore> waits_;
+  std::vector<MetalSemaphore> signals_;
   MTL4_State& m4_state() { return state_.m4; }
   MTL3_State& m3_state() { return state_.m3; }
   gch::small_vector<NS::SharedPtr<CA::MetalDrawable>, 8> presents_;

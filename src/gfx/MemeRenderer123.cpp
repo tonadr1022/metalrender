@@ -74,7 +74,6 @@ namespace gfx {
 
 void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   ZoneScoped;
-  // LINFO("rendering frame {}", frame_num_);
   {
     if (frame_num_ >= device_->get_info().frames_in_flight) {
       // 3 frames in flight ago is ready to be read back to the cpu, since we waited on fence for
@@ -92,6 +91,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
       }
     }
   }
+  main_wait_fors_.clear();
   frame_gpu_upload_allocator_.advance_frame();
   shader_mgr_->replace_dirty_pipelines();
 
@@ -122,9 +122,11 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
       enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
                                  copy.size);
       enc->barrier(copy.dst_buf, PipelineStage::AllTransfer, AccessFlags::TransferWrite,
-                   copy.dst_stage, copy.dst_access);
+                   copy.dst_stage | PipelineStage::AllTransfer,
+                   copy.dst_access | AccessFlags::TransferWrite);
     }
     enc->end_encoding();
+    main_wait_fors_.emplace_back(enc);
     buffer_copy_mgr_.clear_copies();
   }
 
@@ -135,7 +137,14 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
     enc->end_encoding();
   }
 
-  rg_.execute();
+  {
+    auto* enc = device_->begin_cmd_encoder();
+    rg_.execute();
+    enc->end_encoding();
+    for (const auto& prior : main_wait_fors_) {
+      device_->cmd_encoder_wait_for(prior, enc);
+    }
+  }
 
   device_->submit_frame();
   frame_num_++;
@@ -749,10 +758,10 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
   size_t meshlet_triangles_offset{};
   size_t meshlet_vertices_offset{};
   size_t mesh_i{};
-
-  // TODO: explicit staging buffer. this is writing all over the place and probably blowing
-  // caches.
+  std::vector<MeshData> mesh_datas;
+  mesh_datas.reserve(meshlets.meshlet_datas.size());
   for (const auto& meshlet_data : meshlets.meshlet_datas) {
+    ASSERT(!meshlet_data.meshlets.empty());
     buffer_copy_mgr_.copy_to_buffer(meshlet_data.meshlets.data(),
                                     meshlet_data.meshlets.size() * sizeof(Meshlet),
                                     draw_batch.meshlet_buf.get_buffer_handle(),
@@ -761,6 +770,7 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
                                     rhi::AccessFlags::ShaderRead);
     meshlet_offset += meshlet_data.meshlets.size();
 
+    ASSERT(!meshlet_data.meshlet_vertices.empty());
     buffer_copy_mgr_.copy_to_buffer(
         meshlet_data.meshlet_vertices.data(),
         meshlet_data.meshlet_vertices.size() * sizeof(uint32_t),
@@ -771,6 +781,7 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
 
     meshlet_vertices_offset += meshlet_data.meshlet_vertices.size();
 
+    ASSERT(!meshlet_data.meshlet_triangles.empty());
     buffer_copy_mgr_.copy_to_buffer(
         meshlet_data.meshlet_triangles.data(),
         meshlet_data.meshlet_triangles.size() * sizeof(uint8_t),
@@ -781,6 +792,7 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
 
     meshlet_triangles_offset += meshlet_data.meshlet_triangles.size();
 
+    ASSERT(mesh_i < meshes.size());
     MeshData d{
         .meshlet_base = meshlet_data.meshlet_base + meshlet_alloc.offset,
         .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size()),
@@ -792,14 +804,15 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
         .center = meshes[mesh_i].center,
         .radius = meshes[mesh_i].radius,
     };
-    buffer_copy_mgr_.copy_to_buffer(&d, sizeof(d), draw_batch.mesh_buf.get_buffer_handle(),
-                                    (mesh_i + mesh_alloc.offset) * sizeof(MeshData),
-                                    rhi::PipelineStage::ComputeShader |
-                                        rhi::PipelineStage::MeshShader |
-                                        rhi::PipelineStage::TaskShader,
-                                    rhi::AccessFlags::ShaderRead);
     mesh_i++;
+    mesh_datas.push_back(d);
   }
+  buffer_copy_mgr_.copy_to_buffer(
+      mesh_datas.data(), mesh_datas.size() * sizeof(MeshData),
+      draw_batch.mesh_buf.get_buffer_handle(), mesh_alloc.offset * sizeof(MeshData),
+      rhi::PipelineStage::ComputeShader | rhi::PipelineStage::MeshShader |
+          rhi::PipelineStage::TaskShader,
+      rhi::AccessFlags::ShaderRead);
 
   return GeometryBatch::Alloc{.vertex_alloc = vertex_alloc,
                               .index_alloc = index_alloc,
@@ -1270,12 +1283,12 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
       static_instance_mgr_(*device_, buffer_copy_mgr_, device_->get_info().frames_in_flight, *this),
       static_draw_batch_(GeometryBatchType::Static, *device_, buffer_copy_mgr_,
                          GeometryBatch::CreateInfo{
-                             .initial_vertex_capacity = 10'000'000,
-                             .initial_index_capacity = 10'000'000,
-                             .initial_meshlet_capacity = 1'000'000,
-                             .initial_mesh_capacity = 100'000,
-                             .initial_meshlet_triangle_capacity = 10'000'000,
-                             .initial_meshlet_vertex_capacity = 10'000'000,
+                             .initial_vertex_capacity = 1'000,
+                             .initial_index_capacity = 1'000,
+                             .initial_meshlet_capacity = 1'000,
+                             .initial_mesh_capacity = 100'0,
+                             .initial_meshlet_triangle_capacity = 1'000,
+                             .initial_meshlet_vertex_capacity = 1'000,
                          }),
       mesh_shaders_enabled_(cinfo.mesh_shaders_enabled) {
   ZoneScoped;

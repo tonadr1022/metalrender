@@ -136,6 +136,7 @@ class RenderGraph {
   void init(rhi::Device* device);
   void bake(glm::uvec2 fb_size, bool verbose = false);
   void execute();
+  void execute(rhi::CmdEncoder* enc);
   void shutdown();
 
   class Pass {

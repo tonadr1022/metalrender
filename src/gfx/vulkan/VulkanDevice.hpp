@@ -84,7 +84,7 @@ class VulkanDevice : public rhi::Device {
   }
   [[nodiscard]] const Info& get_info() const override { return info_; }
 
-  rhi::CmdEncoder* begin_cmd_encoder() override;
+  rhi::CmdEncoder* begin_cmd_encoder(rhi::QueueType queue_type) override;
   void submit_frame() override;
 
   void cmd_encoder_wait_for(rhi::CmdEncoder* /*cmd_enc*/, rhi::CmdEncoder* /*wait_for*/) override {

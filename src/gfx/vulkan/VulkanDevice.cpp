@@ -680,7 +680,7 @@ rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
   return handle;
 }
 
-rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder() {
+rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder(rhi::QueueType queue_type) {
   if (curr_cmd_encoder_i_ >= cmd_encoders_.size()) {
     // TODO: pipeline layout
     auto& enc = cmd_encoders_.emplace_back(std::make_unique<VulkanCmdEncoder>(this));
@@ -698,7 +698,7 @@ rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder() {
   auto& enc = *cmd_encoders_[curr_cmd_encoder_i_];
   enc.curr_frame_i_ = frame_idx();
   enc.submit_swapchains_.clear();
-  enc.queue_type_ = rhi::QueueType::Graphics;
+  enc.queue_type_ = queue_type;
 
   if (!enc.binder_pools_[enc.curr_frame_i_].pool) {
     for (size_t i = 0; i < frames_in_flight(); i++) {
