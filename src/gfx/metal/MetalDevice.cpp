@@ -1268,7 +1268,7 @@ void MetalDevice::destroy_actual(rhi::BufferHandle handle) {
 // No-op when both encoders are recorded into the same command buffer.
 void MetalDevice::cmd_encoder_wait_for(rhi::CmdEncoder* cmd_enc_first,
                                        rhi::CmdEncoder* cmd_enc_second) {
-  auto sema = create_semaphore();
+  auto sema = get_semaphore();
   auto* enc1 = static_cast<Metal4CmdEncoder*>(cmd_enc_first);
   enc1->signals_.emplace_back(sema);
   auto* enc2 = static_cast<Metal4CmdEncoder*>(cmd_enc_second);
@@ -1417,19 +1417,61 @@ bool MetalDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapch
 
 void MetalDevice::Queue::submit() {
   if (is_valid() && !submit_cmd_bufs.empty()) {
-    // MTL4::CommitOptions* opts = MTL4::CommitOptions::alloc()->init();
-    // MTL4::CommitFeedbackHandlerFunction func = [](MTL4::CommitFeedback* feedback) {
-    //   if (feedback) {
-    //     if (feedback->error()) {
-    //       auto* err = feedback->error();
-    //       ASSERT(err->localizedDescription());
-    //       LERROR("Command buffer commit error: {}", err->localizedDescription()->utf8String());
-    //     }
-    //   }
-    // };
-    // opts->addFeedbackHandler(func);
     queue->commit(submit_cmd_bufs.data(), submit_cmd_bufs.size());
     submit_cmd_bufs.clear();
+  }
+}
+
+void MetalDevice::immediate_submit(rhi::QueueType queue_type, ImmediateSubmitFn&& submit_fn) {
+  // TODO: this is jank
+  if (mtl4_enabled_) {
+    MetalFence fence = get_fence();
+    auto& queue = get_queue(queue_type);
+    auto* cmd_buf = device_->newCommandBuffer();
+    Metal4CmdEncoder& cmd_enc = *m4res().cmd_encoders2_.alloc();
+    auto cmd_allocator = NS::TransferPtr(device_->newCommandAllocator());
+    cmd_buf->beginCommandBuffer(cmd_allocator.get());
+    cmd_enc.reset(this);
+    cmd_enc.m4_state().cmd_buf = cmd_buf;
+    cmd_enc.queue_ = queue_type;
+    submit_fn(&cmd_enc);
+    cmd_enc.flush_barriers();
+    cmd_enc.end_render_encoder();
+    cmd_enc.end_compute_encoder();
+    cmd_enc.end_blit_encoder();
+    cmd_buf->endCommandBuffer();
+    queue.queue->commit(&cmd_buf, 1);
+    queue.queue->signalEvent(fence.event.get(), fence.value);
+    if (!fence.event->waitUntilSignaledValue(fence.value, ~0ULL)) {
+      LERROR("No signaled value from shared event for immediate submit on queue: {}",
+             to_string(queue_type));
+    }
+    m4res().cmd_encoders2_.free(&cmd_enc);
+    free_fence(fence);
+  } else {
+    MetalFence fence = get_fence();
+    auto& queue = get_queue(queue_type);
+    auto* cmd_buf = device_->newCommandBuffer();
+    Metal3CmdEncoder& cmd_enc = *m3res().cmd_encoders2_.alloc();
+    auto cmd_allocator = NS::TransferPtr(device_->newCommandAllocator());
+    cmd_buf->beginCommandBuffer(cmd_allocator.get());
+    cmd_enc.reset(this);
+    cmd_enc.m4_state().cmd_buf = cmd_buf;
+    cmd_enc.queue_ = queue_type;
+    submit_fn(&cmd_enc);
+    cmd_enc.flush_barriers();
+    cmd_enc.end_render_encoder();
+    cmd_enc.end_compute_encoder();
+    cmd_enc.end_blit_encoder();
+    cmd_buf->endCommandBuffer();
+    queue.queue->commit(&cmd_buf, 1);
+    queue.queue->signalEvent(fence.event.get(), fence.value);
+    if (!fence.event->waitUntilSignaledValue(fence.value, ~0ULL)) {
+      LERROR("No signaled value from shared event for immediate submit on queue: {}",
+             to_string(queue_type));
+    }
+    m3res().cmd_encoders2_.free(&cmd_enc);
+    free_fence(fence);
   }
 }
 

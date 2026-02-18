@@ -42,25 +42,18 @@ namespace TENG_NAMESPACE {
 class MetalDevice;
 
 struct MTL3_State {
-  MTL::RenderCommandEncoder* render_enc;
-  MTL::ComputeCommandEncoder* compute_enc;
-  MTL::BlitCommandEncoder* blit_enc;
-  MTL::CommandBuffer* cmd_buf;
-  MTL::ArgumentEncoder* arg_encoder;
+  MTL::RenderCommandEncoder* render_enc{};
+  MTL::ComputeCommandEncoder* compute_enc{};
+  MTL::BlitCommandEncoder* blit_enc{};
+  MTL::CommandBuffer* cmd_buf{};
+  MTL::ArgumentEncoder* arg_encoder{};
 };
 
 struct MTL4_State {
-  MTL4::RenderCommandEncoder* render_enc;
-  MTL4::ComputeCommandEncoder* compute_enc;
-  MTL4::CommandBuffer* cmd_buf;
-  MTL4::ArgumentTable* arg_table;
-};
-
-struct EncoderState2 {
-  union {
-    MTL3_State m3;
-    MTL4_State m4;
-  };
+  MTL4::RenderCommandEncoder* render_enc{};
+  MTL4::ComputeCommandEncoder* compute_enc{};
+  MTL4::CommandBuffer* cmd_buf{};
+  MTL4::ArgumentTable* arg_table{};
 };
 
 template <typename API>
@@ -142,11 +135,12 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   void query_resolve(rhi::QueryPoolHandle query_pool, uint32_t start_query, uint32_t query_count,
                      rhi::BufferHandle dst_buffer, size_t dst_offset) override;
 
-  EncoderState2 state_;
+  MTL3_State m3;
+  MTL4_State m4;
   std::vector<MetalSemaphore> waits_;
   std::vector<MetalSemaphore> signals_;
-  MTL4_State& m4_state() { return state_.m4; }
-  MTL3_State& m3_state() { return state_.m3; }
+  MTL4_State& m4_state() { return m4; }
+  MTL3_State& m3_state() { return m3; }
   gch::small_vector<NS::SharedPtr<CA::MetalDrawable>, 8> presents_;
   MetalDevice* device_{};
   std::string curr_debug_name_;

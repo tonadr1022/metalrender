@@ -117,6 +117,8 @@ class Device {
   virtual CmdEncoder *begin_cmd_encoder(rhi::QueueType queue_type) = 0;
   CmdEncoder *begin_cmd_encoder() { return begin_cmd_encoder(rhi::QueueType::Graphics); }
   virtual void submit_frame() = 0;
+  using ImmediateSubmitFn = std::function<void(rhi::CmdEncoder *)>;
+  virtual void immediate_submit(rhi::QueueType queue_type, ImmediateSubmitFn &&submit_fn) = 0;
 
   // does actual swapchain recreation, ideally only call this when something
   // needs to change.

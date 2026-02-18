@@ -7,6 +7,7 @@
 
 #include "EAssert.hpp"
 #include "core/Config.hpp"
+#include "core/Logger.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -285,6 +286,82 @@ struct BlockPool {
     all_entries_.emplace_back(std::vector<Entry>(element_count_per_block_));
   }
 };
+
+template <typename ObjectT, uint32_t ElementsPerBlock = 64>
+struct BlockPool2 {
+  struct Block {
+    ObjectT* objects;
+    Block() : objects(new ObjectT[ElementsPerBlock]) {}
+
+    Block(const Block&) = delete;
+    Block& operator=(const Block&) = delete;
+
+    Block(Block&& old) noexcept : objects(std::exchange(old.objects, nullptr)) {}
+    Block& operator=(Block&& old) noexcept {
+      if (&old == this) {
+        return *this;
+      }
+      delete[] objects;
+      objects = std::exchange(old.objects, nullptr);
+      return *this;
+    }
+
+    ~Block() { delete[] objects; }
+  };
+
+  struct EntryKey {
+    uint32_t block;
+    uint32_t idx;
+  };
+
+  std::vector<Block> blocks;
+  std::vector<EntryKey> free_list;
+
+  void free(ObjectT* obj) {
+    auto [block_idx, idx] = get_block_and_idx(obj);
+    free_list.push_back({.block = block_idx, .idx = idx});
+  }
+
+  ObjectT* alloc() {
+    if (free_list.empty()) {
+      add_block();
+    }
+    EntryKey entry_key = free_list.back();
+    free_list.pop_back();
+    return &blocks[entry_key.block].objects[entry_key.idx];
+  }
+
+ private:
+  EntryKey get_block_and_idx(ObjectT* obj) {
+    for (Block& block : blocks) {
+      ObjectT* start = block.objects;
+      ObjectT* end = block.objects + ElementsPerBlock;
+      if (obj >= start && obj < end) {
+        uint32_t block_idx = &block - blocks.data();
+        uint32_t idx = obj - block.objects;
+        return {block_idx, idx};
+      }
+    }
+    ASSERT(false);
+    return {};
+  }
+
+  void add_block() {
+    uint32_t block_idx = static_cast<uint32_t>(blocks.size());
+    blocks.emplace_back();
+    for (uint32_t i = 0; i < ElementsPerBlock; i++) {
+      free_list.push_back({.block = block_idx, .idx = ElementsPerBlock - 1u - i});
+    }
+  }
+};
+
+// static assert is default constructible for BlockPool2
+static_assert(std::is_default_constructible_v<BlockPool2<int>>,
+              "BlockPool2 must be default constructible");
+static_assert(std::is_move_constructible_v<BlockPool2<int>::Block>,
+              "BlockPool2 must be move constructible");
+static_assert(std::is_move_constructible_v<BlockPool2<int>>,
+              "BlockPool2 must be move constructible");
 
 template <typename T, typename ContextT>
 struct Holder {

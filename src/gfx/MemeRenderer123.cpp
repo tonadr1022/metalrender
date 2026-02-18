@@ -91,7 +91,6 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
       }
     }
   }
-  main_wait_fors_.clear();
   frame_gpu_upload_allocator_.advance_frame();
   shader_mgr_->replace_dirty_pipelines();
 
@@ -111,39 +110,22 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   rg_.bake(window_->get_window_size(), rg_verbose_);
 
   if (!buffer_copy_mgr_.get_copies().empty()) {
-    auto* enc = device_->begin_cmd_encoder();
     for (const auto& copy : buffer_copy_mgr_.get_copies()) {
-      enc->barrier(copy.src_buf, PipelineStage::AllCommands,
-                   AccessFlags::AnyRead | AccessFlags::AnyWrite, PipelineStage::AllTransfer,
-                   AccessFlags::TransferRead);
-      enc->barrier(copy.dst_buf, PipelineStage::AllCommands,
-                   AccessFlags::AnyRead | AccessFlags::AnyWrite, PipelineStage::AllTransfer,
-                   AccessFlags::TransferWrite);
-      enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
-                                 copy.size);
-      enc->barrier(copy.dst_buf, PipelineStage::AllTransfer, AccessFlags::TransferWrite,
-                   copy.dst_stage | PipelineStage::AllTransfer,
-                   copy.dst_access | AccessFlags::TransferWrite);
+      device_->immediate_submit(rhi::QueueType::Copy, [copy](rhi::CmdEncoder* enc) {
+        enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
+                                   copy.size);
+      });
     }
-    enc->end_encoding();
-    main_wait_fors_.emplace_back(enc);
     buffer_copy_mgr_.clear_copies();
-  }
-
-  // flush textures
-  if (imgui_renderer_->has_dirty_textures() || !pending_texture_uploads_.empty()) {
-    auto* enc = device_->begin_cmd_encoder();
-    flush_pending_texture_uploads(enc);
-    enc->end_encoding();
   }
 
   {
     auto* enc = device_->begin_cmd_encoder();
-    rg_.execute();
-    enc->end_encoding();
-    for (const auto& prior : main_wait_fors_) {
-      device_->cmd_encoder_wait_for(prior, enc);
+    if (imgui_renderer_->has_dirty_textures() || !pending_texture_uploads_.empty()) {
+      flush_pending_texture_uploads(enc);
     }
+    rg_.execute(enc);
+    enc->end_encoding();
   }
 
   device_->submit_frame();

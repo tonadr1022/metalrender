@@ -11,4 +11,9 @@ struct MetalSemaphore {
   size_t value;
 };
 
+struct MetalFence {
+  NS::SharedPtr<MTL::SharedEvent> event;
+  size_t value;
+};
+
 }  // namespace TENG_NAMESPACE

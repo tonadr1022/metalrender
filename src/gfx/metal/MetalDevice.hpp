@@ -111,6 +111,7 @@ class MetalDevice : public rhi::Device {
   MTL::ComputePipelineState* create_compute_pipeline_internal(const rhi::ShaderCreateInfo& cinfo);
 
   void submit_frame() override;
+  void immediate_submit(rhi::QueueType queue_type, ImmediateSubmitFn&& submit_fn) override;
   [[nodiscard]] const Info& get_info() const override { return info_; }
 
   void use_bindless_buffer(MTL::RenderCommandEncoder* enc);
@@ -207,6 +208,8 @@ class MetalDevice : public rhi::Device {
       NS::SharedPtr<MTL4::CommandBuffer> cmd_buf;
     };
     std::vector<EncoderResources> cmd_list_resources_;
+
+    BlockPool2<Metal4CmdEncoder> cmd_encoders2_;
   };
 
   std::optional<MTL4_Resources> mtl4_resources_;
@@ -218,6 +221,7 @@ class MetalDevice : public rhi::Device {
 
     MTL::Event* present_event_{};
     size_t present_event_last_value_{};
+    BlockPool2<Metal3CmdEncoder> cmd_encoders2_;
   };
   std::optional<MTL3_Resources> mtl3_resources_;
 
@@ -311,7 +315,7 @@ class MetalDevice : public rhi::Device {
   ICB_Mgr icb_mgr_draw_indexed_{this, MTL::IndirectCommandTypeDrawIndexed};
   ICB_Mgr icb_mgr_draw_mesh_threadgroups_{this, MTL::IndirectCommandTypeDrawMeshThreadgroups};
 
-  MTL::ResidencySet* get_main_residency_set() const { return main_res_set_; }
+  [[nodiscard]] MTL::ResidencySet* get_main_residency_set() const { return main_res_set_; }
   struct RequestedAllocationSizes {
     size_t total_buffer_space_allocated;
   };
@@ -331,7 +335,7 @@ class MetalDevice : public rhi::Device {
 
   void destroy_actual(rhi::BufferHandle handle);
 
-  MetalSemaphore create_semaphore() {
+  MetalSemaphore get_semaphore() {
     if (free_semaphores_.empty()) {
       return MetalSemaphore{NS::TransferPtr(device_->newEvent()->retain()), 0};
     }
@@ -340,9 +344,22 @@ class MetalDevice : public rhi::Device {
     sem.value++;
     return sem;
   }
-  void free_semaphore(const MetalSemaphore& sem) { free_semaphores_.push_back(sem); }
+
+  MetalFence get_fence() {
+    if (free_fences_.empty()) {
+      return MetalFence{NS::TransferPtr(device_->newSharedEvent()->retain()), 0};
+    }
+    auto fence = free_fences_.back();
+    free_fences_.pop_back();
+    fence.value++;
+    return fence;
+  }
+
+  void free_semaphore(MetalSemaphore sem) { free_semaphores_.emplace_back(std::move(sem)); }
+  void free_fence(MetalFence fence) { free_fences_.emplace_back(std::move(fence)); }
 
   std::vector<MetalSemaphore> free_semaphores_;
+  std::vector<MetalFence> free_fences_;
 
  private:
   struct DeleteQueues {

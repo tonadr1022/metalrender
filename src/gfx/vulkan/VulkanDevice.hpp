@@ -86,6 +86,7 @@ class VulkanDevice : public rhi::Device {
 
   rhi::CmdEncoder* begin_cmd_encoder(rhi::QueueType queue_type) override;
   void submit_frame() override;
+  void immediate_submit(rhi::QueueType, ImmediateSubmitFn&&) override { ASSERT(0); }
 
   void cmd_encoder_wait_for(rhi::CmdEncoder* /*cmd_enc*/, rhi::CmdEncoder* /*wait_for*/) override {
     exit(1);
