@@ -336,21 +336,25 @@ class MetalDevice : public rhi::Device {
   void destroy_actual(rhi::BufferHandle handle);
 
   MetalSemaphore get_semaphore() {
+    MetalSemaphore sem;
     if (free_semaphores_.empty()) {
-      return MetalSemaphore{NS::TransferPtr(device_->newEvent()->retain()), 0};
+      sem = MetalSemaphore{NS::TransferPtr(device_->newEvent()->retain()), 0};
+    } else {
+      sem = free_semaphores_.back();
+      free_semaphores_.pop_back();
     }
-    auto sem = free_semaphores_.back();
-    free_semaphores_.pop_back();
     sem.value++;
     return sem;
   }
 
   MetalFence get_fence() {
+    MetalFence fence;
     if (free_fences_.empty()) {
-      return MetalFence{NS::TransferPtr(device_->newSharedEvent()->retain()), 0};
+      fence = MetalFence{NS::TransferPtr(device_->newSharedEvent()->retain()), 0};
+    } else {
+      fence = free_fences_.back();
+      free_fences_.pop_back();
     }
-    auto fence = free_fences_.back();
-    free_fences_.pop_back();
     fence.value++;
     return fence;
   }

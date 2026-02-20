@@ -332,9 +332,8 @@ void MetalCmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
       set_buffer(kIRDescriptorHeapBindPoint,
                  device_->get_mtl_buf(device_->resource_descriptor_table_), 0,
                  EncoderSetBufferStage::Compute);
-      set_buffer(kIRSamplerHeapBindPoint,
-                 device_->get_mtl_buf(device_->sampler_descriptor_table_), 0,
-                 EncoderSetBufferStage::Compute);
+      set_buffer(kIRSamplerHeapBindPoint, device_->get_mtl_buf(device_->sampler_descriptor_table_),
+                 0, EncoderSetBufferStage::Compute);
       m3_state().compute_enc->setComputePipelineState(pipeline->compute_pso);
     }
   }

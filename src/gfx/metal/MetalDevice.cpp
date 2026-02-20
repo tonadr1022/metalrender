@@ -719,8 +719,8 @@ rhi::CmdEncoder* MetalDevice::begin_cmd_encoder(rhi::QueueType queue_type) {
 
 void MetalDevice::end_command_list(rhi::CmdEncoder* cmd_enc) {
   if (mtl4_enabled_) {
-    auto* cmd = (Metal4CmdEncoder*)cmd_enc;
-    get_queue(cmd->queue_).submit_cmd_bufs.push_back(cmd->m4_state().cmd_buf);
+    // auto* cmd = (Metal4CmdEncoder*)cmd_enc;
+    // get_queue(cmd->queue_).submit_cmd_bufs.push_back(cmd->m4_state().cmd_buf);
   } else {
     auto* cmd = (Metal3CmdEncoder*)cmd_enc;
     get_queue(cmd->queue_).mtl3_submit_cmd_bufs.push_back(cmd->m3_state().cmd_buf);
@@ -743,27 +743,29 @@ void MetalDevice::submit_frame() {
       auto& queue = get_queue(list->queue_);
       ASSERT(queue.is_valid());
       auto* cmd = (Metal4CmdEncoder*)list;
-      if (!cmd->waits_.empty()) {
+      bool dependency = !cmd->waits_.empty() || !cmd->signals_.empty();
+      // submit any prev bufs from prev commands if this current command list
+      // has to wait for previous to signal
+      if (dependency) {
+        queue.submit();
+      }
+
+      // add the current cmd buf
+      queue.submit_cmd_bufs.emplace_back(cmd->m4_state().cmd_buf);
+
+      if (dependency) {
         for (auto& wait : cmd->waits_) {
           queue.wait(wait);
         }
-      }
+        cmd->waits_.clear();
 
-      if (!cmd->waits_.empty()) {
         queue.submit();
-      }
-      cmd->waits_.clear();
 
-      for (auto& signal : cmd->signals_) {
-        queue.signal(signal);
-        free_semaphore(signal);
-      }
-      cmd->signals_.clear();
-    }
-
-    for (auto& queue : queues_) {
-      if (queue.is_valid()) {
-        queue.submit();
+        for (auto& signal : cmd->signals_) {
+          queue.signal(signal);
+          free_semaphore(signal);
+        }
+        cmd->signals_.clear();
       }
     }
 
@@ -847,9 +849,9 @@ void MetalDevice::submit_frame() {
   icb_mgr_draw_indexed_.reset_for_frame();
   icb_mgr_draw_mesh_threadgroups_.reset_for_frame();
 
-  push_constant_allocator_->advance_frame();
-  test_allocator_->advance_frame();
-  arg_buf_allocator_->advance_frame();
+  push_constant_allocator_->set_frame_idx(frame_idx());
+  test_allocator_->set_frame_idx(frame_idx());
+  arg_buf_allocator_->set_frame_idx(frame_idx());
 }
 
 void MetalDevice::init_bindless() {

@@ -91,7 +91,6 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
       }
     }
   }
-  frame_gpu_upload_allocator_.advance_frame();
   shader_mgr_->replace_dirty_pipelines();
 
   indirect_cmd_buf_ids_.clear();
@@ -108,19 +107,35 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   rg_verbose_ = i++ == -2;
   device_->acquire_next_swapchain_image(swapchain_);
   rg_.bake(window_->get_window_size(), rg_verbose_);
-
-  if (!buffer_copy_mgr_.get_copies().empty()) {
-    for (const auto& copy : buffer_copy_mgr_.get_copies()) {
-      device_->immediate_submit(rhi::QueueType::Copy, [copy](rhi::CmdEncoder* enc) {
+  static std::vector<rhi::CmdEncoder*> wait_for_encoders;
+  wait_for_encoders.clear();
+  {
+    auto* enc = device_->begin_cmd_encoder(rhi::QueueType::Copy);
+    if (!buffer_copy_mgr_.get_copies().empty()) {
+      for (const auto& copy : buffer_copy_mgr_.get_copies()) {
+        enc->barrier(copy.src_buf, PipelineStage::AllCommands,
+                     AccessFlags::AnyRead | AccessFlags::AnyWrite, PipelineStage::AllTransfer,
+                     AccessFlags::TransferRead);
+        enc->barrier(copy.dst_buf, PipelineStage::AllCommands,
+                     AccessFlags::AnyRead | AccessFlags::AnyWrite, PipelineStage::AllTransfer,
+                     AccessFlags::TransferWrite);
         enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
                                    copy.size);
-      });
+        enc->barrier(copy.dst_buf, PipelineStage::AllTransfer, AccessFlags::TransferWrite,
+                     copy.dst_stage, copy.dst_access);
+      }
+      buffer_copy_mgr_.clear_copies();
     }
-    buffer_copy_mgr_.clear_copies();
+    enc->end_encoding();
+    wait_for_encoders.push_back(enc);
   }
 
   {
     auto* enc = device_->begin_cmd_encoder();
+    for (auto* wait_for_enc : wait_for_encoders) {
+      device_->cmd_encoder_wait_for(wait_for_enc, enc);
+    }
+
     if (imgui_renderer_->has_dirty_textures() || !pending_texture_uploads_.empty()) {
       flush_pending_texture_uploads(enc);
     }
@@ -131,6 +146,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   device_->submit_frame();
   frame_num_++;
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
+  frame_gpu_upload_allocator_.set_frame_idx(curr_frame_idx_);
 }
 
 uint32_t MemeRenderer123::get_bindless_idx(const rhi::BufferHandleHolder& buf) const {
