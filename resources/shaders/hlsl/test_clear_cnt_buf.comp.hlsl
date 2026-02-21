@@ -11,11 +11,9 @@ struct DispatchIndirectCmd {
 };
 
 [NumThreads(1, 1, 1)] void main(uint dtid : SV_DispatchThreadID) {
-  if (dtid == 0) {
-    DispatchIndirectCmd cmd;
-    cmd.tg_x = 0;
-    cmd.tg_y = 1;
-    cmd.tg_z = 1;
-    bindless_rwbuffers[buf_idx].Store<DispatchIndirectCmd>(0, cmd);
-  }
+  DispatchIndirectCmd cmd;
+  cmd.tg_x = 0;
+  cmd.tg_y = 1;
+  cmd.tg_z = 1;
+  bindless_rwbuffers[buf_idx].Store<DispatchIndirectCmd>(dtid * sizeof(DispatchIndirectCmd), cmd);
 }

@@ -10,6 +10,7 @@
 cbuffer Task2PC HLSL_PC_REG {
   uint pass;
   uint flags;
+  uint alpha_test_enabled;
 };
 
 #define MESHLET_VIS_BUF_SLOT 2

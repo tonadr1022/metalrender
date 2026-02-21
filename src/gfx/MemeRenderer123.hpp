@@ -218,7 +218,9 @@ class MemeRenderer123 {
   rhi::Device* device_{};
   Window* window_{};
   rhi::PipelineHandleHolder test2_pso_;
-  rhi::PipelineHandleHolder test_task_pso_;
+  // rhi::PipelineHandleHolder gbuffer_meshlet_pso_;
+  enum AlphaMaskType { Opaque, Mask, Count };
+  rhi::PipelineHandleHolder gbuffer_meshlet_psos_[AlphaMaskType::Count];
   rhi::PipelineHandleHolder draw_cull_pso_;
   rhi::PipelineHandleHolder reset_counts_buf_pso_;
   rhi::PipelineHandleHolder depth_reduce_pso_;

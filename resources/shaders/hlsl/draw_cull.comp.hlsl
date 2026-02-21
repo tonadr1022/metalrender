@@ -4,6 +4,7 @@
 #include "shared_draw_cull.h"
 #include "shared_mesh_data.h"
 #include "shared_instance_data.h"
+#include "material.h"
 #include "shared_task_cmd.h"
 #include "shader_constants.h"
 #include "math.hlsli"
@@ -11,7 +12,7 @@
 #include "shared_globals.h"
 // clang-format on
 
-struct DispatchIndirectCmd {
+struct DispatchMeshCmd {
   uint tg_x;
   uint tg_y;
   uint tg_z;
@@ -31,6 +32,11 @@ struct DispatchIndirectCmd {
   ViewData view_data =
       bindless_buffers[view_data_buf_idx].Load<ViewData>(view_data_buf_offset_bytes);
   CullData cull_data = bindless_buffers[cull_data_idx].Load<CullData>(cull_data_offset_bytes);
+  M4Material material = bindless_buffers[materials_buf_idx].Load<M4Material>(instance_data.mat_id *
+                                                                             sizeof(M4Material));
+  bool alpha_test_enabled = (material.flags & M4MAT_FLAG_ALPHATEST) != 0;
+  uint task_cmd_buf_idx =
+      alpha_test_enabled ? task_cmd_buf_alpha_test_idx : task_cmd_buf_idx_opaque;
 
   uint task_groups = (mesh_data.meshlet_count + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
 
@@ -52,7 +58,8 @@ struct DispatchIndirectCmd {
   if (visible) {
     uint task_group_base_i;
     RWByteAddressBuffer task_cmd_cnt_buf = bindless_rwbuffers[draw_cnt_buf_idx];
-    task_cmd_cnt_buf.InterlockedAdd(0, task_groups, task_group_base_i);
+    task_cmd_cnt_buf.InterlockedAdd(uint(alpha_test_enabled) * sizeof(DispatchMeshCmd), task_groups,
+                                    task_group_base_i);
 
     TaskCmd cmd;
     for (uint task_group_i = 0; task_group_i < task_groups; task_group_i++) {

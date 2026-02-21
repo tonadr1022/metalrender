@@ -37,6 +37,7 @@
 #include "hlsl/shared_indirect.h"
 #include "hlsl/shared_mesh_data.h"
 #include "hlsl/shared_task_cmd.h"
+#include "hlsl/shared_test_clear_buf.h"
 #include "hlsl/shared_tex_only.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -168,13 +169,17 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   if (mesh_shaders_enabled_) {
     if (!culling_paused_) {
       auto& clear_bufs_pass = rg_.add_compute_pass("clear_bufs");
-      auto out_draw_count_buf_rg_handle = clear_bufs_pass.w_buf(
-          "out_draw_count_buf1", rhi::PipelineStage::ComputeShader, sizeof(uint32_t) * 3);
+      auto out_draw_count_buf_rg_handle =
+          clear_bufs_pass.w_buf("out_draw_count_buf1", rhi::PipelineStage::ComputeShader,
+                                sizeof(uint32_t) * 3 * AlphaMaskType::Count);
       clear_bufs_pass.set_ex([this, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
         enc->bind_pipeline(reset_counts_buf_pso_);
-        uint32_t pc = device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx();
+        TestClearBufPC pc{
+            .buf_idx = device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx(),
+        };
+
         enc->push_constants(&pc, sizeof(pc));
-        enc->dispatch_compute(glm::uvec3{1, 1, 1}, glm::uvec3{1, 1, 1});
+        enc->dispatch_compute(glm::uvec3{AlphaMaskType::Count, 1, 1}, glm::uvec3{1, 1, 1});
       });
     }
 
@@ -188,33 +193,42 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       out_draw_count_buf_rg_handle = prep_meshlets_pass.rw_buf(
           output_buf_name, rhi::PipelineStage::ComputeShader, "out_draw_count_buf1");
     } else {
-      out_draw_count_buf_rg_handle = prep_meshlets_pass.w_buf(
-          output_buf_name, rhi::PipelineStage::ComputeShader, sizeof(uint32_t) * 3);
+      out_draw_count_buf_rg_handle =
+          prep_meshlets_pass.w_buf(output_buf_name, rhi::PipelineStage::ComputeShader,
+                                   (sizeof(uint32_t) * 3) * AlphaMaskType::Count);
     }
-    RGResourceHandle task_cmd_buf_rg_handle{};
-    if (static_draw_batch_.get_stats().vertex_count > 0) {
-      task_cmd_buf_rg_handle =
-          prep_meshlets_pass.w_buf("task_cmd_buf", rhi::PipelineStage::ComputeShader,
-                                   static_draw_batch_.task_cmd_count * sizeof(TaskCmd));
+    RGResourceHandle task_cmd_buf_rg_handles[AlphaMaskType::Count]{};
+    for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
+      if (static_draw_batch_.get_stats().vertex_count > 0) {
+        task_cmd_buf_rg_handles[alpha_mask_type] = prep_meshlets_pass.w_buf(
+            std::string("task_cmd_buf__alpha") + std::to_string(alpha_mask_type),
+            rhi::PipelineStage::ComputeShader, static_draw_batch_.task_cmd_count * sizeof(TaskCmd),
+            true);
+      }
     }
     prep_meshlets_pass.set_ex(
-        [this, task_cmd_buf_rg_handle, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
+        [this, task_cmd_buf_rg_handles, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
           if (!static_instance_mgr_.has_draws()) {
             return;
           }
           enc->bind_pipeline(draw_cull_pso_);
-          auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handle);
+          auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Opaque]);
+          auto task_cmd_buf_alpha_test_handle =
+              rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Mask]);
           if (!culling_paused_) {
             DrawCullPC pc{
                 .view_data_buf_idx = frame_view_buf_info_.idx,
                 .view_data_buf_offset_bytes = frame_view_buf_info_.offset_bytes,
                 .cull_data_idx = frame_cull_data_buf_info_.idx,
                 .cull_data_offset_bytes = frame_cull_data_buf_info_.offset_bytes,
-                .task_cmd_buf_idx = device_->get_buf(task_cmd_buf_handle)->bindless_idx(),
+                .task_cmd_buf_idx_opaque = device_->get_buf(task_cmd_buf_handle)->bindless_idx(),
+                .task_cmd_buf_alpha_test_idx =
+                    device_->get_buf(task_cmd_buf_alpha_test_handle)->bindless_idx(),
                 .draw_cnt_buf_idx =
                     device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx(),
                 .instance_data_buf_idx =
                     device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
+                .materials_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
                 .mesh_data_buf_idx = static_draw_batch_.mesh_buf.get_buffer()->bindless_idx(),
                 .max_draws = static_instance_mgr_.stats().max_instance_data_count,
                 .culling_enabled = culling_enabled_,
@@ -271,12 +285,15 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                         &out_counts_buf_name](bool late, const char* name) {
     ZoneScopedN("Draw pass");
     auto& p = rg_.add_graphics_pass(name);
-    RGResourceHandle task_cmd_buf_rg_handle;
+    RGResourceHandle task_cmd_buf_rg_handles[AlphaMaskType::Count]{};
     RGResourceHandle out_draw_count_buf_rg_handle{};
     if (mesh_shaders_enabled_) {
-      if (static_instance_mgr_.has_draws()) {
-        task_cmd_buf_rg_handle = p.r_buf(
-            "task_cmd_buf", rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader);
+      for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
+        if (static_draw_batch_.get_stats().vertex_count > 0) {
+          task_cmd_buf_rg_handles[alpha_mask_type] =
+              p.r_buf(std::string("task_cmd_buf__alpha") + std::to_string(alpha_mask_type),
+                      rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader);
+        }
       }
       out_draw_count_buf_rg_handle = p.r_buf("out_draw_count_buf2", rhi::PipelineStage::TaskShader);
       if (late) {
@@ -326,7 +343,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     }
 
     p.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, rg_gbuffer_b_handle, &args, late,
-              task_cmd_buf_rg_handle, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
+              task_cmd_buf_rg_handles, out_draw_count_buf_rg_handle](rhi::CmdEncoder* enc) {
       if (!static_instance_mgr_.has_draws()) {
         return;
       }
@@ -349,34 +366,25 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_viewport({0, 0}, window_->get_window_size());
 
       if (mesh_shaders_enabled()) {
-        enc->bind_pipeline(test_task_pso_);
-        Task2PC pc{
-            .pass = late,
-            .flags = 0,
-        };
-        static_assert(sizeof(Task2PC) <= 80);
-
-        auto out_draw_count_buf_handle = rg_.get_buf(out_draw_count_buf_rg_handle);
-        enc->bind_uav(out_draw_count_buf_handle, 0);
         enc->bind_uav(static_instance_mgr_.get_meshlet_vis_buf().get_buffer_handle(), 1);
         enc->bind_uav(out_counts_buf_[curr_frame_idx_].handle, 2);
         if (late) {
           enc->bind_srv(depth_pyramid_tex_.handle, 3);
         }
-        auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handle);
-        enc->bind_srv(task_cmd_buf_handle, 4);
         enc->bind_srv(static_draw_batch_.mesh_buf.get_buffer_handle(), 5);
         enc->bind_srv(static_draw_batch_.meshlet_buf.get_buffer_handle(), 6);
         enc->bind_srv(static_draw_batch_.meshlet_triangles_buf.get_buffer_handle(), 7);
         enc->bind_srv(static_draw_batch_.meshlet_vertices_buf.get_buffer_handle(), 8);
         enc->bind_srv(static_draw_batch_.vertex_buf.get_buffer_handle(), 9);
-        enc->bind_srv(static_instance_mgr_.get_instance_data_buf(), 10);
         enc->bind_srv(materials_buf_.get_buffer_handle(), 11);
         enc->bind_cbv(frame_globals_buf_info_.buf, GLOBALS_SLOT,
                       frame_globals_buf_info_.offset_bytes);
         enc->bind_cbv(frame_view_buf_info_.buf, VIEW_DATA_SLOT, frame_view_buf_info_.offset_bytes);
         enc->bind_cbv(frame_cull_data_buf_info_.buf, 4, frame_cull_data_buf_info_.offset_bytes);
-
+        Task2PC pc{
+            .pass = late,
+            .flags = 0,
+        };
         if (meshlet_frustum_culling_enabled_ && culling_enabled_) {
           pc.flags |= MESHLET_FRUSTUM_CULL_ENABLED_BIT;
         }
@@ -386,9 +394,22 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         if (meshlet_occlusion_culling_enabled_ && culling_enabled_) {
           pc.flags |= MESHLET_OCCLUSION_CULL_ENABLED_BIT;
         }
-        enc->push_constants(&pc, sizeof(pc));
-        enc->draw_mesh_threadgroups_indirect(out_draw_count_buf_handle, 0, {K_TASK_TG_SIZE, 1, 1},
-                                             {K_MESH_TG_SIZE, 1, 1});
+
+        auto out_draw_count_buf_handle = rg_.get_buf(out_draw_count_buf_rg_handle);
+        enc->bind_uav(out_draw_count_buf_handle, 0);
+        enc->bind_srv(static_instance_mgr_.get_instance_data_buf(), 10);
+        for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count;
+             alpha_mask_type++) {
+          auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handles[alpha_mask_type]);
+          enc->bind_srv(task_cmd_buf_handle, 4);
+          enc->bind_pipeline(gbuffer_meshlet_psos_[alpha_mask_type]);
+          pc.alpha_test_enabled = alpha_mask_type;
+          enc->push_constants(&pc, sizeof(pc));
+          enc->draw_mesh_threadgroups_indirect(out_draw_count_buf_handle,
+                                               alpha_mask_type * sizeof(uint32_t) * 3,
+                                               {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+        }
+
       } else {
         enc->bind_pipeline(test2_pso_);
         bool use_indirect = false;
@@ -656,6 +677,7 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
         mat.normal_tex_idx = INVALID_TEX_ID;
       }
       mat.color = m.albedo_factors;
+      mat.flags = m.flags;
     }
     buffer_copy_mgr_.copy_to_buffer(
         mats.data(), mats.size() * sizeof(M4Material), materials_buf_.get_buffer_handle(),
@@ -1345,11 +1367,16 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
 
   {
     if (mesh_shaders_enabled()) {
-      test_task_pso_ = shader_mgr_->create_graphics_pipeline({
-          .shaders = {{{"forward_meshlet", ShaderType::Task},
-                       {"forward_meshlet", ShaderType::Mesh},
-                       {"forward_meshlet", ShaderType::Fragment}}},
-      });
+      for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
+        gbuffer_meshlet_psos_[alpha_mask_type] = shader_mgr_->create_graphics_pipeline({
+            .shaders = {{{"forward_meshlet", ShaderType::Task},
+                         {"forward_meshlet", ShaderType::Mesh},
+                         {alpha_mask_type == AlphaMaskType::Mask ? "forward_meshlet_alphatest"
+                                                                 : "forward_meshlet",
+                          ShaderType::Fragment}}},
+        });
+      }
+
     } else {
       test2_pso_ = shader_mgr_->create_graphics_pipeline({
           .shaders = {{{"basic_indirect", ShaderType::Vertex},

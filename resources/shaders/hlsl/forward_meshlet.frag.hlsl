@@ -41,9 +41,11 @@ FOut main(VOut input) {
   if (material.albedo_tex_idx != INVALID_TEX_ID) {
     albedo *= (bindless_textures[material.albedo_tex_idx]).Sample(samp, input.uv);
   }
+#ifdef ALPHA_TEST
   if (albedo.a < 0.5) {
-    // discard;
+    discard;
   }
+#endif
   fout.gbuffer_a = float4(albedo.xyz, 1.0);
   return fout;
 }

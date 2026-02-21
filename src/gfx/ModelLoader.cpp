@@ -333,6 +333,11 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
         material.albedo_factors.b = gltf_mat->pbr_metallic_roughness.base_color_factor[2];
         material.albedo_factors.a = gltf_mat->pbr_metallic_roughness.base_color_factor[3];
         material.albedo_factors.a = 1.0;
+        material.flags = 0;
+        if (gltf_mat->alpha_mode == cgltf_alpha_mode_mask) {
+          // TODO: use the define
+          material.flags |= 0x1;
+        }
 
         auto set_and_load_material_img = [&gltf, &load_img, &texture_uploads](
                                              const cgltf_texture_view *tex_view,

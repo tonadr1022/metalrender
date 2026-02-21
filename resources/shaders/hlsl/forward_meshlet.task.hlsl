@@ -41,7 +41,7 @@ Texture2D depth_pyramid_tex : register(t3);
 
   SamplerState samp = bindless_samplers[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
 
-  if (task_group_id < draw_cnt_buf[0].x) {
+  if (task_group_id < draw_cnt_buf[alpha_test_enabled].x) {
     TaskCmd task_cmd = task_cmd_buf[task_group_id];
     if (gtid < task_cmd.task_count) {
       visible = true;
