@@ -51,6 +51,7 @@ struct App {
 
   void load_grid(int radius, float dist, const std::string &path, float scale = 1.0f);
   void clear_all_models();
+  void imgui_node(int node, teng::ModelInstance &model);
   struct ScenePreset {
     std::function<void()> load_fn;
     std::string name;

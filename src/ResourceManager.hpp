@@ -77,7 +77,6 @@ class ResourceManager {
 
   struct ModelInstancePoolEntry {
     ModelInstance instance;
-    ModelInstanceGPUHandle instance_gpu_handle;
     size_t model_path_hash;
   };
   BlockPool<ModelHandle, ModelInstancePoolEntry> model_instance_pool_{128, 16, true};

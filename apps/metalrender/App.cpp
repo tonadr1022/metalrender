@@ -138,16 +138,21 @@ void App::run() {
     //   voxel_world_->update(dt, camera_);
     // }
 
-    // for (const auto model : models_) {
-    //   ResourceManager::get().get_model(model)->update_transforms();
-    // }
-
     if (imgui_enabled_) {
       on_imgui(dt);
       ImGui::Render();
     }
 
     ResourceManager::get().update();
+
+    for (const auto& model_handle : models_) {
+      auto* model = ResourceManager::get().get_model(model_handle);
+      bool dirty = model->update_transforms();
+      if (dirty) {
+        renderer_->update_model_instance_transforms(*model);
+      }
+    }
+
     renderer_->render({
         .view_mat = camera_.get_view_mat(),
         .camera_pos = camera_.pos,
@@ -392,6 +397,16 @@ void App::on_imgui(float dt) {
   if (ImGui::TreeNode("Scene")) {
     ImGui::Text("Loaded Models: %zu", ResourceManager::get().get_tot_models_loaded());
     ImGui::Text("Total Model Instances: %zu", ResourceManager::get().get_tot_instances_loaded());
+    if (ImGui::TreeNode("Models")) {
+      for (const auto& model_handle : models_) {
+        auto* model = ResourceManager::get().get_model(model_handle);
+        ASSERT(model);
+        ImGui::PushID(model_handle.to64());
+        imgui_node(0, *model);
+        ImGui::PopID();
+      }
+      ImGui::TreePop();
+    }
     ImGui::TreePop();
   }
   if (ImGui::TreeNode("Load Scene")) {
@@ -587,4 +602,30 @@ void App::load_instances(const std::string& path, std::vector<glm::mat4>&& trans
     models_.insert(models_.end(), std::make_move_iterator(r.begin()),
                    std::make_move_iterator(r.end()));
   }
+}
+
+void App::imgui_node(int node, ModelInstance& model) {
+  ImGui::PushID(node);
+  if (ImGui::TreeNode("child")) {
+    ImGui::Text("Model ");
+    auto& local_transform = model.local_transforms[node];
+    bool dirty = false;
+    if (ImGui::DragFloat3("Position", &local_transform.translation.x, 0.1f)) {
+      dirty = true;
+    }
+    if (ImGui::DragFloat("Scale", &local_transform.scale, 0.1f)) {
+      dirty = true;
+    }
+
+    if (dirty) {
+      model.mark_changed(node);
+    }
+
+    auto& n = model.nodes[node];
+    for (int child = n.first_child; child != -1; child = model.nodes[child].next_sibling) {
+      imgui_node(child, model);
+    }
+    ImGui::TreePop();
+  }
+  ImGui::PopID();
 }

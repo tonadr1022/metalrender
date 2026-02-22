@@ -861,8 +861,6 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   ASSERT(model_resources);
   auto& model_instance_datas = model_resources->base_instance_datas;
   auto& instance_id_to_node = model_resources->instance_id_to_node;
-  std::vector<TRS> instance_transforms;
-  instance_transforms.reserve(model_instance_datas.size());
   std::vector<InstanceData> instance_datas = {model_instance_datas.begin(),
                                               model_instance_datas.end()};
   std::vector<IndexedIndirectDrawCmd> cmds;
@@ -877,7 +875,6 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
 
   for (size_t i = 0; i < instance_datas.size(); i++) {
     auto node_i = instance_id_to_node[i];
-    instance_transforms.push_back(model.global_transforms[node_i]);
     const auto& transform = model.global_transforms[node_i];
     const auto rot = transform.rotation;
     instance_datas[i].translation = transform.translation;
@@ -1510,6 +1507,29 @@ void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
         add_commas(stats_.total_instance_vertices).c_str(),
         add_commas(stats_.total_instances).c_str(), add_commas(total_scene_models).c_str());
   }
+}
+
+void MemeRenderer123::update_model_instance_transforms(const ModelInstance& model) {
+  auto instance_resources =
+      model_instance_gpu_resource_pool_.get(model.instance_gpu_handle)->instance_data_gpu_alloc;
+  auto* model_resources = model_gpu_resource_pool_.get(model.model_gpu_handle);
+  auto& model_instance_datas = model_resources->base_instance_datas;
+  std::vector<InstanceData> instance_datas = {model_instance_datas.begin(),
+                                              model_instance_datas.end()};
+  for (size_t i = 0; i < instance_datas.size(); i++) {
+    auto node_i = model_resources->instance_id_to_node[i];
+    const auto& transform = model.global_transforms[node_i];
+    const auto rot = transform.rotation;
+    instance_datas[i].translation = transform.translation;
+    instance_datas[i].rotation = glm::vec4{rot[0], rot[1], rot[2], rot[3]};
+    instance_datas[i].scale = transform.scale;
+  }
+
+  buffer_copy_mgr_.copy_to_buffer(
+      instance_datas.data(), instance_datas.size() * sizeof(InstanceData),
+      static_instance_mgr_.get_instance_data_buf(),
+      instance_resources.instance_data_alloc.offset * sizeof(InstanceData),
+      rhi::PipelineStage::AllCommands, rhi::AccessFlags::ShaderRead);
 }
 
 }  // namespace gfx

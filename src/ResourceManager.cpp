@@ -4,7 +4,6 @@
 
 #include "core/Config.hpp"
 #include "core/EAssert.hpp"
-#include "core/Logger.hpp"
 #include "gfx/MemeRenderer123.hpp"
 
 namespace TENG_NAMESPACE {
@@ -21,8 +20,9 @@ ModelHandle ResourceManager::load_model(const std::filesystem::path &path,
   new_instance.update_transforms();
   const auto model_instance_gpu_handle =
       renderer_->add_model_instance(new_instance, model->gpu_resource_handle);
-  ModelHandle handle =
-      model_instance_pool_.alloc(std::move(new_instance), model_instance_gpu_handle, path_hash);
+  new_instance.instance_gpu_handle = model_instance_gpu_handle;
+  new_instance.model_gpu_handle = model->gpu_resource_handle;
+  ModelHandle handle = model_instance_pool_.alloc(std::move(new_instance), path_hash);
   tot_instances_loaded_++;
 
   return handle;
@@ -35,7 +35,7 @@ void ResourceManager::free_model(ModelHandle handle) {
   ASSERT(it != model_cache_.end());
   auto &entry = it->second;
   entry.use_count--;
-  renderer_->free_instance(model->instance_gpu_handle);
+  renderer_->free_instance(model->instance.instance_gpu_handle);
   tot_instances_loaded_--;
 
   if (entry.use_count == 0 && should_release_unused_models_) {
@@ -71,8 +71,9 @@ std::vector<std::vector<ModelHandle>> ResourceManager::load_instanced_models(
       new_instance.update_transforms();
       const auto model_instance_gpu_handle =
           renderer_->add_model_instance(new_instance, model->gpu_resource_handle);
-      ModelHandle handle = model_instance_pool_.alloc(std::move(new_instance),
-                                                      model_instance_gpu_handle, model->path_hash);
+      new_instance.instance_gpu_handle = model_instance_gpu_handle;
+      new_instance.model_gpu_handle = model->gpu_resource_handle;
+      ModelHandle handle = model_instance_pool_.alloc(std::move(new_instance), model->path_hash);
       tot_instances_loaded_++;
       out_handles.emplace_back(handle);
     }

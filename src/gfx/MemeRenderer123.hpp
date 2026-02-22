@@ -166,6 +166,7 @@ class MemeRenderer123 {
   void reserve_space_for(std::span<std::pair<ModelGPUHandle, uint32_t>> models);
   [[nodiscard]] ModelInstanceGPUHandle add_model_instance(const ModelInstance& model,
                                                           ModelGPUHandle model_gpu_handle);
+  void update_model_instance_transforms(const ModelInstance& model);
   void free_instance(ModelInstanceGPUHandle handle);
   void free_model(ModelGPUHandle handle);
   bool mesh_shaders_enabled() const { return mesh_shaders_enabled_; }

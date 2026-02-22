@@ -1,5 +1,6 @@
 # TODOs
 
+- instead of copying entire instance data buffer and doing cursed things in update_model_instance_transforms(), do it better.
 - immediate_submit is jank in MetalDevice.cpp
 - in render graph, track texture usages instead of adding sample/storage automatically
 - timestamp query better organization
