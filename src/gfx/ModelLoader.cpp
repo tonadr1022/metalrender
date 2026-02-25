@@ -199,6 +199,8 @@ int32_t add_node_to_model(ModelInstance &model, int32_t parent, int32_t level,
     model.changed_this_frame.resize(level + 1);
   }
   model.global_transforms.emplace_back();
+  ASSERT(model.nodes.size() == model.global_transforms.size());
+  ASSERT((size_t)node < model.global_transforms.size());
   model.local_transforms.emplace_back(translation, rotation, scale);
   model.mesh_ids.emplace_back(mesh_id);
   return node;

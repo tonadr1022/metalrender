@@ -854,7 +854,7 @@ void MemeRenderer123::reserve_space_for(std::span<std::pair<ModelGPUHandle, uint
   static_instance_mgr_.reserve_space(total_instance_datas, total_instance_meshlets);
 }
 
-ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& model,
+ModelInstanceGPUHandle MemeRenderer123::add_model_instance(ModelInstance& model,
                                                            ModelGPUHandle model_gpu_handle) {
   ZoneScoped;
   auto* model_resources = model_gpu_resource_pool_.get(model_gpu_handle);
@@ -876,9 +876,8 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(const ModelInstance& 
   for (size_t i = 0; i < instance_datas.size(); i++) {
     auto node_i = instance_id_to_node[i];
     const auto& transform = model.global_transforms[node_i];
-    const auto rot = transform.rotation;
     instance_datas[i].translation = transform.translation;
-    instance_datas[i].rotation = glm::vec4{rot[0], rot[1], rot[2], rot[3]};
+    instance_datas[i].rotation = transform.rotation;
     instance_datas[i].scale = transform.scale;
     instance_datas[i].meshlet_vis_base += instance_data_gpu_alloc.meshlet_vis_alloc.offset;
     size_t mesh_id = model.mesh_ids[node_i];
@@ -1519,9 +1518,8 @@ void MemeRenderer123::update_model_instance_transforms(const ModelInstance& mode
   for (size_t i = 0; i < instance_datas.size(); i++) {
     auto node_i = model_resources->instance_id_to_node[i];
     const auto& transform = model.global_transforms[node_i];
-    const auto rot = transform.rotation;
     instance_datas[i].translation = transform.translation;
-    instance_datas[i].rotation = glm::vec4{rot[0], rot[1], rot[2], rot[3]};
+    instance_datas[i].rotation = transform.rotation;
     instance_datas[i].scale = transform.scale;
   }
 

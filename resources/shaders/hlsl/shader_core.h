@@ -16,6 +16,7 @@
 #define packed_float3 float3
 #define packed_float4 float4
 #define packed_char4 uint
+#define glm_quat packed_float4
 
 #define ATTR_POSITION : POSITION
 
@@ -40,6 +41,7 @@
 
 #include <glm/ext/vector_int3_sized.hpp>
 #include <glm/ext/vector_int4_sized.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <glm/mat4x4.hpp>
 #define packed_float4x4 glm::mat4
 #define float4x4 glm::mat4
@@ -52,6 +54,7 @@
 #define packed_char4 uint32_t
 #define packed_char char
 #define packed_float4 glm::vec4
+#define glm_quat glm::quat
 #define float2 glm::vec2
 #define float3 glm::vec3
 #define float4 glm::vec4

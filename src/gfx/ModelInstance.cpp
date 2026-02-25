@@ -42,7 +42,9 @@ bool ModelInstance::update_transforms() {
   // process level 0 separately to avoid if-check for parent existence
   for (const auto node : changed_this_frame[0]) {
     dirty = true;
-    global_transforms[node] = local_transforms[node];
+    global_transforms[node].translation = local_transforms[node].translation;
+    global_transforms[node].scale = local_transforms[node].scale;
+    global_transforms[node].rotation = local_transforms[node].rotation;
   }
   changed_this_frame[0].clear();
 

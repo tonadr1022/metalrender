@@ -164,7 +164,7 @@ class MemeRenderer123 {
   bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
                   ModelInstance& model, ModelGPUHandle& out_handle);
   void reserve_space_for(std::span<std::pair<ModelGPUHandle, uint32_t>> models);
-  [[nodiscard]] ModelInstanceGPUHandle add_model_instance(const ModelInstance& model,
+  [[nodiscard]] ModelInstanceGPUHandle add_model_instance(ModelInstance& model,
                                                           ModelGPUHandle model_gpu_handle);
   void update_model_instance_transforms(const ModelInstance& model);
   void free_instance(ModelInstanceGPUHandle handle);
