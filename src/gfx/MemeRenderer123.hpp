@@ -80,7 +80,9 @@ class InstanceMgr {
   [[nodiscard]] rhi::BufferHandle get_instance_data_buf() const {
     return instance_data_buf_.handle;
   }
-  [[nodiscard]] const BackedGPUAllocator& get_meshlet_vis_buf() const { return meshlet_vis_buf_; }
+  [[nodiscard]] size_t get_num_meshlet_vis_buf_elements() const {
+    return meshlet_vis_buf_allocator_.capacity();
+  }
   std::array<std::vector<Alloc>, k_max_frames_in_flight> pending_frees_;
   [[nodiscard]] rhi::BufferHandle get_draw_cmd_buf() const { return draw_cmd_buf_.handle; }
 
@@ -91,7 +93,7 @@ class InstanceMgr {
 
   [[nodiscard]] const Stats& stats() const { return stats_; }
 
-  void reserve_space(uint32_t instance_data_count, uint32_t meshlet_instance_count);
+  void reserve_space(uint32_t instance_data_count);
 
  private:
   OffsetAllocator::Allocation allocate_instance_data(uint32_t element_count);
@@ -100,7 +102,7 @@ class InstanceMgr {
   OffsetAllocator::Allocator allocator_;
   rhi::BufferHandleHolder instance_data_buf_;
   rhi::BufferHandleHolder draw_cmd_buf_;
-  BackedGPUAllocator meshlet_vis_buf_;
+  OffsetAllocator::Allocator meshlet_vis_buf_allocator_;
   BufferCopyMgr& buffer_copy_mgr_;
   Stats stats_{};
   uint32_t curr_element_count_{};
@@ -227,11 +229,13 @@ class MemeRenderer123 {
   RGPass* clear_bufs_pass_{};
 
   std::string get_out_draw_cnt_buf_name(RenderViewId view_id, int iter) const {
-    return "out_draw_count_buf" + std::to_string(iter) + "__view" + std::to_string((int)view_id);
+    return std::format("out_draw_count_buf__view{}_iter{}", (int)view_id, iter);
   }
   std::string get_task_cmd_buf_name(RenderViewId view_id, AlphaMaskType alpha_mask_type) const {
-    return "task_cmd_buf__alpha" + std::to_string((int)alpha_mask_type) + "__view" +
-           std::to_string((int)view_id);
+    return std::format("task_cmd_buf__alpha{}_view{}", (int)alpha_mask_type, (int)view_id);
+  }
+  std::string get_meshlet_vis_buf_name(RenderViewId view_id, int iter) const {
+    return std::format("meshlet_vis_buf__view{}_iter{}", (int)view_id, iter);
   }
 
   void set_cull_data_and_globals(const RenderArgs& args);

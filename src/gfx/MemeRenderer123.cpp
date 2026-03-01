@@ -69,6 +69,14 @@ uint32_t prev_pow2(uint32_t val) {
   return v;
 }
 
+uint32_t next_pow2(uint32_t val) {
+  uint32_t v = 1;
+  while (v < val) {
+    v *= 2;
+  }
+  return v;
+}
+
 }  // namespace
 
 namespace gfx {
@@ -317,6 +325,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     auto& p = rg_.add_graphics_pass(name);
     RGResourceHandle task_cmd_buf_rg_handles[AlphaMaskType::Count]{};
     RGResourceHandle out_draw_count_buf_rg_handle{};
+    RGResourceHandle meshlet_vis_buf_rg_handle{};
     if (mesh_shaders_enabled_) {
       for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
         if (static_draw_batch_.get_stats().vertex_count > 0) {
@@ -329,11 +338,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           p.r_buf(get_out_draw_cnt_buf_name(view_id, 1), rhi::PipelineStage::TaskShader);
       if (late) {
         p.sample_external_tex(final_depth_pyramid_name, rhi::PipelineStage::TaskShader);
-        p.rw_external_buf("meshlet_vis_buf2", "meshlet_vis_buf", rhi::PipelineStage::TaskShader);
+        meshlet_vis_buf_rg_handle =
+            p.rw_buf(get_meshlet_vis_buf_name(view_id, 1), rhi::PipelineStage::TaskShader,
+                     get_meshlet_vis_buf_name(view_id, 0));
       } else {
-        p.w_external_buf("meshlet_vis_buf",
-                         static_instance_mgr_.get_meshlet_vis_buf().get_buffer_handle(),
-                         rhi::PipelineStage::TaskShader);
+        ASSERT(static_instance_mgr_.get_num_meshlet_vis_buf_elements() > 0);
+        meshlet_vis_buf_rg_handle = p.w_buf(
+            get_meshlet_vis_buf_name(view_id, 0), rhi::PipelineStage::TaskShader,
+            sizeof(uint32_t) * static_instance_mgr_.get_num_meshlet_vis_buf_elements(), true);
       }
     } else {
       p.r_external_buf("indirect_buffer", rhi::PipelineStage::DrawIndirect);
@@ -374,8 +386,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     }
 
     p.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, rg_gbuffer_b_handle, &args, late,
-              task_cmd_buf_rg_handles, out_draw_count_buf_rg_handle,
-              view_id](rhi::CmdEncoder* enc) {
+              task_cmd_buf_rg_handles, out_draw_count_buf_rg_handle, view_id,
+              meshlet_vis_buf_rg_handle](rhi::CmdEncoder* enc) {
       if (!static_instance_mgr_.has_draws()) {
         return;
       }
@@ -398,7 +410,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_viewport({0, 0}, window_->get_window_size());
 
       if (mesh_shaders_enabled()) {
-        enc->bind_uav(static_instance_mgr_.get_meshlet_vis_buf().get_buffer_handle(), 1);
+        enc->bind_uav(rg_.get_buf(meshlet_vis_buf_rg_handle), 1);
         enc->bind_uav(out_counts_buf_[curr_frame_idx_].handle, 2);
         if (late) {
           enc->bind_srv(depth_pyramid_tex_.handle, 3);
@@ -877,15 +889,13 @@ GeometryBatch::Alloc MemeRenderer123::upload_geometry(
 }
 
 void MemeRenderer123::reserve_space_for(std::span<std::pair<ModelGPUHandle, uint32_t>> models) {
-  size_t total_instance_meshlets{};
   size_t total_instance_datas{};
   for (auto& [model_handle, instance_count] : models) {
     auto* model_resources = model_gpu_resource_pool_.get(model_handle);
     ASSERT(model_resources);
-    total_instance_meshlets += (size_t)model_resources->totals.instance_meshlets * instance_count;
     total_instance_datas += model_resources->base_instance_datas.size() * instance_count;
   }
-  static_instance_mgr_.reserve_space(total_instance_datas, total_instance_meshlets);
+  static_instance_mgr_.reserve_space(total_instance_datas);
 }
 
 ModelInstanceGPUHandle MemeRenderer123::add_model_instance(ModelInstance& model,
@@ -987,8 +997,13 @@ void MemeRenderer123::free_model(ModelGPUHandle handle) {
 InstanceMgr::Alloc InstanceMgr::allocate(uint32_t element_count, uint32_t meshlet_instance_count) {
   OffsetAllocator::Allocation meshlet_vis_buf_alloc{};
   if (renderer_.mesh_shaders_enabled()) {
-    bool resized{};
-    meshlet_vis_buf_alloc = meshlet_vis_buf_.allocate(meshlet_instance_count, resized);
+    meshlet_vis_buf_alloc = meshlet_vis_buf_allocator_.allocate(meshlet_instance_count);
+    if (meshlet_vis_buf_alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
+      meshlet_vis_buf_allocator_.grow(
+          std::max(meshlet_vis_buf_allocator_.capacity(), next_pow2(meshlet_instance_count)));
+      meshlet_vis_buf_alloc = meshlet_vis_buf_allocator_.allocate(meshlet_instance_count);
+      ASSERT(meshlet_vis_buf_alloc.offset != OffsetAllocator::Allocation::NO_SPACE);
+    }
     stats_.max_seen_meshlet_instance_count =
         std::max(stats_.max_seen_meshlet_instance_count,
                  meshlet_vis_buf_alloc.offset + meshlet_instance_count);
@@ -1015,7 +1030,7 @@ void InstanceMgr::flush_pending_frees(uint32_t curr_frame_in_flight, rhi::CmdEnc
     curr_element_count_ -= element_count;
 
     if (renderer_.mesh_shaders_enabled()) {
-      meshlet_vis_buf_.free(allocs.meshlet_vis_alloc);
+      meshlet_vis_buf_allocator_.free(allocs.meshlet_vis_alloc);
     }
   }
   pending_frees_[curr_frame_in_flight].clear();
@@ -1478,11 +1493,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
 InstanceMgr::InstanceMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr,
                          uint32_t frames_in_flight, MemeRenderer123& renderer)
     : allocator_(0),
-      meshlet_vis_buf_(device, buffer_copy_mgr,
-                       {.usage = rhi::BufferUsage::Storage,
-                        // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
-                        .name = "instance meshlet vis buf"},
-                       sizeof(uint32_t)),
+      meshlet_vis_buf_allocator_(0),
       buffer_copy_mgr_(buffer_copy_mgr),
       frames_in_flight_(frames_in_flight),
       device_(device),
@@ -1506,12 +1517,11 @@ OffsetAllocator::Allocation InstanceMgr::allocate_instance_data(uint32_t element
   return alloc;
 }
 
-void InstanceMgr::reserve_space(uint32_t instance_data_count, uint32_t meshlet_instance_count) {
+void InstanceMgr::reserve_space(uint32_t instance_data_count) {
   // TODO: consolidate capacity logic
   auto old_capacity = allocator_.capacity();
   auto new_capacity = std::max(old_capacity * 2, instance_data_count * 2);
   ensure_buffer_space(new_capacity);
-  meshlet_vis_buf_.reserve_buffer_space(meshlet_instance_count, false);
 }
 
 void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
