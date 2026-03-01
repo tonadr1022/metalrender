@@ -197,6 +197,43 @@ class MemeRenderer123 {
     return device_->get_buf(buf)->bindless_idx();
   }
   void add_render_graph_passes(const RenderArgs& args);
+
+  enum class RenderViewId : uint32_t { Invalid = UINT32_MAX };
+  struct RenderView {
+    IdxOffset data_buf_info;
+  };
+
+  RenderView& get_render_view(RenderViewId view_id) {
+    ASSERT(view_id != RenderViewId::Invalid);
+    return render_views_[(uint32_t)view_id];
+  }
+
+  void clear_render_views() { render_views_.clear(); }
+
+  RenderViewId create_render_view() {
+    auto id = render_views_.size();
+    render_views_.push_back(RenderView{});
+    return static_cast<RenderViewId>(id);
+  }
+
+  enum AlphaMaskType { Opaque, Mask, Count };
+  std::vector<RenderView> render_views_;
+  RenderViewId main_render_view_id_{RenderViewId::Invalid};
+  constexpr static uint32_t k_max_shadow_cascades = 4;
+  RenderViewId shadow_map_render_views_[k_max_shadow_cascades]{
+      RenderViewId::Invalid, RenderViewId::Invalid, RenderViewId::Invalid, RenderViewId::Invalid};
+  size_t shadow_cascade_count_{1};
+
+  RGPass* clear_bufs_pass_{};
+
+  std::string get_out_draw_cnt_buf_name(RenderViewId view_id, int iter) const {
+    return "out_draw_count_buf" + std::to_string(iter) + "__view" + std::to_string((int)view_id);
+  }
+  std::string get_task_cmd_buf_name(RenderViewId view_id, AlphaMaskType alpha_mask_type) const {
+    return "task_cmd_buf__alpha" + std::to_string((int)alpha_mask_type) + "__view" +
+           std::to_string((int)view_id);
+  }
+
   void set_cull_data_and_globals(const RenderArgs& args);
   GeometryBatch::Alloc upload_geometry(GeometryBatchType type,
                                        const std::vector<DefaultVertex>& vertices,
@@ -220,7 +257,6 @@ class MemeRenderer123 {
   Window* window_{};
   rhi::PipelineHandleHolder test2_pso_;
   // rhi::PipelineHandleHolder gbuffer_meshlet_pso_;
-  enum AlphaMaskType { Opaque, Mask, Count };
   rhi::PipelineHandleHolder gbuffer_meshlet_psos_[AlphaMaskType::Count];
   rhi::PipelineHandleHolder draw_cull_pso_;
   rhi::PipelineHandleHolder reset_counts_buf_pso_;
@@ -273,7 +309,7 @@ class MemeRenderer123 {
   static constexpr float k_default_fov_deg = 70.0f;
 
   IdxOffset frame_globals_buf_info_;
-  IdxOffset frame_view_buf_info_;
+  // IdxOffset frame_view_buf_info_;
   IdxOffset frame_cull_data_buf_info_;
 
   enum class DebugRenderMode {
