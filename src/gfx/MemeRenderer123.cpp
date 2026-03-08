@@ -174,9 +174,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       });
     }
   }
-  {
-    // shadow map pass
-  }
   RenderViewId view_ids[] = {main_render_view_id_};
 
   if (mesh_shaders_enabled_) {
@@ -281,20 +278,22 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     prepare_indirect_pass.set_ex([this](rhi::CmdEncoder* enc) {
       ZoneScopedN("Prepare indirect");
       enc->write_timestamp(get_query_pool(), 0);
-      ASSERT(0 && "handle multiple views pls");
-      BasicIndirectPC pc{
-          // .view_data_buf_idx = frame_view_buf_info_.idx,
-          // .view_data_buf_offset = frame_view_buf_info_.offset_bytes,
-          .vert_buf_idx = static_draw_batch_.vertex_buf.get_buffer()->bindless_idx(),
-          .instance_data_buf_idx =
-              device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
-          .mat_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
-      };
-      indirect_cmd_buf_ids_.emplace_back(
-          enc->prepare_indexed_indirect_draws(static_instance_mgr_.get_draw_cmd_buf(), 0,
-                                              static_instance_mgr_.stats().max_instance_data_count,
-                                              static_draw_batch_.index_buf.get_buffer_handle(), 0,
-                                              &pc, sizeof(pc), sizeof(DefaultVertex)));
+      for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
+        BasicIndirectPC pc{
+            .view_data_buf_idx = get_render_view((RenderViewId)view_id).data_buf_info.idx,
+            .view_data_buf_offset =
+                get_render_view((RenderViewId)view_id).data_buf_info.offset_bytes,
+            .vert_buf_idx = static_draw_batch_.vertex_buf.get_buffer()->bindless_idx(),
+            .instance_data_buf_idx =
+                device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
+            .mat_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
+        };
+        indirect_cmd_buf_ids_.emplace_back(enc->prepare_indexed_indirect_draws(
+            static_instance_mgr_.get_draw_cmd_buf(), 0,
+            static_instance_mgr_.stats().max_instance_data_count,
+            static_draw_batch_.index_buf.get_buffer_handle(), 0, &pc, sizeof(pc),
+            sizeof(DefaultVertex)));
+      }
     });
   }
 
@@ -311,6 +310,49 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         enc->fill_buffer(out_counts_buf_[curr_frame_idx_].handle, 0, sizeof(MeshletDrawStats) / 2,
                          0);
       }
+    });
+  }
+
+  {
+    // shadow pass
+    auto secondary_view_id = shadow_map_render_views_[0];
+    auto& p = rg_.add_graphics_pass("shadow_view_0_draw_to_texture");
+    auto secondary_depth =
+        p.w_depth_output("shadow_debug_depth", {.format = rhi::TextureFormat::D32float});
+    p.set_ex([this, secondary_view_id, secondary_depth](rhi::CmdEncoder* enc) {
+      if (!static_instance_mgr_.has_draws()) {
+        return;
+      }
+      ZoneScopedN("Execute shadow view debug pass");
+
+      auto depth_handle = rg_.get_att_img(secondary_depth);
+      enc->begin_rendering({
+          RenderAttInfo::depth_stencil_att(depth_handle, rhi::LoadOp::Clear,
+                                           {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
+      });
+      enc->set_depth_stencil_state(reverse_z_ ? rhi::CompareOp::Greater : rhi::CompareOp::Less,
+                                   true);
+      enc->set_wind_order(rhi::WindOrder::CounterClockwise);
+      enc->set_cull_mode(rhi::CullMode::Back);
+      enc->set_viewport({0, 0}, device_->get_tex(depth_handle)->desc().dims);
+      enc->bind_pipeline(csm_no_frag_pso_);
+      auto& view_data_buf_info = get_render_view(secondary_view_id).data_buf_info;
+      BasicIndirectPC pc{
+          .view_data_buf_idx = view_data_buf_info.idx,
+          .view_data_buf_offset = view_data_buf_info.offset_bytes,
+          .vert_buf_idx = static_draw_batch_.vertex_buf.get_buffer()->bindless_idx(),
+          .instance_data_buf_idx =
+              device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
+          .mat_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
+      };
+      enc->push_constants(&pc, sizeof(pc));
+      for (auto& cmd : static_instance_mgr_.cpu_draw_cmds()) {
+        enc->draw_indexed_primitives(
+            rhi::PrimitiveTopology::TriangleList, static_draw_batch_.index_buf.get_buffer_handle(),
+            cmd.first_index * sizeof(DefaultIndexT), cmd.index_count, 1,
+            cmd.vertex_offset / sizeof(DefaultVertex), cmd.first_instance, rhi::IndexType::Uint32);
+      }
+      enc->end_rendering();
     });
   }
 
@@ -399,7 +441,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       auto load_op = late ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
       enc->begin_rendering({
           RenderAttInfo::color_att(gbuffer_a_tex, load_op, {.color = args.clear_color}),
-          RenderAttInfo::color_att(gbuffer_b_tex, load_op, {.color = args.clear_color}),
+          RenderAttInfo::color_att(gbuffer_b_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
           RenderAttInfo::depth_stencil_att(depth_handle, load_op,
                                            {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
       });
@@ -466,18 +508,17 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
         } else {
           ASSERT(indirect_cmd_buf_ids_.size());
-          ASSERT(0 && "handle multiple views pls");
           BasicIndirectPC pc{
-              // .view_data_buf_idx = frame_view_buf_info_.idx,
-              // .view_data_buf_offset = frame_view_buf_info_.offset_bytes,
+              .view_data_buf_idx = get_render_view(view_id).data_buf_info.idx,
+              .view_data_buf_offset = get_render_view(view_id).data_buf_info.offset_bytes,
               .vert_buf_idx = static_draw_batch_.vertex_buf.get_buffer()->bindless_idx(),
               .instance_data_buf_idx =
                   device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
               .mat_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
           };
           enc->push_constants(&pc, sizeof(pc));
-          for (auto& cmd : cmds_) {
-            // TODO: make no indirect an option.
+          for (const auto& cmd : static_instance_mgr_.cpu_draw_cmds()) {
+            // TODO: make no indirect a toggleable option.
             enc->draw_indexed_primitives(rhi::PrimitiveTopology::TriangleList,
                                          static_draw_batch_.index_buf.get_buffer_handle(),
                                          cmd.first_index * sizeof(DefaultIndexT), cmd.index_count,
@@ -565,12 +606,18 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     auto& p = rg_.add_graphics_pass("shade");
     auto gbuffer_a_rg_handle = p.sample_tex(last_gbuffer_a_name);
     auto gbuffer_b_rg_handle = p.sample_tex(last_gbuffer_b_name);
+    RGResourceHandle secondary_view_debug_depth_rg_handle{};
+    bool secondary_view_debug_enabled = debug_render_mode_ == DebugRenderMode::SecondaryView;
+    if (secondary_view_debug_enabled) {
+      secondary_view_debug_depth_rg_handle = p.r_tex("shadow_debug_depth");
+    }
     if (meshlet_occlusion_culling_enabled &&
         debug_render_mode_ == DebugRenderMode::DepthReduceMips) {
       p.sample_external_tex(final_depth_pyramid_name);
     }
     p.w_swapchain_tex(swapchain_);
-    p.set_ex([this, gbuffer_a_rg_handle, gbuffer_b_rg_handle,
+    p.set_ex([this, gbuffer_a_rg_handle, gbuffer_b_rg_handle, secondary_view_debug_depth_rg_handle,
+              secondary_view_debug_enabled,
               meshlet_occlusion_culling_enabled](rhi::CmdEncoder* enc) {
       ZoneScopedN("Final pass");
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
@@ -581,11 +628,17 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_wind_order(rhi::WindOrder::Clockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, dims);
+      enc->bind_cbv(frame_globals_buf_info_.buf, GLOBALS_SLOT,
+                    frame_globals_buf_info_.offset_bytes);
 
       uint32_t tex_idx{};
       float mult = 1.f;
-      if (!meshlet_occlusion_culling_enabled ||
-          debug_render_mode_ != DebugRenderMode::DepthReduceMips) {
+      if (secondary_view_debug_enabled) {
+        mult = 100.f;
+        tex_idx =
+            device_->get_tex(rg_.get_att_img(secondary_view_debug_depth_rg_handle))->bindless_idx();
+      } else if (!meshlet_occlusion_culling_enabled ||
+                 debug_render_mode_ != DebugRenderMode::DepthReduceMips) {
         tex_idx = gbuffer_a_tex->bindless_idx();
       } else {
         tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
@@ -917,6 +970,12 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(ModelInstance& model,
   stats_.total_instance_meshlets += model_resources->totals.instance_meshlets;
   stats_.total_instance_vertices += model_resources->totals.instance_vertices;
 
+  if (static_instance_mgr_.need_draw_cmds_on_cpu() &&
+      static_instance_mgr_.cpu_draw_cmds().size() <
+          instance_data_gpu_alloc.instance_data_alloc.offset + instance_datas.size()) {
+    static_instance_mgr_.cpu_draw_cmds().resize(instance_data_gpu_alloc.instance_data_alloc.offset +
+                                                instance_datas.size());
+  }
   for (size_t i = 0; i < instance_datas.size(); i++) {
     auto node_i = instance_id_to_node[i];
     const auto& transform = model.global_transforms[node_i];
@@ -926,22 +985,26 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(ModelInstance& model,
     instance_datas[i].meshlet_vis_base += instance_data_gpu_alloc.meshlet_vis_alloc.offset;
     size_t mesh_id = model.mesh_ids[node_i];
     auto& mesh = model_resources->meshes[mesh_id];
-    if (true) {
-      // if (!mesh_shaders_enabled_) {
-      cmds.push_back(IndexedIndirectDrawCmd{
-          .index_count = mesh.index_count,
-          .instance_count = 1,
-          .first_index = static_cast<uint32_t>(
-              (mesh.index_offset + model_resources->static_draw_batch_alloc.index_alloc.offset *
-                                       sizeof(rhi::DefaultIndexT)) /
-              sizeof(rhi::DefaultIndexT)),
-          .vertex_offset = static_cast<int32_t>(
-              mesh.vertex_offset_bytes +
-              model_resources->static_draw_batch_alloc.vertex_alloc.offset * sizeof(DefaultVertex)),
-          .first_instance =
-              static_cast<uint32_t>(i + instance_data_gpu_alloc.instance_data_alloc.offset),
-      });
-      cmds_.push_back(cmds.back());
+    IndexedIndirectDrawCmd cmd{
+        .index_count = mesh.index_count,
+        .instance_count = 1,
+        .first_index = static_cast<uint32_t>(
+            (mesh.index_offset + model_resources->static_draw_batch_alloc.index_alloc.offset *
+                                     sizeof(rhi::DefaultIndexT)) /
+            sizeof(rhi::DefaultIndexT)),
+        .vertex_offset = static_cast<int32_t>(
+            mesh.vertex_offset_bytes +
+            model_resources->static_draw_batch_alloc.vertex_alloc.offset * sizeof(DefaultVertex)),
+        .first_instance =
+            static_cast<uint32_t>(i + instance_data_gpu_alloc.instance_data_alloc.offset),
+    };
+    if (static_instance_mgr_.need_draw_cmds_on_cpu()) {
+      auto final_instance_i = instance_data_gpu_alloc.instance_data_alloc.offset + i;
+      ASSERT(final_instance_i < static_instance_mgr_.cpu_draw_cmds().size());
+      static_instance_mgr_.cpu_draw_cmds()[final_instance_i] = cmd;
+    }
+    if (!mesh_shaders_enabled_) {
+      cmds.push_back(cmd);
     }
   }
   static_draw_batch_.task_cmd_count += model_resources->totals.task_cmd_count;
@@ -1022,6 +1085,11 @@ void InstanceMgr::flush_pending_frees(uint32_t curr_frame_in_flight, rhi::CmdEnc
     auto element_count = allocator_.allocationSize(alloc);
     enc->fill_buffer(instance_data_buf_.handle, alloc.offset * sizeof(InstanceData),
                      element_count * sizeof(InstanceData), 0xFFFFFFFF);
+    if (need_cpu_draws_) {
+      for (size_t i = 0; i < element_count; i++) {
+        cpu_draw_cmds()[alloc.offset + i].instance_count = 0;
+      }
+    }
     if (!renderer_.mesh_shaders_enabled()) {
       enc->fill_buffer(draw_cmd_buf_.handle, alloc.offset * sizeof(IndexedIndirectDrawCmd),
                        element_count * sizeof(IndexedIndirectDrawCmd), 0xFFFFFFFF);
@@ -1208,15 +1276,17 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
     main_view.data_buf_info.offset_bytes = offset;
   }
   {
-    ViewData shadow_view_data{
-        .vp = proj_mat * args.view_mat,
-        .view = args.view_mat,
-        .proj = proj_mat,
-        .camera_pos = glm::vec4{args.camera_pos, 0},
-    };
-    auto [buf, offset, write_ptr] =
-        frame_gpu_upload_allocator_.alloc(sizeof(ViewData), &shadow_view_data);
     for (size_t i = 0; i < shadow_cascade_count_; i++) {
+      float shadow_fov = 140.0f;
+      glm::mat4 shadow_proj_mat = get_proj_matrix(shadow_fov);
+      ViewData shadow_view_data{
+          .vp = shadow_proj_mat * args.view_mat,
+          .view = args.view_mat,
+          .proj = shadow_proj_mat,
+          .camera_pos = glm::vec4{args.camera_pos, 0},
+      };
+      auto [buf, offset, write_ptr] =
+          frame_gpu_upload_allocator_.alloc(sizeof(ViewData), &shadow_view_data);
       shadow_map_render_views_[i] = create_render_view();
       auto& view = get_render_view(shadow_map_render_views_[i]);
       view.data_buf_info.buf = buf;
@@ -1435,19 +1505,21 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
       for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
         gbuffer_meshlet_psos_[alpha_mask_type] = shader_mgr_->create_graphics_pipeline({
             .shaders = {{{"forward_meshlet", ShaderType::Task},
-                         {"forward_meshlet", ShaderType::Mesh},
+                         {"gbuffer_meshlet", ShaderType::Mesh},
                          {alpha_mask_type == AlphaMaskType::Mask ? "forward_meshlet_alphatest"
                                                                  : "forward_meshlet",
                           ShaderType::Fragment}}},
         });
       }
-
-    } else {
-      test2_pso_ = shader_mgr_->create_graphics_pipeline({
-          .shaders = {{{"basic_indirect", ShaderType::Vertex},
-                       {"basic_indirect", ShaderType::Fragment}}},
-      });
     }
+
+    csm_no_frag_pso_ = shader_mgr_->create_graphics_pipeline({
+        .shaders = {{{"basic_indirect", ShaderType::Vertex}}},
+    });
+    test2_pso_ = shader_mgr_->create_graphics_pipeline({
+        .shaders = {{{"basic_indirect", ShaderType::Vertex},
+                     {"basic_indirect", ShaderType::Fragment}}},
+    });
 
     tex_only_pso_ = shader_mgr_->create_graphics_pipeline({
         .shaders = {{{"fullscreen_quad", ShaderType::Vertex}, {"tex_only", ShaderType::Fragment}}},

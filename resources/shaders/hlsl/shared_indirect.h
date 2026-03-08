@@ -10,6 +10,10 @@ struct IndexedIndirectDrawCmd {
   uint32_t first_index;
   int32_t vertex_offset;
   uint32_t first_instance;
+#ifndef __HLSL__
+  [[nodiscard]] bool is_valid() const { return index_count > 0; }
+  void invalidate() { index_count = 0; }
+#endif
 };
 
 // struct InstData {

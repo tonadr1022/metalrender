@@ -94,10 +94,14 @@ class InstanceMgr {
   [[nodiscard]] const Stats& stats() const { return stats_; }
 
   void reserve_space(uint32_t instance_data_count);
+  [[nodiscard]] std::vector<IndexedIndirectDrawCmd>& cpu_draw_cmds() { return cpu_draw_cmds_; }
+  [[nodiscard]] bool need_draw_cmds_on_cpu() const { return need_cpu_draws_; }
 
  private:
   OffsetAllocator::Allocation allocate_instance_data(uint32_t element_count);
   // returns true if resize occured
+  std::vector<IndexedIndirectDrawCmd> cpu_draw_cmds_;
+  bool need_cpu_draws_{true};
   bool ensure_buffer_space(size_t element_count);
   OffsetAllocator::Allocator allocator_;
   rhi::BufferHandleHolder instance_data_buf_;
@@ -267,10 +271,10 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder depth_reduce_pso_;
   rhi::PipelineHandleHolder shade_pso_;
   rhi::PipelineHandleHolder tex_only_pso_;
+  rhi::PipelineHandleHolder csm_no_frag_pso_;
 
   GPUFrameAllocator3 frame_gpu_upload_allocator_;
   BufferCopyMgr buffer_copy_mgr_;
-  std::vector<IndexedIndirectDrawCmd> cmds_;
   BackedGPUAllocator materials_buf_;
 
   TexAndViewHolder depth_pyramid_tex_;
@@ -319,6 +323,7 @@ class MemeRenderer123 {
   enum class DebugRenderMode {
     None = DEBUG_RENDER_MODE_NONE,
     DepthReduceMips = DEBUG_RENDER_MODE_DEPTH_REDUCE_MIPS,
+    SecondaryView = DEBUG_RENDER_MODE_SECONDARY_VIEW,
     MeshletColors = DEBUG_RENDER_MODE_MESHLET_COLORS,
     TriangleColors = DEBUG_RENDER_MODE_TRIANGLE_COLORS,
     InstanceColors = DEBUG_RENDER_MODE_INSTANCE_COLORS,

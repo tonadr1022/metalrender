@@ -43,13 +43,17 @@ VOut get_vertex_attributes(in InstanceData instance_data, in float4x4 vp, uint r
                            uint vertex_idx) {
 #endif
   DefaultVertex vert = vertex_buf[vertex_idx];
-
+  VOut v;
   float3 pos = rotate_quat(instance_data.scale * vert.pos.xyz, instance_data.rotation) +
                instance_data.translation;
-  VOut v;
   v.pos = mul(vp, float4(pos, 1.0));
+#ifdef MESH_SHADER_OUTPUT_UV
   v.uv = vert.uv;
+#endif
+#ifdef MESH_SHADER_OUTPUT_NORMAL
   v.normal = normalize(rotate_quat(vert.normal, instance_data.rotation));
+#endif
+
 #ifdef DEBUG_MODE
 #define COLOR_MULTIPLIER 1.71f
   if (render_mode == DEBUG_RENDER_MODE_TRIANGLE_COLORS) {
@@ -63,7 +67,9 @@ VOut get_vertex_attributes(in InstanceData instance_data, in float4x4 vp, uint r
     v.color = float4(1.0, 1.0, 1.0, 1.0);
   }
 #endif
+#ifdef MESH_SHADER_OUTPUT_MATERIAL
   v.material_id = instance_data.mat_id;
+#endif
   return v;
 }
 
