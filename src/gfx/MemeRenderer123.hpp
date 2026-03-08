@@ -205,8 +205,12 @@ class MemeRenderer123 {
   void add_render_graph_passes(const RenderArgs& args);
 
   enum class RenderViewId : uint32_t { Invalid = UINT32_MAX };
+
   struct RenderView {
-    IdxOffset data_buf_info;
+    IdxOffset data_buf_info{};
+    IdxOffset cull_data_buf_info{};
+    TexAndViewHolder depth_pyramid_tex;
+    std::string depth_tex_name;
   };
 
   RenderView& get_render_view(RenderViewId view_id) {
@@ -234,6 +238,9 @@ class MemeRenderer123 {
 
   std::string get_out_draw_cnt_buf_name(RenderViewId view_id, int iter) const {
     return std::format("out_draw_count_buf__view{}_iter{}", (int)view_id, iter);
+  }
+  std::string get_depth_tex_name(RenderViewId view_id, int iter) const {
+    return std::format("depth_tex{}__view{}", iter, (int)view_id);
   }
   std::string get_task_cmd_buf_name(RenderViewId view_id, AlphaMaskType alpha_mask_type) const {
     return std::format("task_cmd_buf__alpha{}_view{}", (int)alpha_mask_type, (int)view_id);
@@ -277,7 +284,6 @@ class MemeRenderer123 {
   BufferCopyMgr buffer_copy_mgr_;
   BackedGPUAllocator materials_buf_;
 
-  TexAndViewHolder depth_pyramid_tex_;
   int debug_view_mip_{};
 
   size_t frame_num_{};
@@ -317,8 +323,6 @@ class MemeRenderer123 {
   static constexpr float k_default_fov_deg = 70.0f;
 
   IdxOffset frame_globals_buf_info_;
-  // IdxOffset frame_view_buf_info_;
-  IdxOffset frame_cull_data_buf_info_;
 
   DebugRenderMode debug_render_mode_{DebugRenderMode::None};
 

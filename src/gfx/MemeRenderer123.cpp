@@ -101,7 +101,10 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
     }
   }
   shader_mgr_->replace_dirty_pipelines();
-  clear_render_views();
+  for (auto& view : render_views_) {
+    view.depth_tex_name = "";
+  }
+  // clear_render_views();
 
   indirect_cmd_buf_ids_.clear();
 
@@ -174,7 +177,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       });
     }
   }
-  RenderViewId view_ids[] = {main_render_view_id_};
+  RenderViewId view_ids[] = {main_render_view_id_, shadow_map_render_views_[0]};
 
   if (mesh_shaders_enabled_) {
     if (!culling_paused_) {
@@ -219,7 +222,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     }
     gch::small_vector<std::array<RGResourceHandle, AlphaMaskType::Count>, 10>
         task_cmd_buf_rg_handles_all_views;
-    for ([[maybe_unused]] auto view_id : view_ids) {
+    for (auto view_id : view_ids) {
       auto& view_handles = task_cmd_buf_rg_handles_all_views.emplace_back();
       for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
         if (static_draw_batch_.get_stats().vertex_count > 0) {
@@ -245,12 +248,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
               rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Mask]);
           for (size_t i = 0; i < out_draw_count_buf_rg_handles.size(); i++) {
             auto out_draw_count_buf_rg_handle = out_draw_count_buf_rg_handles[i];
-            auto& render_view_data = render_views_[i];
+            const auto& render_view_data = render_views_[i];
             DrawCullPC pc{
                 .view_data_buf_idx = render_view_data.data_buf_info.idx,
                 .view_data_buf_offset_bytes = render_view_data.data_buf_info.offset_bytes,
-                .cull_data_idx = frame_cull_data_buf_info_.idx,
-                .cull_data_offset_bytes = frame_cull_data_buf_info_.offset_bytes,
+                .cull_data_idx = render_view_data.cull_data_buf_info.idx,
+                .cull_data_offset_bytes = render_view_data.cull_data_buf_info.offset_bytes,
                 .task_cmd_buf_idx_opaque =
                     device_->get_buf(task_cmd_buf_opaque_handle)->bindless_idx(),
                 .task_cmd_buf_alpha_test_idx =
@@ -297,7 +300,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     });
   }
 
-  std::string final_depth_pyramid_name;
+  static std::vector<std::string> final_depth_pyramid_names;
+  final_depth_pyramid_names.clear();
+  final_depth_pyramid_names.resize(render_views_.size());
   const char* out_counts_buf_name = "out_counts_buf";
   if (mesh_shaders_enabled()) {
     auto& p = rg_.add_transfer_pass("clear_out_counts_buf");
@@ -313,57 +318,64 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     });
   }
 
-  {
-    // shadow pass
-    auto secondary_view_id = shadow_map_render_views_[0];
-    auto& p = rg_.add_graphics_pass("shadow_view_0_draw_to_texture");
-    auto secondary_depth =
-        p.w_depth_output("shadow_debug_depth", {.format = rhi::TextureFormat::D32float});
-    p.set_ex([this, secondary_view_id, secondary_depth](rhi::CmdEncoder* enc) {
-      if (!static_instance_mgr_.has_draws()) {
-        return;
-      }
-      ZoneScopedN("Execute shadow view debug pass");
-
-      auto depth_handle = rg_.get_att_img(secondary_depth);
-      enc->begin_rendering({
-          RenderAttInfo::depth_stencil_att(depth_handle, rhi::LoadOp::Clear,
-                                           {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
-      });
-      enc->set_depth_stencil_state(reverse_z_ ? rhi::CompareOp::Greater : rhi::CompareOp::Less,
-                                   true);
-      enc->set_wind_order(rhi::WindOrder::CounterClockwise);
-      enc->set_cull_mode(rhi::CullMode::Back);
-      enc->set_viewport({0, 0}, device_->get_tex(depth_handle)->desc().dims);
-      enc->bind_pipeline(csm_no_frag_pso_);
-      auto& view_data_buf_info = get_render_view(secondary_view_id).data_buf_info;
-      BasicIndirectPC pc{
-          .view_data_buf_idx = view_data_buf_info.idx,
-          .view_data_buf_offset = view_data_buf_info.offset_bytes,
-          .vert_buf_idx = static_draw_batch_.vertex_buf.get_buffer()->bindless_idx(),
-          .instance_data_buf_idx =
-              device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
-          .mat_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
-      };
-      enc->push_constants(&pc, sizeof(pc));
-      for (auto& cmd : static_instance_mgr_.cpu_draw_cmds()) {
-        enc->draw_indexed_primitives(
-            rhi::PrimitiveTopology::TriangleList, static_draw_batch_.index_buf.get_buffer_handle(),
-            cmd.first_index * sizeof(DefaultIndexT), cmd.index_count, 1,
-            cmd.vertex_offset / sizeof(DefaultVertex), cmd.first_instance, rhi::IndexType::Uint32);
-      }
-      enc->end_rendering();
-    });
-  }
+  // {
+  //   // shadow pass
+  //   auto secondary_view_id = shadow_map_render_views_[0];
+  //   auto& p = rg_.add_graphics_pass("shadow_view_0_draw_to_texture");
+  //   auto depth_tex_name = get_depth_tex_name(secondary_view_id, 0);
+  //   auto& render_view = get_render_view(secondary_view_id);
+  //   render_view.depth_tex_name = depth_tex_name;
+  //   auto secondary_depth =
+  //       p.w_depth_output(depth_tex_name, {.format = rhi::TextureFormat::D32float});
+  //   p.set_ex([this, secondary_view_id, secondary_depth](rhi::CmdEncoder* enc) {
+  //     if (!static_instance_mgr_.has_draws()) {
+  //       return;
+  //     }
+  //     ZoneScopedN("Execute shadow view debug pass");
+  //
+  //     auto depth_handle = rg_.get_att_img(secondary_depth);
+  //     enc->begin_rendering({
+  //         RenderAttInfo::depth_stencil_att(depth_handle, rhi::LoadOp::Clear,
+  //                                          {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
+  //     });
+  //     enc->set_depth_stencil_state(reverse_z_ ? rhi::CompareOp::Greater : rhi::CompareOp::Less,
+  //                                  true);
+  //     enc->set_wind_order(rhi::WindOrder::CounterClockwise);
+  //     enc->set_cull_mode(rhi::CullMode::Back);
+  //     enc->set_viewport({0, 0}, device_->get_tex(depth_handle)->desc().dims);
+  //     enc->bind_pipeline(csm_no_frag_pso_);
+  //     auto& view_data_buf_info = get_render_view(secondary_view_id).data_buf_info;
+  //     BasicIndirectPC pc{
+  //         .view_data_buf_idx = view_data_buf_info.idx,
+  //         .view_data_buf_offset = view_data_buf_info.offset_bytes,
+  //         .vert_buf_idx = static_draw_batch_.vertex_buf.get_buffer()->bindless_idx(),
+  //         .instance_data_buf_idx =
+  //             device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
+  //         .mat_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
+  //     };
+  //     enc->push_constants(&pc, sizeof(pc));
+  //     for (auto& cmd : static_instance_mgr_.cpu_draw_cmds()) {
+  //       enc->draw_indexed_primitives(
+  //           rhi::PrimitiveTopology::TriangleList,
+  //           static_draw_batch_.index_buf.get_buffer_handle(), cmd.first_index *
+  //           sizeof(DefaultIndexT), cmd.index_count, 1, cmd.vertex_offset / sizeof(DefaultVertex),
+  //           cmd.first_instance, rhi::IndexType::Uint32);
+  //     }
+  //     enc->end_rendering();
+  //   });
+  // }
 
   const char* last_gbuffer_a_name = "gbuffer_a";
   const char* last_gbuffer_b_name = "gbuffer_b";
-  const char* last_depth_name = "depth_tex";
-  auto add_draw_pass = [&args, this, &final_depth_pyramid_name, &last_gbuffer_a_name,
-                        &last_gbuffer_b_name, &last_depth_name,
+  for (size_t i = 0; i < render_views_.size(); i++) {
+    render_views_[i].depth_tex_name = get_depth_tex_name((RenderViewId)i, 0);
+  }
+
+  auto add_draw_pass = [&args, this, &last_gbuffer_a_name, &last_gbuffer_b_name,
                         &out_counts_buf_name](bool late, const char* name) {
     ZoneScopedN("Draw pass");
     auto view_id = main_render_view_id_;
+    auto& render_view = get_render_view(view_id);
     auto& p = rg_.add_graphics_pass(name);
     RGResourceHandle task_cmd_buf_rg_handles[AlphaMaskType::Count]{};
     RGResourceHandle out_draw_count_buf_rg_handle{};
@@ -379,7 +391,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       out_draw_count_buf_rg_handle =
           p.r_buf(get_out_draw_cnt_buf_name(view_id, 1), rhi::PipelineStage::TaskShader);
       if (late) {
-        p.sample_external_tex(final_depth_pyramid_name, rhi::PipelineStage::TaskShader);
+        p.sample_external_tex(final_depth_pyramid_names[(int)view_id],
+                              rhi::PipelineStage::TaskShader);
         meshlet_vis_buf_rg_handle =
             p.rw_buf(get_meshlet_vis_buf_name(view_id, 1), rhi::PipelineStage::TaskShader,
                      get_meshlet_vis_buf_name(view_id, 0));
@@ -402,9 +415,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       rg_gbuffer_b_handle = p.rw_color_output(new_gbuffer_b_name, last_gbuffer_b_name);
       last_gbuffer_a_name = new_gbuffer_a_name;
       last_gbuffer_b_name = new_gbuffer_b_name;
-      const char* new_depth_name = "depth_tex2";
-      rg_depth_handle = p.rw_depth_output(new_depth_name, last_depth_name);
-      last_depth_name = new_depth_name;
+      std::string new_depth_name = get_depth_tex_name(view_id, 1);
+      rg_depth_handle = p.rw_depth_output(new_depth_name, get_render_view(view_id).depth_tex_name);
+      render_view.depth_tex_name = new_depth_name;
 
       if (mesh_shaders_enabled()) {
         const char* next_out_counts_buf_name = "out_counts_buf3";
@@ -424,7 +437,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
           p.w_color_output(last_gbuffer_a_name, {.format = rhi::TextureFormat::R16G16B16A16Sfloat});
       rg_gbuffer_b_handle =
           p.w_color_output(last_gbuffer_b_name, {.format = rhi::TextureFormat::R8G8B8A8Unorm});
-      rg_depth_handle = p.w_depth_output(last_depth_name, {.format = rhi::TextureFormat::D32float});
+      rg_depth_handle = p.w_depth_output(get_render_view(view_id).depth_tex_name,
+                                         {.format = rhi::TextureFormat::D32float});
     }
 
     p.set_ex([this, rg_depth_handle, rg_gbuffer_a_handle, rg_gbuffer_b_handle, &args, late,
@@ -451,11 +465,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, window_->get_window_size());
 
+      const auto& render_view = get_render_view(view_id);
       if (mesh_shaders_enabled()) {
         enc->bind_uav(rg_.get_buf(meshlet_vis_buf_rg_handle), 1);
         enc->bind_uav(out_counts_buf_[curr_frame_idx_].handle, 2);
         if (late) {
-          enc->bind_srv(depth_pyramid_tex_.handle, 3);
+          enc->bind_srv(render_view.depth_pyramid_tex.handle, 3);
         }
         enc->bind_srv(static_draw_batch_.mesh_buf.get_buffer_handle(), 5);
         enc->bind_srv(static_draw_batch_.meshlet_buf.get_buffer_handle(), 6);
@@ -465,9 +480,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         enc->bind_srv(materials_buf_.get_buffer_handle(), 11);
         enc->bind_cbv(frame_globals_buf_info_.buf, GLOBALS_SLOT,
                       frame_globals_buf_info_.offset_bytes);
-        auto& view_data_buf_info = get_render_view(view_id).data_buf_info;
-        enc->bind_cbv(view_data_buf_info.buf, VIEW_DATA_SLOT, view_data_buf_info.offset_bytes);
-        enc->bind_cbv(frame_cull_data_buf_info_.buf, 4, frame_cull_data_buf_info_.offset_bytes);
+        enc->bind_cbv(render_view.data_buf_info.buf, VIEW_DATA_SLOT,
+                      render_view.data_buf_info.offset_bytes);
+        enc->bind_cbv(render_view.cull_data_buf_info.buf, 4,
+                      render_view.cull_data_buf_info.offset_bytes);
         Task2PC pc{
             .pass = late,
             .flags = 0,
@@ -537,52 +553,60 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   add_draw_pass(false, "draw_pass_early");
 
   if (meshlet_occlusion_culling_enabled) {
-    auto* dp_tex = device_->get_tex(depth_pyramid_tex_);
-    auto dp_dims = glm::uvec2{dp_tex->desc().dims};
-    uint32_t mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
-    std::string read_name;
-    uint32_t final_mip = mip_levels - 1;
-    for (uint32_t mip = 0; mip < final_mip; mip++) {
-      auto& p = rg_.add_compute_pass("depth_reduce_" + std::to_string(mip));
-      RGResourceHandle depth_handle{};
-      if (mip == 0) {
-        depth_handle = p.r_tex("depth_tex");
-      } else {
-        p.r_external_tex(read_name);
-      }
-      auto write_name = "depth_pyramid_tex_reduce_" + std::to_string(mip);
-      if (mip == final_mip - 1) {
-        final_depth_pyramid_name = write_name;
-      }
-
-      read_name = write_name;
-      p.w_external_tex(write_name, depth_pyramid_tex_.handle);
-      p.set_ex([this, mip, depth_handle, dp_dims](rhi::CmdEncoder* enc) {
-        enc->bind_pipeline(depth_reduce_pso_);
-        glm::uvec2 in_dims = (mip == 0)
-                                 ? device_->get_tex(rg_.get_att_img(depth_handle))->desc().dims
-                                 : glm::uvec2{std::max(1u, dp_dims.x >> (mip - 1)),
-                                              std::max(1u, dp_dims.y >> (mip - 1))};
-        DepthReducePC pc{
-            .in_tex_dim_x = in_dims.x,
-            .in_tex_dim_y = in_dims.y,
-            .out_tex_dim_x = dp_dims.x >> mip,
-            .out_tex_dim_y = dp_dims.y >> mip,
-        };
-        enc->push_constants(&pc, sizeof(pc));
-
+    for (auto view_id : view_ids) {
+      if ((int)view_id > 0) continue;
+      const auto& render_view = get_render_view(view_id);
+      auto* dp_tex = device_->get_tex(render_view.depth_pyramid_tex);
+      auto dp_dims = glm::uvec2{dp_tex->desc().dims};
+      uint32_t mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
+      std::string read_name;
+      uint32_t final_mip = mip_levels - 1;
+      for (uint32_t mip = 0; mip < final_mip; mip++) {
+        auto& p = rg_.add_compute_pass("depth_reduce_" + std::to_string(mip) +
+                                       "_view:" + std::to_string((int)view_id));
+        RGResourceHandle depth_handle{};
         if (mip == 0) {
-          enc->bind_srv(rg_.get_att_img(depth_handle), 0);
+          depth_handle = p.r_tex(render_view.depth_tex_name);
         } else {
-          enc->bind_srv(depth_pyramid_tex_.handle, 0, depth_pyramid_tex_.views[mip - 1]);
+          p.r_external_tex(read_name);
         }
-        enc->bind_uav(depth_pyramid_tex_.handle, 0, depth_pyramid_tex_.views[mip]);
+        auto write_name = "depth_pyramid_tex_reduce_" + std::to_string(mip) + "_view__" +
+                          std::to_string((int)view_id);
+        if (mip == final_mip - 1) {
+          final_depth_pyramid_names[(int)view_id] = write_name;
+        }
 
-        constexpr size_t k_tg_size = 8;
-        enc->dispatch_compute(glm::uvec3{align_divide_up(pc.out_tex_dim_x, k_tg_size),
-                                         align_divide_up(pc.out_tex_dim_y, k_tg_size), 1},
-                              glm::uvec3{k_tg_size, k_tg_size, 1});
-      });
+        read_name = write_name;
+        p.w_external_tex(write_name, render_view.depth_pyramid_tex.handle);
+        p.set_ex([this, mip, depth_handle, dp_dims, &render_view](rhi::CmdEncoder* enc) {
+          enc->bind_pipeline(depth_reduce_pso_);
+          glm::uvec2 in_dims = (mip == 0)
+                                   ? device_->get_tex(rg_.get_att_img(depth_handle))->desc().dims
+                                   : glm::uvec2{std::max(1u, dp_dims.x >> (mip - 1)),
+                                                std::max(1u, dp_dims.y >> (mip - 1))};
+          DepthReducePC pc{
+              .in_tex_dim_x = in_dims.x,
+              .in_tex_dim_y = in_dims.y,
+              .out_tex_dim_x = dp_dims.x >> mip,
+              .out_tex_dim_y = dp_dims.y >> mip,
+          };
+          enc->push_constants(&pc, sizeof(pc));
+
+          if (mip == 0) {
+            enc->bind_srv(rg_.get_att_img(depth_handle), 0);
+          } else {
+            enc->bind_srv(render_view.depth_pyramid_tex.handle, 0,
+                          render_view.depth_pyramid_tex.views[mip - 1]);
+          }
+          enc->bind_uav(render_view.depth_pyramid_tex.handle, 0,
+                        render_view.depth_pyramid_tex.views[mip]);
+
+          constexpr size_t k_tg_size = 8;
+          enc->dispatch_compute(glm::uvec3{align_divide_up(pc.out_tex_dim_x, k_tg_size),
+                                           align_divide_up(pc.out_tex_dim_y, k_tg_size), 1},
+                                glm::uvec3{k_tg_size, k_tg_size, 1});
+        });
+      }
     }
   }
 
@@ -609,11 +633,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     RGResourceHandle secondary_view_debug_depth_rg_handle{};
     bool secondary_view_debug_enabled = debug_render_mode_ == DebugRenderMode::SecondaryView;
     if (secondary_view_debug_enabled) {
-      secondary_view_debug_depth_rg_handle = p.r_tex("shadow_debug_depth");
+      secondary_view_debug_depth_rg_handle =
+          p.r_tex(get_render_view(shadow_map_render_views_[0]).depth_tex_name);
     }
     if (meshlet_occlusion_culling_enabled &&
         debug_render_mode_ == DebugRenderMode::DepthReduceMips) {
-      p.sample_external_tex(final_depth_pyramid_name);
+      p.sample_external_tex(final_depth_pyramid_names[(int)main_render_view_id_]);
     }
     p.w_swapchain_tex(swapchain_);
     p.set_ex([this, gbuffer_a_rg_handle, gbuffer_b_rg_handle, secondary_view_debug_depth_rg_handle,
@@ -641,8 +666,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
                  debug_render_mode_ != DebugRenderMode::DepthReduceMips) {
         tex_idx = gbuffer_a_tex->bindless_idx();
       } else {
-        tex_idx = device_->get_tex_view_bindless_idx(depth_pyramid_tex_.handle,
-                                                     depth_pyramid_tex_.views[debug_view_mip_]);
+        tex_idx = device_->get_tex_view_bindless_idx(
+            render_views_[0].depth_pyramid_tex.handle,
+            render_views_[0].depth_pyramid_tex.views[debug_view_mip_]);
         mult = 100.f;
       }
       TexOnlyPC pc{
@@ -1215,7 +1241,7 @@ void MemeRenderer123::on_imgui() {
   ImGui::Text("Culling paused: %d", culling_paused_);
   ImGui::Text("Culling enabled: %d", culling_enabled_);
 
-  auto dp_dims = device_->get_tex(depth_pyramid_tex_)->desc().dims;
+  auto dp_dims = device_->get_tex(render_views_[0].depth_pyramid_tex)->desc().dims;
   auto mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
   ImGui::SliderInt("mip view", &debug_view_mip_, 0, mip_levels - 1);
 
@@ -1269,34 +1295,14 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
         .proj = proj_mat,
         .camera_pos = glm::vec4{args.camera_pos, 0},
     };
-    main_render_view_id_ = create_render_view();
     auto& main_view = get_render_view(main_render_view_id_);
     auto [buf, offset, write_ptr] = frame_gpu_upload_allocator_.alloc(sizeof(ViewData), &view_data);
     main_view.data_buf_info.buf = buf;
     main_view.data_buf_info.idx = device_->get_buf(buf)->bindless_idx();
     main_view.data_buf_info.offset_bytes = offset;
   }
-  {
-    for (size_t i = 0; i < shadow_cascade_count_; i++) {
-      float shadow_fov = 140.0f;
-      glm::mat4 shadow_proj_mat = get_proj_matrix(shadow_fov);
-      ViewData shadow_view_data{
-          .vp = shadow_proj_mat * args.view_mat,
-          .view = args.view_mat,
-          .proj = shadow_proj_mat,
-          .camera_pos = glm::vec4{args.camera_pos, 0},
-      };
-      auto [buf, offset, write_ptr] =
-          frame_gpu_upload_allocator_.alloc(sizeof(ViewData), &shadow_view_data);
-      shadow_map_render_views_[i] = create_render_view();
-      auto& view = get_render_view(shadow_map_render_views_[i]);
-      view.data_buf_info.buf = buf;
-      view.data_buf_info.idx = device_->get_buf(buf)->bindless_idx();
-      view.data_buf_info.offset_bytes = offset;
-    }
-  }
-
-  {
+  auto set_cull_data = [](GPUFrameAllocator3& frame_gpu_upload_allocator, rhi::Device* device,
+                          RenderView& view, const glm::mat4& proj_mat, bool culling_paused) {
     // set cull data buf
     CullData cull_data{};
     const glm::mat4 projection_transpose = glm::transpose(proj_mat);
@@ -1315,18 +1321,42 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
     cull_data.frustum[3] = frustum_y.z;
     cull_data.z_near = k_z_near;
     cull_data.z_far = k_z_far;
-    const auto& dp_tex_desc = device_->get_tex(depth_pyramid_tex_)->desc();
+    const auto& dp_tex_desc = device->get_tex(view.depth_pyramid_tex)->desc();
     cull_data.pyramid_width = dp_tex_desc.dims.x;
     cull_data.pyramid_height = dp_tex_desc.dims.y;
     cull_data.pyramid_mip_count = dp_tex_desc.mip_levels;
     cull_data.p00 = proj_mat[0][0];
     cull_data.p11 = proj_mat[1][1];
-    cull_data.paused = culling_paused_;
+    cull_data.paused = culling_paused;
 
-    auto [buf, offset, write_ptr] = frame_gpu_upload_allocator_.alloc(sizeof(CullData), &cull_data);
-    frame_cull_data_buf_info_.buf = buf;
-    frame_cull_data_buf_info_.idx = device_->get_buf(buf)->bindless_idx();
-    frame_cull_data_buf_info_.offset_bytes = offset;
+    auto [buf, offset, write_ptr] = frame_gpu_upload_allocator.alloc(sizeof(CullData), &cull_data);
+    // auto& view = get_render_view(main_render_view_id_);
+    view.cull_data_buf_info.buf = buf;
+    view.cull_data_buf_info.idx = device->get_buf(buf)->bindless_idx();
+    view.cull_data_buf_info.offset_bytes = offset;
+  };
+
+  set_cull_data(frame_gpu_upload_allocator_, device_, get_render_view(main_render_view_id_),
+                proj_mat, culling_paused_);
+  {
+    for (size_t i = 0; i < shadow_cascade_count_; i++) {
+      float shadow_fov = 140.0f;
+      glm::mat4 shadow_proj_mat = get_proj_matrix(shadow_fov);
+      ViewData shadow_view_data{
+          .vp = shadow_proj_mat * args.view_mat,
+          .view = args.view_mat,
+          .proj = shadow_proj_mat,
+          .camera_pos = glm::vec4{args.camera_pos, 0},
+      };
+      auto [buf, offset, write_ptr] =
+          frame_gpu_upload_allocator_.alloc(sizeof(ViewData), &shadow_view_data);
+      auto& view = get_render_view(shadow_map_render_views_[i]);
+      view.data_buf_info.buf = buf;
+      view.data_buf_info.idx = device_->get_buf(buf)->bindless_idx();
+      view.data_buf_info.offset_bytes = offset;
+
+      set_cull_data(frame_gpu_upload_allocator_, device_, view, shadow_proj_mat, culling_paused_);
+    }
   }
 }
 
@@ -1380,26 +1410,29 @@ void MemeRenderer123::recreate_swapchain_sized_textures() {
   {  // depth pyramid
     auto size = glm::uvec3{prev_pow2(main_size.x), prev_pow2(main_size.y), 1};
     uint32_t mip_levels = math::get_mip_levels(size.x, size.y);
-    if (depth_pyramid_tex_.is_valid()) {
-      auto* existing = device_->get_tex(depth_pyramid_tex_);
-      if (existing->desc().dims == size) {
-        return;
+    for (auto& render_view : render_views_) {
+      auto& depth_pyramid_tex = render_view.depth_pyramid_tex;
+      if (depth_pyramid_tex.is_valid()) {
+        auto* existing = device_->get_tex(depth_pyramid_tex);
+        if (existing->desc().dims == size) {
+          continue;
+        }
       }
-    }
-    for (auto& v : depth_pyramid_tex_.views) {
-      device_->destroy(depth_pyramid_tex_.handle, v);
-    }
-    depth_pyramid_tex_.views.clear();
-    depth_pyramid_tex_ = TexAndViewHolder{device_->create_tex_h(
-        rhi::TextureDesc{.format = rhi::TextureFormat::R32float,
-                         .usage = rhi::TextureUsage::Storage | rhi::TextureUsage::ShaderWrite,
-                         .dims = size,
-                         .mip_levels = mip_levels,
-                         .name = "depth_pyramid_tex"})};
-    depth_pyramid_tex_.views.reserve(mip_levels);
-    for (size_t i = 0; i < mip_levels; i++) {
-      depth_pyramid_tex_.views.emplace_back(
-          device_->create_tex_view(depth_pyramid_tex_.handle, i, 1, 0, 1));
+      for (auto& v : depth_pyramid_tex.views) {
+        device_->destroy(depth_pyramid_tex.handle, v);
+      }
+      depth_pyramid_tex.views.clear();
+      depth_pyramid_tex = TexAndViewHolder{device_->create_tex_h(
+          rhi::TextureDesc{.format = rhi::TextureFormat::R32float,
+                           .usage = rhi::TextureUsage::Storage | rhi::TextureUsage::ShaderWrite,
+                           .dims = size,
+                           .mip_levels = mip_levels,
+                           .name = "depth_pyramid_tex"})};
+      depth_pyramid_tex.views.reserve(mip_levels);
+      for (size_t i = 0; i < mip_levels; i++) {
+        depth_pyramid_tex.views.emplace_back(
+            device_->create_tex_view(depth_pyramid_tex.handle, i, 1, 0, 1));
+      }
     }
   }
 }
@@ -1536,6 +1569,11 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
 
   init_imgui();
   imgui_renderer_.emplace(*shader_mgr_, device_);
+
+  main_render_view_id_ = create_render_view();
+  for (auto& shadow_map_render_view : shadow_map_render_views_) {
+    shadow_map_render_view = create_render_view();
+  }
 
   recreate_swapchain_sized_textures();
 

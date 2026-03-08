@@ -1007,6 +1007,10 @@ void RenderGraph::add_external_rw_buffer_usage(const std::string& name,
 }
 
 RGResourceHandle RenderGraph::get_resource(const std::string& name, RGResourceType type) {
+  if (!resource_name_to_handle_.contains(name)) {
+    LERROR("Resource {} of type {} not found in render graph", name, to_string(type));
+    ASSERT(0);
+  }
   if (type == RGResourceType::Texture || type == RGResourceType::Buffer) {
     return resource_name_to_handle_.at(name);
   }
