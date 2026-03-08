@@ -1178,6 +1178,7 @@ void MemeRenderer123::on_imgui() {
   ZoneScoped;
   if (ImGui::TreeNodeEx("Config")) {
     ImGui::Text("Mesh shaders enabled: %d", mesh_shaders_enabled_);
+    ImGui::Text("Render Mode %s", to_string(debug_render_mode_));
     ImGui::TreePop();
   }
   if (ImGui::TreeNodeEx("Textures")) {

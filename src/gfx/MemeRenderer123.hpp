@@ -320,16 +320,7 @@ class MemeRenderer123 {
   // IdxOffset frame_view_buf_info_;
   IdxOffset frame_cull_data_buf_info_;
 
-  enum class DebugRenderMode {
-    None = DEBUG_RENDER_MODE_NONE,
-    DepthReduceMips = DEBUG_RENDER_MODE_DEPTH_REDUCE_MIPS,
-    SecondaryView = DEBUG_RENDER_MODE_SECONDARY_VIEW,
-    MeshletColors = DEBUG_RENDER_MODE_MESHLET_COLORS,
-    TriangleColors = DEBUG_RENDER_MODE_TRIANGLE_COLORS,
-    InstanceColors = DEBUG_RENDER_MODE_INSTANCE_COLORS,
-    Albedo = DEBUG_RENDER_MODE_ALBEDO,
-    Count = DEBUG_RENDER_MODE_COUNT,
-  } debug_render_mode_{DebugRenderMode::None};
+  DebugRenderMode debug_render_mode_{DebugRenderMode::None};
 
   // TODO: this is instance mgr
   struct MeshletDrawStats {

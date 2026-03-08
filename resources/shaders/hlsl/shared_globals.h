@@ -3,14 +3,43 @@
 
 #include "shader_core.h"
 
-#define DEBUG_RENDER_MODE_NONE 0
-#define DEBUG_RENDER_MODE_DEPTH_REDUCE_MIPS 1
-#define DEBUG_RENDER_MODE_SECONDARY_VIEW 2
-#define DEBUG_RENDER_MODE_MESHLET_COLORS 3
-#define DEBUG_RENDER_MODE_TRIANGLE_COLORS 4
-#define DEBUG_RENDER_MODE_INSTANCE_COLORS 5
-#define DEBUG_RENDER_MODE_ALBEDO 6
-#define DEBUG_RENDER_MODE_COUNT 7
+#define DEBUG_RENDER_MODE_LIST(X)                             \
+  X(None, DEBUG_RENDER_MODE_NONE, 0u)                         \
+  X(DepthReduceMips, DEBUG_RENDER_MODE_DEPTH_REDUCE_MIPS, 1u) \
+  X(SecondaryView, DEBUG_RENDER_MODE_SECONDARY_VIEW, 2u)      \
+  X(MeshletColors, DEBUG_RENDER_MODE_MESHLET_COLORS, 3u)      \
+  X(TriangleColors, DEBUG_RENDER_MODE_TRIANGLE_COLORS, 4u)    \
+  X(InstanceColors, DEBUG_RENDER_MODE_INSTANCE_COLORS, 5u)    \
+  X(Albedo, DEBUG_RENDER_MODE_ALBEDO, 6u)                     \
+  X(Count, DEBUG_RENDER_MODE_COUNT, 7u)
+#if defined(__cplusplus)
+
+enum class DebugRenderMode : uint32_t {
+#define DEBUG_RENDER_MODE_ENUM(name, define_name, value) name = (value),
+  DEBUG_RENDER_MODE_LIST(DEBUG_RENDER_MODE_ENUM)
+#undef DEBUG_RENDER_MODE_ENUM
+};
+
+inline const char* to_string(DebugRenderMode mode) {
+#define DEBUG_RENDER_MODE_CASE(name, define_name, value) \
+  case DebugRenderMode::name:                            \
+    return #name;
+  switch (mode) {
+    DEBUG_RENDER_MODE_LIST(DEBUG_RENDER_MODE_CASE);
+    default:
+      return "";
+  }
+}
+#endif
+
+#ifdef __HLSL__
+#define DEBUG_RENDER_MODE_CONST(name, define_name, value) static const uint define_name = value;
+#else
+#define DEBUG_RENDER_MODE_CONST(name, define_name, value) constexpr uint32_t define_name = value;
+#endif
+DEBUG_RENDER_MODE_LIST(DEBUG_RENDER_MODE_CONST)
+#undef DEBUG_RENDER_MODE_CONST
+#undef DEBUG_RENDER_MODE_LIST
 
 struct GlobalData {
   uint render_mode;
