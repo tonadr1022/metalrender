@@ -117,7 +117,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_verbose_ = i++ == -2;
+  rg_verbose_ = i++ == 2;
   device_->acquire_next_swapchain_image(swapchain_);
   rg_.bake(window_->get_window_size(), rg_verbose_);
   static std::vector<rhi::CmdEncoder*> wait_for_encoders;
@@ -177,7 +177,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       });
     }
   }
-  RenderViewId view_ids[] = {main_render_view_id_, shadow_map_render_views_[0]};
+  std::array<RenderViewId, 2> view_ids = {main_render_view_id_, shadow_map_render_views_[0]};
 
   if (mesh_shaders_enabled_) {
     if (!culling_paused_) {
@@ -235,42 +235,42 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     }
 
     prep_meshlets_pass.set_ex([this, task_cmd_buf_rg_handles_all_views,
-                               out_draw_count_buf_rg_handles](rhi::CmdEncoder* enc) {
+                               out_draw_count_buf_rg_handles, view_ids](rhi::CmdEncoder* enc) {
       if (!static_instance_mgr_.has_draws()) {
         return;
       }
       enc->bind_pipeline(draw_cull_pso_);
       if (!culling_paused_) {
-        for (const auto& task_cmd_buf_rg_handles : task_cmd_buf_rg_handles_all_views) {
+        for (size_t i = 0; i < out_draw_count_buf_rg_handles.size(); i++) {
+          const auto view_id = view_ids[i];
+          const auto& task_cmd_buf_rg_handles = task_cmd_buf_rg_handles_all_views[i];
           auto task_cmd_buf_opaque_handle =
               rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Opaque]);
           auto task_cmd_buf_alpha_test_handle =
               rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Mask]);
-          for (size_t i = 0; i < out_draw_count_buf_rg_handles.size(); i++) {
-            auto out_draw_count_buf_rg_handle = out_draw_count_buf_rg_handles[i];
-            const auto& render_view_data = render_views_[i];
-            DrawCullPC pc{
-                .view_data_buf_idx = render_view_data.data_buf_info.idx,
-                .view_data_buf_offset_bytes = render_view_data.data_buf_info.offset_bytes,
-                .cull_data_idx = render_view_data.cull_data_buf_info.idx,
-                .cull_data_offset_bytes = render_view_data.cull_data_buf_info.offset_bytes,
-                .task_cmd_buf_idx_opaque =
-                    device_->get_buf(task_cmd_buf_opaque_handle)->bindless_idx(),
-                .task_cmd_buf_alpha_test_idx =
-                    device_->get_buf(task_cmd_buf_alpha_test_handle)->bindless_idx(),
-                .draw_cnt_buf_idx =
-                    device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx(),
-                .instance_data_buf_idx =
-                    device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
-                .materials_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
-                .mesh_data_buf_idx = static_draw_batch_.mesh_buf.get_buffer()->bindless_idx(),
-                .max_draws = static_instance_mgr_.stats().max_instance_data_count,
-                .culling_enabled = culling_enabled_,
-            };
-            enc->push_constants(&pc, sizeof(pc));
-            enc->dispatch_compute(glm::uvec3{align_divide_up(pc.max_draws, 64ull), 1, 1},
-                                  glm::uvec3{64, 1, 1});
-          }
+          auto out_draw_count_buf_rg_handle = out_draw_count_buf_rg_handles[i];
+          const auto& render_view_data = get_render_view(view_id);
+          DrawCullPC pc{
+              .view_data_buf_idx = render_view_data.data_buf_info.idx,
+              .view_data_buf_offset_bytes = render_view_data.data_buf_info.offset_bytes,
+              .cull_data_idx = render_view_data.cull_data_buf_info.idx,
+              .cull_data_offset_bytes = render_view_data.cull_data_buf_info.offset_bytes,
+              .task_cmd_buf_idx_opaque =
+                  device_->get_buf(task_cmd_buf_opaque_handle)->bindless_idx(),
+              .task_cmd_buf_alpha_test_idx =
+                  device_->get_buf(task_cmd_buf_alpha_test_handle)->bindless_idx(),
+              .draw_cnt_buf_idx =
+                  device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx(),
+              .instance_data_buf_idx =
+                  device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
+              .materials_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
+              .mesh_data_buf_idx = static_draw_batch_.mesh_buf.get_buffer()->bindless_idx(),
+              .max_draws = static_instance_mgr_.stats().max_instance_data_count,
+              .culling_enabled = culling_enabled_,
+          };
+          enc->push_constants(&pc, sizeof(pc));
+          enc->dispatch_compute(glm::uvec3{align_divide_up(pc.max_draws, 64ull), 1, 1},
+                                glm::uvec3{64, 1, 1});
         }
       }
     });
@@ -318,52 +318,51 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     });
   }
 
-  // {
-  //   // shadow pass
-  //   auto secondary_view_id = shadow_map_render_views_[0];
-  //   auto& p = rg_.add_graphics_pass("shadow_view_0_draw_to_texture");
-  //   auto depth_tex_name = get_depth_tex_name(secondary_view_id, 0);
-  //   auto& render_view = get_render_view(secondary_view_id);
-  //   render_view.depth_tex_name = depth_tex_name;
-  //   auto secondary_depth =
-  //       p.w_depth_output(depth_tex_name, {.format = rhi::TextureFormat::D32float});
-  //   p.set_ex([this, secondary_view_id, secondary_depth](rhi::CmdEncoder* enc) {
-  //     if (!static_instance_mgr_.has_draws()) {
-  //       return;
-  //     }
-  //     ZoneScopedN("Execute shadow view debug pass");
-  //
-  //     auto depth_handle = rg_.get_att_img(secondary_depth);
-  //     enc->begin_rendering({
-  //         RenderAttInfo::depth_stencil_att(depth_handle, rhi::LoadOp::Clear,
-  //                                          {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
-  //     });
-  //     enc->set_depth_stencil_state(reverse_z_ ? rhi::CompareOp::Greater : rhi::CompareOp::Less,
-  //                                  true);
-  //     enc->set_wind_order(rhi::WindOrder::CounterClockwise);
-  //     enc->set_cull_mode(rhi::CullMode::Back);
-  //     enc->set_viewport({0, 0}, device_->get_tex(depth_handle)->desc().dims);
-  //     enc->bind_pipeline(csm_no_frag_pso_);
-  //     auto& view_data_buf_info = get_render_view(secondary_view_id).data_buf_info;
-  //     BasicIndirectPC pc{
-  //         .view_data_buf_idx = view_data_buf_info.idx,
-  //         .view_data_buf_offset = view_data_buf_info.offset_bytes,
-  //         .vert_buf_idx = static_draw_batch_.vertex_buf.get_buffer()->bindless_idx(),
-  //         .instance_data_buf_idx =
-  //             device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
-  //         .mat_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
-  //     };
-  //     enc->push_constants(&pc, sizeof(pc));
-  //     for (auto& cmd : static_instance_mgr_.cpu_draw_cmds()) {
-  //       enc->draw_indexed_primitives(
-  //           rhi::PrimitiveTopology::TriangleList,
-  //           static_draw_batch_.index_buf.get_buffer_handle(), cmd.first_index *
-  //           sizeof(DefaultIndexT), cmd.index_count, 1, cmd.vertex_offset / sizeof(DefaultVertex),
-  //           cmd.first_instance, rhi::IndexType::Uint32);
-  //     }
-  //     enc->end_rendering();
-  //   });
-  // }
+  {
+    // shadow pass
+    auto secondary_view_id = shadow_map_render_views_[0];
+    auto& p = rg_.add_graphics_pass("shadow_view_0_draw_to_texture");
+    auto depth_tex_name = get_depth_tex_name(secondary_view_id, 0);
+    auto& render_view = get_render_view(secondary_view_id);
+    render_view.depth_tex_name = depth_tex_name;
+    auto secondary_depth =
+        p.w_depth_output(depth_tex_name, {.format = rhi::TextureFormat::D32float});
+    p.set_ex([this, secondary_view_id, secondary_depth](rhi::CmdEncoder* enc) {
+      if (!static_instance_mgr_.has_draws()) {
+        return;
+      }
+      ZoneScopedN("Execute shadow view debug pass");
+
+      auto depth_handle = rg_.get_att_img(secondary_depth);
+      enc->begin_rendering({
+          RenderAttInfo::depth_stencil_att(depth_handle, rhi::LoadOp::Clear,
+                                           {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
+      });
+      enc->set_depth_stencil_state(reverse_z_ ? rhi::CompareOp::Greater : rhi::CompareOp::Less,
+                                   true);
+      enc->set_wind_order(rhi::WindOrder::CounterClockwise);
+      enc->set_cull_mode(rhi::CullMode::Back);
+      enc->set_viewport({0, 0}, device_->get_tex(depth_handle)->desc().dims);
+      enc->bind_pipeline(csm_no_frag_pso_);
+      auto& view_data_buf_info = get_render_view(secondary_view_id).data_buf_info;
+      BasicIndirectPC pc{
+          .view_data_buf_idx = view_data_buf_info.idx,
+          .view_data_buf_offset = view_data_buf_info.offset_bytes,
+          .vert_buf_idx = static_draw_batch_.vertex_buf.get_buffer()->bindless_idx(),
+          .instance_data_buf_idx =
+              device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
+          .mat_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
+      };
+      enc->push_constants(&pc, sizeof(pc));
+      for (auto& cmd : static_instance_mgr_.cpu_draw_cmds()) {
+        enc->draw_indexed_primitives(
+            rhi::PrimitiveTopology::TriangleList, static_draw_batch_.index_buf.get_buffer_handle(),
+            cmd.first_index * sizeof(DefaultIndexT), cmd.index_count, 1,
+            cmd.vertex_offset / sizeof(DefaultVertex), cmd.first_instance, rhi::IndexType::Uint32);
+      }
+      enc->end_rendering();
+    });
+  }
 
   const char* last_gbuffer_a_name = "gbuffer_a";
   const char* last_gbuffer_b_name = "gbuffer_b";
@@ -554,7 +553,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
   if (meshlet_occlusion_culling_enabled) {
     for (auto view_id : view_ids) {
-      if ((int)view_id > 0) continue;
       const auto& render_view = get_render_view(view_id);
       auto* dp_tex = device_->get_tex(render_view.depth_pyramid_tex);
       auto dp_dims = glm::uvec2{dp_tex->desc().dims};
