@@ -336,8 +336,10 @@ class MemeRenderer123 {
   rhi::QueryPoolHandleHolder query_pools_[k_max_frames_in_flight];
   rhi::QueryPoolHandle get_query_pool() { return query_pools_[curr_frame_idx_].handle; }
   constexpr static int k_query_count = 2;
-  rhi::BufferHandleHolder out_counts_buf_[k_max_frames_in_flight];
-  rhi::BufferHandleHolder out_counts_buf_readback_[k_max_frames_in_flight];
+
+  // out_counts_buf_[frame_in_flight][view_id]
+  std::vector<std::vector<rhi::BufferHandleHolder>> out_counts_buf_;
+  std::vector<std::vector<rhi::BufferHandleHolder>> out_counts_buf_readback_;
   rhi::BufferHandleHolder query_resolve_bufs_[k_max_frames_in_flight];
   rhi::Swapchain* swapchain_{};
 

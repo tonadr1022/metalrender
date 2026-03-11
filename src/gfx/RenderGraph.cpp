@@ -685,6 +685,10 @@ void RenderGraph::init(rhi::Device* device) {
 
 RGResourceHandle RenderGraph::add_tex_usage(const std::string& name, const AttachmentInfo& att_info,
                                             RGAccess, RGPass& pass) {
+  if (resource_name_to_handle_.contains(name)) {
+    LERROR("Resource with name '{}' already exists", name);
+    ASSERT(0);
+  }
   ASSERT(!resource_name_to_handle_.contains(name));
   ASSERT((att_info.is_swapchain_tex || att_info.format != rhi::TextureFormat::Undefined));
   resource_use_name_to_writer_pass_idx_.emplace(name, pass.get_idx());
