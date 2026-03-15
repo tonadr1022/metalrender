@@ -679,7 +679,10 @@ RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
         rec.debug_name = intern_name(std::string(debug_name));
       }
     }
-    return it->second;
+    const auto& rec = resources_[it->second.idx];
+    return RGResourceId{.idx = it->second.idx,
+                        .type = RGResourceType::ExternalTexture,
+                        .version = rec.latest_version};
   }
   auto idx = external_textures_.size();
   external_textures_.emplace_back(tex_handle);
@@ -702,7 +705,10 @@ RGResourceId RenderGraph::import_external_buffer(rhi::BufferHandle buf_handle,
         rec.debug_name = intern_name(std::string(debug_name));
       }
     }
-    return it->second;
+    const auto& rec = resources_[it->second.idx];
+    return RGResourceId{.idx = it->second.idx,
+                        .type = RGResourceType::ExternalBuffer,
+                        .version = rec.latest_version};
   }
   auto idx = external_buffers_.size();
   external_buffers_.emplace_back(buf_handle);

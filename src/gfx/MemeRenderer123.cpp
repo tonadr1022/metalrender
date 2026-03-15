@@ -182,25 +182,26 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   for (auto& shadow_map_render_view : shadow_map_render_views_) {
     view_ids.emplace_back(shadow_map_render_view);
   }
-  gch::small_vector<RGResourceId, 10> out_draw_count_ids;
-  gch::small_vector<std::array<RGResourceId, AlphaMaskType::Count>, 10> task_cmd_buf_ids_all_views;
+  std::vector<RGResourceId> out_draw_count_ids(render_views_.size());
+  std::vector<std::array<RGResourceId, AlphaMaskType::Count>> task_cmd_buf_ids_all_views(
+      render_views_.size());
 
   if (mesh_shaders_enabled_) {
-    out_draw_count_ids.reserve(view_ids.size());
     for (auto view_id : view_ids) {
-      (void)view_id;
-      out_draw_count_ids.push_back(rg_.create_buffer(
-          {.size = sizeof(uint32_t) * 3 * AlphaMaskType::Count}, "out_draw_count_buf"));
+      out_draw_count_ids[(int)view_id] = rg_.create_buffer(
+          {.size = sizeof(uint32_t) * 3 * AlphaMaskType::Count}, "out_draw_count_buf");
     }
     if (!culling_paused_) {
       auto& clear_bufs_pass = rg_.add_compute_pass("clear_bufs");
-      for (auto id : out_draw_count_ids) {
-        clear_bufs_pass.write_buf(id, rhi::PipelineStage::ComputeShader);
+      for (auto view_id : view_ids) {
+        clear_bufs_pass.write_buf(out_draw_count_ids[(int)view_id],
+                                  rhi::PipelineStage::ComputeShader);
       }
 
-      clear_bufs_pass.set_ex([this, out_draw_count_ids](rhi::CmdEncoder* enc) {
+      clear_bufs_pass.set_ex([this, out_draw_count_ids, view_ids](rhi::CmdEncoder* enc) {
         enc->bind_pipeline(reset_counts_buf_pso_);
-        for (auto id : out_draw_count_ids) {
+        for (auto view_id : view_ids) {
+          auto id = out_draw_count_ids[(int)view_id];
           TestClearBufPC pc{
               .buf_idx = device_->get_buf(rg_.get_buf(id))->bindless_idx(),
           };
@@ -216,7 +217,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       prep_meshlets_pass.read_buf(instance_data_id, rhi::PipelineStage::ComputeShader);
     }
 
-    for (auto& out_draw_count_id : out_draw_count_ids) {
+    for (auto view_id : view_ids) {
+      auto& out_draw_count_id = out_draw_count_ids[(int)view_id];
       if (!culling_paused_) {
         out_draw_count_id =
             prep_meshlets_pass.rw_buf(out_draw_count_id, rhi::PipelineStage::ComputeShader);
@@ -224,8 +226,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         prep_meshlets_pass.write_buf(out_draw_count_id, rhi::PipelineStage::ComputeShader);
       }
     }
-    for (size_t view_idx = 0; view_idx < view_ids.size(); view_idx++) {
-      auto& view_handles = task_cmd_buf_ids_all_views.emplace_back();
+    for (auto view_id : view_ids) {
+      auto& view_handles = task_cmd_buf_ids_all_views[(int)view_id];
       for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
         if (static_draw_batch_.get_stats().vertex_count > 0) {
           view_handles[alpha_mask_type] = rg_.create_buffer(
@@ -244,14 +246,13 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       }
       enc->bind_pipeline(draw_cull_pso_);
       if (!culling_paused_) {
-        for (size_t i = 0; i < out_draw_count_ids.size(); i++) {
-          const auto view_id = view_ids[i];
-          const auto& task_cmd_buf_rg_handles = task_cmd_buf_ids_all_views[i];
+        for (auto view_id : view_ids) {
+          const auto& task_cmd_buf_rg_handles = task_cmd_buf_ids_all_views[(int)view_id];
           auto task_cmd_buf_opaque_handle =
               rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Opaque]);
           auto task_cmd_buf_alpha_test_handle =
               rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Mask]);
-          auto out_draw_count_buf_rg_handle = out_draw_count_ids[i];
+          auto out_draw_count_buf_rg_handle = out_draw_count_ids[(int)view_id];
           const auto& render_view_data = get_render_view(view_id);
           DrawCullPC pc{
               .view_data_buf_idx = render_view_data.data_buf_info.idx,
