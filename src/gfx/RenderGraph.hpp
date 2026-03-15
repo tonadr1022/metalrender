@@ -146,6 +146,7 @@ class RenderGraph {
     Pass(std::string name, RenderGraph* rg, uint32_t pass_i, RGPassType type);
 
     RGResourceId sample_tex(RGResourceId id);
+    RGResourceId sample_tex(RGResourceId id, rhi::PipelineStage stage);
     RGResourceId read_tex(RGResourceId id, rhi::PipelineStage stage);
     RGResourceId write_tex(RGResourceId id, rhi::PipelineStage stage);
     RGResourceId write_color_output(RGResourceId id);
@@ -300,6 +301,9 @@ class RenderGraph {
 
   std::unordered_map<std::string, NameId> name_to_id_;
   std::vector<std::string> id_to_name_;
+
+  std::unordered_map<uint64_t, RGResourceId> external_tex_handle_to_id_;
+  std::unordered_map<uint64_t, RGResourceId> external_buf_handle_to_id_;
 
   struct ResourceRecord {
     RGResourceType type{};

@@ -296,6 +296,8 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
   external_read_ids_.clear();
   external_buffers_.clear();
   external_textures_.clear();
+  external_tex_handle_to_id_.clear();
+  external_buf_handle_to_id_.clear();
   curr_submitted_swapchain_textures_.clear();
 }
 
@@ -669,24 +671,48 @@ RGResourceId RenderGraph::create_buffer(const BufferInfo& buf_info, std::string_
 
 RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
                                                   std::string_view debug_name) {
+  const auto key = tex_handle.to64();
+  if (auto it = external_tex_handle_to_id_.find(key); it != external_tex_handle_to_id_.end()) {
+    if (!debug_name.empty()) {
+      auto& rec = resources_[it->second.idx];
+      if (rec.debug_name == kInvalidNameId) {
+        rec.debug_name = intern_name(std::string(debug_name));
+      }
+    }
+    return it->second;
+  }
   auto idx = external_textures_.size();
   external_textures_.emplace_back(tex_handle);
   auto record = create_resource_record(RGResourceType::ExternalTexture, idx, debug_name);
   resources_.push_back(record);
-  return RGResourceId{.idx = static_cast<uint32_t>(resources_.size() - 1),
-                      .type = RGResourceType::ExternalTexture,
-                      .version = 0};
+  RGResourceId id{.idx = static_cast<uint32_t>(resources_.size() - 1),
+                  .type = RGResourceType::ExternalTexture,
+                  .version = 0};
+  external_tex_handle_to_id_.emplace(key, id);
+  return id;
 }
 
 RGResourceId RenderGraph::import_external_buffer(rhi::BufferHandle buf_handle,
                                                  std::string_view debug_name) {
+  const auto key = buf_handle.to64();
+  if (auto it = external_buf_handle_to_id_.find(key); it != external_buf_handle_to_id_.end()) {
+    if (!debug_name.empty()) {
+      auto& rec = resources_[it->second.idx];
+      if (rec.debug_name == kInvalidNameId) {
+        rec.debug_name = intern_name(std::string(debug_name));
+      }
+    }
+    return it->second;
+  }
   auto idx = external_buffers_.size();
   external_buffers_.emplace_back(buf_handle);
   auto record = create_resource_record(RGResourceType::ExternalBuffer, idx, debug_name);
   resources_.push_back(record);
-  return RGResourceId{.idx = static_cast<uint32_t>(resources_.size() - 1),
-                      .type = RGResourceType::ExternalBuffer,
-                      .version = 0};
+  RGResourceId id{.idx = static_cast<uint32_t>(resources_.size() - 1),
+                  .type = RGResourceType::ExternalBuffer,
+                  .version = 0};
+  external_buf_handle_to_id_.emplace(key, id);
+  return id;
 }
 
 AttachmentInfo* RenderGraph::get_tex_att_info(RGResourceId id) {
@@ -795,6 +821,10 @@ RGResourceId RGPass::sample_tex(RGResourceId id) {
   } else {
     ASSERT(0);
   }
+  return sample_tex(id, stage);
+}
+
+RGResourceId RGPass::sample_tex(RGResourceId id, rhi::PipelineStage stage) {
   add_read_usage(id, stage, rhi::AccessFlags::ShaderSampledRead);
   return id;
 }

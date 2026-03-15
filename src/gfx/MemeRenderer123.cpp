@@ -358,7 +358,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       out_draw_count_buf_rg_handle =
           p.read_buf(out_draw_count_ids[(int)view_id], rhi::PipelineStage::TaskShader);
       if (late) {
-        p.sample_tex(final_depth_pyramid_ids[(int)view_id]);
+        p.sample_tex(final_depth_pyramid_ids[(int)view_id], rhi::PipelineStage::TaskShader);
         meshlet_vis_ids[(int)view_id] =
             p.rw_buf(meshlet_vis_ids[(int)view_id], rhi::PipelineStage::TaskShader);
         meshlet_vis_buf_rg_handle = meshlet_vis_ids[(int)view_id];
@@ -482,7 +482,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       out_draw_count_buf_rg_handle =
           p.read_buf(out_draw_count_ids[(int)view_id], rhi::PipelineStage::TaskShader);
       if (late) {
-        p.sample_tex(final_depth_pyramid_ids[(int)view_id]);
+        p.sample_tex(final_depth_pyramid_ids[(int)view_id], rhi::PipelineStage::TaskShader);
         meshlet_vis_ids[(int)view_id] =
             p.rw_buf(meshlet_vis_ids[(int)view_id], rhi::PipelineStage::TaskShader);
         meshlet_vis_buf_rg_handle = meshlet_vis_ids[(int)view_id];
