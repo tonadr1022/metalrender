@@ -78,9 +78,11 @@ void TestRenderer::recreate_resources_on_swapchain_resize() {
 }
 
 void TestRenderer::add_render_graph_passes() {
+  auto test_full_screen_tex_id =
+      rg_.import_external_texture(test_full_screen_tex_.handle, "test_full_screen_tex");
   {
     auto& p = rg_.add_compute_pass("compute_clear_pass");
-    p.w_external_tex("test_full_screen_tex_", test_full_screen_tex_.handle);
+    p.write_tex(test_full_screen_tex_id, rhi::PipelineStage::ComputeShader);
     p.set_ex([this](rhi::CmdEncoder* enc) {
       auto tex_handle = test_full_screen_tex_.handle;
 
@@ -99,7 +101,7 @@ void TestRenderer::add_render_graph_passes() {
   }
   {
     auto& p = rg_.add_graphics_pass("fullscreen");
-    p.r_external_tex("test_full_screen_tex_", rhi::PipelineStage::FragmentShader);
+    p.sample_tex(test_full_screen_tex_id);
     p.w_swapchain_tex(swapchain_);
     p.set_ex([this](rhi::CmdEncoder* enc) {
       glm::vec4 clear_color{0.5, 0.5, 0, 1};

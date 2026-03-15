@@ -1,5 +1,6 @@
 # TODOs
 
+- maybe use one depth pyramid tex instead of many
 - CURRENT WORK: in progress multi-view meshlet rendering. Right now the CSM shadow pass uses vertex shader and doesn't write to the depth buffer that is read from the corresponding render view's depth pyramid texture. Instead of a separrate vertex shader pass, abstract the mesh shader drawing to handle the CSM geometry pass.
 
 - instead of copying entire instance data buffer and doing cursed things in update_model_instance_transforms(), do it better.

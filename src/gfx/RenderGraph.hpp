@@ -2,6 +2,7 @@
 
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -85,34 +86,27 @@ struct RGResourceHandle {
   }
 };
 
-enum RGAccess : uint16_t {
-  None = 1ULL << 0,
-  ColorWrite = 1ULL << 1,
-  ColorRead = 1ULL << 2,
-  ColorRW = ColorRead | ColorWrite,
-  DepthStencilRead = 1ULL << 3,
-  DepthStencilWrite = 1ULL << 4,
-  DepthStencilRW = DepthStencilRead | DepthStencilWrite,
-  VertexRead = 1ULL << 5,
-  IndexRead = 1ULL << 6,
-  IndirectRead = 1ULL << 7,
-  ComputeRead = 1ULL << 8,
-  ComputeWrite = 1ULL << 9,
-  ComputeRW = ComputeRead | ComputeWrite,
-  TransferRead = 1ULL << 10,
-  TransferWrite = 1ULL << 11,
-  FragmentStorageRead = 1ULL << 12,
-  ComputeSample = 1ULL << 13,
-  FragmentSample = 1ULL << 14,
-  ShaderRead = 1ULL << 15,
-  AnyRead = ColorRead | DepthStencilRead | VertexRead | IndexRead | IndirectRead | ComputeRead |
-            TransferRead | FragmentSample | FragmentStorageRead | ComputeSample | ShaderRead,
-  AnyWrite = ColorWrite | DepthStencilWrite | ComputeWrite | TransferWrite,
+struct RGResourceId {
+  uint32_t idx{UINT32_MAX};
+  RGResourceType type{};
+  uint32_t version{};
+
+  [[nodiscard]] bool is_valid() const { return idx != UINT32_MAX; }
+};
+
+inline bool operator==(const RGResourceId& lhs, const RGResourceId& rhs) {
+  return lhs.idx == rhs.idx && lhs.type == rhs.type && lhs.version == rhs.version;
+}
+
+struct RGResourceIdHash {
+  size_t operator()(const RGResourceId& id) const noexcept {
+    auto h = std::make_tuple(id.idx, static_cast<uint32_t>(id.type), id.version);
+    return util::hash::tuple_hash<decltype(h)>{}(h);
+  }
 };
 
 struct ResourceAndUsage {
-  std::string name;
-  RGResourceHandle handle;
+  RGResourceId id;
   rhi::AccessFlags access;
   rhi::PipelineStage stage;
   uint32_t pass_rw_read_idx{UINT32_MAX};
@@ -151,40 +145,29 @@ class RenderGraph {
     Pass() = default;
     Pass(std::string name, RenderGraph* rg, uint32_t pass_i, RGPassType type);
 
-    RGResourceHandle sample_tex(const std::string& name);
-    void sample_external_tex(std::string name);
-    void sample_external_tex(std::string name, rhi::PipelineStage stage);
-    void r_external_tex(std::string name);
-    void r_external_tex(std::string name, rhi::PipelineStage stage);
-    void w_external_tex(const std::string& name, rhi::TextureHandle tex_handle);
-    void w_external_tex_color_output(const std::string& name, rhi::TextureHandle tex_handle);
+    RGResourceId sample_tex(RGResourceId id);
+    RGResourceId read_tex(RGResourceId id, rhi::PipelineStage stage);
+    RGResourceId write_tex(RGResourceId id, rhi::PipelineStage stage);
+    RGResourceId write_color_output(RGResourceId id);
+    RGResourceId write_depth_output(RGResourceId id);
+    RGResourceId rw_tex(RGResourceId input, rhi::PipelineStage stage, rhi::AccessFlags access);
+    RGResourceId rw_color_output(RGResourceId input);
+    RGResourceId rw_depth_output(RGResourceId input);
     void w_swapchain_tex(rhi::Swapchain* swapchain);
-    void w_external_buf(const std::string& name, rhi::BufferHandle buf);
-    void w_external_buf(const std::string& name, rhi::BufferHandle buf, rhi::PipelineStage stage);
-    RGResourceHandle r_tex(const std::string& name);
-    RGResourceHandle w_tex(const std::string& name);
-    RGResourceHandle w_color_output(const std::string& name, const AttachmentInfo& att_info);
-    RGResourceHandle w_depth_output(const std::string& name, const AttachmentInfo& att_info);
-    RGResourceHandle rw_color_output(const std::string& name, const std::string& input_name);
-    RGResourceHandle rw_depth_output(const std::string& name, const std::string& input_name);
-    void r_external_buf(std::string name, rhi::PipelineStage stage);
-    void r_external_buf(std::string name);
-    void rw_external_buf(std::string name, const std::string& input_name);
-    void rw_external_buf(std::string name, const std::string& input_name, rhi::PipelineStage stage);
+    RGResourceId read_buf(RGResourceId id, rhi::PipelineStage stage);
+    RGResourceId write_buf(RGResourceId id, rhi::PipelineStage stage);
+    RGResourceId rw_buf(RGResourceId input, rhi::PipelineStage stage);
 
-    RGResourceHandle r_buf(const std::string& name, rhi::PipelineStage stage);
-    /// @param defer_reuse defer reuse by one frame
-    RGResourceHandle w_buf(const std::string& name, rhi::PipelineStage stage, size_t size,
-                           bool defer_reuse = false);
-    RGResourceHandle rw_buf(const std::string& name, rhi::PipelineStage stage,
-                            const std::string& input_name);
+    RGResourceId import_external_texture(rhi::TextureHandle tex_handle,
+                                         std::string_view debug_name = {});
+    RGResourceId import_external_buffer(rhi::BufferHandle buf_handle,
+                                        std::string_view debug_name = {});
 
     struct NameAndAccess {
-      NameId name;
+      RGResourceId id;
       rhi::PipelineStage stage;
       rhi::AccessFlags acc;
       RGResourceType type;
-      NameId rw_read_name_id{RenderGraph::kInvalidNameId};
       bool is_swapchain_write{false};
     };
 
@@ -212,11 +195,6 @@ class RenderGraph {
     // return resource_usages_;
     // }
 
-    NameId get_resource_read_name_id(const NameAndAccess& resource) const {
-      ASSERT(resource.rw_read_name_id != RenderGraph::kInvalidNameId);
-      return resource.rw_read_name_id;
-    }
-
     [[nodiscard]] uint32_t get_idx() const { return pass_i_; }
     void set_ex(auto&& f) { execute_fn_ = f; }
     [[nodiscard]] const std::string& get_name() const { return name_; }
@@ -224,9 +202,9 @@ class RenderGraph {
     [[nodiscard]] RGPassType type() const { return type_; }
 
    private:
-    RGResourceHandle read_tex(const std::string& name, RGAccess access);
-    RGResourceHandle rw_tex(const std::string& name, const std::string& input_name,
-                            rhi::PipelineStage stage, rhi::AccessFlags access);
+    void add_read_usage(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access);
+    void add_write_usage(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access,
+                         bool is_swapchain_write = false);
     std::vector<ResourceAndUsage> resource_usages_;
     ExecuteFn execute_fn_;
     RenderGraph* rg_;
@@ -239,32 +217,34 @@ class RenderGraph {
   Pass& add_transfer_pass(const std::string& name) { return add_pass(name, RGPassType::Transfer); }
   Pass& add_graphics_pass(const std::string& name) { return add_pass(name, RGPassType::Graphics); }
 
+  RGResourceId create_texture(const AttachmentInfo& att_info, std::string_view debug_name = {});
+  RGResourceId create_buffer(const BufferInfo& buf_info, std::string_view debug_name = {});
+  RGResourceId import_external_texture(rhi::TextureHandle tex_handle,
+                                       std::string_view debug_name = {});
+  RGResourceId import_external_buffer(rhi::BufferHandle buf_handle,
+                                      std::string_view debug_name = {});
+
+  rhi::TextureHandle get_att_img(RGResourceId tex_id);
   rhi::TextureHandle get_att_img(RGResourceHandle tex_handle);
+  rhi::BufferHandle get_buf(RGResourceId buf_id);
   rhi::BufferHandle get_buf(RGResourceHandle buf_handle);
 
  private:
   Pass& add_pass(const std::string& name, RGPassType type);
 
   // begin usually called by Pass
-  RGResourceHandle get_resource(NameId name, RGResourceType type);
-  RGResourceHandle add_tex_usage(NameId name, const AttachmentInfo& att_info,
-                                 RGAccess access, Pass& pass);
-  RGResourceHandle add_buf_usage(NameId name, const BufferInfo& buf_info, Pass& pass);
-  void add_external_write_usage(NameId name, rhi::TextureHandle handle, Pass& pass);
-  void add_external_write_usage(NameId name, rhi::BufferHandle handle, Pass& pass);
-
-  // void add_internal_rw_tex_usage(const std::string& name, const std::string& input_name,
-  //                                RGResourceType type, Pass& pass);
-  void add_internal_rw_usage(NameId name, RGResourceHandle handle, Pass& pass);
-
-  void add_external_rw_buffer_usage(NameId name, NameId input_name, Pass& pass);
-  void add_external_read_name(NameId name) { external_read_names_.insert(name); }
+  void register_write(RGResourceId id, Pass& pass);
+  RGResourceId next_version(RGResourceId id);
+  void add_external_read_id(RGResourceId id) { external_read_ids_.insert(id); }
   // end usually called by Pass
 
   NameId intern_name(const std::string& name);
   const std::string& debug_name(NameId name) const;
+  std::string debug_name(RGResourceId id) const;
 
+  AttachmentInfo* get_tex_att_info(RGResourceId id);
   AttachmentInfo* get_tex_att_info(RGResourceHandle handle);
+  RGResourceHandle get_physical_handle(RGResourceId id) const;
   rhi::BufferHandle get_external_buf(RGResourceHandle handle) {
     ASSERT(handle.type == RGResourceType::ExternalBuffer);
     return external_buffers_[handle.idx];
@@ -293,16 +273,14 @@ class RenderGraph {
     rhi::PipelineStage dst_stage;
     rhi::AccessFlags src_access;
     rhi::AccessFlags dst_access;
-    NameId debug_name{RenderGraph::kInvalidNameId};
+    RGResourceId debug_id{};
     bool is_swapchain_write{false};
   };
   std::vector<Pass> passes_;
   std::vector<std::vector<BarrierInfo>> pass_barrier_infos_;
   std::vector<std::unordered_set<uint32_t>> pass_dependencies_;
-  std::unordered_map<NameId, RGResourceHandle> resource_name_to_handle_;
-  std::unordered_map<uint64_t, RGResourceHandle> tex_handle_to_handle_;
-  std::unordered_map<NameId, uint32_t> resource_read_name_to_writer_pass_;
-  std::unordered_set<NameId> external_read_names_;
+  std::unordered_map<RGResourceId, uint32_t, RGResourceIdHash> resource_use_id_to_writer_pass_idx_;
+  std::unordered_set<RGResourceId, RGResourceIdHash> external_read_ids_;
   std::vector<rhi::TextureHandle> external_textures_;
   std::vector<rhi::BufferHandle> external_buffers_;
   std::vector<rhi::TextureHandle> curr_submitted_swapchain_textures_;
@@ -320,11 +298,18 @@ class RenderGraph {
   std::vector<uint32_t> sink_passes_;
   std::vector<uint32_t> pass_stack_;
 
-  std::unordered_map<NameId, uint32_t> external_name_to_handle_idx_;
-  std::unordered_map<NameId, uint32_t> resource_use_name_to_writer_pass_idx_;
-
   std::unordered_map<std::string, NameId> name_to_id_;
   std::vector<std::string> id_to_name_;
+
+  struct ResourceRecord {
+    RGResourceType type{};
+    uint32_t physical_idx{UINT32_MAX};
+    NameId debug_name{RenderGraph::kInvalidNameId};
+    uint32_t latest_version{};
+  };
+  std::vector<ResourceRecord> resources_;
+  ResourceRecord create_resource_record(RGResourceType type, uint32_t physical_idx,
+                                        std::string_view debug_name);
 
   // cache for intermediate calc data
   std::unordered_set<uint32_t> intermed_pass_visited_;

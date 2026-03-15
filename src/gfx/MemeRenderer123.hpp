@@ -210,7 +210,6 @@ class MemeRenderer123 {
     IdxOffset data_buf_info{};
     IdxOffset cull_data_buf_info{};
     TexAndViewHolder depth_pyramid_tex;
-    std::string depth_tex_name;
   };
 
   RenderView& get_render_view(RenderViewId view_id) {
@@ -220,34 +219,23 @@ class MemeRenderer123 {
 
   void clear_render_views() { render_views_.clear(); }
 
-  RenderViewId create_render_view() {
-    auto id = render_views_.size();
-    render_views_.push_back(RenderView{});
-    return static_cast<RenderViewId>(id);
-  }
+  RenderViewId create_render_view();
+  void destroy_render_view(RenderViewId view_id);
+  void make_depth_pyramid_tex(RenderViewId view_id, glm::uvec2 main_size);
+  std::vector<RenderViewId> free_render_view_ids_;
 
   enum AlphaMaskType { Opaque, Mask, Count };
+  // guaranteed to be densely packed
   std::vector<RenderView> render_views_;
   RenderViewId main_render_view_id_{RenderViewId::Invalid};
-  constexpr static uint32_t k_max_shadow_cascades = 4;
-  RenderViewId shadow_map_render_views_[k_max_shadow_cascades]{
-      RenderViewId::Invalid, RenderViewId::Invalid, RenderViewId::Invalid, RenderViewId::Invalid};
+  constexpr static uint32_t k_max_shadow_cascades = 1;
+  gch::small_vector<RenderViewId, k_max_shadow_cascades> shadow_map_render_views_;
   size_t shadow_cascade_count_{1};
+  bool shadows_enabled_{};
+  bool get_shadows_enabled() const { return shadows_enabled_; }
+  void on_shadows_enabled_change(bool shadows_enabled);
 
   RGPass* clear_bufs_pass_{};
-
-  std::string get_out_draw_cnt_buf_name(RenderViewId view_id, int iter) const {
-    return std::format("out_draw_count_buf__view{}_iter{}", (int)view_id, iter);
-  }
-  std::string get_depth_tex_name(RenderViewId view_id, int iter) const {
-    return std::format("depth_tex{}__view{}", iter, (int)view_id);
-  }
-  std::string get_task_cmd_buf_name(RenderViewId view_id, AlphaMaskType alpha_mask_type) const {
-    return std::format("task_cmd_buf__alpha{}_view{}", (int)alpha_mask_type, (int)view_id);
-  }
-  std::string get_meshlet_vis_buf_name(RenderViewId view_id, int iter) const {
-    return std::format("meshlet_vis_buf__view{}_iter{}", (int)view_id, iter);
-  }
 
   void set_cull_data_and_globals(const RenderArgs& args);
   GeometryBatch::Alloc upload_geometry(GeometryBatchType type,
