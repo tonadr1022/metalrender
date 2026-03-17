@@ -451,7 +451,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         if (meshlet_cone_culling_enabled_ && culling_enabled_) {
           pc.flags |= MESHLET_CONE_CULL_ENABLED_BIT;
         }
-        if (meshlet_occlusion_culling_enabled_ && culling_enabled_) {
+        if (meshlet_occlusion_culling_enabled_ && culling_enabled_ && view_id == main_render_view_id_) {
           pc.flags |= MESHLET_OCCLUSION_CULL_ENABLED_BIT;
         }
 
@@ -595,7 +595,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
         if (meshlet_cone_culling_enabled_ && culling_enabled_) {
           pc.flags |= MESHLET_CONE_CULL_ENABLED_BIT;
         }
-        if (meshlet_occlusion_culling_enabled_ && culling_enabled_) {
+        if (meshlet_occlusion_culling_enabled_ && culling_enabled_ && view_id == main_render_view_id_) {
           pc.flags |= MESHLET_OCCLUSION_CULL_ENABLED_BIT;
         }
 
@@ -658,6 +658,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
   if (meshlet_occlusion_culling_enabled) {
     for (auto view_id : view_ids) {
+      if (view_id != main_render_view_id_) continue;
       const auto& render_view = get_render_view(view_id);
       auto* dp_tex = device_->get_tex(render_view.depth_pyramid_tex);
       auto dp_dims = glm::uvec2{dp_tex->desc().dims};
@@ -717,9 +718,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   }
 
   if (meshlet_occlusion_culling_enabled) {
-    if (get_shadows_enabled()) {
-      add_csm_pass(true, "csm_pass_late", shadow_map_render_views_[0]);
-    }
     add_draw_pass(true, "draw_pass_late", main_render_view_id_);
   }
 
