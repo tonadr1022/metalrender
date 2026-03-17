@@ -231,7 +231,7 @@ class MemeRenderer123 {
   constexpr static uint32_t k_max_shadow_cascades = 1;
   gch::small_vector<RenderViewId, k_max_shadow_cascades> shadow_map_render_views_;
   size_t shadow_cascade_count_{1};
-  bool shadows_enabled_{};
+  bool shadows_enabled_{true};
   bool get_shadows_enabled() const { return shadows_enabled_; }
   void on_shadows_enabled_change(bool shadows_enabled);
 

@@ -29,46 +29,48 @@ struct DispatchMeshCmd {
   }
   MeshData mesh_data =
       bindless_buffers[mesh_data_buf_idx].Load<MeshData>(instance_data.mesh_id * sizeof(MeshData));
-  ViewData view_data =
-      bindless_buffers[view_data_buf_idx].Load<ViewData>(view_data_buf_offset_bytes);
-  CullData cull_data = bindless_buffers[cull_data_idx].Load<CullData>(cull_data_offset_bytes);
   M4Material material = bindless_buffers[materials_buf_idx].Load<M4Material>(instance_data.mat_id *
                                                                              sizeof(M4Material));
   bool alpha_test_enabled = (material.flags & M4MAT_FLAG_ALPHATEST) != 0;
-  uint task_cmd_buf_idx =
-      alpha_test_enabled ? task_cmd_buf_alpha_test_idx : task_cmd_buf_idx_opaque;
 
   uint task_groups = (mesh_data.meshlet_count + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
 
-  bool visible = true;
-  if (culling_enabled != 0) {
-    float3 world_center =
-        rotate_quat(instance_data.scale * mesh_data.center, instance_data.rotation) +
-        instance_data.translation;
-    float radius = mesh_data.radius * instance_data.scale;
-    float4 center = mul(view_data.view, float4(world_center, 1.0));
-    visible = visible && (-center.z + radius) > cull_data.z_near &&
-              (-center.z - radius) < cull_data.z_far;
-    visible = visible &&
-              (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
-    visible = visible &&
-              (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
-  }
+  for (uint v = 0; v < view_cull_setup_count; v++) {
+    ViewCullSetup view_setup = bindless_buffers[view_cull_setup_buf_idx].Load<ViewCullSetup>(view_cull_setup_buf_offset_bytes + v * sizeof(ViewCullSetup));
+    ViewData view_data = bindless_buffers[view_setup.view_data_buf_idx].Load<ViewData>(view_setup.view_data_buf_offset_bytes);
+    CullData cull_data = bindless_buffers[view_setup.cull_data_idx].Load<CullData>(view_setup.cull_data_offset_bytes);
+    uint task_cmd_buf_idx = alpha_test_enabled ? view_setup.task_cmd_buf_alpha_test_idx : view_setup.task_cmd_buf_idx_opaque;
 
-  if (visible) {
-    uint task_group_base_i;
-    RWByteAddressBuffer task_cmd_cnt_buf = bindless_rwbuffers[draw_cnt_buf_idx];
-    task_cmd_cnt_buf.InterlockedAdd(uint(alpha_test_enabled) * sizeof(DispatchMeshCmd), task_groups,
-                                    task_group_base_i);
+    bool visible = true;
+    if (culling_enabled != 0) {
+      float3 world_center =
+          rotate_quat(instance_data.scale * mesh_data.center, instance_data.rotation) +
+          instance_data.translation;
+      float radius = mesh_data.radius * instance_data.scale;
+      float4 center = mul(view_data.view, float4(world_center, 1.0));
+      visible = visible && (-center.z + radius) > cull_data.z_near &&
+                (-center.z - radius) < cull_data.z_far;
+      visible = visible &&
+                (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
+      visible = visible &&
+                (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
+    }
 
-    TaskCmd cmd;
-    for (uint task_group_i = 0; task_group_i < task_groups; task_group_i++) {
-      cmd.instance_id = dtid;
-      cmd.task_offset = mesh_data.meshlet_base + task_group_i * K_TASK_TG_SIZE;
-      cmd.group_base = task_group_i * K_TASK_TG_SIZE;
-      cmd.task_count = min(K_TASK_TG_SIZE, mesh_data.meshlet_count - task_group_i * K_TASK_TG_SIZE);
-      bindless_rwbuffers[task_cmd_buf_idx].Store<TaskCmd>(
-          (task_group_base_i + task_group_i) * sizeof(TaskCmd), cmd);
+    if (visible) {
+      uint task_group_base_i;
+      RWByteAddressBuffer task_cmd_cnt_buf = bindless_rwbuffers[view_setup.draw_cnt_buf_idx];
+      task_cmd_cnt_buf.InterlockedAdd(uint(alpha_test_enabled) * sizeof(DispatchMeshCmd), task_groups,
+                                      task_group_base_i);
+
+      TaskCmd cmd;
+      for (uint task_group_i = 0; task_group_i < task_groups; task_group_i++) {
+        cmd.instance_id = dtid;
+        cmd.task_offset = mesh_data.meshlet_base + task_group_i * K_TASK_TG_SIZE;
+        cmd.group_base = task_group_i * K_TASK_TG_SIZE;
+        cmd.task_count = min(K_TASK_TG_SIZE, mesh_data.meshlet_count - task_group_i * K_TASK_TG_SIZE);
+        bindless_rwbuffers[task_cmd_buf_idx].Store<TaskCmd>(
+            (task_group_base_i + task_group_i) * sizeof(TaskCmd), cmd);
+      }
     }
   }
 }

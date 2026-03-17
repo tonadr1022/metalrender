@@ -239,45 +239,60 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       }
     }
 
-    prep_meshlets_pass.set_ex([this, task_cmd_buf_ids_all_views, out_draw_count_ids,
-                               view_ids](rhi::CmdEncoder* enc) {
-      if (!static_instance_mgr_.has_draws()) {
-        return;
-      }
-      enc->bind_pipeline(draw_cull_pso_);
-      if (!culling_paused_) {
-        for (auto view_id : view_ids) {
-          const auto& task_cmd_buf_rg_handles = task_cmd_buf_ids_all_views[(int)view_id];
-          auto task_cmd_buf_opaque_handle =
-              rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Opaque]);
-          auto task_cmd_buf_alpha_test_handle =
-              rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Mask]);
-          auto out_draw_count_buf_rg_handle = out_draw_count_ids[(int)view_id];
-          const auto& render_view_data = get_render_view(view_id);
-          DrawCullPC pc{
-              .view_data_buf_idx = render_view_data.data_buf_info.idx,
-              .view_data_buf_offset_bytes = render_view_data.data_buf_info.offset_bytes,
-              .cull_data_idx = render_view_data.cull_data_buf_info.idx,
-              .cull_data_offset_bytes = render_view_data.cull_data_buf_info.offset_bytes,
-              .task_cmd_buf_idx_opaque =
-                  device_->get_buf(task_cmd_buf_opaque_handle)->bindless_idx(),
-              .task_cmd_buf_alpha_test_idx =
-                  device_->get_buf(task_cmd_buf_alpha_test_handle)->bindless_idx(),
-              .draw_cnt_buf_idx =
-                  device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx(),
-              .instance_data_buf_idx =
-                  device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
-              .materials_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
-              .mesh_data_buf_idx = static_draw_batch_.mesh_buf.get_buffer()->bindless_idx(),
-              .max_draws = static_instance_mgr_.stats().max_instance_data_count,
-              .culling_enabled = culling_enabled_,
-          };
-          enc->push_constants(&pc, sizeof(pc));
-          enc->dispatch_compute(glm::uvec3{align_divide_up(pc.max_draws, 64ull), 1, 1},
-                                glm::uvec3{64, 1, 1});
-        }
-      }
-    });
+    prep_meshlets_pass.set_ex(
+        [this, task_cmd_buf_ids_all_views, out_draw_count_ids, view_ids](rhi::CmdEncoder* enc) {
+          if (!static_instance_mgr_.has_draws()) {
+            return;
+          }
+          enc->bind_pipeline(draw_cull_pso_);
+          if (!culling_paused_) {
+            // Prepare array of ViewCullSetups to be uploaded
+            auto view_cull_setup_alloc =
+                frame_gpu_upload_allocator_.alloc(view_ids.size() * sizeof(ViewCullSetup));
+            auto* view_cull_setups = static_cast<ViewCullSetup*>(view_cull_setup_alloc.write_ptr);
+
+            for (size_t i = 0; i < view_ids.size(); i++) {
+              auto view_id = view_ids[i];
+              const auto& task_cmd_buf_rg_handles = task_cmd_buf_ids_all_views[(int)view_id];
+              auto task_cmd_buf_opaque_handle =
+                  rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Opaque]);
+              auto task_cmd_buf_alpha_test_handle =
+                  rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Mask]);
+              auto out_draw_count_buf_rg_handle = out_draw_count_ids[(int)view_id];
+              const auto& render_view_data = get_render_view(view_id);
+
+              view_cull_setups[i].view_data_buf_idx = render_view_data.data_buf_info.idx;
+              view_cull_setups[i].view_data_buf_offset_bytes =
+                  render_view_data.data_buf_info.offset_bytes;
+              view_cull_setups[i].cull_data_idx = render_view_data.cull_data_buf_info.idx;
+              view_cull_setups[i].cull_data_offset_bytes =
+                  render_view_data.cull_data_buf_info.offset_bytes;
+              view_cull_setups[i].task_cmd_buf_idx_opaque =
+                  device_->get_buf(task_cmd_buf_opaque_handle)->bindless_idx();
+              view_cull_setups[i].task_cmd_buf_alpha_test_idx =
+                  device_->get_buf(task_cmd_buf_alpha_test_handle)->bindless_idx();
+              view_cull_setups[i].draw_cnt_buf_idx =
+                  device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx();
+              view_cull_setups[i].pad = 0;
+            }
+
+            DrawCullPC pc{
+                .view_cull_setup_buf_idx = get_bindless_idx(view_cull_setup_alloc.buf),
+                .view_cull_setup_count = static_cast<uint32_t>(view_ids.size()),
+                .view_cull_setup_buf_offset_bytes = view_cull_setup_alloc.offset,
+                .instance_data_buf_idx =
+                    device_->get_buf(static_instance_mgr_.get_instance_data_buf())->bindless_idx(),
+                .materials_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
+                .mesh_data_buf_idx = static_draw_batch_.mesh_buf.get_buffer()->bindless_idx(),
+                .max_draws = static_instance_mgr_.stats().max_instance_data_count,
+                .culling_enabled = culling_enabled_,
+            };
+
+            enc->push_constants(&pc, sizeof(pc));
+            enc->dispatch_compute(glm::uvec3{align_divide_up(pc.max_draws, 64ull), 1, 1},
+                                  glm::uvec3{64, 1, 1});
+          }
+        });
   } else {
     auto& prepare_indirect_pass = rg_.add_compute_pass("prepare_indirect");
     prepare_indirect_pass.write_buf(indirect_buffer_id, rhi::PipelineStage::ComputeShader);
