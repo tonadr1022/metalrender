@@ -46,8 +46,8 @@ struct DispatchMeshCmd {
                                                : view_setup.task_cmd_buf_idx_opaque;
     Texture2D depth_pyramid_tex = bindless_textures[view_setup.depth_pyramid_tex_idx];
     SamplerState samp = bindless_samplers[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
-    RWStructuredBuffer<uint> instance_vis_buf = bindless_rwbuffers[view_setup.instance_vis_buf_idx];
-    bool visible_last_frame = instance_vis_buf[dtid] != 0;
+    RWByteAddressBuffer instance_vis_buf = bindless_rwbuffers[view_setup.instance_vis_buf_idx];
+    bool visible_last_frame = instance_vis_buf.Load(dtid * sizeof(uint32_t)) != 0;
 
     bool late = view_setup.pass != 0;
     if (!late && !visible_last_frame) {
@@ -66,7 +66,7 @@ struct DispatchMeshCmd {
                 (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2]) > -radius;
       visible = visible &&
                 (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0]) > -radius;
-      if (late && visible) {
+      if (late && visible && (view_setup.flags & OBJECT_OCCLUSION_CULL_ENABLED_BIT) != 0) {
         // occlusion culling for late pass
         ProjectSphereResult proj_res =
             project_sphere(center.xyz, radius, cull_data.z_near, cull_data.p00, cull_data.p11);
@@ -104,6 +104,9 @@ struct DispatchMeshCmd {
       }
     }
 
+    RWByteAddressBuffer draw_cmd_count_buf = bindless_rwbuffers[view_setup.draw_cmd_count_buf_idx];
+    draw_cmd_count_buf.InterlockedAdd(sizeof(uint32_t) * 2 * view_setup.pass, 1);
+
     if (visible) {
       uint task_group_base_i;
       RWByteAddressBuffer task_cmd_cnt_buf = bindless_rwbuffers[view_setup.draw_cnt_buf_idx];
@@ -124,7 +127,7 @@ struct DispatchMeshCmd {
 
     // write visibility result for late pass
     if (late) {
-      instance_vis_buf[dtid] = visible ? 1 : 0;
+      instance_vis_buf.Store(4 * dtid, visible ? 1 : 0);
     }
   }
 }

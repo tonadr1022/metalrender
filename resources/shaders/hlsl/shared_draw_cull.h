@@ -1,6 +1,8 @@
 #ifndef SHARED_DRAW_CULL_H
 #define SHARED_DRAW_CULL_H
 
+#define OBJECT_OCCLUSION_CULL_ENABLED_BIT (1 << 0)
+
 #include "shader_core.h"
 
 struct ViewCullSetup {
@@ -14,7 +16,8 @@ struct ViewCullSetup {
   uint instance_vis_buf_idx;
   uint pass;
   uint depth_pyramid_tex_idx;
-  uint pad1;
+  uint draw_cmd_count_buf_idx;
+  uint flags;
   uint pad2;
 };
 

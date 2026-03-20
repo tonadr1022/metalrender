@@ -562,6 +562,12 @@ void App::load_scene_presets() {
       },
       "many many sponzas",
       Camera{.pos = {900, 300, -900}, .pitch = -28, .yaw = 134, .move_speed = 15.f});
+  scene_presets_.emplace_back(
+      [this]() {
+        load_model(sponza_path);
+        load_model(chessboard_path, glm::translate(glm::mat4{1}, glm::vec3{0, -10, 0}));
+      },
+      "chess-sponza", Camera{.pos = {-6, 2.5, 0}, .move_speed = 2.0f});
 }
 void App::run_preset_scene(int idx) {
   auto& preset = scene_presets_[idx];

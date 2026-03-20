@@ -210,11 +210,17 @@ class MemeRenderer123 {
     IdxOffset data_buf_info{};
     IdxOffset cull_data_buf_info{};
     TexAndViewHolder depth_pyramid_tex;
+    std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> draw_cmd_count_buf_readback;
+    // std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> draw_cmd_count_buf;
   };
 
   RenderView& get_render_view(RenderViewId view_id) {
     ASSERT(view_id != RenderViewId::Invalid);
     return render_views_[(uint32_t)view_id];
+  }
+  RenderView& get_render_view(size_t view_i) {
+    ASSERT(view_i < render_views_.size());
+    return render_views_[view_i];
   }
 
   void clear_render_views() { render_views_.clear(); }
@@ -327,6 +333,7 @@ class MemeRenderer123 {
   constexpr static int k_query_count = 2;
 
   // out_counts_buf_[frame_in_flight][view_id]
+  // TODO: move into render view
   std::vector<std::vector<rhi::BufferHandleHolder>> out_counts_buf_;
   std::vector<std::vector<rhi::BufferHandleHolder>> out_counts_buf_readback_;
   rhi::BufferHandleHolder query_resolve_bufs_[k_max_frames_in_flight];
@@ -340,6 +347,7 @@ class MemeRenderer123 {
   bool reverse_z_{true};
   bool mesh_shaders_enabled_{true};
   bool imgui_enabled_{true};
+  bool object_occlusion_culling_enabled_{true};
   bool rg_verbose_{};
 };
 
