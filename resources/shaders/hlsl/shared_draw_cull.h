@@ -11,7 +11,11 @@ struct ViewCullSetup {
   uint task_cmd_buf_idx_opaque;
   uint task_cmd_buf_alpha_test_idx;
   uint draw_cnt_buf_idx;
-  uint pad;
+  uint instance_vis_buf_idx;
+  uint pass;
+  uint depth_pyramid_tex_idx;
+  uint pad1;
+  uint pad2;
 };
 
 cbuffer DrawCullPC HLSL_PC_REG {
@@ -24,6 +28,5 @@ cbuffer DrawCullPC HLSL_PC_REG {
   uint max_draws;
   uint culling_enabled;
 };
-
 
 #endif
