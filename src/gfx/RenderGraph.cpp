@@ -778,21 +778,21 @@ const char* to_string(RGResourceType type) {
   }
 }
 
-rhi::TextureHandle RenderGraph::get_att_img(RGResourceId tex_id) {
+rhi::TextureHandle RenderGraph::get_att_img(RGResourceId tex_id) const {
   return get_att_img(get_physical_handle(tex_id));
 }
 
-rhi::TextureHandle RenderGraph::get_att_img(RGResourceHandle tex_handle) {
+rhi::TextureHandle RenderGraph::get_att_img(RGResourceHandle tex_handle) const {
   ASSERT(tex_handle.idx < tex_att_handles_.size());
   ASSERT(tex_handle.type == RGResourceType::Texture);
   return tex_att_handles_[tex_handle.idx];
 }
 
-rhi::BufferHandle RenderGraph::get_buf(RGResourceId buf_id) {
+rhi::BufferHandle RenderGraph::get_buf(RGResourceId buf_id) const {
   return get_buf(get_physical_handle(buf_id));
 }
 
-rhi::BufferHandle RenderGraph::get_buf(RGResourceHandle buf_handle) {
+rhi::BufferHandle RenderGraph::get_buf(RGResourceHandle buf_handle) const {
   ASSERT(buf_handle.idx < buffer_handles_.size());
   ASSERT(buf_handle.type == RGResourceType::Buffer);
   return buffer_handles_[buf_handle.idx];

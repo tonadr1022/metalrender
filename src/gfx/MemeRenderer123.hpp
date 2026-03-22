@@ -14,13 +14,14 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/ShaderManager.hpp"
-#include "gfx/renderer/AlphaMaskType.hpp"
 #include "gfx/renderer/BufferResize.hpp"
+#include "gfx/renderer/InstanceMgr.hpp"
+#include "gfx/renderer/RenderView.hpp"
+#include "gfx/renderer/RendererSettings.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "hlsl/shared_globals.h"
-#include "hlsl/shared_indirect.h"
 #include "hlsl/shared_instance_data.h"
 #include "offsetAllocator.hpp"
 
@@ -34,6 +35,8 @@ class CmdEncoder;
 }
 
 namespace gfx {
+
+class GBufferRenderer;
 
 struct ModelGPUResources {
   OffsetAllocator::Allocation material_alloc;
@@ -54,89 +57,9 @@ struct ModelGPUResources {
 
 class MemeRenderer123;
 
-class InstanceMgr {
- public:
-  InstanceMgr(const InstanceMgr&) = delete;
-  InstanceMgr(InstanceMgr&&) = delete;
-  InstanceMgr& operator=(const InstanceMgr&) = delete;
-  InstanceMgr& operator=(InstanceMgr&&) = delete;
-  struct Alloc {
-    OffsetAllocator::Allocation instance_data_alloc;
-    OffsetAllocator::Allocation meshlet_vis_alloc;
-  };
-
-  InstanceMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr, uint32_t frames_in_flight,
-              MemeRenderer123& renderer);
-  [[nodiscard]] bool has_draws() const { return curr_element_count_ > 0; }
-  Alloc allocate(uint32_t element_count, uint32_t meshlet_instance_count);
-
-  [[nodiscard]] size_t allocation_size(OffsetAllocator::Allocation alloc) const {
-    return allocator_.allocationSize(alloc);
-  }
-
-  void free(const Alloc& alloc, uint32_t frame_in_flight);
-  void flush_pending_frees(uint32_t curr_frame_in_flight, rhi::CmdEncoder* enc);
-  [[nodiscard]] bool has_pending_frees(uint32_t curr_frame_in_flight) const;
-  void zero_out_freed_instances(rhi::CmdEncoder* enc);
-  [[nodiscard]] rhi::BufferHandle get_instance_data_buf() const {
-    return instance_data_buf_.handle;
-  }
-  [[nodiscard]] size_t get_num_meshlet_vis_buf_elements() const {
-    return meshlet_vis_buf_allocator_.capacity();
-  }
-  std::array<std::vector<Alloc>, k_max_frames_in_flight> pending_frees_;
-  [[nodiscard]] rhi::BufferHandle get_draw_cmd_buf() const { return draw_cmd_buf_.handle; }
-
-  struct Stats {
-    uint32_t max_instance_data_count;
-    uint32_t max_seen_meshlet_instance_count;
-  };
-
-  [[nodiscard]] const Stats& stats() const { return stats_; }
-
-  void reserve_space(uint32_t instance_data_count);
-  [[nodiscard]] std::vector<IndexedIndirectDrawCmd>& cpu_draw_cmds() { return cpu_draw_cmds_; }
-  [[nodiscard]] bool need_draw_cmds_on_cpu() const { return need_cpu_draws_; }
-
- private:
-  OffsetAllocator::Allocation allocate_instance_data(uint32_t element_count);
-  // returns true if resize occured
-  std::vector<IndexedIndirectDrawCmd> cpu_draw_cmds_;
-  bool need_cpu_draws_{true};
-  bool ensure_buffer_space(size_t element_count);
-  OffsetAllocator::Allocator allocator_;
-  rhi::BufferHandleHolder instance_data_buf_;
-  rhi::BufferHandleHolder draw_cmd_buf_;
-  OffsetAllocator::Allocator meshlet_vis_buf_allocator_;
-  BufferCopyMgr& buffer_copy_mgr_;
-  Stats stats_{};
-  uint32_t curr_element_count_{};
-  uint32_t frames_in_flight_{};
-  rhi::Device& device_;
-  MemeRenderer123& renderer_;
-};
-
 struct ModelInstanceGPUResources {
   InstanceMgr::Alloc instance_data_gpu_alloc;
   ModelGPUHandle model_resources_handle;
-};
-
-struct IdxOffset {
-  rhi::BufferHandle buf;
-  uint idx;
-  uint offset_bytes;
-};
-
-struct TexAndViewHolder : public rhi::TextureHandleHolder {
-  TexAndViewHolder() = default;
-  explicit TexAndViewHolder(rhi::TextureHandleHolder&& handle)
-      : rhi::TextureHandleHolder(std::move(handle)) {}
-  TexAndViewHolder(const TexAndViewHolder&) = delete;
-  TexAndViewHolder(TexAndViewHolder&&) = default;
-  TexAndViewHolder& operator=(const TexAndViewHolder&) = delete;
-  TexAndViewHolder& operator=(TexAndViewHolder&&) = default;
-  ~TexAndViewHolder();
-  std::vector<rhi::TextureViewHandle> views;
 };
 
 class MemeRenderer123 {
@@ -205,17 +128,6 @@ class MemeRenderer123 {
   }
   void add_render_graph_passes(const RenderArgs& args);
 
-  enum class RenderViewId : uint32_t { Invalid = UINT32_MAX };
-
-  struct RenderView {
-    IdxOffset data_buf_info{};
-    IdxOffset cull_data_buf_info{};
-    TexAndViewHolder depth_pyramid_tex;
-    rhi::BufferHandleHolder instance_vis_buf;
-    std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> draw_cmd_count_buf_readback;
-    // std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> draw_cmd_count_buf;
-  };
-
   RenderView& get_render_view(RenderViewId view_id) {
     ASSERT(view_id != RenderViewId::Invalid);
     return render_views_[(uint32_t)view_id];
@@ -265,9 +177,9 @@ class MemeRenderer123 {
   std::unique_ptr<gfx::ShaderManager> shader_mgr_;
   rhi::Device* device_{};
   Window* window_{};
-  rhi::PipelineHandleHolder test2_pso_;
+  // rhi::PipelineHandleHolder test2_pso_;
   // rhi::PipelineHandleHolder gbuffer_meshlet_pso_;
-  rhi::PipelineHandleHolder gbuffer_meshlet_psos_[(size_t)AlphaMaskType::Count];
+  // rhi::PipelineHandleHolder gbuffer_meshlet_psos_[(size_t)AlphaMaskType::Count];
   rhi::PipelineHandleHolder draw_cull_pso_;
   rhi::PipelineHandleHolder reset_counts_buf_pso_;
   rhi::PipelineHandleHolder depth_reduce_pso_;
@@ -349,6 +261,11 @@ class MemeRenderer123 {
   bool imgui_enabled_{true};
   bool object_occlusion_culling_enabled_{true};
   bool rg_verbose_{};
+
+  RendererSettings settings_{};
+
+  // unique to avoid including headers
+  std::unique_ptr<gfx::GBufferRenderer> gbuffer_renderer_;
 };
 
 }  // namespace gfx

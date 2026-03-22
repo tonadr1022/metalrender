@@ -23,7 +23,6 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
 StructuredBuffer<Meshlet> meshlet_buf : register(t6);
 StructuredBuffer<InstanceData> instance_data_buf : register(t10);
 StructuredBuffer<TaskCmd> task_cmd_buf : register(t4);
-RWStructuredBuffer<uint3> draw_cnt_buf : register(u0);
 RWStructuredBuffer<uint> meshlet_vis_buf : register(u1);
 RWStructuredBuffer<uint> out_counts_buf : register(u2);
 Texture2D depth_pyramid_tex : register(t3);
@@ -41,6 +40,7 @@ Texture2D depth_pyramid_tex : register(t3);
 
   SamplerState samp = bindless_samplers[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
 
+  StructuredBuffer<uint3> draw_cnt_buf = bindless_buffers_uint3[out_draw_count_buf_idx]; // TODO: fix
   if (task_group_id < draw_cnt_buf[alpha_test_enabled].x) {
     TaskCmd task_cmd = task_cmd_buf[task_group_id];
     if (gtid < task_cmd.task_count) {

@@ -29,6 +29,9 @@ MAKE_HANDLE(Sampler);
 MAKE_HANDLE(QueryPool);
 MAKE_HANDLE(Swapchain);
 
+// TODO: strong type
+using TextureViewHandle = int32_t;
+
 #undef MAKE_HANDLE
 
 constexpr uint32_t k_invalid_bindless_idx = UINT32_MAX;

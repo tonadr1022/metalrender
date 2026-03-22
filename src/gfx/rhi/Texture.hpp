@@ -32,6 +32,18 @@ class Texture {
   uint32_t bindless_idx_{k_invalid_bindless_idx};
 };
 
+struct TexAndViewHolder : public rhi::TextureHandleHolder {
+  TexAndViewHolder() = default;
+  explicit TexAndViewHolder(rhi::TextureHandleHolder&& handle)
+      : rhi::TextureHandleHolder(std::move(handle)) {}
+  TexAndViewHolder(const TexAndViewHolder&) = delete;
+  TexAndViewHolder(TexAndViewHolder&&) = default;
+  TexAndViewHolder& operator=(const TexAndViewHolder&) = delete;
+  TexAndViewHolder& operator=(TexAndViewHolder&&) = default;
+  ~TexAndViewHolder();
+  std::vector<rhi::TextureViewHandle> views;
+};
+
 }  // namespace rhi
 
 }  // namespace TENG_NAMESPACE

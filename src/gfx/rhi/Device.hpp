@@ -26,8 +26,6 @@ class Device;
 class CmdEncoder;
 class Swapchain;
 
-using TextureViewHandle = int32_t;
-
 enum class GraphicsCapability : uint32_t {
   None = 0,
   CacheCoherentUMA = 1 << 0,  // CPU-GPU shared memory is cache coherent -> no staging buffers, etc.

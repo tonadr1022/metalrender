@@ -1,6 +1,7 @@
 #include "Texture.hpp"
 
 #include "core/Config.hpp"
+#include "gfx/rhi/Device.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -46,4 +47,14 @@ bool is_stencil_format(rhi::TextureFormat format) {
 
 }  // namespace gfx
 
+namespace rhi {
+
+TexAndViewHolder::~TexAndViewHolder() {
+  for (auto v : views) {
+    context->destroy(handle, v);
+  }
+  views.clear();
+}
+
+}  // namespace rhi
 }  // namespace TENG_NAMESPACE

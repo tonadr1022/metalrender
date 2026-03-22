@@ -225,10 +225,10 @@ class RenderGraph {
   RGResourceId import_external_buffer(rhi::BufferHandle buf_handle,
                                       std::string_view debug_name = {});
 
-  rhi::TextureHandle get_att_img(RGResourceId tex_id);
-  rhi::TextureHandle get_att_img(RGResourceHandle tex_handle);
-  rhi::BufferHandle get_buf(RGResourceId buf_id);
-  rhi::BufferHandle get_buf(RGResourceHandle buf_handle);
+  [[nodiscard]] rhi::TextureHandle get_att_img(RGResourceId tex_id) const;
+  [[nodiscard]] rhi::TextureHandle get_att_img(RGResourceHandle tex_handle) const;
+  [[nodiscard]] rhi::BufferHandle get_buf(RGResourceId buf_id) const;
+  [[nodiscard]] rhi::BufferHandle get_buf(RGResourceHandle buf_handle) const;
 
  private:
   Pass& add_pass(const std::string& name, RGPassType type);
@@ -240,12 +240,12 @@ class RenderGraph {
   // end usually called by Pass
 
   NameId intern_name(const std::string& name);
-  const std::string& debug_name(NameId name) const;
-  std::string debug_name(RGResourceId id) const;
+  [[nodiscard]] const std::string& debug_name(NameId name) const;
+  [[nodiscard]] std::string debug_name(RGResourceId id) const;
 
   AttachmentInfo* get_tex_att_info(RGResourceId id);
   AttachmentInfo* get_tex_att_info(RGResourceHandle handle);
-  RGResourceHandle get_physical_handle(RGResourceId id) const;
+  [[nodiscard]] RGResourceHandle get_physical_handle(RGResourceId id) const;
   rhi::BufferHandle get_external_buf(RGResourceHandle handle) {
     ASSERT(handle.type == RGResourceType::ExternalBuffer);
     return external_buffers_[handle.idx];

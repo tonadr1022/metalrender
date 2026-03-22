@@ -26,6 +26,8 @@ add_library(${target_name} SHARED
     gfx/RenderGraph.cpp
     gfx/BackedGPUAllocator.cpp
     gfx/renderer/BufferResize.cpp
+    gfx/renderer/InstanceMgr.cpp
+    gfx/renderer/GBufferRenderer.cpp
 
     gfx/texture/KtxLoad.cpp
     gfx/rhi/Pipeline.cpp

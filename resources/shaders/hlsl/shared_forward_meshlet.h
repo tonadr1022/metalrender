@@ -11,6 +11,7 @@ cbuffer Task2PC HLSL_PC_REG {
   uint pass;
   uint flags;
   uint alpha_test_enabled;
+  uint out_draw_count_buf_idx;
 };
 
 #define MESHLET_VIS_BUF_SLOT 2
