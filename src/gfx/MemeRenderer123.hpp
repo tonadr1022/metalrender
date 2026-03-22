@@ -210,6 +210,7 @@ class MemeRenderer123 {
     IdxOffset data_buf_info{};
     IdxOffset cull_data_buf_info{};
     TexAndViewHolder depth_pyramid_tex;
+    rhi::BufferHandleHolder instance_vis_buf;
     std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> draw_cmd_count_buf_readback;
     // std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> draw_cmd_count_buf;
   };
@@ -240,7 +241,6 @@ class MemeRenderer123 {
   bool shadows_enabled_{false};
   bool get_shadows_enabled() const { return shadows_enabled_; }
   void on_shadows_enabled_change(bool shadows_enabled);
-  rhi::BufferHandleHolder instance_vis_buf_;
 
   RGPass* clear_bufs_pass_{};
 

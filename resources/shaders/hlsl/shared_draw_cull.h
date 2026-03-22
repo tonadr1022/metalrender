@@ -18,7 +18,6 @@ struct ViewCullSetup {
   uint depth_pyramid_tex_idx;
   uint draw_cmd_count_buf_idx;
   uint flags;
-  uint pad2;
 };
 
 cbuffer DrawCullPC HLSL_PC_REG {

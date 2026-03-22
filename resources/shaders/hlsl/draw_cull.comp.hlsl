@@ -47,7 +47,8 @@ struct DispatchMeshCmd {
     Texture2D depth_pyramid_tex = bindless_textures[view_setup.depth_pyramid_tex_idx];
     SamplerState samp = bindless_samplers[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
     RWByteAddressBuffer instance_vis_buf = bindless_rwbuffers[view_setup.instance_vis_buf_idx];
-    bool visible_last_frame = instance_vis_buf.Load(dtid * sizeof(uint32_t)) != 0;
+    uint vis_byte_addr = dtid * sizeof(uint32_t);
+    bool visible_last_frame = instance_vis_buf.Load(vis_byte_addr) != 0;
 
     bool late = view_setup.pass != 0;
     if (!late && !visible_last_frame) {
@@ -127,7 +128,7 @@ struct DispatchMeshCmd {
 
     // write visibility result for late pass
     if (late) {
-      instance_vis_buf.Store(4 * dtid, visible ? 1 : 0);
+      instance_vis_buf.Store(vis_byte_addr, visible ? 1 : 0);
     }
   }
 }
