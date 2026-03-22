@@ -14,6 +14,7 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/ShaderManager.hpp"
+#include "gfx/renderer/AlphaMaskType.hpp"
 #include "gfx/renderer/BufferResize.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -231,7 +232,6 @@ class MemeRenderer123 {
   void make_depth_pyramid_tex(RenderViewId view_id, glm::uvec2 main_size);
   std::vector<RenderViewId> free_render_view_ids_;
 
-  enum AlphaMaskType { Opaque, Mask, Count };
   // guaranteed to be densely packed
   std::vector<RenderView> render_views_;
   RenderViewId main_render_view_id_{RenderViewId::Invalid};
@@ -267,7 +267,7 @@ class MemeRenderer123 {
   Window* window_{};
   rhi::PipelineHandleHolder test2_pso_;
   // rhi::PipelineHandleHolder gbuffer_meshlet_pso_;
-  rhi::PipelineHandleHolder gbuffer_meshlet_psos_[AlphaMaskType::Count];
+  rhi::PipelineHandleHolder gbuffer_meshlet_psos_[(size_t)AlphaMaskType::Count];
   rhi::PipelineHandleHolder draw_cull_pso_;
   rhi::PipelineHandleHolder reset_counts_buf_pso_;
   rhi::PipelineHandleHolder depth_reduce_pso_;

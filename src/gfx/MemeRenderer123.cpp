@@ -17,6 +17,7 @@
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
+#include "gfx/renderer/TaskCmdBufRgIds.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -184,10 +185,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   }
   std::vector<RGResourceId> out_draw_count_ids_early(render_views_.size());
   std::vector<RGResourceId> out_draw_count_ids_late(render_views_.size());
-  std::vector<std::array<RGResourceId, AlphaMaskType::Count>> task_cmd_buf_ids_all_views_early(
-      render_views_.size());
-  std::vector<std::array<RGResourceId, AlphaMaskType::Count>> task_cmd_buf_ids_all_views_late(
-      render_views_.size());
+  TaskCmdBufRgTable task_cmd_buf_rg_ids(render_views_.size());
 
   std::vector<RGResourceId> final_depth_pyramid_ids(render_views_.size());
   std::vector<RGResourceId> draw_cmd_count_buf_ids(render_views_.size());
@@ -217,10 +215,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
   auto add_draw_cull_pass = [this, instance_data_id, &view_ids, &final_depth_pyramid_ids,
                              &draw_cmd_count_buf_ids](
-                                bool late,
-                                std::vector<std::array<RGResourceId, AlphaMaskType::Count>>&
-                                    task_cmd_buf_ids_all_views,
+                                DrawCullPhase phase, TaskCmdBufRgTable& task_cmd_buf_rg_ids,
                                 std::vector<RGResourceId>& out_draw_count_ids) {
+    const bool late = phase == DrawCullPhase::Late;
     auto& prep_meshlets_pass =
         rg_.add_compute_pass(late ? "meshlet_draw_cull_late" : "meshlet_draw_cull_early");
     if (static_instance_mgr_.has_pending_frees(curr_frame_idx_)) {
@@ -263,20 +260,20 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       }
     }
     for (auto view_id : view_ids) {
-      auto& view_handles = task_cmd_buf_ids_all_views[(int)view_id];
+      auto& view_handles = task_cmd_buf_rg_ids[(int)view_id].phase(phase);
       for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
         if (static_draw_batch_.get_stats().vertex_count > 0) {
-          view_handles[alpha_mask_type] = rg_.create_buffer(
+          view_handles[static_cast<AlphaMaskType>(alpha_mask_type)] = rg_.create_buffer(
               {.size = static_draw_batch_.task_cmd_count * sizeof(TaskCmd), .defer_reuse = true},
               late ? (alpha_mask_type == 0 ? "task_cmd_buf_late_0" : "task_cmd_buf_late_1")
                    : (alpha_mask_type == 0 ? "task_cmd_buf_early_0" : "task_cmd_buf_early_1"));
-          prep_meshlets_pass.write_buf(view_handles[alpha_mask_type],
+          prep_meshlets_pass.write_buf(view_handles[static_cast<AlphaMaskType>(alpha_mask_type)],
                                        rhi::PipelineStage::ComputeShader);
         }
       }
     }
 
-    prep_meshlets_pass.set_ex([this, task_cmd_buf_ids_all_views, out_draw_count_ids, view_ids, late,
+    prep_meshlets_pass.set_ex([this, task_cmd_buf_rg_ids, out_draw_count_ids, view_ids, phase,
                                draw_cmd_count_buf_ids](rhi::CmdEncoder* enc) {
       if (!static_instance_mgr_.has_draws()) {
         return;
@@ -290,7 +287,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
         for (size_t i = 0; i < view_ids.size(); i++) {
           auto view_id = view_ids[i];
-          const auto& task_cmd_buf_rg_handles = task_cmd_buf_ids_all_views[(int)view_id];
+          const auto& task_cmd_buf_rg_handles = task_cmd_buf_rg_ids[(int)view_id].phase(phase);
           auto task_cmd_buf_opaque_handle =
               rg_.get_buf(task_cmd_buf_rg_handles[AlphaMaskType::Opaque]);
           auto task_cmd_buf_alpha_test_handle =
@@ -312,10 +309,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
               device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx();
           view_cull_setups[i].instance_vis_buf_idx =
               device_->get_buf(render_view_data.instance_vis_buf)->bindless_idx();
-          view_cull_setups[i].pass = (uint32_t)late;
+          view_cull_setups[i].pass = static_cast<uint32_t>(phase);
           view_cull_setups[i].depth_pyramid_tex_idx =
-              late ? device_->get_tex(render_view_data.depth_pyramid_tex)->bindless_idx()
-                   : UINT32_MAX;
+              phase == DrawCullPhase::Late
+                  ? device_->get_tex(render_view_data.depth_pyramid_tex)->bindless_idx()
+                  : UINT32_MAX;
           view_cull_setups[i].draw_cmd_count_buf_idx =
               device_->get_buf(rg_.get_buf(draw_cmd_count_buf_ids[(int)view_id]))->bindless_idx();
           view_cull_setups[i].flags = 0;
@@ -377,7 +375,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
       });
     }
 
-    add_draw_cull_pass(false, task_cmd_buf_ids_all_views_early, out_draw_count_ids_early);
+    add_draw_cull_pass(DrawCullPhase::Early, task_cmd_buf_rg_ids, out_draw_count_ids_early);
 
   } else {
     auto& prepare_indirect_pass = rg_.add_compute_pass("prepare_indirect");
@@ -443,19 +441,19 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
   auto add_csm_pass = [this, &depth_ids, &meshlet_vis_ids, &out_counts_ids,
                        &final_depth_pyramid_ids, &out_draw_count_ids_late,
-                       &out_draw_count_ids_early, &task_cmd_buf_ids_all_views_early,
-                       &task_cmd_buf_ids_all_views_late](bool late, const char* name,
-                                                         RenderViewId view_id) {
+                       &out_draw_count_ids_early,
+                       &task_cmd_buf_rg_ids](bool late, const char* name, RenderViewId view_id) {
     auto& p = rg_.add_graphics_pass(name);
     RGResourceId task_cmd_buf_rg_handles[AlphaMaskType::Count]{};
     RGResourceId out_draw_count_buf_rg_handle{};
     RGResourceId meshlet_vis_buf_rg_handle{};
     if (mesh_shaders_enabled_) {
+      const DrawCullPhase cull_phase = late ? DrawCullPhase::Late : DrawCullPhase::Early;
       for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
         if (static_draw_batch_.get_stats().vertex_count > 0) {
           task_cmd_buf_rg_handles[alpha_mask_type] =
-              p.read_buf((late ? task_cmd_buf_ids_all_views_late
-                               : task_cmd_buf_ids_all_views_early)[(int)view_id][alpha_mask_type],
+              p.read_buf(task_cmd_buf_rg_ids[(int)view_id].phase(
+                             cull_phase)[static_cast<AlphaMaskType>(alpha_mask_type)],
                          rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader);
         }
       }
@@ -570,10 +568,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
 
   auto add_draw_pass = [&args, this, &last_gbuffer_a_id, &last_gbuffer_b_id, &depth_ids,
                         &meshlet_vis_ids, &out_counts_ids, &final_depth_pyramid_ids,
-                        &out_draw_count_ids_early, &out_draw_count_ids_late,
-                        &task_cmd_buf_ids_all_views_early, &task_cmd_buf_ids_all_views_late,
-                        indirect_buffer_id](bool late, const char* name, RenderViewId view_id) {
+                        &out_draw_count_ids_early, &out_draw_count_ids_late, &task_cmd_buf_rg_ids,
+                        indirect_buffer_id](DrawCullPhase cull_phase, const char* name,
+                                            RenderViewId view_id) {
     ZoneScopedN("Draw pass");
+    bool late = cull_phase == DrawCullPhase::Late;
     auto& p = rg_.add_graphics_pass(name);
     RGResourceId task_cmd_buf_rg_handles[AlphaMaskType::Count]{};
     RGResourceId out_draw_count_buf_rg_handle{};
@@ -581,8 +580,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     if (mesh_shaders_enabled_) {
       for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
         if (static_draw_batch_.get_stats().vertex_count > 0) {
-          auto id = (late ? task_cmd_buf_ids_all_views_late
-                          : task_cmd_buf_ids_all_views_early)[(int)view_id][alpha_mask_type];
+          auto id = task_cmd_buf_rg_ids[(int)view_id].phase(
+              cull_phase)[static_cast<AlphaMaskType>(alpha_mask_type)];
           ASSERT(id.is_valid());
           task_cmd_buf_rg_handles[alpha_mask_type] =
               p.read_buf(id, rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader);
@@ -749,7 +748,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
   if (get_shadows_enabled()) {
     add_csm_pass(false, "csm_pass_early", shadow_map_render_views_[0]);
   }
-  add_draw_pass(false, "draw_pass_early", main_render_view_id_);
+  add_draw_pass(DrawCullPhase::Early, "draw_pass_early", main_render_view_id_);
 
   if (meshlet_occlusion_culling_enabled) {
     for (auto view_id : view_ids) {
@@ -812,10 +811,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs& args) {
     }
   }
 
-  add_draw_cull_pass(true, task_cmd_buf_ids_all_views_late, out_draw_count_ids_late);
+  add_draw_cull_pass(DrawCullPhase::Late, task_cmd_buf_rg_ids, out_draw_count_ids_late);
 
   if (meshlet_occlusion_culling_enabled) {
-    add_draw_pass(true, "draw_pass_late", main_render_view_id_);
+    add_draw_pass(DrawCullPhase::Late, "draw_pass_late", main_render_view_id_);
   }
 
   if (mesh_shaders_enabled_) {  // readback draw counts
