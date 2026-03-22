@@ -1,6 +1,5 @@
 #include "ShaderManager.hpp"
 
-#include <algorithm>
 #include <chrono>
 #include <ctime>
 #include <filesystem>
@@ -14,6 +13,7 @@
 #include "core/Hash.hpp"
 #include "core/Logger.hpp"
 #include "gfx/rhi/Device.hpp"
+#include "shader_compiler/ShaderCompiler.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -22,30 +22,6 @@ namespace fs = std::filesystem;
 namespace gfx {
 
 namespace {
-
-std::string shader_model_from_hlsl_path(const std::filesystem::path& path) {
-  std::string shader_model_prefix;
-
-  std::string filename = path.filename().string();
-  auto first_dot = filename.find('.');
-  auto second_dot = filename.find('.', first_dot + 1);
-
-  if (first_dot == std::string::npos) {
-    return "_6_7";
-  }
-
-  std::string shader_type = (second_dot == std::string::npos)
-                                ? filename.substr(first_dot + 1)
-                                : filename.substr(first_dot + 1, second_dot - first_dot - 1);
-
-  if (shader_type == "vert") shader_model_prefix = "vs";
-  if (shader_type == "frag") shader_model_prefix = "ps";
-  if (shader_type == "mesh") shader_model_prefix = "ms";
-  if (shader_type == "task") shader_model_prefix = "as";
-  if (shader_type == "comp") shader_model_prefix = "cs";
-
-  return shader_model_prefix + "_6_7";
-}
 
 const char* get_shader_type_string(rhi::ShaderType type) {
   const char* type_str{};
@@ -70,20 +46,6 @@ const char* get_shader_type_string(rhi::ShaderType type) {
       break;
   }
   return type_str;
-}
-
-std::string path_after_word(const std::filesystem::path& p, const char* word) {
-  auto it = std::ranges::find(p, word);
-  if (it == p.end()) return {};
-
-  ++it;
-
-  std::filesystem::path result;
-  for (; it != p.end(); ++it) {
-    result /= *it;
-  }
-
-  return result.generic_string();
 }
 
 ShaderManager::HashT get_hash_for_shader_file(const fs::path& path,
@@ -233,7 +195,8 @@ void ShaderManager::init(rhi::Device* device, const Options& options) {
       continue;
     }
     auto depfile_filepath =
-        (depfile_dir_ / path_after_word(entry.path(), "hlsl")).replace_extension(".d");
+        (depfile_dir_ / shader_compiler::path_after_word(entry.path(), "hlsl"))
+            .replace_extension(".d");
     if (!std::filesystem::exists(depfile_filepath)) {
       continue;
     }
@@ -279,7 +242,8 @@ void ShaderManager::recompile_shaders_no_lock() {
       continue;
     }
     auto depfile_filepath =
-        (depfile_dir_ / path_after_word(entry.path(), "hlsl")).replace_extension(".d");
+        (depfile_dir_ / shader_compiler::path_after_word(entry.path(), "hlsl"))
+            .replace_extension(".d");
     auto deps = get_dep_filepaths(depfile_filepath);
     auto hash = get_hash_for_shader_file(deps.file, deps.deps);
     if (!path_to_existing_hash_.contains(entry.path()) ||
@@ -364,80 +328,19 @@ std::filesystem::path ShaderManager::get_shader_path(const std::string& relative
 }
 
 bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug_enabled) {
-  // TODO: handle spirv
-  auto shader_model = shader_model_from_hlsl_path(path);
   ASSERT(!path.empty());
-  LINFO("compiling {} {}", path.string(), shader_model);
-  auto relative = path_after_word(path, "hlsl");
-  auto out_filepath =
-      (fs::path("resources/shader_out/metal") / relative).replace_extension(".dxil");
-  auto dep_filepath = (fs::path("resources/shader_out/deps") / relative).replace_extension(".d");
-  fs::create_directories(out_filepath.parent_path());
-  fs::create_directories(dep_filepath.parent_path());
-  std::string compile_dxil =
-      std::format("dxc {} -Fo {} -T {} -E main {}  -rootsig-define ROOT_SIGNATURE", path.string(),
-                  out_filepath.string(), shader_model,
-                  debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");
-  if (std::system(compile_dxil.c_str())) {
-    LINFO("dxc failed for {}", path.string());
+  LINFO("compiling {} {}", path.string(), shader_compiler::shader_model_from_hlsl_path(path));
+  shader_compiler::CompileOptions compile_opts;
+  compile_opts.debug_enabled = debug_enabled;
+  std::string compile_error;
+  if (!shader_compiler::compile_hlsl_file(path, compile_opts, &compile_error)) {
+    LINFO("{}", compile_error);
     return false;
   }
 
-  if (true) {  // spirv
-               // if (has_flag(options_.targets, rhi::ShaderTarget::Spirv)) {  // spirv
-    auto spirv_path = out_filepath;
-    spirv_path.replace_extension(".spv");
-    auto compile_spirv = std::format(
-        "dxc {} -Fo {} -T {} -E main {} -spirv "
-        " -fspv-target-env=vulkan1.3"
-        " -fspv-extension=SPV_NV_mesh_shader"
-        " -fspv-extension=SPV_EXT_descriptor_indexing"
-        " -fvk-use-dx-layout"
-        " -fvk-u-shift 1000 0"
-        " -fvk-t-shift 2000 0"
-        " -rootsig-define ROOT_SIGNATURE"
-        " -D VULKAN",
-        path.string(), spirv_path.string(), shader_model,
-        debug_enabled ? "-Zi -Qembed_debug -Qsource_in_debug_module" : "");
-    if (std::system(compile_spirv.c_str())) {
-      LINFO("dxc spirv failed for {}", compile_spirv);
-      return false;
-    }
-  }
-
-  {  // write shader deps
-    std::string write_shader_dependencies_cmd = std::format(
-        "dxc {} -T {} -E main -MF {}", path.string(), shader_model, dep_filepath.string());
-    if (std::system(write_shader_dependencies_cmd.c_str())) {
-      LINFO("dxc dep-generation failed for {}", path.string());
-      return false;
-    }
-  }
-
-  if (true) {
-    // if (has_flag(options_.targets, rhi::ShaderTarget::MSL)) {
-    auto metallib_path =
-        (fs::path("resources/shader_out/metal") / relative).replace_extension(".metallib");
-    bool output_reflection = true;
-
-    std::string output_reflection_arg;
-    if (output_reflection) {
-      auto reflection_path = metallib_path;
-      output_reflection_arg =
-          output_reflection
-              ? "--output-reflection-file " + reflection_path.replace_extension(".json").string()
-              : "";
-    }
-
-    std::string metallib_compile_args =
-        std::format("metal-shaderconverter {} -o {} {}", out_filepath.string(),
-                    metallib_path.string(), output_reflection_arg);
-    if (std::system(metallib_compile_args.c_str())) {
-      LINFO("metal-shaderconverter metallib failed for {}", path.string());
-      return false;
-    }
-  }
-
+  const auto relative = shader_compiler::path_after_word(path, "hlsl");
+  auto dep_filepath =
+      (fs::path("resources/shader_out/deps") / relative).replace_extension(".d");
   // update hash
   auto deps = get_dep_filepaths(dep_filepath);
   auto hash = get_hash_for_shader_file(deps.file, deps.deps);
@@ -490,7 +393,8 @@ void teng::gfx::ShaderManager::check_and_recompile(
     if (it == last_write_times_.end() || it->second < last_write_time ||
         (path.extension() == ".hlsl" &&
          !std::filesystem::exists(
-             (fs::path("resources/shader_out/metal") / path_after_word(path, "hlsl"))
+             (fs::path("resources/shader_out/metal") /
+              shader_compiler::path_after_word(path, "hlsl"))
                  .replace_extension(".dxil")))) {
       // TODO: cursed
       if (!path.string().contains("root_sig")) {

@@ -1,5 +1,11 @@
 set(target_name teng)
 
+add_library(teng_shader_compiler STATIC
+    shader_compiler/ShaderCompiler.cpp
+)
+target_include_directories(teng_shader_compiler PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(teng_shader_compiler PUBLIC project_warnings)
+
 add_library(${target_name} SHARED
     ResourceManager.cpp
     Window.cpp
@@ -74,6 +80,7 @@ target_include_directories(${target_name} PUBLIC ${CMAKE_SOURCE_DIR}/third_party
 target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 target_link_libraries(${target_name} PUBLIC
+    teng_shader_compiler
     glm::glm
     project_warnings
     cgltf
