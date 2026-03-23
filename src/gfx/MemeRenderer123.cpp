@@ -434,9 +434,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
           get_render_view(shadow_map_render_views_[i]),
           {meshlet_vis_ids[svid], out_draw_count_ids_early[svid], final_depth_pyramid_ids[svid],
            meshlet_draw_stats_buf_ids[svid]}};
-      gbuffer_renderer_->bake_shadow_depth(
-          std::string("csm_pass_early_") + std::to_string(i), shadow_depth, DrawCullPhase::Early,
-          gbuffer_scene, shadow_view);
+      gbuffer_renderer_->bake_shadow_depth(std::string("csm_pass_early_") + std::to_string(i),
+                                           shadow_depth, DrawCullPhase::Early, gbuffer_scene,
+                                           shadow_view);
       depth_ids[svid] = shadow_depth.depth_id;
     }
   }
@@ -542,11 +542,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     }
     for (size_t rb_view = 0; rb_view < render_views_.size(); rb_view++) {
       rhi::BufferHandle counts_dst = draw_cmd_counts_readback_[rb_view][fif_i].handle;
-      std::string counts_import_name = "draw_cmd_readback_v" + std::to_string(rb_view);
-      RGResourceId counts_dst_rg = rg_.import_external_buffer(counts_dst, counts_import_name);
-      std::string counts_pass_name = "readback_draw_cmd_counts_v" + std::to_string(rb_view);
-      add_buffer_readback_copy(rg_, counts_pass_name, draw_cmd_count_buf_ids[rb_view], counts_dst,
-                               counts_dst_rg, 0, 0,
+      RGResourceId counts_dst_rg = rg_.import_external_buffer(counts_dst, "draw_cmd_readback");
+      add_buffer_readback_copy(rg_, "readback_draw_cmd_counts", draw_cmd_count_buf_ids[rb_view],
+                               counts_dst, counts_dst_rg, 0, 0,
                                sizeof(uint32_t) * static_cast<size_t>(DrawCullPhase::Count));
     }
   }
@@ -1499,18 +1497,16 @@ void MemeRenderer123::ensure_per_view_readback_buffers() {
   for (size_t v = 0; v < render_views_.size(); ++v) {
     for (uint32_t f = 0; f < fif; ++f) {
       if (!meshlet_draw_stats_readback_[v][f].handle.is_valid()) {
-        std::string name = "meshlet_stats_rb_v" + std::to_string(v) + "_f" + std::to_string(f);
         meshlet_draw_stats_readback_[v][f] =
             device_->create_buf_h({.size = meshlet_sz,
                                    .flags = rhi::BufferDescFlags::CPUAccessible,
-                                   .name = name.c_str()});
+                                   .name = "meshlet_stats_rb"});
       }
       if (!draw_cmd_counts_readback_[v][f].handle.is_valid()) {
-        std::string name = "draw_cmd_counts_rb_v" + std::to_string(v) + "_f" + std::to_string(f);
         draw_cmd_counts_readback_[v][f] =
             device_->create_buf_h({.size = draw_cnt_sz,
                                    .flags = rhi::BufferDescFlags::CPUAccessible,
-                                   .name = name.c_str()});
+                                   .name = "draw_cmd_counts_rb"});
       }
     }
     for (uint32_t f = fif; f < k_max_frames_in_flight; ++f) {
