@@ -187,7 +187,7 @@ void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthP
                                         DrawCullPhase cull_phase, const SceneBindings& scene,
                                         const GBufferViewBindings& view) {
   bool late = cull_phase == DrawCullPhase::Late;
-  auto& p = rg_.add_graphics_pass(std::string(pass_name));
+  auto& p = rg_.add_graphics_pass(pass_name);
   RGResourceId out_draw_count_buf_rg_handle{};
 
   ASSERT(get_ctx().settings.mesh_shaders_enabled);

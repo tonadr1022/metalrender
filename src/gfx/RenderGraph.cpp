@@ -207,12 +207,13 @@ constexpr Flags flag_or(Flags x, Bits y) noexcept {
 
 }  // namespace
 
-RenderGraph::Pass::Pass(std::string name, RenderGraph* rg, uint32_t pass_i, RGPassType type)
-    : rg_(rg), pass_i_(pass_i), name_(std::move(name)), type_(type) {}
+RenderGraph::Pass::Pass(NameId name_id, RenderGraph* rg, uint32_t pass_i, RGPassType type)
+    : rg_(rg), pass_i_(pass_i), name_id_(name_id), type_(type) {}
 
-RenderGraph::Pass& RenderGraph::add_pass(const std::string& name, RGPassType type) {
+RenderGraph::Pass& RenderGraph::add_pass(std::string_view name, RGPassType type) {
   auto idx = static_cast<uint32_t>(passes_.size());
-  passes_.emplace_back(name, this, idx, type);
+  const NameId name_id = intern_name(name);
+  passes_.emplace_back(name_id, this, idx, type);
   return passes_.back();
 }
 
@@ -608,13 +609,13 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   }
 }
 
-RenderGraph::NameId RenderGraph::intern_name(const std::string& name) {
+RenderGraph::NameId RenderGraph::intern_name(std::string_view name) {
   auto it = name_to_id_.find(name);
   if (it != name_to_id_.end()) {
     return it->second;
   }
   const auto id = static_cast<NameId>(id_to_name_.size());
-  id_to_name_.push_back(name);
+  id_to_name_.emplace_back(name);
   name_to_id_.emplace(id_to_name_.back(), id);
   return id;
 }
@@ -677,7 +678,7 @@ RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
     if (!debug_name.empty()) {
       auto& rec = resources_[it->second.idx];
       if (rec.debug_name == kInvalidNameId) {
-        rec.debug_name = intern_name(std::string(debug_name));
+        rec.debug_name = intern_name(debug_name);
       }
     }
     const auto& rec = resources_[it->second.idx];
@@ -703,7 +704,7 @@ RGResourceId RenderGraph::import_external_buffer(rhi::BufferHandle buf_handle,
     if (!debug_name.empty()) {
       auto& rec = resources_[it->second.idx];
       if (rec.debug_name == kInvalidNameId) {
-        rec.debug_name = intern_name(std::string(debug_name));
+        rec.debug_name = intern_name(debug_name);
       }
     }
     const auto& rec = resources_[it->second.idx];
@@ -1000,14 +1001,14 @@ RenderGraph::ResourceRecord RenderGraph::create_resource_record(RGResourceType t
   return {
       .type = type,
       .physical_idx = physical_idx,
-      .debug_name = debug_name.empty() ? kInvalidNameId : intern_name(std::string(debug_name)),
+      .debug_name = debug_name.empty() ? kInvalidNameId : intern_name(debug_name),
   };
 }
 
 void add_buffer_readback_copy(RenderGraph& rg, std::string_view pass_name, RGResourceId src_buf,
                               rhi::BufferHandle dst_buf, RGResourceId dst_rg_id, size_t src_offset,
                               size_t dst_offset, size_t size_bytes) {
-  auto& p = rg.add_transfer_pass(std::string(pass_name));
+  auto& p = rg.add_transfer_pass(pass_name);
   p.read_buf(src_buf, rhi::PipelineStage::AllTransfer);
   p.write_buf(dst_rg_id, rhi::PipelineStage::AllTransfer);
   p.set_ex([&rg, src_buf, dst_buf, dst_offset, src_offset, size_bytes](rhi::CmdEncoder* enc) {

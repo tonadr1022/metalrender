@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -143,7 +144,7 @@ class RenderGraph {
   class Pass {
    public:
     Pass() = default;
-    Pass(std::string name, RenderGraph* rg, uint32_t pass_i, RGPassType type);
+    Pass(NameId name_id, RenderGraph* rg, uint32_t pass_i, RGPassType type);
 
     RGResourceId sample_tex(RGResourceId id);
     RGResourceId sample_tex(RGResourceId id, rhi::PipelineStage stage);
@@ -198,7 +199,7 @@ class RenderGraph {
 
     [[nodiscard]] uint32_t get_idx() const { return pass_i_; }
     void set_ex(auto&& f) { execute_fn_ = f; }
-    [[nodiscard]] const std::string& get_name() const { return name_; }
+    [[nodiscard]] const std::string& get_name() const { return rg_->debug_name(name_id_); }
     [[nodiscard]] const ExecuteFn& get_execute_fn() const { return execute_fn_; }
     [[nodiscard]] RGPassType type() const { return type_; }
 
@@ -208,15 +209,15 @@ class RenderGraph {
                          bool is_swapchain_write = false);
     std::vector<ResourceAndUsage> resource_usages_;
     ExecuteFn execute_fn_;
-    RenderGraph* rg_;
+    RenderGraph* rg_{};
     uint32_t pass_i_{};
-    const std::string name_;
+    const NameId name_id_{kInvalidNameId};
     RGPassType type_{};
   };
 
-  Pass& add_compute_pass(const std::string& name) { return add_pass(name, RGPassType::Compute); }
-  Pass& add_transfer_pass(const std::string& name) { return add_pass(name, RGPassType::Transfer); }
-  Pass& add_graphics_pass(const std::string& name) { return add_pass(name, RGPassType::Graphics); }
+  Pass& add_compute_pass(std::string_view name) { return add_pass(name, RGPassType::Compute); }
+  Pass& add_transfer_pass(std::string_view name) { return add_pass(name, RGPassType::Transfer); }
+  Pass& add_graphics_pass(std::string_view name) { return add_pass(name, RGPassType::Graphics); }
 
   RGResourceId create_texture(const AttachmentInfo& att_info, std::string_view debug_name = {});
   RGResourceId create_buffer(const BufferInfo& buf_info, std::string_view debug_name = {});
@@ -231,7 +232,14 @@ class RenderGraph {
   [[nodiscard]] rhi::BufferHandle get_buf(RGResourceHandle buf_handle) const;
 
  private:
-  Pass& add_pass(const std::string& name, RGPassType type);
+  struct StringHash {
+    using is_transparent = void;
+    size_t operator()(std::string_view s) const noexcept {
+      return std::hash<std::string_view>{}(s);
+    }
+  };
+
+  Pass& add_pass(std::string_view name, RGPassType type);
 
   // begin usually called by Pass
   void register_write(RGResourceId id, Pass& pass);
@@ -239,7 +247,7 @@ class RenderGraph {
   void add_external_read_id(RGResourceId id) { external_read_ids_.insert(id); }
   // end usually called by Pass
 
-  NameId intern_name(const std::string& name);
+  NameId intern_name(std::string_view name);
   [[nodiscard]] const std::string& debug_name(NameId name) const;
   [[nodiscard]] std::string debug_name(RGResourceId id) const;
 
@@ -299,7 +307,7 @@ class RenderGraph {
   std::vector<uint32_t> sink_passes_;
   std::vector<uint32_t> pass_stack_;
 
-  std::unordered_map<std::string, NameId> name_to_id_;
+  std::unordered_map<std::string, NameId, StringHash, std::equal_to<>> name_to_id_;
   std::vector<std::string> id_to_name_;
 
   std::unordered_map<uint64_t, RGResourceId> external_tex_handle_to_id_;
