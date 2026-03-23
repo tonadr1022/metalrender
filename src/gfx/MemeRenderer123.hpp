@@ -20,7 +20,6 @@
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/renderer/RenderView.hpp"
 #include "gfx/renderer/RendererSettings.hpp"
-#include "gfx/renderer/TaskCmdBufRgIds.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -236,13 +235,6 @@ class MemeRenderer123 {
 
   DebugRenderMode debug_render_mode_{DebugRenderMode::None};
 
-  // TODO: this is instance mgr
-  struct MeshletDrawStats {
-    uint32_t meshlets_drawn_early;
-    uint32_t meshlets_drawn_late;
-    uint32_t triangles_drawn_early;
-    uint32_t triangles_drawn_late;
-  };
   void ensure_per_view_readback_buffers();
   std::vector<std::array<rhi::BufferHandleHolder, k_max_frames_in_flight>>
       meshlet_draw_stats_readback_;

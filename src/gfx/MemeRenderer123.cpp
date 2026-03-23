@@ -38,6 +38,7 @@
 #include "hlsl/shared_globals.h"
 #include "hlsl/shared_indirect.h"
 #include "hlsl/shared_mesh_data.h"
+#include "hlsl/shared_meshlet_draw_stats.hlsli"
 #include "hlsl/shared_task_cmd.h"
 #include "hlsl/shared_test_clear_buf.h"
 #include "hlsl/shared_tex_only.h"
