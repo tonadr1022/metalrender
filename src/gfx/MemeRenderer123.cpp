@@ -428,8 +428,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     }
   }
 
-  RGResourceId last_gbuffer_a_id{};
-  RGResourceId last_gbuffer_b_id{};
+  GBufferRenderer::GbufferPassInfo gbuffer_pass_info{};
 
   // auto add_csm_pass = [this, &depth_ids, &meshlet_vis_ids, &out_counts_ids,
   //                      &final_depth_pyramid_ids, &out_draw_count_ids_late,
@@ -572,12 +571,13 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   {
     auto vid = (int)main_render_view_id_;
-    gbuffer_renderer_->bake(
-        static_draw_batch_, last_gbuffer_a_id, last_gbuffer_b_id, depth_ids[vid],
-        task_cmd_buf_rg_ids[vid], DrawCullPhase::Early, meshlet_vis_ids[vid],
-        out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid], out_counts_ids[vid],
-        get_render_view(main_render_view_id_), out_counts_buf_[curr_frame_idx_][vid].handle,
-        materials_buf_.get_buffer_handle(), frame_globals_buf_info_);
+    gbuffer_renderer_->bake(static_draw_batch_, gbuffer_pass_info, task_cmd_buf_rg_ids[vid],
+                            DrawCullPhase::Early, meshlet_vis_ids[vid],
+                            out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
+                            out_counts_ids[vid], get_render_view(main_render_view_id_),
+                            out_counts_buf_[curr_frame_idx_][vid].handle,
+                            materials_buf_.get_buffer_handle(), frame_globals_buf_info_);
+    depth_ids[vid] = gbuffer_pass_info.depth_id;
   }
 
   if (meshlet_occlusion_culling_enabled) {
@@ -645,12 +645,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   if (meshlet_occlusion_culling_enabled) {
     auto vid = (int)main_render_view_id_;
-    gbuffer_renderer_->bake(
-        static_draw_batch_, last_gbuffer_a_id, last_gbuffer_b_id, depth_ids[vid],
-        task_cmd_buf_rg_ids[vid], DrawCullPhase::Late, meshlet_vis_ids[vid],
-        out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid], out_counts_ids[vid],
-        get_render_view(main_render_view_id_), out_counts_buf_[curr_frame_idx_][vid].handle,
-        materials_buf_.get_buffer_handle(), frame_globals_buf_info_);
+    gbuffer_renderer_->bake(static_draw_batch_, gbuffer_pass_info, task_cmd_buf_rg_ids[vid],
+                            DrawCullPhase::Late, meshlet_vis_ids[vid],
+                            out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
+                            out_counts_ids[vid], get_render_view(main_render_view_id_),
+                            out_counts_buf_[curr_frame_idx_][vid].handle,
+                            materials_buf_.get_buffer_handle(), frame_globals_buf_info_);
   }
 
   if (mesh_shaders_enabled_) {  // readback draw counts
@@ -680,9 +680,19 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   }
 
   {
+    struct ShadePassInfo {
+      RGResourceId gbuffer_a_id{};
+      RGResourceId gbuffer_b_id{};
+    };
+
+    ShadePassInfo shade_pass_info{
+        .gbuffer_a_id = gbuffer_pass_info.gbuffer_a_id,
+        .gbuffer_b_id = gbuffer_pass_info.gbuffer_b_id,
+    };
+
     auto& p = rg_.add_graphics_pass("shade");
-    auto gbuffer_a_rg_handle = p.sample_tex(last_gbuffer_a_id);
-    auto gbuffer_b_rg_handle = p.sample_tex(last_gbuffer_b_id);
+    auto gbuffer_a_id = p.sample_tex(shade_pass_info.gbuffer_a_id);
+    auto gbuffer_b_id = p.sample_tex(shade_pass_info.gbuffer_b_id);
     RGResourceId secondary_view_debug_depth_rg_handle{};
     bool secondary_view_debug_enabled =
         debug_render_mode_ == DebugRenderMode::SecondaryView && !shadow_map_render_views_.empty();
@@ -696,12 +706,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       p.sample_tex(final_depth_pyramid_ids[(int)main_render_view_id_]);
     }
     p.w_swapchain_tex(swapchain_);
-    p.set_ex([this, gbuffer_a_rg_handle, gbuffer_b_rg_handle, secondary_view_debug_depth_rg_handle,
+    p.set_ex([this, gbuffer_a_id, gbuffer_b_id, secondary_view_debug_depth_rg_handle,
               secondary_view_debug_enabled,
               meshlet_occlusion_culling_enabled](rhi::CmdEncoder* enc) {
       ZoneScopedN("Final pass");
-      auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_rg_handle));
-      auto* gbuffer_b_tex = device_->get_tex(rg_.get_att_img(gbuffer_b_rg_handle));
+      auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_id));
+      auto* gbuffer_b_tex = device_->get_tex(rg_.get_att_img(gbuffer_b_id));
       auto dims = gbuffer_a_tex->desc().dims;
       device_->begin_swapchain_rendering(swapchain_, enc);
       enc->bind_pipeline(tex_only_pso_);
