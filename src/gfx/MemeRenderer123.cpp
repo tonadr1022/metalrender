@@ -420,143 +420,25 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   GBufferRenderer::GbufferPassInfo gbuffer_pass_info{};
 
-  // auto add_csm_pass = [this, &depth_ids, &meshlet_vis_ids, &meshlet_draw_stats_buf_ids,
-  //                      &final_depth_pyramid_ids, &out_draw_count_ids_late,
-  //                      &out_draw_count_ids_early,
-  //                      &task_cmd_buf_rg_ids](bool late, const char* name, RenderViewId view_id) {
-  //   auto& p = rg_.add_graphics_pass(name);
-  //   RGResourceId task_cmd_buf_rg_handles[AlphaMaskType::Count]{};
-  //   RGResourceId out_draw_count_buf_rg_handle{};
-  //   RGResourceId meshlet_vis_buf_rg_handle{};
-  //   if (mesh_shaders_enabled_) {
-  //     const DrawCullPhase cull_phase = late ? DrawCullPhase::Late : DrawCullPhase::Early;
-  //     for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++)
-  //     {
-  //       if (static_draw_batch_.get_stats().vertex_count > 0) {
-  //         task_cmd_buf_rg_handles[alpha_mask_type] =
-  //             p.read_buf(task_cmd_buf_rg_ids[(int)view_id].phase(
-  //                            cull_phase)[static_cast<AlphaMaskType>(alpha_mask_type)],
-  //                        rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader);
-  //       }
-  //     }
-  //     out_draw_count_buf_rg_handle =
-  //         p.read_buf((late ? out_draw_count_ids_late : out_draw_count_ids_early)[(int)view_id],
-  //                    rhi::PipelineStage::TaskShader);
-  //     if (late) {
-  //       p.sample_tex(final_depth_pyramid_ids[(int)view_id], rhi::PipelineStage::TaskShader);
-  //       meshlet_vis_ids[(int)view_id] =
-  //           p.rw_buf(meshlet_vis_ids[(int)view_id], rhi::PipelineStage::TaskShader);
-  //       meshlet_vis_buf_rg_handle = meshlet_vis_ids[(int)view_id];
-  //     } else {
-  //       ASSERT(static_instance_mgr_.get_num_meshlet_vis_buf_elements() > 0);
-  //       meshlet_vis_ids[(int)view_id] = rg_.create_buffer(
-  //           {.size = sizeof(uint32_t) * static_instance_mgr_.get_num_meshlet_vis_buf_elements(),
-  //            .defer_reuse = true},
-  //           "meshlet_vis_buf");
-  //       meshlet_vis_buf_rg_handle = meshlet_vis_ids[(int)view_id];
-  //       p.write_buf(meshlet_vis_buf_rg_handle, rhi::PipelineStage::TaskShader);
-  //     }
-  //   } else {
-  //     ASSERT(0);
-  //   }
-  //   RGResourceId rg_depth_handle;
-  //   if (late) {
-  //     depth_ids[(int)view_id] = p.rw_depth_output(depth_ids[(int)view_id]);
-  //     rg_depth_handle = depth_ids[(int)view_id];
-  //   } else {
-  //     depth_ids[(int)view_id] =
-  //         rg_.create_texture({.format = rhi::TextureFormat::D32float}, "depth_tex");
-  //     rg_depth_handle = depth_ids[(int)view_id];
-  //     p.write_depth_output(rg_depth_handle);
-  //   }
-  //   if (mesh_shaders_enabled()) {
-  //     meshlet_draw_stats_buf_ids[(int)view_id] =
-  //         p.rw_buf(meshlet_draw_stats_buf_ids[(int)view_id], rhi::PipelineStage::TaskShader);
-  //   }
-
-  //   p.set_ex([this, rg_depth_handle, late, view_id, out_draw_count_buf_rg_handle,
-  //             meshlet_vis_buf_rg_handle, task_cmd_buf_rg_handles](rhi::CmdEncoder* enc) {
-  //     if (!static_instance_mgr_.has_draws()) {
-  //       return;
-  //     }
-  //     auto depth_handle = rg_.get_att_img(rg_depth_handle);
-  //     auto load_op = late ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
-  //     enc->begin_rendering({
-  //         RenderAttInfo::depth_stencil_att(depth_handle, load_op,
-  //                                          {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
-  //     });
-  //     enc->set_depth_stencil_state(reverse_z_ ? rhi::CompareOp::Greater : rhi::CompareOp::Less,
-  //                                  true);
-  //     enc->set_wind_order(rhi::WindOrder::CounterClockwise);
-  //     enc->set_cull_mode(rhi::CullMode::Back);
-  //     enc->set_viewport({0, 0}, device_->get_tex(depth_handle)->desc().dims);
-  //     const auto& render_view = get_render_view(view_id);
-
-  //     if (mesh_shaders_enabled()) {
-  //       enc->bind_uav(rg_.get_buf(meshlet_vis_buf_rg_handle), 1);
-  //       enc->bind_uav(rg_.get_buf(meshlet_draw_stats_buf_id), 2);
-  //       if (late) {
-  //         enc->bind_srv(render_view.depth_pyramid_tex.handle, 3);
-  //       }
-  //       enc->bind_srv(static_draw_batch_.mesh_buf.get_buffer_handle(), 5);
-  //       enc->bind_srv(static_draw_batch_.meshlet_buf.get_buffer_handle(), 6);
-  //       enc->bind_srv(static_draw_batch_.meshlet_triangles_buf.get_buffer_handle(), 7);
-  //       enc->bind_srv(static_draw_batch_.meshlet_vertices_buf.get_buffer_handle(), 8);
-  //       enc->bind_srv(static_draw_batch_.vertex_buf.get_buffer_handle(), 9);
-  //       enc->bind_srv(materials_buf_.get_buffer_handle(), 11);
-  //       enc->bind_cbv(frame_globals_buf_info_.buf, GLOBALS_SLOT,
-  //                     frame_globals_buf_info_.offset_bytes);
-  //       enc->bind_cbv(render_view.data_buf_info.buf, VIEW_DATA_SLOT,
-  //                     render_view.data_buf_info.offset_bytes);
-  //       enc->bind_cbv(render_view.cull_data_buf_info.buf, 4,
-  //                     render_view.cull_data_buf_info.offset_bytes);
-  //       Task2PC pc{
-  //           .pass = late,
-  //           .flags = 0,
-  //       };
-  //       if (meshlet_frustum_culling_enabled_ && culling_enabled_) {
-  //         pc.flags |= MESHLET_FRUSTUM_CULL_ENABLED_BIT;
-  //       }
-  //       if (meshlet_cone_culling_enabled_ && culling_enabled_) {
-  //         pc.flags |= MESHLET_CONE_CULL_ENABLED_BIT;
-  //       }
-  //       if (meshlet_occlusion_culling_enabled_ && culling_enabled_ &&
-  //           view_id == main_render_view_id_) {
-  //         pc.flags |= MESHLET_OCCLUSION_CULL_ENABLED_BIT;
-  //       }
-
-  //       auto out_draw_count_buf_handle = rg_.get_buf(out_draw_count_buf_rg_handle);
-
-  // auto out_draw_count_buf_handle = rg.get_buf(out_draw_count_buf_rg_handle);
-  // pc.out_draw_count_buf_idx = device_->get_buf(out_draw_count_buf_handle)->bindless_idx();
-  // ASSERT(0 && "delete the below line and make sure the above line is gtg");
-  //       enc->bind_srv(out_draw_count_buf_handle, 12);
-  //       enc->bind_srv(static_instance_mgr_.get_instance_data_buf(), 10);
-  //       for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count;
-  //            alpha_mask_type++) {
-  //         auto task_cmd_buf_handle = rg_.get_buf(task_cmd_buf_rg_handles[alpha_mask_type]);
-  //         enc->bind_srv(task_cmd_buf_handle, 4);
-  //         enc->bind_pipeline(gbuffer_meshlet_psos_[alpha_mask_type]);
-  //         pc.alpha_test_enabled = alpha_mask_type;
-  //         enc->push_constants(&pc, sizeof(pc));
-  //         enc->draw_mesh_threadgroups_indirect(out_draw_count_buf_handle,
-  //                                              alpha_mask_type * sizeof(uint32_t) * 3,
-  //                                              {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
-  //       }
-
-  //     } else {
-  //       ASSERT(0);
-  //     }
-
-  //     enc->end_rendering();
-  //   });
-  // };
-
   bool meshlet_occlusion_culling_enabled =
       meshlet_occlusion_culling_enabled_ && culling_enabled_ && mesh_shaders_enabled_;
 
-  if (get_shadows_enabled()) {
-    // add_csm_pass(false, "csm_pass_early", shadow_map_render_views_[0]);
+  if (get_shadows_enabled() && mesh_shaders_enabled()) {
+    const GBufferRenderer::SceneBindings gbuffer_scene{
+        static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
+    for (size_t i = 0; i < shadow_cascade_count_; i++) {
+      const int svid = static_cast<int>(shadow_map_render_views_[i]);
+      GBufferRenderer::ShadowDepthPassInfo shadow_depth{};
+      const GBufferRenderer::GBufferViewBindings shadow_view{
+          task_cmd_buf_rg_ids[svid],
+          get_render_view(shadow_map_render_views_[i]),
+          {meshlet_vis_ids[svid], out_draw_count_ids_early[svid], final_depth_pyramid_ids[svid],
+           meshlet_draw_stats_buf_ids[svid]}};
+      gbuffer_renderer_->bake_shadow_depth(
+          std::string("csm_pass_early_") + std::to_string(i), shadow_depth, DrawCullPhase::Early,
+          gbuffer_scene, shadow_view);
+      depth_ids[svid] = shadow_depth.depth_id;
+    }
   }
 
   {

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string_view>
+
 #include "core/Config.hpp"
 #include "gfx/DrawBatch.hpp"
 #include "gfx/RenderGraph.hpp"
@@ -61,9 +63,14 @@ class GBufferRenderer {
 
   void bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
             const SceneBindings& scene, const GBufferViewBindings& view);
-  void encode_mesh_shader_pass(rhi::CmdEncoder* enc, DrawCullPhase cull_phase,
-                               rhi::TextureHandle depth_handle, const SceneBindings& scene,
-                               const MeshletMeshPassView& mesh_pass) const;
+
+  struct ShadowDepthPassInfo {
+    RGResourceId depth_id{};
+  };
+
+  void bake_shadow_depth(std::string_view pass_name, ShadowDepthPassInfo& out,
+                         DrawCullPhase cull_phase, const SceneBindings& scene,
+                         const GBufferViewBindings& view);
 
   struct DepthOnlyPassInfo {};
 
@@ -74,6 +81,7 @@ class GBufferRenderer {
   InstanceMgr& static_instance_mgr_;
   RenderGraph& rg_;
   rhi::PipelineHandleHolder gbuffer_meshlet_psos_[(size_t)AlphaMaskType::Count];
+  rhi::PipelineHandleHolder shadow_meshlet_psos_[(size_t)AlphaMaskType::Count];
   rhi::PipelineHandleHolder test2_pso_;
 };
 
