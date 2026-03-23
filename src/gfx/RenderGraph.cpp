@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <ranges>
+#include <string>
 #include <tracy/Tracy.hpp>
 #include <utility>
 
@@ -1001,6 +1002,17 @@ RenderGraph::ResourceRecord RenderGraph::create_resource_record(RGResourceType t
       .physical_idx = physical_idx,
       .debug_name = debug_name.empty() ? kInvalidNameId : intern_name(std::string(debug_name)),
   };
+}
+
+void add_buffer_readback_copy(RenderGraph& rg, std::string_view pass_name, RGResourceId src_buf,
+                              rhi::BufferHandle dst_buf, RGResourceId dst_rg_id, size_t src_offset,
+                              size_t dst_offset, size_t size_bytes) {
+  auto& p = rg.add_transfer_pass(std::string(pass_name));
+  p.read_buf(src_buf, rhi::PipelineStage::AllTransfer);
+  p.write_buf(dst_rg_id, rhi::PipelineStage::AllTransfer);
+  p.set_ex([&rg, src_buf, dst_buf, dst_offset, src_offset, size_bytes](rhi::CmdEncoder* enc) {
+    enc->copy_buffer_to_buffer(rg.get_buf(src_buf), src_offset, dst_buf, dst_offset, size_bytes);
+  });
 }
 
 }  // namespace gfx

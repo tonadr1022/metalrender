@@ -324,6 +324,10 @@ class RenderGraph {
 
 using RGPass = RenderGraph::Pass;
 
+void add_buffer_readback_copy(RenderGraph& rg, std::string_view pass_name, RGResourceId src_buf,
+                              rhi::BufferHandle dst_buf, RGResourceId dst_rg_id, size_t src_offset,
+                              size_t dst_offset, size_t size_bytes);
+
 }  // namespace gfx
 
 }  // namespace TENG_NAMESPACE

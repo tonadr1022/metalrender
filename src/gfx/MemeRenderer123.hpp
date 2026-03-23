@@ -1,7 +1,9 @@
 #pragma once
 
+#include <array>
 #include <filesystem>
 #include <span>
+#include <vector>
 
 #include "ImGuiRenderer.hpp"
 #include "core/Config.hpp"
@@ -18,6 +20,7 @@
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/renderer/RenderView.hpp"
 #include "gfx/renderer/RendererSettings.hpp"
+#include "gfx/renderer/TaskCmdBufRgIds.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -240,12 +243,16 @@ class MemeRenderer123 {
     uint32_t triangles_drawn_early;
     uint32_t triangles_drawn_late;
   };
+  void ensure_per_view_readback_buffers();
+  std::vector<std::array<rhi::BufferHandleHolder, k_max_frames_in_flight>>
+      meshlet_draw_stats_readback_;
+  std::vector<std::array<rhi::BufferHandleHolder, k_max_frames_in_flight>>
+      draw_cmd_counts_readback_;
+
   rhi::QueryPoolHandleHolder query_pools_[k_max_frames_in_flight];
   rhi::QueryPoolHandle get_query_pool() { return query_pools_[curr_frame_idx_].handle; }
   constexpr static int k_query_count = 2;
 
-  // meshlet_draw_stats_readback_[frame_in_flight][view_id] — CPU readback; GPU buffer is RG-owned
-  std::vector<std::vector<rhi::BufferHandleHolder>> meshlet_draw_stats_readback_;
   rhi::BufferHandleHolder query_resolve_bufs_[k_max_frames_in_flight];
   rhi::Swapchain* swapchain_{};
 

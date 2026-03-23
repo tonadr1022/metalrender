@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <fstream>
 #include <glm/ext/vector_integer.hpp>
+#include <string>
 #include <tracy/Tracy.hpp>
 
 #include "GLFW/glfw3.h"
@@ -198,13 +199,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       }
     });
   }
-  std::vector<RGResourceId> draw_cmd_counts_readback_buf_ids(render_views_.size());
-  for (size_t vid = 0; vid < render_views_.size(); vid++) {
-    draw_cmd_counts_readback_buf_ids[vid] = rg_.import_external_buffer(
-        get_render_view((RenderViewId)vid).draw_cmd_count_buf_readback[curr_frame_idx_].handle,
-        "draw_cmd_counts_readback_buf_view_" + std::to_string(vid));
-  }
-
   auto add_draw_cull_pass = [this, instance_data_id, &view_ids, &final_depth_pyramid_ids,
                              &draw_cmd_count_buf_ids](
                                 DrawCullPhase phase, TaskCmdBufRgTable& task_cmd_buf_rg_ids,
@@ -395,7 +389,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   }
 
   std::vector<RGResourceId> meshlet_draw_stats_buf_ids;
-  std::vector<RGResourceId> meshlet_draw_stats_readback_ids;
   std::vector<RGResourceId> depth_pyramid_ids(render_views_.size());
   std::vector<RGResourceId> depth_ids(render_views_.size());
   std::vector<RGResourceId> meshlet_vis_ids(render_views_.size());
@@ -407,16 +400,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   if (mesh_shaders_enabled()) {
     meshlet_draw_stats_buf_ids.reserve(render_views_.size());
-    meshlet_draw_stats_readback_ids.reserve(render_views_.size());
     for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
       meshlet_draw_stats_buf_ids.push_back(rg_.create_buffer(
           {.size = sizeof(MeshletDrawStats), .defer_reuse = true}, "meshlet_draw_stats"));
-      meshlet_draw_stats_readback_ids.push_back(rg_.import_external_buffer(
-          meshlet_draw_stats_readback_[curr_frame_idx_][view_id].handle,
-          "meshlet_draw_stats_readback"));
       RGResourceId meshlet_stats_clear_id = meshlet_draw_stats_buf_ids[view_id];
-      auto& p =
-          rg_.add_transfer_pass("clear_meshlet_draw_stats_view_" + std::to_string(view_id));
+      auto& p = rg_.add_transfer_pass("clear_meshlet_draw_stats_view_" + std::to_string(view_id));
       p.write_buf(meshlet_stats_clear_id, rhi::PipelineStage::AllTransfer);
       p.set_ex([this, view_id, meshlet_stats_clear_id](rhi::CmdEncoder* enc) {
         if (view_id == 0) enc->write_timestamp(get_query_pool(), 0);
@@ -654,30 +642,24 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   }
 
   if (mesh_shaders_enabled_) {  // readback draw counts
+    const auto fif_i = static_cast<uint32_t>(curr_frame_idx_);
     for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
       if (view_id > 0) break;
       RGResourceId meshlet_stats_read_src = meshlet_draw_stats_buf_ids[view_id];
-      auto& p =
-          rg_.add_transfer_pass("readback_meshlet_draw_stats_view_" + std::to_string(view_id));
-      p.read_buf(meshlet_stats_read_src, rhi::PipelineStage::AllTransfer);
-      p.write_buf(meshlet_draw_stats_readback_ids[view_id], rhi::PipelineStage::AllTransfer);
-      p.set_ex([this, view_id, meshlet_stats_read_src](rhi::CmdEncoder* enc) {
-        enc->copy_buffer_to_buffer(rg_.get_buf(meshlet_stats_read_src), 0,
-                                   meshlet_draw_stats_readback_[curr_frame_idx_][view_id].handle,
-                                   0, sizeof(MeshletDrawStats));
-      });
-      for (size_t rb_view = 0; rb_view < render_views_.size(); rb_view++) {
-        auto& p = rg_.add_transfer_pass("readback_draw_cmd_counts_view_" + std::to_string(rb_view));
-        p.read_buf(draw_cmd_count_buf_ids[rb_view], rhi::PipelineStage::AllTransfer);
-        p.write_buf(draw_cmd_counts_readback_buf_ids[rb_view], rhi::PipelineStage::AllTransfer);
-        p.set_ex([this, draw_cmd_count_buf_ids, rb_view](rhi::CmdEncoder* enc) {
-          enc->copy_buffer_to_buffer(rg_.get_buf(draw_cmd_count_buf_ids[rb_view]), 0,
-                                     get_render_view((RenderViewId)rb_view)
-                                         .draw_cmd_count_buf_readback[curr_frame_idx_]
-                                         .handle,
-                                     0, sizeof(uint32_t) * 2);
-        });
-      }
+      rhi::BufferHandle meshlet_dst = meshlet_draw_stats_readback_[view_id][fif_i].handle;
+      RGResourceId meshlet_dst_rg =
+          rg_.import_external_buffer(meshlet_dst, "meshlet_stats_readback_curr");
+      add_buffer_readback_copy(rg_, "readback_meshlet_draw_stats", meshlet_stats_read_src,
+                               meshlet_dst, meshlet_dst_rg, 0, 0, sizeof(MeshletDrawStats));
+    }
+    for (size_t rb_view = 0; rb_view < render_views_.size(); rb_view++) {
+      rhi::BufferHandle counts_dst = draw_cmd_counts_readback_[rb_view][fif_i].handle;
+      std::string counts_import_name = "draw_cmd_readback_v" + std::to_string(rb_view);
+      RGResourceId counts_dst_rg = rg_.import_external_buffer(counts_dst, counts_import_name);
+      std::string counts_pass_name = "readback_draw_cmd_counts_v" + std::to_string(rb_view);
+      add_buffer_readback_copy(rg_, counts_pass_name, draw_cmd_count_buf_ids[rb_view], counts_dst,
+                               counts_dst_rg, 0, 0,
+                               sizeof(uint32_t) * static_cast<size_t>(DrawCullPhase::Count));
     }
   }
 
@@ -1204,12 +1186,10 @@ void MemeRenderer123::on_imgui() {
 
     MeshletDrawStats stats{};
     for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
-      auto& readback_bufs_for_frame = meshlet_draw_stats_readback_[curr_frame_idx_];
-      if (view_id >= readback_bufs_for_frame.size()) {
-        continue;
-      }
-      auto* readback_buf = device_->get_buf(readback_bufs_for_frame[view_id].handle);
-      stats = *(MeshletDrawStats*)readback_buf->contents();
+      if (view_id >= meshlet_draw_stats_readback_.size()) continue;
+      stats = *static_cast<MeshletDrawStats*>(device_->get_buf(
+                                                   meshlet_draw_stats_readback_[view_id][curr_frame_idx_])
+                                                   ->contents());
       size_t tot_drawn_meshlets = stats.meshlets_drawn_early + stats.meshlets_drawn_late;
       ImGui::Text(
           "(View %zu) Meshlets drawn %1zu frames ago: %5zu of %5u (%.2f %%)\nEarly: %7u\tLate %7u",
@@ -1230,11 +1210,9 @@ void MemeRenderer123::on_imgui() {
   if (frame_num_ >= device_->get_info().frames_in_flight) {
     const size_t frames_ago = device_->get_info().frames_in_flight - 1;
     for (size_t v = 0; v < render_views_.size(); v++) {
-      auto* conts = (uint32_t*)device_
-                        ->get_buf(get_render_view((RenderViewId)v)
-                                      .draw_cmd_count_buf_readback[get_frames_ago_idx(frames_ago)]
-                                      .handle)
-                        ->contents();
+      if (v >= draw_cmd_counts_readback_.size()) continue;
+      auto* conts = static_cast<uint32_t*>(
+          device_->get_buf(draw_cmd_counts_readback_[v][get_frames_ago_idx(frames_ago)])->contents());
       ImGui::Text("Draw cull cmd counts (view %zu, early/late): %u %u", v, conts[0], conts[1]);
     }
   }
@@ -1551,9 +1529,11 @@ void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
     constexpr int frames_ago = 2;
     if (frame_num_ >= device_->get_info().frames_in_flight) {
       auto view_id = static_cast<size_t>(main_render_view_id_);
-      auto* readback_buf = device_->get_buf(
-          meshlet_draw_stats_readback_[get_frames_ago_idx(frames_ago)][view_id].handle);
-      stats = *(MeshletDrawStats*)readback_buf->contents();
+      if (view_id < meshlet_draw_stats_readback_.size()) {
+        stats = *static_cast<MeshletDrawStats*>(
+            device_->get_buf(meshlet_draw_stats_readback_[view_id][get_frames_ago_idx(frames_ago)])
+                ->contents());
+      }
     }
     size_t tot_drawn_meshlets = stats.meshlets_drawn_early + stats.meshlets_drawn_late;
     ImGui::Text(
@@ -1623,6 +1603,36 @@ void MemeRenderer123::on_shadows_enabled_change(bool shadows_enabled) {
   }
 }
 
+void MemeRenderer123::ensure_per_view_readback_buffers() {
+  const auto fif = static_cast<uint32_t>(device_->get_info().frames_in_flight);
+  meshlet_draw_stats_readback_.resize(render_views_.size());
+  draw_cmd_counts_readback_.resize(render_views_.size());
+  const size_t meshlet_sz = sizeof(MeshletDrawStats);
+  const size_t draw_cnt_sz = sizeof(uint32_t) * static_cast<size_t>(DrawCullPhase::Count);
+  for (size_t v = 0; v < render_views_.size(); ++v) {
+    for (uint32_t f = 0; f < fif; ++f) {
+      if (!meshlet_draw_stats_readback_[v][f].handle.is_valid()) {
+        std::string name = "meshlet_stats_rb_v" + std::to_string(v) + "_f" + std::to_string(f);
+        meshlet_draw_stats_readback_[v][f] = device_->create_buf_h(
+            {.size = meshlet_sz,
+             .flags = rhi::BufferDescFlags::CPUAccessible,
+             .name = name.c_str()});
+      }
+      if (!draw_cmd_counts_readback_[v][f].handle.is_valid()) {
+        std::string name = "draw_cmd_counts_rb_v" + std::to_string(v) + "_f" + std::to_string(f);
+        draw_cmd_counts_readback_[v][f] = device_->create_buf_h(
+            {.size = draw_cnt_sz,
+             .flags = rhi::BufferDescFlags::CPUAccessible,
+             .name = name.c_str()});
+      }
+    }
+    for (uint32_t f = fif; f < k_max_frames_in_flight; ++f) {
+      meshlet_draw_stats_readback_[v][f] = {};
+      draw_cmd_counts_readback_[v][f] = {};
+    }
+  }
+}
+
 RenderViewId MemeRenderer123::create_render_view() {
   RenderViewId view_id;
   if (!free_render_view_ids_.empty()) {
@@ -1633,34 +1643,7 @@ RenderViewId MemeRenderer123::create_render_view() {
     render_views_.push_back(RenderView{});
   }
 
-  auto fif = device_->get_info().frames_in_flight;
-  if (meshlet_draw_stats_readback_.size() < fif) {
-    meshlet_draw_stats_readback_.resize(fif);
-  }
-
-  size_t num_render_views = render_views_.size();
-  auto& render_view = render_views_[(int)view_id];
-  for (size_t frame_idx = 0; frame_idx < fif; frame_idx++) {
-    if (meshlet_draw_stats_readback_[frame_idx].size() < num_render_views) {
-      meshlet_draw_stats_readback_[frame_idx].resize(num_render_views);
-    }
-
-    meshlet_draw_stats_readback_[frame_idx][(int)view_id] = device_->create_buf_h(rhi::BufferDesc{
-        .size = sizeof(MeshletDrawStats),
-        .flags = rhi::BufferDescFlags::CPUAccessible,
-        .name = "meshlet_draw_stats_readback",
-    });
-    render_view.draw_cmd_count_buf_readback[frame_idx] = device_->create_buf_h(rhi::BufferDesc{
-        .size = sizeof(uint32_t) * 2,
-        .flags = rhi::BufferDescFlags::CPUAccessible,
-        .name = "draw_cmd_counts_buf_readback",
-    });
-    // render_view.draw_cmd_count_buf[frame_idx] = device_->create_buf_h(rhi::BufferDesc{
-    //     .usage = rhi::BufferUsage::Storage,
-    //     .size = sizeof(uint32_t) * 2,
-    //     .name = "draw_cmd_counts_buf",
-    // });
-  }
+  ensure_per_view_readback_buffers();
   auto main_size = window_->get_window_size();
   make_depth_pyramid_tex(view_id, main_size);
   return view_id;
