@@ -12,7 +12,6 @@ namespace TENG_NAMESPACE {
 namespace rhi {
 
 class Device;
-class Swapchain;
 
 }  // namespace rhi
 
@@ -24,8 +23,7 @@ class RenderGraph;
 
 class GBufferRenderer {
  public:
-  explicit GBufferRenderer(rhi::Device* device, rhi::Swapchain* swapchain,
-                           InstanceMgr& static_instance_mgr, RenderGraph& rg);
+  explicit GBufferRenderer(rhi::Device* device, InstanceMgr& static_instance_mgr, RenderGraph& rg);
   ~GBufferRenderer();
 
   struct GbufferPassInfo {
@@ -34,34 +32,45 @@ class GBufferRenderer {
     RGResourceId depth_id{};
   };
 
-  void bake(const GeometryBatch& draw_batch, GbufferPassInfo& gbuffer_pass_info,
-            const TaskCmdBufRgIdsPerView& task_cmd_buf_rg_ids, DrawCullPhase cull_phase,
-            RGResourceId& meshlet_vis_id, RGResourceId& draw_cnt_buf_id,
-            RGResourceId& final_depth_pyramid_id, RGResourceId& meshlet_draw_stats_buf_id,
-            RenderView& render_view, rhi::BufferHandle materials_buf_handle,
-            const IdxOffset& frame_globals_buf_info);
-  void encode_mesh_shader_pass(rhi::CmdEncoder* enc, const RGResourceId& meshlet_vis_id,
-                               DrawCullPhase cull_phase, const RenderView& render_view,
-                               RGResourceId meshlet_draw_stats_buf_id,
-                               const IdxOffset& frame_globals_buf_info,
-                               rhi::TextureHandle depth_handle, const GeometryBatch& draw_batch,
-                               TaskCmdBufRgIdsByAlphaMask task_cmd_buf_rg_ids,
-                               rhi::BufferHandle out_draw_count_buf) const;
+  struct GBufferViewRgIds {
+    RGResourceId& meshlet_vis;
+    RGResourceId& draw_count;
+    RGResourceId& final_depth_pyramid;
+    RGResourceId& meshlet_draw_stats;
+  };
+
+  struct GBufferViewBindings {
+    const TaskCmdBufRgIdsPerView& task_cmd_buf_rg_ids;
+    RenderView& render_view;
+    GBufferViewRgIds rg_ids;
+  };
+
+  struct SceneBindings {
+    const GeometryBatch& draw_batch;
+    rhi::BufferHandle materials_buf;
+    IdxOffset frame_globals_buf_info{};
+  };
+
+  struct MeshletMeshPassView {
+    const RenderView& render_view;
+    RGResourceId meshlet_vis{};
+    RGResourceId meshlet_draw_stats{};
+    TaskCmdBufRgIdsByAlphaMask task_cmd_buf_rg_ids{};
+    rhi::BufferHandle out_draw_count_buf;
+  };
+
+  void bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
+            const SceneBindings& scene, const GBufferViewBindings& view);
+  void encode_mesh_shader_pass(rhi::CmdEncoder* enc, DrawCullPhase cull_phase,
+                               rhi::TextureHandle depth_handle, const SceneBindings& scene,
+                               const MeshletMeshPassView& mesh_pass) const;
 
   struct DepthOnlyPassInfo {};
-
-  struct PerEarlyLatePassInfo {
-    RGResourceId task_cmd_buf_rg_handles[AlphaMaskType::Count]{};
-    RGResourceId out_draw_count_buf_rg_handle{};
-    RGResourceId meshlet_draw_stats_buf_id{};
-    RGResourceId meshlet_vis_id{};
-  };
 
   void load_pipelines(ShaderManager& shader_mgr);
 
  private:
   rhi::Device* device_;
-  rhi::Swapchain* swapchain_;
   InstanceMgr& static_instance_mgr_;
   RenderGraph& rg_;
   rhi::PipelineHandleHolder gbuffer_meshlet_psos_[(size_t)AlphaMaskType::Count];

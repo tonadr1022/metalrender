@@ -561,11 +561,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   {
     auto vid = (int)main_render_view_id_;
-    gbuffer_renderer_->bake(static_draw_batch_, gbuffer_pass_info, task_cmd_buf_rg_ids[vid],
-                            DrawCullPhase::Early, meshlet_vis_ids[vid],
-                            out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
-                            meshlet_draw_stats_buf_ids[vid], get_render_view(main_render_view_id_),
-                            materials_buf_.get_buffer_handle(), frame_globals_buf_info_);
+    const GBufferRenderer::SceneBindings gbuffer_scene{
+        static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
+    const GBufferRenderer::GBufferViewBindings gbuffer_view{
+        task_cmd_buf_rg_ids[vid],
+        get_render_view(main_render_view_id_),
+        {meshlet_vis_ids[vid], out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
+         meshlet_draw_stats_buf_ids[vid]}};
+    gbuffer_renderer_->bake(gbuffer_pass_info, DrawCullPhase::Early, gbuffer_scene, gbuffer_view);
     depth_ids[vid] = gbuffer_pass_info.depth_id;
   }
 
@@ -634,11 +637,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   if (meshlet_occlusion_culling_enabled) {
     auto vid = (int)main_render_view_id_;
-    gbuffer_renderer_->bake(static_draw_batch_, gbuffer_pass_info, task_cmd_buf_rg_ids[vid],
-                            DrawCullPhase::Late, meshlet_vis_ids[vid],
-                            out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
-                            meshlet_draw_stats_buf_ids[vid], get_render_view(main_render_view_id_),
-                            materials_buf_.get_buffer_handle(), frame_globals_buf_info_);
+    const GBufferRenderer::SceneBindings gbuffer_scene{
+        static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
+    const GBufferRenderer::GBufferViewBindings gbuffer_view{
+        task_cmd_buf_rg_ids[vid],
+        get_render_view(main_render_view_id_),
+        {meshlet_vis_ids[vid], out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
+         meshlet_draw_stats_buf_ids[vid]}};
+    gbuffer_renderer_->bake(gbuffer_pass_info, DrawCullPhase::Late, gbuffer_scene, gbuffer_view);
   }
 
   if (mesh_shaders_enabled_) {  // readback draw counts
@@ -1187,9 +1193,8 @@ void MemeRenderer123::on_imgui() {
     MeshletDrawStats stats{};
     for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
       if (view_id >= meshlet_draw_stats_readback_.size()) continue;
-      stats = *static_cast<MeshletDrawStats*>(device_->get_buf(
-                                                   meshlet_draw_stats_readback_[view_id][curr_frame_idx_])
-                                                   ->contents());
+      stats = *static_cast<MeshletDrawStats*>(
+          device_->get_buf(meshlet_draw_stats_readback_[view_id][curr_frame_idx_])->contents());
       size_t tot_drawn_meshlets = stats.meshlets_drawn_early + stats.meshlets_drawn_late;
       ImGui::Text(
           "(View %zu) Meshlets drawn %1zu frames ago: %5zu of %5u (%.2f %%)\nEarly: %7u\tLate %7u",
@@ -1212,7 +1217,8 @@ void MemeRenderer123::on_imgui() {
     for (size_t v = 0; v < render_views_.size(); v++) {
       if (v >= draw_cmd_counts_readback_.size()) continue;
       auto* conts = static_cast<uint32_t*>(
-          device_->get_buf(draw_cmd_counts_readback_[v][get_frames_ago_idx(frames_ago)])->contents());
+          device_->get_buf(draw_cmd_counts_readback_[v][get_frames_ago_idx(frames_ago)])
+              ->contents());
       ImGui::Text("Draw cull cmd counts (view %zu, early/late): %u %u", v, conts[0], conts[1]);
     }
   }
@@ -1489,8 +1495,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
     depth_reduce_pso_ = shader_mgr_->create_compute_pipeline({"depth_reduce/depth_reduce"});
     shade_pso_ = shader_mgr_->create_compute_pipeline({"shade"});
   }
-  gbuffer_renderer_ =
-      std::make_unique<gfx::GBufferRenderer>(device_, swapchain_, static_instance_mgr_, rg_);
+  gbuffer_renderer_ = std::make_unique<gfx::GBufferRenderer>(device_, static_instance_mgr_, rg_);
   gbuffer_renderer_->load_pipelines(*shader_mgr_);
 
   rg_.init(device_);
@@ -1613,17 +1618,17 @@ void MemeRenderer123::ensure_per_view_readback_buffers() {
     for (uint32_t f = 0; f < fif; ++f) {
       if (!meshlet_draw_stats_readback_[v][f].handle.is_valid()) {
         std::string name = "meshlet_stats_rb_v" + std::to_string(v) + "_f" + std::to_string(f);
-        meshlet_draw_stats_readback_[v][f] = device_->create_buf_h(
-            {.size = meshlet_sz,
-             .flags = rhi::BufferDescFlags::CPUAccessible,
-             .name = name.c_str()});
+        meshlet_draw_stats_readback_[v][f] =
+            device_->create_buf_h({.size = meshlet_sz,
+                                   .flags = rhi::BufferDescFlags::CPUAccessible,
+                                   .name = name.c_str()});
       }
       if (!draw_cmd_counts_readback_[v][f].handle.is_valid()) {
         std::string name = "draw_cmd_counts_rb_v" + std::to_string(v) + "_f" + std::to_string(f);
-        draw_cmd_counts_readback_[v][f] = device_->create_buf_h(
-            {.size = draw_cnt_sz,
-             .flags = rhi::BufferDescFlags::CPUAccessible,
-             .name = name.c_str()});
+        draw_cmd_counts_readback_[v][f] =
+            device_->create_buf_h({.size = draw_cnt_sz,
+                                   .flags = rhi::BufferDescFlags::CPUAccessible,
+                                   .name = name.c_str()});
       }
     }
     for (uint32_t f = fif; f < k_max_frames_in_flight; ++f) {
