@@ -37,12 +37,12 @@ class GBufferRenderer {
   void bake(const GeometryBatch& draw_batch, GbufferPassInfo& gbuffer_pass_info,
             const TaskCmdBufRgIdsPerView& task_cmd_buf_rg_ids, DrawCullPhase cull_phase,
             RGResourceId& meshlet_vis_id, RGResourceId& draw_cnt_buf_id,
-            RGResourceId& final_depth_pyramid_id, RGResourceId& out_counts_id,
-            RenderView& render_view, rhi::BufferHandle out_counts_buf_handle,
-            rhi::BufferHandle materials_buf_handle, const IdxOffset& frame_globals_buf_info);
+            RGResourceId& final_depth_pyramid_id, RGResourceId& meshlet_draw_stats_buf_id,
+            RenderView& render_view, rhi::BufferHandle materials_buf_handle,
+            const IdxOffset& frame_globals_buf_info);
   void encode_mesh_shader_pass(rhi::CmdEncoder* enc, const RGResourceId& meshlet_vis_id,
                                DrawCullPhase cull_phase, const RenderView& render_view,
-                               rhi::BufferHandle out_counts_buf_handle,
+                               RGResourceId meshlet_draw_stats_buf_id,
                                const IdxOffset& frame_globals_buf_info,
                                rhi::TextureHandle depth_handle, const GeometryBatch& draw_batch,
                                TaskCmdBufRgIdsByAlphaMask task_cmd_buf_rg_ids,
@@ -53,7 +53,7 @@ class GBufferRenderer {
   struct PerEarlyLatePassInfo {
     RGResourceId task_cmd_buf_rg_handles[AlphaMaskType::Count]{};
     RGResourceId out_draw_count_buf_rg_handle{};
-    RGResourceId out_counts_id{};
+    RGResourceId meshlet_draw_stats_buf_id{};
     RGResourceId meshlet_vis_id{};
   };
 

@@ -25,8 +25,7 @@ void GBufferRenderer::bake(const GeometryBatch& draw_batch, GbufferPassInfo& gbu
                            const TaskCmdBufRgIdsPerView& task_cmd_buf_rg_ids,
                            DrawCullPhase cull_phase, RGResourceId& meshlet_vis_id,
                            RGResourceId& draw_cnt_buf_id, RGResourceId& final_depth_pyramid_id,
-                           RGResourceId& out_counts_id, RenderView& render_view,
-                           rhi::BufferHandle out_counts_buf_handle,
+                           RGResourceId& meshlet_draw_stats_buf_id, RenderView& render_view,
                            rhi::BufferHandle materials_buf_handle,
                            const IdxOffset& frame_globals_buf_info) {
   bool late = cull_phase == DrawCullPhase::Late;
@@ -76,14 +75,17 @@ void GBufferRenderer::bake(const GeometryBatch& draw_batch, GbufferPassInfo& gbu
         rg_.create_texture({.format = rhi::TextureFormat::D32float}, "depth_tex");
     p.write_depth_output(gbuffer_pass_info.depth_id);
   }
+  RGResourceId meshlet_stats_for_pass{};
   if (get_ctx().settings.mesh_shaders_enabled) {
-    out_counts_id = p.rw_buf(out_counts_id, rhi::PipelineStage::TaskShader);
+    meshlet_draw_stats_buf_id =
+        p.rw_buf(meshlet_draw_stats_buf_id, rhi::PipelineStage::TaskShader);
+    meshlet_stats_for_pass = meshlet_draw_stats_buf_id;
   }
 
   auto dep_id = gbuffer_pass_info.depth_id;
   p.set_ex([this, rg_gbuffer_a_handle = gbuffer_pass_info.gbuffer_a_id,
             rg_gbuffer_b_handle = gbuffer_pass_info.gbuffer_b_id, dep_id, late, &render_view,
-            meshlet_vis_id, out_counts_buf_handle, &draw_batch, materials_buf_handle,
+            meshlet_vis_id, meshlet_stats_for_pass, &draw_batch, materials_buf_handle,
             &frame_globals_buf_info, out_draw_count_buf_rg_handle, cull_phase,
             task_cmd_buf_rg_ids = task_cmd_buf_rg_ids.phase(cull_phase)](rhi::CmdEncoder* enc) {
     if (!static_instance_mgr_.has_draws()) {
@@ -104,7 +106,7 @@ void GBufferRenderer::bake(const GeometryBatch& draw_batch, GbufferPassInfo& gbu
     enc->bind_srv(materials_buf_handle, 11);
 
     if (get_ctx().settings.mesh_shaders_enabled) {
-      encode_mesh_shader_pass(enc, meshlet_vis_id, cull_phase, render_view, out_counts_buf_handle,
+      encode_mesh_shader_pass(enc, meshlet_vis_id, cull_phase, render_view, meshlet_stats_for_pass,
                               frame_globals_buf_info, depth_handle, draw_batch, task_cmd_buf_rg_ids,
                               rg_.get_buf(out_draw_count_buf_rg_handle));
     } else {
@@ -163,7 +165,7 @@ void GBufferRenderer::load_pipelines(ShaderManager& shader_mgr) {
 
 void GBufferRenderer::encode_mesh_shader_pass(
     rhi::CmdEncoder* enc, const RGResourceId& meshlet_vis_id, DrawCullPhase cull_phase,
-    const RenderView& render_view, rhi::BufferHandle out_counts_buf_handle,
+    const RenderView& render_view, RGResourceId meshlet_draw_stats_buf_id,
     const IdxOffset& frame_globals_buf_info, rhi::TextureHandle depth_handle,
     const GeometryBatch& draw_batch, TaskCmdBufRgIdsByAlphaMask task_cmd_buf_rg_ids,
     rhi::BufferHandle out_draw_count_buf) const {
@@ -176,7 +178,7 @@ void GBufferRenderer::encode_mesh_shader_pass(
   ASSERT(get_ctx().settings.mesh_shaders_enabled);
 
   enc->bind_uav(rg_.get_buf(meshlet_vis_id), 1);
-  enc->bind_uav(out_counts_buf_handle, 2);
+  enc->bind_uav(rg_.get_buf(meshlet_draw_stats_buf_id), 2);
   if (cull_phase == DrawCullPhase::Late) {
     enc->bind_srv(render_view.depth_pyramid_tex.handle, 3);
   }

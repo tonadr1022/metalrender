@@ -9,6 +9,7 @@
 #include "shared_instance_data.h"
 #include "shared_globals.h"
 #include "shared_cull_data.h"
+#include "shared_meshlet_draw_stats.hlsli"
 #include "default_vertex.h"
 // clang-format on
 
@@ -24,7 +25,7 @@ StructuredBuffer<Meshlet> meshlet_buf : register(t6);
 StructuredBuffer<InstanceData> instance_data_buf : register(t10);
 StructuredBuffer<TaskCmd> task_cmd_buf : register(t4);
 RWStructuredBuffer<uint> meshlet_vis_buf : register(u1);
-RWStructuredBuffer<uint> out_counts_buf : register(u2);
+RWStructuredBuffer<uint> meshlet_draw_stats : register(u2);
 Texture2D depth_pyramid_tex : register(t3);
 
 [NumThreads(K_TASK_TG_SIZE, 1, 1)] void main(uint gtid : SV_GroupThreadID,
@@ -153,13 +154,11 @@ Texture2D depth_pyramid_tex : register(t3);
       uint meshlet_idx = task_cmd.task_offset + gtid;
       Meshlet meshlet = meshlet_buf[meshlet_idx];
       uint tri_count = meshlet.vertex_count;
-      uint cnt;
-      InterlockedAdd(out_counts_buf[pass + 2], tri_count * (draw ? 1 : 0), cnt);
+      MeshletDrawStats_AddTriangles(meshlet_draw_stats, pass, tri_count, draw);
     }
   }
 
-  uint cnt;
-  InterlockedAdd(out_counts_buf[pass], draw ? 1 : 0, cnt);
+  MeshletDrawStats_AddMeshlets(meshlet_draw_stats, pass, draw ? 1u : 0u);
 
   if (gtid == 0) {
     s_count = 0;

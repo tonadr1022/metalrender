@@ -244,10 +244,8 @@ class MemeRenderer123 {
   rhi::QueryPoolHandle get_query_pool() { return query_pools_[curr_frame_idx_].handle; }
   constexpr static int k_query_count = 2;
 
-  // out_counts_buf_[frame_in_flight][view_id]
-  // TODO: move into render view
-  std::vector<std::vector<rhi::BufferHandleHolder>> out_counts_buf_;
-  std::vector<std::vector<rhi::BufferHandleHolder>> out_counts_buf_readback_;
+  // meshlet_draw_stats_readback_[frame_in_flight][view_id] — CPU readback; GPU buffer is RG-owned
+  std::vector<std::vector<rhi::BufferHandleHolder>> meshlet_draw_stats_readback_;
   rhi::BufferHandleHolder query_resolve_bufs_[k_max_frames_in_flight];
   rhi::Swapchain* swapchain_{};
 

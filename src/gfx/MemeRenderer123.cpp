@@ -394,8 +394,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     });
   }
 
-  std::vector<RGResourceId> out_counts_ids;
-  std::vector<RGResourceId> out_counts_readback_ids;
+  std::vector<RGResourceId> meshlet_draw_stats_buf_ids;
+  std::vector<RGResourceId> meshlet_draw_stats_readback_ids;
   std::vector<RGResourceId> depth_pyramid_ids(render_views_.size());
   std::vector<RGResourceId> depth_ids(render_views_.size());
   std::vector<RGResourceId> meshlet_vis_ids(render_views_.size());
@@ -406,23 +406,25 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   }
 
   if (mesh_shaders_enabled()) {
-    out_counts_ids.reserve(render_views_.size());
-    out_counts_readback_ids.reserve(render_views_.size());
+    meshlet_draw_stats_buf_ids.reserve(render_views_.size());
+    meshlet_draw_stats_readback_ids.reserve(render_views_.size());
     for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
-      out_counts_ids.push_back(rg_.import_external_buffer(
-          out_counts_buf_[curr_frame_idx_][view_id].handle, "out_counts_buf"));
-      out_counts_readback_ids.push_back(rg_.import_external_buffer(
-          out_counts_buf_readback_[curr_frame_idx_][view_id].handle, "out_counts_readback"));
-      auto& p = rg_.add_transfer_pass("clear_out_counts_buf_view_" + std::to_string(view_id));
-      p.write_buf(out_counts_ids[view_id], rhi::PipelineStage::AllTransfer);
-      p.set_ex([this, view_id](rhi::CmdEncoder* enc) {
+      meshlet_draw_stats_buf_ids.push_back(rg_.create_buffer(
+          {.size = sizeof(MeshletDrawStats), .defer_reuse = true}, "meshlet_draw_stats"));
+      meshlet_draw_stats_readback_ids.push_back(rg_.import_external_buffer(
+          meshlet_draw_stats_readback_[curr_frame_idx_][view_id].handle,
+          "meshlet_draw_stats_readback"));
+      RGResourceId meshlet_stats_clear_id = meshlet_draw_stats_buf_ids[view_id];
+      auto& p =
+          rg_.add_transfer_pass("clear_meshlet_draw_stats_view_" + std::to_string(view_id));
+      p.write_buf(meshlet_stats_clear_id, rhi::PipelineStage::AllTransfer);
+      p.set_ex([this, view_id, meshlet_stats_clear_id](rhi::CmdEncoder* enc) {
         if (view_id == 0) enc->write_timestamp(get_query_pool(), 0);
+        rhi::BufferHandle buf = rg_.get_buf(meshlet_stats_clear_id);
         if (frame_num_ % 10 == 0) {
-          enc->fill_buffer(out_counts_buf_[curr_frame_idx_][view_id].handle, 0,
-                           sizeof(MeshletDrawStats), 0);
+          enc->fill_buffer(buf, 0, sizeof(MeshletDrawStats), 0);
         } else {
-          enc->fill_buffer(out_counts_buf_[curr_frame_idx_][view_id].handle, 0,
-                           sizeof(MeshletDrawStats) / 2, 0);
+          enc->fill_buffer(buf, 0, sizeof(MeshletDrawStats) / 2, 0);
         }
       });
     }
@@ -430,7 +432,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   GBufferRenderer::GbufferPassInfo gbuffer_pass_info{};
 
-  // auto add_csm_pass = [this, &depth_ids, &meshlet_vis_ids, &out_counts_ids,
+  // auto add_csm_pass = [this, &depth_ids, &meshlet_vis_ids, &meshlet_draw_stats_buf_ids,
   //                      &final_depth_pyramid_ids, &out_draw_count_ids_late,
   //                      &out_draw_count_ids_early,
   //                      &task_cmd_buf_rg_ids](bool late, const char* name, RenderViewId view_id) {
@@ -480,8 +482,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   //     p.write_depth_output(rg_depth_handle);
   //   }
   //   if (mesh_shaders_enabled()) {
-  //     out_counts_ids[(int)view_id] =
-  //         p.rw_buf(out_counts_ids[(int)view_id], rhi::PipelineStage::TaskShader);
+  //     meshlet_draw_stats_buf_ids[(int)view_id] =
+  //         p.rw_buf(meshlet_draw_stats_buf_ids[(int)view_id], rhi::PipelineStage::TaskShader);
   //   }
 
   //   p.set_ex([this, rg_depth_handle, late, view_id, out_draw_count_buf_rg_handle,
@@ -504,7 +506,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   //     if (mesh_shaders_enabled()) {
   //       enc->bind_uav(rg_.get_buf(meshlet_vis_buf_rg_handle), 1);
-  //       enc->bind_uav(out_counts_buf_[curr_frame_idx_][(int)view_id].handle, 2);
+  //       enc->bind_uav(rg_.get_buf(meshlet_draw_stats_buf_id), 2);
   //       if (late) {
   //         enc->bind_srv(render_view.depth_pyramid_tex.handle, 3);
   //       }
@@ -574,8 +576,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     gbuffer_renderer_->bake(static_draw_batch_, gbuffer_pass_info, task_cmd_buf_rg_ids[vid],
                             DrawCullPhase::Early, meshlet_vis_ids[vid],
                             out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
-                            out_counts_ids[vid], get_render_view(main_render_view_id_),
-                            out_counts_buf_[curr_frame_idx_][vid].handle,
+                            meshlet_draw_stats_buf_ids[vid], get_render_view(main_render_view_id_),
                             materials_buf_.get_buffer_handle(), frame_globals_buf_info_);
     depth_ids[vid] = gbuffer_pass_info.depth_id;
   }
@@ -648,21 +649,22 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     gbuffer_renderer_->bake(static_draw_batch_, gbuffer_pass_info, task_cmd_buf_rg_ids[vid],
                             DrawCullPhase::Late, meshlet_vis_ids[vid],
                             out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
-                            out_counts_ids[vid], get_render_view(main_render_view_id_),
-                            out_counts_buf_[curr_frame_idx_][vid].handle,
+                            meshlet_draw_stats_buf_ids[vid], get_render_view(main_render_view_id_),
                             materials_buf_.get_buffer_handle(), frame_globals_buf_info_);
   }
 
   if (mesh_shaders_enabled_) {  // readback draw counts
     for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
       if (view_id > 0) break;
-      auto& p = rg_.add_transfer_pass("readback_draw_counts_view_" + std::to_string(view_id));
-      p.read_buf(out_counts_ids[view_id], rhi::PipelineStage::AllTransfer);
-      p.write_buf(out_counts_readback_ids[view_id], rhi::PipelineStage::AllTransfer);
-      p.set_ex([this, view_id](rhi::CmdEncoder* enc) {
-        enc->copy_buffer_to_buffer(out_counts_buf_[curr_frame_idx_][view_id].handle, 0,
-                                   out_counts_buf_readback_[curr_frame_idx_][view_id].handle, 0,
-                                   sizeof(MeshletDrawStats));
+      RGResourceId meshlet_stats_read_src = meshlet_draw_stats_buf_ids[view_id];
+      auto& p =
+          rg_.add_transfer_pass("readback_meshlet_draw_stats_view_" + std::to_string(view_id));
+      p.read_buf(meshlet_stats_read_src, rhi::PipelineStage::AllTransfer);
+      p.write_buf(meshlet_draw_stats_readback_ids[view_id], rhi::PipelineStage::AllTransfer);
+      p.set_ex([this, view_id, meshlet_stats_read_src](rhi::CmdEncoder* enc) {
+        enc->copy_buffer_to_buffer(rg_.get_buf(meshlet_stats_read_src), 0,
+                                   meshlet_draw_stats_readback_[curr_frame_idx_][view_id].handle,
+                                   0, sizeof(MeshletDrawStats));
       });
       for (size_t rb_view = 0; rb_view < render_views_.size(); rb_view++) {
         auto& p = rg_.add_transfer_pass("readback_draw_cmd_counts_view_" + std::to_string(rb_view));
@@ -1202,7 +1204,7 @@ void MemeRenderer123::on_imgui() {
 
     MeshletDrawStats stats{};
     for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
-      auto& readback_bufs_for_frame = out_counts_buf_readback_[curr_frame_idx_];
+      auto& readback_bufs_for_frame = meshlet_draw_stats_readback_[curr_frame_idx_];
       if (view_id >= readback_bufs_for_frame.size()) {
         continue;
       }
@@ -1550,7 +1552,7 @@ void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
     if (frame_num_ >= device_->get_info().frames_in_flight) {
       auto view_id = static_cast<size_t>(main_render_view_id_);
       auto* readback_buf = device_->get_buf(
-          out_counts_buf_readback_[get_frames_ago_idx(frames_ago)][view_id].handle);
+          meshlet_draw_stats_readback_[get_frames_ago_idx(frames_ago)][view_id].handle);
       stats = *(MeshletDrawStats*)readback_buf->contents();
     }
     size_t tot_drawn_meshlets = stats.meshlets_drawn_early + stats.meshlets_drawn_late;
@@ -1632,31 +1634,21 @@ RenderViewId MemeRenderer123::create_render_view() {
   }
 
   auto fif = device_->get_info().frames_in_flight;
-  if (out_counts_buf_.size() < fif) {
-    out_counts_buf_.resize(fif);
-    out_counts_buf_readback_.resize(fif);
+  if (meshlet_draw_stats_readback_.size() < fif) {
+    meshlet_draw_stats_readback_.resize(fif);
   }
 
   size_t num_render_views = render_views_.size();
   auto& render_view = render_views_[(int)view_id];
   for (size_t frame_idx = 0; frame_idx < fif; frame_idx++) {
-    // TODO: render graph this?
-    if (out_counts_buf_[frame_idx].size() < num_render_views) {
-      out_counts_buf_[frame_idx].resize(num_render_views);
-    }
-    if (out_counts_buf_readback_[frame_idx].size() < num_render_views) {
-      out_counts_buf_readback_[frame_idx].resize(num_render_views);
+    if (meshlet_draw_stats_readback_[frame_idx].size() < num_render_views) {
+      meshlet_draw_stats_readback_[frame_idx].resize(num_render_views);
     }
 
-    out_counts_buf_[frame_idx][(int)view_id] = device_->create_buf_h(rhi::BufferDesc{
-        .usage = rhi::BufferUsage::Storage,
-        .size = sizeof(MeshletDrawStats),
-        .name = "out_counts_buf",
-    });
-    out_counts_buf_readback_[frame_idx][(int)view_id] = device_->create_buf_h(rhi::BufferDesc{
+    meshlet_draw_stats_readback_[frame_idx][(int)view_id] = device_->create_buf_h(rhi::BufferDesc{
         .size = sizeof(MeshletDrawStats),
         .flags = rhi::BufferDescFlags::CPUAccessible,
-        .name = "out_counts_buf_readback",
+        .name = "meshlet_draw_stats_readback",
     });
     render_view.draw_cmd_count_buf_readback[frame_idx] = device_->create_buf_h(rhi::BufferDesc{
         .size = sizeof(uint32_t) * 2,
