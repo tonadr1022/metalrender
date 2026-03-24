@@ -36,6 +36,7 @@ struct RendererSettings {
 
   struct Developer {
     bool render_graph_verbose = false;
+    bool collect_meshlet_draw_stats = true;
   } developer;
 };
 

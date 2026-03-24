@@ -44,7 +44,8 @@ DEBUG_RENDER_MODE_LIST(DEBUG_RENDER_MODE_CONST)
 struct GlobalData {
   uint render_mode;
   uint frame_num;
-  uint _padding[2];
+  uint meshlet_stats_enabled;
+  uint _padding;
 };
 
 struct ViewData {

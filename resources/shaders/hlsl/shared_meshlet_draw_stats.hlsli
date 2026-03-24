@@ -3,6 +3,9 @@
 
 #include "shader_core.h"
 
+#define MESHLET_DRAW_STATS_CATEGORY_MESHLETS 0
+#define MESHLET_DRAW_STATS_CATEGORY_TRIANGLES 1
+
 struct MeshletDrawStats {
   uint meshlets_drawn_early;
   uint meshlets_drawn_late;
@@ -18,15 +21,6 @@ static void MeshletDrawStats_AtomicAdd(RWStructuredBuffer<uint> stats, uint cate
                                        uint delta) {
   uint unused;
   InterlockedAdd(stats[category * kMeshletDrawStatPassesPerCategory + pass_idx], delta, unused);
-}
-
-void MeshletDrawStats_AddMeshlets(RWStructuredBuffer<uint> stats, uint pass, uint delta) {
-  MeshletDrawStats_AtomicAdd(stats, 0, pass, delta);
-}
-
-void MeshletDrawStats_AddTriangles(RWStructuredBuffer<uint> stats, uint pass, uint tri_count,
-                                   bool draw) {
-  MeshletDrawStats_AtomicAdd(stats, 1, pass, tri_count * (draw ? 1u : 0u));
 }
 
 #endif

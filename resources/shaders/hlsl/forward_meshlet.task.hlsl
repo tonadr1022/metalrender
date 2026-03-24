@@ -16,7 +16,8 @@
 #define UINT_MAX 0xFFFFFFFFu
 
 groupshared Payload s_Payload;
-groupshared uint s_count;
+groupshared uint s_visible_meshlet_cnt;
+groupshared uint s_tris[K_TASK_TG_SIZE];
 
 CONSTANT_BUFFER(ViewData, view_data, VIEW_DATA_SLOT);
 CONSTANT_BUFFER(GlobalData, global_data, GLOBALS_SLOT);
@@ -42,7 +43,10 @@ Texture2D depth_pyramid_tex : register(t3);
   SamplerState samp = bindless_samplers[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
 
   StructuredBuffer<uint3> draw_cnt_buf = bindless_buffers_uint3[out_draw_count_buf_idx]; // TODO: fix
-  if (task_group_id < draw_cnt_buf[alpha_test_enabled].x) {
+  bool valid_task_group = task_group_id < draw_cnt_buf[alpha_test_enabled].x;
+  uint lane_tri_contrib = 0u;
+
+  if (valid_task_group) {
     TaskCmd task_cmd = task_cmd_buf[task_group_id];
     if (gtid < task_cmd.task_count) {
       visible = true;
@@ -149,19 +153,14 @@ Texture2D depth_pyramid_tex : register(t3);
       }
 
       draw = visible && !skip_draw;
-    }
-    if (global_data.frame_num % 10 == 0) {
-      uint meshlet_idx = task_cmd.task_offset + gtid;
-      Meshlet meshlet = meshlet_buf[meshlet_idx];
-      uint tri_count = meshlet.vertex_count;
-      MeshletDrawStats_AddTriangles(meshlet_draw_stats, pass, tri_count, draw);
+      lane_tri_contrib = draw ? meshlet.vertex_count : 0u;
     }
   }
 
-  MeshletDrawStats_AddMeshlets(meshlet_draw_stats, pass, draw ? 1u : 0u);
+  s_tris[gtid] = lane_tri_contrib;
 
   if (gtid == 0) {
-    s_count = 0;
+    s_visible_meshlet_cnt = 0;
   }
 
   // wait for s_count initialization to 0
@@ -169,14 +168,34 @@ Texture2D depth_pyramid_tex : register(t3);
 
   if (draw) {
     uint thread_i;
-    InterlockedAdd(s_count, 1, thread_i);
+    InterlockedAdd(s_visible_meshlet_cnt, 1, thread_i);
     s_Payload.meshlet_indices[thread_i] = (task_group_id & 0xFFFFFFu) | (gtid << 24);
   }
 
   // wait for s_Payload writes to finish
   GroupMemoryBarrierWithGroupSync();
 
-  uint visible_count = s_count;
+  uint visible_meshlet_cnt = s_visible_meshlet_cnt;
 
-  DispatchMesh(visible_count, 1, 1, s_Payload);
+  // sum triangles for meshlet draw stats
+  {
+    for (uint offset = K_TASK_TG_SIZE / 2u; offset > 0u; offset >>= 1u) {
+      if (gtid < offset) {
+        s_tris[gtid] += s_tris[gtid + offset];
+      }
+      GroupMemoryBarrierWithGroupSync();
+    }
+
+    if (gtid == 0 && valid_task_group && global_data.meshlet_stats_enabled != 0) {
+      uint tri_sum = s_tris[0];
+      if (visible_meshlet_cnt != 0u || tri_sum != 0u) {
+        MeshletDrawStats_AtomicAdd(meshlet_draw_stats, MESHLET_DRAW_STATS_CATEGORY_MESHLETS, pass, visible_meshlet_cnt);
+        MeshletDrawStats_AtomicAdd(meshlet_draw_stats, MESHLET_DRAW_STATS_CATEGORY_TRIANGLES, pass, tri_sum);
+      }
+    }
+
+    GroupMemoryBarrierWithGroupSync();
+  }
+
+  DispatchMesh(visible_meshlet_cnt, 1, 1, s_Payload);
 }
