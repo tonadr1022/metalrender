@@ -65,7 +65,7 @@ Texture2D depth_pyramid_tex : register(t3);
       if (pass == 0 && !visible_last_frame) {
         visible = false;
       }
-      if (pass != 0 && visible_last_frame) {
+      if (pass != 0 && task_cmd.late_draw_visibility == 1u && visible_last_frame) {
         skip_draw = true;
       }
       float3 world_center =

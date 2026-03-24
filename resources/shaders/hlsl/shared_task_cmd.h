@@ -8,6 +8,7 @@ struct TaskCmd {
   uint32_t task_offset;
   uint32_t group_base;
   uint32_t task_count;
+  uint32_t late_draw_visibility;
 };
 
 #endif
