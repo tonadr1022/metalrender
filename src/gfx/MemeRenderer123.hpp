@@ -23,7 +23,6 @@
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
-#include "hlsl/shared_globals.h"
 #include "hlsl/shared_instance_data.h"
 #include "offsetAllocator.hpp"
 
@@ -101,8 +100,8 @@ class MemeRenderer123 {
   void update_model_instance_transforms(const ModelInstance& model);
   void free_instance(ModelInstanceGPUHandle handle);
   void free_model(ModelGPUHandle handle);
-  bool mesh_shaders_enabled() const { return mesh_shaders_enabled_; }
-  void set_imgui_enabled(bool enabled) { imgui_enabled_ = enabled; }
+  bool mesh_shaders_enabled() const { return settings_.pipeline.mesh_shaders_enabled; }
+  void set_imgui_enabled(bool enabled) { settings_.ui.imgui_enabled = enabled; }
 
   struct FinalDrawResults {
     uint32_t drawn_meshlets;
@@ -152,8 +151,7 @@ class MemeRenderer123 {
   constexpr static uint32_t k_max_shadow_cascades = 1;
   gch::small_vector<RenderViewId, k_max_shadow_cascades> shadow_map_render_views_;
   size_t shadow_cascade_count_{1};
-  bool shadows_enabled_{false};
-  bool get_shadows_enabled() const { return shadows_enabled_; }
+  bool get_shadows_enabled() const { return settings_.shadows.enabled; }
   void on_shadows_enabled_change(bool shadows_enabled);
 
   RGPass* clear_bufs_pass_{};
@@ -193,8 +191,6 @@ class MemeRenderer123 {
   BufferCopyMgr buffer_copy_mgr_;
   BackedGPUAllocator materials_buf_;
 
-  int debug_view_mip_{};
-
   size_t frame_num_{};
   size_t curr_frame_idx_{};
 
@@ -233,8 +229,6 @@ class MemeRenderer123 {
 
   IdxOffset frame_globals_buf_info_;
 
-  DebugRenderMode debug_render_mode_{DebugRenderMode::None};
-
   void ensure_per_view_readback_buffers();
   std::vector<std::array<rhi::BufferHandleHolder, k_max_frames_in_flight>>
       meshlet_draw_stats_readback_;
@@ -247,17 +241,6 @@ class MemeRenderer123 {
 
   rhi::BufferHandleHolder query_resolve_bufs_[k_max_frames_in_flight];
   rhi::Swapchain* swapchain_{};
-
-  bool culling_paused_{};
-  bool culling_enabled_{true};
-  bool meshlet_frustum_culling_enabled_{true};
-  bool meshlet_cone_culling_enabled_{true};
-  bool meshlet_occlusion_culling_enabled_{true};
-  bool reverse_z_{true};
-  bool mesh_shaders_enabled_{true};
-  bool imgui_enabled_{true};
-  bool object_occlusion_culling_enabled_{true};
-  bool rg_verbose_{};
 
   RendererSettings settings_{};
 

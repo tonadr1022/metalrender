@@ -3,7 +3,6 @@
 #include <string>
 
 #include "gfx/ShaderManager.hpp"
-#include "gfx/renderer/Context.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/renderer/TaskCmdBufRgIds.hpp"
 #include "hlsl/shader_constants.h"
@@ -19,18 +18,19 @@ namespace gfx {
 namespace {
 
 void encode_meshlet_mesh_draw_pass(
-    rhi::Device* device, RenderGraph& rg, InstanceMgr& static_instance_mgr, rhi::CmdEncoder* enc,
-    DrawCullPhase cull_phase, bool enable_meshlet_occlusion_cull, rhi::TextureHandle depth_handle,
+    const RendererSettings& settings, rhi::Device* device, RenderGraph& rg,
+    InstanceMgr& static_instance_mgr, rhi::CmdEncoder* enc, DrawCullPhase cull_phase,
+    bool enable_meshlet_occlusion_cull, rhi::TextureHandle depth_handle,
     const GBufferRenderer::SceneBindings& scene,
     const GBufferRenderer::MeshletMeshPassView& mesh_pass,
     std::span<const rhi::PipelineHandleHolder> meshlet_psos_by_alpha_mask) {
   enc->set_depth_stencil_state(
-      get_ctx().settings.reverse_z ? rhi::CompareOp::Greater : rhi::CompareOp::Less, true);
+      settings.pipeline.reverse_z ? rhi::CompareOp::Greater : rhi::CompareOp::Less, true);
   enc->set_wind_order(rhi::WindOrder::CounterClockwise);
   enc->set_cull_mode(rhi::CullMode::Back);
   enc->set_viewport({0, 0}, device->get_tex(depth_handle)->desc().dims);
 
-  ASSERT(get_ctx().settings.mesh_shaders_enabled);
+  ASSERT(settings.pipeline.mesh_shaders_enabled);
   ASSERT(meshlet_psos_by_alpha_mask.size() == static_cast<size_t>(AlphaMaskType::Count));
 
   enc->bind_uav(rg.get_buf(mesh_pass.meshlet_vis), 1);
@@ -55,14 +55,14 @@ void encode_meshlet_mesh_draw_pass(
       .flags = 0,
       .out_draw_count_buf_idx = device->get_buf(mesh_pass.out_draw_count_buf)->bindless_idx(),
   };
-  if (get_ctx().settings.meshlet_frustum_culling_enabled && get_ctx().settings.culling_enabled) {
+  if (settings.culling.meshlet_frustum && settings.culling.enabled) {
     pc.flags |= MESHLET_FRUSTUM_CULL_ENABLED_BIT;
   }
-  if (get_ctx().settings.meshlet_cone_culling_enabled && get_ctx().settings.culling_enabled) {
+  if (settings.culling.meshlet_cone && settings.culling.enabled) {
     pc.flags |= MESHLET_CONE_CULL_ENABLED_BIT;
   }
-  if (enable_meshlet_occlusion_cull && get_ctx().settings.meshlet_occlusion_culling_enabled &&
-      get_ctx().settings.culling_enabled) {
+  if (enable_meshlet_occlusion_cull && settings.culling.meshlet_occlusion &&
+      settings.culling.enabled) {
     pc.flags |= MESHLET_OCCLUSION_CULL_ENABLED_BIT;
   }
 
@@ -83,8 +83,8 @@ void encode_meshlet_mesh_draw_pass(
 
 // draw_batch / render_view pointers must stay valid until this pass's ExecuteFn runs.
 GBufferRenderer::GBufferRenderer(rhi::Device* device, InstanceMgr& static_instance_mgr,
-                                 RenderGraph& rg)
-    : device_(device), static_instance_mgr_(static_instance_mgr), rg_(rg) {}
+                                 RenderGraph& rg, RendererSettings& settings)
+    : device_(device), static_instance_mgr_(static_instance_mgr), rg_(rg), settings_(settings) {}
 
 GBufferRenderer::~GBufferRenderer() = default;
 
@@ -94,7 +94,7 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
   auto& p = rg_.add_graphics_pass(late ? "gbuffer_late" : "gbuffer_early");
   RGResourceId out_draw_count_buf_rg_handle{};
 
-  if (get_ctx().settings.mesh_shaders_enabled) {
+  if (settings_.pipeline.mesh_shaders_enabled) {
     for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
       if (scene.draw_batch.get_stats().vertex_count > 0) {
         auto id =
@@ -136,7 +136,7 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
     p.write_depth_output(gbuffer_pass_info.depth_id);
   }
   RGResourceId meshlet_stats_for_pass{};
-  if (get_ctx().settings.mesh_shaders_enabled) {
+  if (settings_.pipeline.mesh_shaders_enabled) {
     view.rg_ids.meshlet_draw_stats =
         p.rw_buf(view.rg_ids.meshlet_draw_stats, rhi::PipelineStage::TaskShader);
     meshlet_stats_for_pass = view.rg_ids.meshlet_draw_stats;
@@ -163,17 +163,17 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
         RenderAttInfo::color_att(gbuffer_b_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
         RenderAttInfo::depth_stencil_att(
             depth_handle, load_op,
-            {.depth_stencil = {.depth = get_ctx().settings.reverse_z ? 0.f : 1.f}}),
+            {.depth_stencil = {.depth = settings_.pipeline.reverse_z ? 0.f : 1.f}}),
     });
     enc->bind_srv(materials, 11);
 
-    if (get_ctx().settings.mesh_shaders_enabled) {
+    if (settings_.pipeline.mesh_shaders_enabled) {
       const SceneBindings mesh_scene{*batch, materials, frame_globals};
       const MeshletMeshPassView mesh_pass{*rv, meshlet_vis_rg, meshlet_stats_rg, task_cmd_rg,
                                           rg_.get_buf(out_draw_count_rg)};
       encode_meshlet_mesh_draw_pass(
-          device_, rg_, static_instance_mgr_, enc, cull_phase, true, depth_handle, mesh_scene,
-          mesh_pass,
+          settings_, device_, rg_, static_instance_mgr_, enc, cull_phase, true, depth_handle,
+          mesh_scene, mesh_pass,
           std::span<const rhi::PipelineHandleHolder>(gbuffer_meshlet_psos_,
                                                      static_cast<size_t>(AlphaMaskType::Count)));
     } else {
@@ -190,7 +190,7 @@ void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthP
   auto& p = rg_.add_graphics_pass(pass_name);
   RGResourceId out_draw_count_buf_rg_handle{};
 
-  ASSERT(get_ctx().settings.mesh_shaders_enabled);
+  ASSERT(settings_.pipeline.mesh_shaders_enabled);
   for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
     if (scene.draw_batch.get_stats().vertex_count > 0) {
       auto id =
@@ -239,7 +239,7 @@ void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthP
     enc->begin_rendering({
         RenderAttInfo::depth_stencil_att(
             depth_handle, load_op,
-            {.depth_stencil = {.depth = get_ctx().settings.reverse_z ? 0.f : 1.f}}),
+            {.depth_stencil = {.depth = settings_.pipeline.reverse_z ? 0.f : 1.f}}),
     });
     enc->bind_srv(materials, 11);
 
@@ -247,8 +247,8 @@ void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthP
     const MeshletMeshPassView mesh_pass{*rv, meshlet_vis_rg, meshlet_stats_rg, task_cmd_rg,
                                         rg_.get_buf(out_draw_count_rg)};
     encode_meshlet_mesh_draw_pass(
-        device_, rg_, static_instance_mgr_, enc, cull_phase, false, depth_handle, mesh_scene,
-        mesh_pass,
+        settings_, device_, rg_, static_instance_mgr_, enc, cull_phase, false, depth_handle,
+        mesh_scene, mesh_pass,
         std::span<const rhi::PipelineHandleHolder>(shadow_meshlet_psos_,
                                                    static_cast<size_t>(AlphaMaskType::Count)));
     enc->end_rendering();

@@ -109,9 +109,9 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  rg_verbose_ = i++ == 2;
+  settings_.developer.render_graph_verbose = i++ == 2;
   device_->acquire_next_swapchain_image(swapchain_);
-  rg_.bake(window_->get_window_size(), rg_verbose_);
+  rg_.bake(window_->get_window_size(), settings_.developer.render_graph_verbose);
   static std::vector<rhi::CmdEncoder*> wait_for_encoders;
   wait_for_encoders.clear();
   {
@@ -213,8 +213,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
     for (auto view_id : view_ids) {
       if (late) {
-        const bool depth_pyramid_valid_for_draw_cull = meshlet_occlusion_culling_enabled_ &&
-                                                       culling_enabled_ && mesh_shaders_enabled_ &&
+        const bool depth_pyramid_valid_for_draw_cull = settings_.culling.meshlet_occlusion &&
+                                                       settings_.culling.enabled && settings_.pipeline.mesh_shaders_enabled &&
                                                        view_id == main_render_view_id_;
         if (depth_pyramid_valid_for_draw_cull) {
           prep_meshlets_pass.read_tex(final_depth_pyramid_ids[(int)view_id],
@@ -222,7 +222,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
         }
       }
       auto& out_draw_count_id = out_draw_count_ids[(int)view_id];
-      if (!culling_paused_) {
+      if (!settings_.culling.paused) {
         out_draw_count_id =
             prep_meshlets_pass.rw_buf(out_draw_count_id, rhi::PipelineStage::ComputeShader);
       } else {
@@ -266,7 +266,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
         return;
       }
       enc->bind_pipeline(draw_cull_pso_);
-      if (!culling_paused_) {
+      if (!settings_.culling.paused) {
         // Prepare array of ViewCullSetups to be uploaded
         auto view_cull_setup_alloc =
             frame_gpu_upload_allocator_.alloc(view_ids.size() * sizeof(ViewCullSetup));
@@ -304,8 +304,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
           view_cull_setups[i].draw_cmd_count_buf_idx =
               device_->get_buf(rg_.get_buf(draw_cmd_count_buf_ids[(int)view_id]))->bindless_idx();
           view_cull_setups[i].flags = 0;
-          if (object_occlusion_culling_enabled_ && view_id == main_render_view_id_ &&
-              meshlet_occlusion_culling_enabled_ && culling_enabled_ && mesh_shaders_enabled_) {
+          if (settings_.culling.object_occlusion && view_id == main_render_view_id_ &&
+              settings_.culling.meshlet_occlusion && settings_.culling.enabled && settings_.pipeline.mesh_shaders_enabled) {
             view_cull_setups[i].flags |= OBJECT_OCCLUSION_CULL_ENABLED_BIT;
           }
         }
@@ -319,7 +319,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
             .materials_buf_idx = materials_buf_.get_buffer()->bindless_idx(),
             .mesh_data_buf_idx = static_draw_batch_.mesh_buf.get_buffer()->bindless_idx(),
             .max_draws = static_instance_mgr_.stats().max_instance_data_count,
-            .culling_enabled = culling_enabled_,
+            .culling_enabled = settings_.culling.enabled,
         };
 
         enc->push_constants(&pc, sizeof(pc));
@@ -329,14 +329,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     });
   };
 
-  if (mesh_shaders_enabled_) {
+  if (settings_.pipeline.mesh_shaders_enabled) {
     for (auto view_id : view_ids) {
       out_draw_count_ids_early[(int)view_id] = rg_.create_buffer(
           {.size = sizeof(uint32_t) * 3 * AlphaMaskType::Count}, "out_draw_count_buf_early");
       out_draw_count_ids_late[(int)view_id] = rg_.create_buffer(
           {.size = sizeof(uint32_t) * 3 * AlphaMaskType::Count}, "out_draw_count_buf_late");
     }
-    if (!culling_paused_) {
+    if (!settings_.culling.paused) {
       auto& clear_bufs_pass = rg_.add_compute_pass("clear_bufs");
       for (auto view_id : view_ids) {
         clear_bufs_pass.write_buf(out_draw_count_ids_early[(int)view_id],
@@ -422,7 +422,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   GBufferRenderer::GbufferPassInfo gbuffer_pass_info{};
 
   bool meshlet_occlusion_culling_enabled =
-      meshlet_occlusion_culling_enabled_ && culling_enabled_ && mesh_shaders_enabled_;
+      settings_.culling.meshlet_occlusion && settings_.culling.enabled && settings_.pipeline.mesh_shaders_enabled;
 
   if (get_shadows_enabled() && mesh_shaders_enabled()) {
     const GBufferRenderer::SceneBindings gbuffer_scene{
@@ -530,7 +530,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     gbuffer_renderer_->bake(gbuffer_pass_info, DrawCullPhase::Late, gbuffer_scene, gbuffer_view);
   }
 
-  if (mesh_shaders_enabled_) {  // readback draw counts
+  if (settings_.pipeline.mesh_shaders_enabled) {  // readback draw counts
     const auto fif_i = static_cast<uint32_t>(curr_frame_idx_);
     for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
       if (view_id > 0) break;
@@ -566,14 +566,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     auto gbuffer_b_id = p.sample_tex(shade_pass_info.gbuffer_b_id);
     RGResourceId secondary_view_debug_depth_rg_handle{};
     bool secondary_view_debug_enabled =
-        debug_render_mode_ == DebugRenderMode::SecondaryView && !shadow_map_render_views_.empty();
+        settings_.debug.render_mode == DebugRenderMode::SecondaryView && !shadow_map_render_views_.empty();
     if (secondary_view_debug_enabled) {
       p.sample_tex(depth_ids[(int)shadow_map_render_views_[0]]);
       secondary_view_debug_depth_rg_handle = p.read_tex(depth_ids[(int)shadow_map_render_views_[0]],
                                                         rhi::PipelineStage::FragmentShader);
     }
     if (meshlet_occlusion_culling_enabled &&
-        debug_render_mode_ == DebugRenderMode::DepthReduceMips) {
+        settings_.debug.render_mode == DebugRenderMode::DepthReduceMips) {
       p.sample_tex(final_depth_pyramid_ids[(int)main_render_view_id_]);
     }
     p.w_swapchain_tex(swapchain_);
@@ -599,24 +599,24 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
         tex_idx =
             device_->get_tex(rg_.get_att_img(secondary_view_debug_depth_rg_handle))->bindless_idx();
       } else if (!meshlet_occlusion_culling_enabled ||
-                 debug_render_mode_ != DebugRenderMode::DepthReduceMips) {
+                 settings_.debug.render_mode != DebugRenderMode::DepthReduceMips) {
         tex_idx = gbuffer_a_tex->bindless_idx();
       } else {
         tex_idx = device_->get_tex_view_bindless_idx(
             render_views_[0].depth_pyramid_tex.handle,
-            render_views_[0].depth_pyramid_tex.views[debug_view_mip_]);
+            render_views_[0].depth_pyramid_tex.views[settings_.debug.depth_pyramid_mip_view]);
         mult = 100.f;
       }
       TexOnlyPC pc{
           .color_mult = glm::vec4{mult, mult, mult, 1},
           .tex_idx = tex_idx,
           .gbuffer_b_idx = gbuffer_b_tex->bindless_idx(),
-          .mip_level = static_cast<uint32_t>(debug_view_mip_),
+          .mip_level = static_cast<uint32_t>(settings_.debug.depth_pyramid_mip_view),
       };
       enc->push_constants(&pc, sizeof(pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
 
-      if (imgui_enabled_) {
+      if (settings_.ui.imgui_enabled) {
         imgui_renderer_->render(enc, {swapchain_->desc_.width, swapchain_->desc_.height},
                                 curr_frame_idx_);
       }
@@ -923,7 +923,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(ModelInstance& model,
   std::vector<InstanceData> instance_datas = {model_instance_datas.begin(),
                                               model_instance_datas.end()};
   std::vector<IndexedIndirectDrawCmd> cmds;
-  if (!mesh_shaders_enabled_) cmds.reserve(instance_datas.size());
+  if (!settings_.pipeline.mesh_shaders_enabled) cmds.reserve(instance_datas.size());
 
   ASSERT(instance_datas.size() == instance_id_to_node.size());
 
@@ -965,7 +965,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(ModelInstance& model,
       ASSERT(final_instance_i < static_instance_mgr_.cpu_draw_cmds().size());
       static_instance_mgr_.cpu_draw_cmds()[final_instance_i] = cmd;
     }
-    if (!mesh_shaders_enabled_) {
+    if (!settings_.pipeline.mesh_shaders_enabled) {
       cmds.push_back(cmd);
     }
   }
@@ -977,7 +977,7 @@ ModelInstanceGPUHandle MemeRenderer123::add_model_instance(ModelInstance& model,
       static_instance_mgr_.get_instance_data_buf(),
       instance_data_gpu_alloc.instance_data_alloc.offset * sizeof(InstanceData),
       rhi::PipelineStage::AllCommands, rhi::AccessFlags::ShaderRead);
-  if (!mesh_shaders_enabled_) {
+  if (!settings_.pipeline.mesh_shaders_enabled) {
     buffer_copy_mgr_.copy_to_buffer(
         cmds.data(), cmds.size() * sizeof(IndexedIndirectDrawCmd),
         static_instance_mgr_.get_draw_cmd_buf(),
@@ -1046,8 +1046,8 @@ void MemeRenderer123::shutdown_imgui() { ZoneScoped; }
 void MemeRenderer123::on_imgui() {
   ZoneScoped;
   if (ImGui::TreeNodeEx("Config")) {
-    ImGui::Text("Mesh shaders enabled: %d", mesh_shaders_enabled_);
-    ImGui::Text("Render Mode %s", to_string(debug_render_mode_));
+    ImGui::Text("Mesh shaders enabled: %d", settings_.pipeline.mesh_shaders_enabled);
+    ImGui::Text("Render Mode %s", to_string(settings_.debug.render_mode));
 
     bool shadows_enabled = get_shadows_enabled();
     if (ImGui::Checkbox("Shadows enabled", &shadows_enabled)) {
@@ -1089,8 +1089,8 @@ void MemeRenderer123::on_imgui() {
     ImGui::TreePop();
   }
 
-  ImGui::Text("Culling paused: %d", culling_paused_);
-  ImGui::Text("Culling enabled: %d", culling_enabled_);
+  ImGui::Text("Culling paused: %d", settings_.culling.paused);
+  ImGui::Text("Culling enabled: %d", settings_.culling.enabled);
   // frames_in_flight - 1 frames ago is guaranteed to be copied back to the cpu (see readback
   // passes above)
   if (frame_num_ >= device_->get_info().frames_in_flight) {
@@ -1106,7 +1106,7 @@ void MemeRenderer123::on_imgui() {
 
   auto dp_dims = device_->get_tex(render_views_[0].depth_pyramid_tex)->desc().dims;
   auto mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
-  ImGui::SliderInt("mip view", &debug_view_mip_, 0, mip_levels - 1);
+  ImGui::SliderInt("mip view", &settings_.debug.depth_pyramid_mip_view, 0, mip_levels - 1);
 
   if (ImGui::TreeNodeEx("Device", ImGuiTreeNodeFlags_DefaultOpen)) {
     device_->on_imgui();
@@ -1124,12 +1124,12 @@ void MemeRenderer123::on_imgui() {
     ImGui::TreePop();
   }
   if (ImGui::TreeNodeEx("Culling")) {
-    ImGui::Checkbox("Culling paused", &culling_paused_);
-    ImGui::Checkbox("Culling enabled", &culling_enabled_);
-    ImGui::Checkbox("Meshlet frustum culling enabled", &meshlet_frustum_culling_enabled_);
-    ImGui::Checkbox("Meshlet cone culling enabled", &meshlet_cone_culling_enabled_);
-    ImGui::Checkbox("Meshlet occlusion culling enabled", &meshlet_occlusion_culling_enabled_);
-    ImGui::Checkbox("Object occlusion culling enabled", &object_occlusion_culling_enabled_);
+    ImGui::Checkbox("Culling paused", &settings_.culling.paused);
+    ImGui::Checkbox("Culling enabled", &settings_.culling.enabled);
+    ImGui::Checkbox("Meshlet frustum culling enabled", &settings_.culling.meshlet_frustum);
+    ImGui::Checkbox("Meshlet cone culling enabled", &settings_.culling.meshlet_cone);
+    ImGui::Checkbox("Meshlet occlusion culling enabled", &settings_.culling.meshlet_occlusion);
+    ImGui::Checkbox("Object occlusion culling enabled", &settings_.culling.object_occlusion);
     ImGui::TreePop();
   }
 }
@@ -1142,7 +1142,7 @@ glm::mat4 MemeRenderer123::get_proj_matrix(float fov) {
 void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
   glm::mat4 proj_mat = get_proj_matrix();
   GlobalData global_data{
-      .render_mode = (uint32_t)debug_render_mode_,
+      .render_mode = (uint32_t)settings_.debug.render_mode,
       .frame_num = (uint32_t)frame_num_,
   };
   {
@@ -1201,7 +1201,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
   };
 
   set_cull_data(frame_gpu_upload_allocator_, device_, get_render_view(main_render_view_id_),
-                proj_mat, culling_paused_);
+                proj_mat, settings_.culling.paused);
   if (get_shadows_enabled()) {
     for (size_t i = 0; i < shadow_cascade_count_; i++) {
       float shadow_fov = 170.0f;
@@ -1219,7 +1219,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
       view.data_buf_info.idx = device_->get_buf(buf)->bindless_idx();
       view.data_buf_info.offset_bytes = offset;
 
-      set_cull_data(frame_gpu_upload_allocator_, device_, view, shadow_proj_mat, culling_paused_);
+      set_cull_data(frame_gpu_upload_allocator_, device_, view, shadow_proj_mat, settings_.culling.paused);
     }
   }
 }
@@ -1229,30 +1229,30 @@ bool MemeRenderer123::on_key_event(int key, int action, int mods) {
   bool is_shift = mods & GLFW_MOD_SHIFT;
   if (action == GLFW_PRESS || action == GLFW_REPEAT) {
     if (key == GLFW_KEY_P && is_shift) {
-      culling_paused_ = !culling_paused_;
+      settings_.culling.paused = !settings_.culling.paused;
       return true;
     }
     if (key == GLFW_KEY_E && is_shift) {
-      culling_enabled_ = !culling_enabled_;
+      settings_.culling.enabled = !settings_.culling.enabled;
       return true;
     }
     if (key == GLFW_KEY_G && mods & GLFW_MOD_CONTROL) {
       if (mods & GLFW_MOD_SHIFT) {
-        if (debug_render_mode_ == DebugRenderMode::None) {
-          debug_render_mode_ = (DebugRenderMode)((int)DebugRenderMode::Count - 1);
+        if (settings_.debug.render_mode == DebugRenderMode::None) {
+          settings_.debug.render_mode = (DebugRenderMode)((int)DebugRenderMode::Count - 1);
         } else {
-          debug_render_mode_ =
-              (DebugRenderMode)(((int)debug_render_mode_ - 1) % (int)DebugRenderMode::Count);
+          settings_.debug.render_mode =
+              (DebugRenderMode)(((int)settings_.debug.render_mode - 1) % (int)DebugRenderMode::Count);
         }
       } else {
-        debug_render_mode_ =
-            (DebugRenderMode)(((int)debug_render_mode_ + 1) % (int)DebugRenderMode::Count);
+        settings_.debug.render_mode =
+            (DebugRenderMode)(((int)settings_.debug.render_mode + 1) % (int)DebugRenderMode::Count);
       }
       return true;
     }
 
     if (key == GLFW_KEY_M && mods & GLFW_MOD_CONTROL && mods & GLFW_MOD_SHIFT) {
-      meshlet_occlusion_culling_enabled_ = !meshlet_occlusion_culling_enabled_;
+      settings_.culling.meshlet_occlusion = !settings_.culling.meshlet_occlusion;
       return true;
     }
 
@@ -1306,13 +1306,13 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
                              .initial_mesh_capacity = 100'0,
                              .initial_meshlet_triangle_capacity = 1'000,
                              .initial_meshlet_vertex_capacity = 1'000,
-                         }),
-      mesh_shaders_enabled_(cinfo.mesh_shaders_enabled) {
+                         }) {
   ZoneScoped;
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
   config_file_path_ = cinfo.config_file_path;
   swapchain_ = cinfo.swapchain;
+  settings_.pipeline.mesh_shaders_enabled = cinfo.mesh_shaders_enabled;
   {
     constexpr const char* key_mesh_shaders_enabled = "mesh_shaders_enabled";
     std::ifstream file(config_file_path_);
@@ -1321,14 +1321,14 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
       while (std::getline(file, line)) {
         auto kv = core::split_string_at_first(line, '=');
         if (kv.first == key_mesh_shaders_enabled) {
-          mesh_shaders_enabled_ = kv.second == "1";
+          settings_.pipeline.mesh_shaders_enabled = kv.second == "1";
         }
       }
     } else {
       // write the default config.
       std::ofstream file(config_file_path_);
       if (file.is_open()) {
-        file << key_mesh_shaders_enabled << '=' << mesh_shaders_enabled_ << '\n';
+        file << key_mesh_shaders_enabled << '=' << settings_.pipeline.mesh_shaders_enabled << '\n';
       } else {
         ASSERT(0 && "Failed to open config file for writing");
         LINFO("Failed to open config file for writing: {}", config_file_path_.string());
@@ -1376,7 +1376,8 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
     depth_reduce_pso_ = shader_mgr_->create_compute_pipeline({"depth_reduce/depth_reduce"});
     shade_pso_ = shader_mgr_->create_compute_pipeline({"shade"});
   }
-  gbuffer_renderer_ = std::make_unique<gfx::GBufferRenderer>(device_, static_instance_mgr_, rg_);
+  gbuffer_renderer_ =
+      std::make_unique<gfx::GBufferRenderer>(device_, static_instance_mgr_, rg_, settings_);
   gbuffer_renderer_->load_pipelines(*shader_mgr_);
 
   rg_.init(device_);
@@ -1385,7 +1386,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
   imgui_renderer_.emplace(*shader_mgr_, device_);
 
   main_render_view_id_ = create_render_view();
-  on_shadows_enabled_change(shadows_enabled_);
+  on_shadows_enabled_change(settings_.shadows.enabled);
 
   recreate_swapchain_sized_textures();
 
@@ -1400,7 +1401,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
 }
 
 void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
-  if (mesh_shaders_enabled_) {
+  if (settings_.pipeline.mesh_shaders_enabled) {
     auto add_commas = [](uint64_t n) -> std::string {
       std::string s = std::to_string(n);
       int pos = s.length() - 3;
@@ -1426,7 +1427,7 @@ void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
         "Culling Paused:             %d\n"
         "Culling Enabled:            %d\n"
         "Meshlet Occlusion Enabled:  %d",
-        culling_paused_, culling_enabled_, meshlet_occlusion_culling_enabled_);
+        settings_.culling.paused, settings_.culling.enabled, settings_.culling.meshlet_occlusion);
 
     ImGui::Text(
         "Meshlets drawn: %10s of %10s \n"
@@ -1473,16 +1474,16 @@ void MemeRenderer123::update_model_instance_transforms(const ModelInstance& mode
 }
 
 void MemeRenderer123::on_shadows_enabled_change(bool shadows_enabled) {
-  shadows_enabled_ = shadows_enabled;
+  settings_.shadows.enabled = shadows_enabled;
 
-  if (!shadows_enabled_) {
+  if (!settings_.shadows.enabled) {
     for (auto& view : shadow_map_render_views_) {
       destroy_render_view(view);
     }
     shadow_map_render_views_.clear();
   }
 
-  if (shadows_enabled_ && shadow_map_render_views_.empty()) {
+  if (settings_.shadows.enabled && shadow_map_render_views_.empty()) {
     for (size_t i = 0; i < k_max_shadow_cascades; i++) {
       shadow_map_render_views_.emplace_back(create_render_view());
     }
