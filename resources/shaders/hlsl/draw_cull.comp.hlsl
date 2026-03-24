@@ -54,8 +54,8 @@ void main(uint dtid : SV_DispatchThreadID)
 
         RWByteAddressBuffer instance_vis_buf = bindless_rwbuffers[view_setup.instance_vis_buf_idx];
         uint vis_byte_addr = dtid * sizeof(uint32_t);
-
-        bool visible_last_frame = instance_vis_buf.Load(vis_byte_addr) != 0;
+        bool object_occlusion_cull_enabled = (view_setup.flags & OBJECT_OCCLUSION_CULL_ENABLED_BIT) != 0;
+        bool visible_last_frame = !object_occlusion_cull_enabled || instance_vis_buf.Load(vis_byte_addr) != 0;
         bool late = view_setup.pass != 0;
 
         // early pass: only process draws that were visible last frame
@@ -81,7 +81,7 @@ void main(uint dtid : SV_DispatchThreadID)
             visible = visible &&
                       (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0] > -radius);
 
-            if (late && visible && (view_setup.flags & OBJECT_OCCLUSION_CULL_ENABLED_BIT) != 0)
+            if (late && visible && object_occlusion_cull_enabled)
             {
                 ProjectSphereResult proj_res = project_sphere(center.xyz, radius, cull_data.z_near,
                                                               cull_data.p00, cull_data.p11);

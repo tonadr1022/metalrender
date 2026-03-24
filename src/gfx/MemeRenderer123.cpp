@@ -206,13 +206,50 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
                                 DrawCullPhase phase, TaskCmdBufRgTable& task_cmd_buf_rg_ids,
                                 std::vector<RGResourceId>& out_draw_count_ids) {
     const bool late = phase == DrawCullPhase::Late;
+    struct BufferClear {
+      RGResourceId id;
+      rhi::BufferHandle buf;
+      size_t size_bytes;
+      uint32_t fill_value;
+    };
+
+    std::vector<BufferClear> instance_vis_clear_ids;
+    std::vector<RGResourceId> instance_vis_rg_ids;
+    instance_vis_rg_ids.reserve(view_ids.size());
+
     auto& prep_meshlets_pass =
         rg_.add_compute_pass(late ? "meshlet_draw_cull_late" : "meshlet_draw_cull_early");
     if (static_instance_mgr_.has_pending_frees(curr_frame_idx_)) {
       prep_meshlets_pass.read_buf(instance_data_id, rhi::PipelineStage::ComputeShader);
     }
 
+    const uint32_t max_draws = static_instance_mgr_.stats().max_instance_data_count;
+    const size_t required_instance_vis_buf_size = static_cast<size_t>(max_draws) * sizeof(uint32_t);
     for (auto view_id : view_ids) {
+      auto& render_view = get_render_view(view_id);
+      auto* vis_buf = device_->get_buf(render_view.instance_vis_buf);
+      bool created_or_resized = false;
+      if (!vis_buf || vis_buf->size() < required_instance_vis_buf_size) {
+        render_view.instance_vis_buf =
+            device_->create_buf_h({.usage = BufferUsage::Storage,
+                                   .size = required_instance_vis_buf_size,
+                                   .name = "instance_vis_buf"});
+        created_or_resized = true;
+        vis_buf = device_->get_buf(render_view.instance_vis_buf);
+      }
+      RGResourceId vis_rg_id =
+          rg_.import_external_buffer(render_view.instance_vis_buf, "instance_vis_buf");
+      instance_vis_rg_ids.push_back(vis_rg_id);
+      if (created_or_resized) {
+        instance_vis_clear_ids.push_back({.id = vis_rg_id,
+                                          .buf = render_view.instance_vis_buf.handle,
+                                          .size_bytes = required_instance_vis_buf_size,
+                                          .fill_value = 1});
+      }
+    }
+
+    for (size_t view_i = 0; view_i < view_ids.size(); ++view_i) {
+      auto view_id = view_ids[view_i];
       if (late) {
         const bool depth_pyramid_valid_for_draw_cull =
             settings_.culling.meshlet_occlusion && settings_.culling.enabled &&
@@ -222,6 +259,13 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
                                       rhi::PipelineStage::ComputeShader);
         }
       }
+      if (!instance_vis_rg_ids.empty()) {
+        if (late) {
+          prep_meshlets_pass.write_buf(instance_vis_rg_ids[view_i],
+                                       rhi::PipelineStage::ComputeShader);
+        }
+      }
+
       auto& out_draw_count_id = out_draw_count_ids[(int)view_id];
       if (!settings_.culling.paused) {
         out_draw_count_id =
@@ -233,20 +277,18 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
           draw_cmd_count_buf_ids[(int)view_id], rhi::PipelineStage::ComputeShader);
     }
 
-    const uint32_t max_draws = static_instance_mgr_.stats().max_instance_data_count;
-    const size_t required_instance_vis_buf_size = static_cast<size_t>(max_draws) * sizeof(uint32_t);
-    for (auto view_id : view_ids) {
-      auto& render_view = get_render_view(view_id);
-      auto* vis_buf = device_->get_buf(render_view.instance_vis_buf);
-      if (!vis_buf || vis_buf->size() < required_instance_vis_buf_size) {
-        const std::string vis_name =
-            "instance_vis_buf_view_" + std::to_string(static_cast<uint32_t>(view_id));
-        render_view.instance_vis_buf =
-            device_->create_buf_h({.usage = BufferUsage::Storage,
-                                   .size = required_instance_vis_buf_size,
-                                   .name = vis_name.c_str()});
+    if (!instance_vis_clear_ids.empty() && phase == DrawCullPhase::Early) {
+      auto& p = rg_.add_transfer_pass("clear_instance_vis");
+      for (const auto& clear : instance_vis_clear_ids) {
+        p.write_buf(clear.id, rhi::PipelineStage::AllTransfer);
       }
+      p.set_ex([instance_vis_clear_ids](rhi::CmdEncoder* enc) {
+        for (const auto& clear : instance_vis_clear_ids) {
+          enc->fill_buffer(clear.buf, 0, clear.size_bytes, clear.fill_value);
+        }
+      });
     }
+
     for (auto view_id : view_ids) {
       auto& view_handles = task_cmd_buf_rg_ids[(int)view_id].phase(phase);
       for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
@@ -402,12 +444,52 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   }
 
   if (mesh_shaders_enabled()) {
+    const size_t required_meshlet_vis_buf_size =
+        static_cast<size_t>(static_instance_mgr_.get_num_meshlet_vis_buf_elements()) *
+        sizeof(uint32_t);
+    struct BufferClear {
+      RGResourceId id;
+      rhi::BufferHandle buf;
+      size_t size_bytes;
+    };
+    std::vector<BufferClear> meshlet_vis_clear_ids;
+    meshlet_vis_clear_ids.reserve(render_views_.size());
+    for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
+      auto& render_view = get_render_view((RenderViewId)view_id);
+      auto* vis_buf = device_->get_buf(render_view.meshlet_vis_buf);
+      bool created_or_resized = false;
+      if (!vis_buf || vis_buf->size() < required_meshlet_vis_buf_size) {
+        render_view.meshlet_vis_buf = device_->create_buf_h({.usage = BufferUsage::Storage,
+                                                             .size = required_meshlet_vis_buf_size,
+                                                             .name = "meshlet_vis_buf"});
+        created_or_resized = true;
+      }
+      meshlet_vis_ids[view_id] =
+          rg_.import_external_buffer(render_view.meshlet_vis_buf, "meshlet_vis_buf");
+      if (created_or_resized) {
+        meshlet_vis_clear_ids.push_back({.id = meshlet_vis_ids[view_id],
+                                         .buf = render_view.meshlet_vis_buf.handle,
+                                         .size_bytes = required_meshlet_vis_buf_size});
+      }
+    }
+    if (!meshlet_vis_clear_ids.empty()) {
+      auto& p = rg_.add_transfer_pass("clear_meshlet_vis");
+      for (const auto& clear : meshlet_vis_clear_ids) {
+        p.write_buf(clear.id, rhi::PipelineStage::AllTransfer);
+      }
+      p.set_ex([meshlet_vis_clear_ids](rhi::CmdEncoder* enc) {
+        for (const auto& clear : meshlet_vis_clear_ids) {
+          enc->fill_buffer(clear.buf, 0, clear.size_bytes, 0);
+        }
+      });
+    }
+
     meshlet_draw_stats_buf_ids.reserve(render_views_.size());
     for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
-      meshlet_draw_stats_buf_ids.push_back(rg_.create_buffer(
-          {.size = sizeof(MeshletDrawStats), .defer_reuse = true}, "meshlet_draw_stats"));
+      meshlet_draw_stats_buf_ids.push_back(
+          rg_.create_buffer({.size = sizeof(MeshletDrawStats)}, "meshlet_draw_stats"));
       RGResourceId meshlet_stats_clear_id = meshlet_draw_stats_buf_ids[view_id];
-      auto& p = rg_.add_transfer_pass("clear_meshlet_draw_stats_view_" + std::to_string(view_id));
+      auto& p = rg_.add_transfer_pass("clear_meshlet_draw_stats");
       p.write_buf(meshlet_stats_clear_id, rhi::PipelineStage::AllTransfer);
       p.set_ex([this, view_id, meshlet_stats_clear_id](rhi::CmdEncoder* enc) {
         if (view_id == 0) enc->write_timestamp(get_query_pool(), 0);

@@ -27,7 +27,7 @@ class RenderGraph;
 class GBufferRenderer {
  public:
   explicit GBufferRenderer(rhi::Device* device, InstanceMgr& static_instance_mgr, RenderGraph& rg,
-                         RendererSettings& settings);
+                           RendererSettings& settings);
   ~GBufferRenderer();
 
   struct GbufferPassInfo {

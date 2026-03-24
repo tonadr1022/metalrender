@@ -22,6 +22,7 @@ struct RenderView {
   IdxOffset cull_data_buf_info{};
   rhi::TexAndViewHolder depth_pyramid_tex;
   rhi::BufferHandleHolder instance_vis_buf;
+  rhi::BufferHandleHolder meshlet_vis_buf;
   // std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> draw_cmd_count_buf;
 };
 

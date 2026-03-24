@@ -33,7 +33,7 @@ void encode_meshlet_mesh_draw_pass(
   ASSERT(settings.pipeline.mesh_shaders_enabled);
   ASSERT(meshlet_psos_by_alpha_mask.size() == static_cast<size_t>(AlphaMaskType::Count));
 
-  enc->bind_uav(rg.get_buf(mesh_pass.meshlet_vis), 1);
+  enc->bind_uav(rg.get_external_buffer(mesh_pass.meshlet_vis), 1);
   enc->bind_uav(rg.get_buf(mesh_pass.meshlet_draw_stats), 2);
   if (cull_phase == DrawCullPhase::Late) {
     enc->bind_srv(mesh_pass.render_view.depth_pyramid_tex.handle, 3);
@@ -108,12 +108,7 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
       p.sample_tex(view.rg_ids.final_depth_pyramid, PipelineStage::TaskShader);
       view.rg_ids.meshlet_vis = p.rw_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
     } else {
-      ASSERT(static_instance_mgr_.get_num_meshlet_vis_buf_elements() > 0);
-      view.rg_ids.meshlet_vis = rg_.create_buffer(
-          {.size = sizeof(uint32_t) * static_instance_mgr_.get_num_meshlet_vis_buf_elements(),
-           .defer_reuse = true},
-          "meshlet_vis_buf");
-      p.write_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
+      view.rg_ids.meshlet_vis = p.write_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
     }
   } else {
     // TODO: handle indirect case
@@ -202,15 +197,8 @@ void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthP
   out_draw_count_buf_rg_handle = p.read_buf(view.rg_ids.draw_count, PipelineStage::TaskShader);
   if (late) {
     p.sample_tex(view.rg_ids.final_depth_pyramid, PipelineStage::TaskShader);
-    view.rg_ids.meshlet_vis = p.rw_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
-  } else {
-    ASSERT(static_instance_mgr_.get_num_meshlet_vis_buf_elements() > 0);
-    view.rg_ids.meshlet_vis = rg_.create_buffer(
-        {.size = sizeof(uint32_t) * static_instance_mgr_.get_num_meshlet_vis_buf_elements(),
-         .defer_reuse = true},
-        std::string("meshlet_vis_buf_shadow_").append(pass_name));
-    p.write_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
   }
+  view.rg_ids.meshlet_vis = p.rw_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
 
   if (late) {
     out.depth_id = p.rw_depth_output(out.depth_id);

@@ -34,6 +34,7 @@ const char* to_string(RGPassType type) {
       return "None";
   }
 }
+
 std::string rhi_pipeline_stage_to_string(rhi::PipelineStage stage) {
   std::string result;
   if (has_flag(stage, rhi::PipelineStage::TopOfPipe)) {
@@ -206,6 +207,19 @@ constexpr Flags flag_or(Flags x, Bits y) noexcept {
 }
 
 }  // namespace
+
+const char* to_string(RGResourceType type) {
+  switch (type) {
+    case RGResourceType::Texture:
+      return "Texture";
+    case RGResourceType::Buffer:
+      return "Buffer";
+    case RGResourceType::ExternalTexture:
+      return "ExternalTexture";
+    case RGResourceType::ExternalBuffer:
+      return "ExternalBuffer";
+  }
+}
 
 RenderGraph::Pass::Pass(NameId name_id, RenderGraph* rg, uint32_t pass_i, RGPassType type)
     : rg_(rg), pass_i_(pass_i), name_id_(name_id), type_(type) {}
@@ -755,7 +769,14 @@ void RenderGraph::find_deps_recursive(uint32_t pass_i, uint32_t stack_size) {
 
   for (const auto& external_read : pass.get_external_reads()) {
     auto writer_pass_it = resource_use_id_to_writer_pass_idx_.find(external_read.id);
-    ALWAYS_ASSERT(writer_pass_it != resource_use_id_to_writer_pass_idx_.end());
+    if (writer_pass_it == resource_use_id_to_writer_pass_idx_.end()) {
+      LERROR(
+          "RenderGraph: external read has no producer pass (no write registered for this resource "
+          "id). reader_pass='{}' resource='{}' type={} — add a pass that writes this id/version "
+          "before readers, or fix a stale RGResourceId (wrong #version).",
+          pass.get_name(), debug_name(external_read.id), to_string(external_read.type));
+      ASSERT(0);
+    }
     uint32_t write_pass_i = writer_pass_it->second;
     intermed_pass_stack_.emplace_back(write_pass_i);
     pass_dependencies_[pass_i].insert(write_pass_i);
@@ -765,26 +786,16 @@ void RenderGraph::find_deps_recursive(uint32_t pass_i, uint32_t stack_size) {
   for (const auto& read : pass.get_internal_reads()) {
     auto writer_pass_it = resource_use_id_to_writer_pass_idx_.find(read.id);
     if (writer_pass_it == resource_use_id_to_writer_pass_idx_.end()) {
-      LERROR("not found: {}", debug_name(read.id));
+      LERROR(
+          "RenderGraph: internal read has no producer pass. reader_pass='{}' resource='{}' type={} "
+          "— ensure an earlier pass writes this id/version.",
+          pass.get_name(), debug_name(read.id), to_string(read.type));
       ASSERT(0);
     }
     uint32_t write_pass_i = writer_pass_it->second;
     intermed_pass_stack_.emplace_back(write_pass_i);
     pass_dependencies_[pass_i].insert(write_pass_i);
     find_deps_recursive(write_pass_i, stack_size);
-  }
-}
-
-const char* to_string(RGResourceType type) {
-  switch (type) {
-    case RGResourceType::Texture:
-      return "Texture";
-    case RGResourceType::Buffer:
-      return "Buffer";
-    case RGResourceType::ExternalTexture:
-      return "ExternalTexture";
-    case RGResourceType::ExternalBuffer:
-      return "ExternalBuffer";
   }
 }
 
