@@ -185,8 +185,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   std::vector<RGResourceId> draw_cmd_count_buf_ids(render_views_.size());
 
   for (size_t vid = 0; vid < render_views_.size(); vid++) {
-    draw_cmd_count_buf_ids[vid] = rg_.create_buffer(
-        {.size = sizeof(uint32_t) * 2}, "draw_cmd_count_buf_view_" + std::to_string(vid));
+    draw_cmd_count_buf_ids[vid] =
+        rg_.create_buffer({.size = sizeof(uint32_t) * static_cast<size_t>(DrawCullPhase::Count)},
+                          "draw_cmd_count_buf_view");
   }
   {
     auto& p = rg_.add_transfer_pass("clear_draw_cmd_count_bufs");
