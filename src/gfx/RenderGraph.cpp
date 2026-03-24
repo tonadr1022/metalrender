@@ -300,6 +300,8 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
   external_textures_.clear();
   external_tex_handle_to_id_.clear();
   external_buf_handle_to_id_.clear();
+  rg_id_to_external_texture_.clear();
+  rg_id_to_external_buffer_.clear();
   curr_submitted_swapchain_textures_.clear();
 }
 
@@ -682,9 +684,11 @@ RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
       }
     }
     const auto& rec = resources_[it->second.idx];
-    return RGResourceId{.idx = it->second.idx,
-                        .type = RGResourceType::ExternalTexture,
-                        .version = rec.latest_version};
+    RGResourceId id{.idx = it->second.idx,
+                    .type = RGResourceType::ExternalTexture,
+                    .version = rec.latest_version};
+    rg_id_to_external_texture_[id] = tex_handle;
+    return id;
   }
   auto idx = external_textures_.size();
   external_textures_.emplace_back(tex_handle);
@@ -694,6 +698,7 @@ RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
                   .type = RGResourceType::ExternalTexture,
                   .version = 0};
   external_tex_handle_to_id_.emplace(key, id);
+  rg_id_to_external_texture_[id] = tex_handle;
   return id;
 }
 
@@ -708,9 +713,11 @@ RGResourceId RenderGraph::import_external_buffer(rhi::BufferHandle buf_handle,
       }
     }
     const auto& rec = resources_[it->second.idx];
-    return RGResourceId{.idx = it->second.idx,
-                        .type = RGResourceType::ExternalBuffer,
-                        .version = rec.latest_version};
+    RGResourceId id{.idx = it->second.idx,
+                    .type = RGResourceType::ExternalBuffer,
+                    .version = rec.latest_version};
+    rg_id_to_external_buffer_[id] = buf_handle;
+    return id;
   }
   auto idx = external_buffers_.size();
   external_buffers_.emplace_back(buf_handle);
@@ -720,6 +727,7 @@ RGResourceId RenderGraph::import_external_buffer(rhi::BufferHandle buf_handle,
                   .type = RGResourceType::ExternalBuffer,
                   .version = 0};
   external_buf_handle_to_id_.emplace(key, id);
+  rg_id_to_external_buffer_[id] = buf_handle;
   return id;
 }
 
@@ -798,6 +806,22 @@ rhi::BufferHandle RenderGraph::get_buf(RGResourceHandle buf_handle) const {
   ASSERT(buf_handle.idx < buffer_handles_.size());
   ASSERT(buf_handle.type == RGResourceType::Buffer);
   return buffer_handles_[buf_handle.idx];
+}
+
+rhi::TextureHandle RenderGraph::get_external_texture(RGResourceId id) const {
+  ALWAYS_ASSERT(id.type == RGResourceType::ExternalTexture);
+  ALWAYS_ASSERT(id.idx < resources_.size());
+  auto it = rg_id_to_external_texture_.find(id);
+  ALWAYS_ASSERT(it != rg_id_to_external_texture_.end());
+  return it->second;
+}
+
+rhi::BufferHandle RenderGraph::get_external_buffer(RGResourceId id) const {
+  ALWAYS_ASSERT(id.type == RGResourceType::ExternalBuffer);
+  ALWAYS_ASSERT(id.idx < resources_.size());
+  auto it = rg_id_to_external_buffer_.find(id);
+  ALWAYS_ASSERT(it != rg_id_to_external_buffer_.end());
+  return it->second;
 }
 
 RGResourceHandle RenderGraph::get_physical_handle(RGResourceId id) const {

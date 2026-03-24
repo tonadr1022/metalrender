@@ -106,6 +106,20 @@ struct RGResourceIdHash {
   }
 };
 
+// For maps keyed by logical external import: same GPU handle for all RGResourceId versions.
+struct RGResourceIdStableHash {
+  size_t operator()(RGResourceId id) const noexcept {
+    auto h = std::make_tuple(id.idx, static_cast<uint32_t>(id.type));
+    return util::hash::tuple_hash<decltype(h)>{}(h);
+  }
+};
+
+struct RGResourceIdStableEq {
+  bool operator()(const RGResourceId& a, const RGResourceId& b) const noexcept {
+    return a.idx == b.idx && a.type == b.type;
+  }
+};
+
 struct ResourceAndUsage {
   RGResourceId id;
   rhi::AccessFlags access;
@@ -162,8 +176,16 @@ class RenderGraph {
 
     RGResourceId import_external_texture(rhi::TextureHandle tex_handle,
                                          std::string_view debug_name = {});
+    RGResourceId import_external_texture(const rhi::TextureHandleHolder& tex_handle,
+                                         std::string_view debug_name = {}) {
+      return import_external_texture(tex_handle.handle, debug_name);
+    }
     RGResourceId import_external_buffer(rhi::BufferHandle buf_handle,
                                         std::string_view debug_name = {});
+    RGResourceId import_external_buffer(const rhi::BufferHandleHolder& buf_handle,
+                                        std::string_view debug_name = {}) {
+      return import_external_buffer(buf_handle.handle, debug_name);
+    }
 
     struct NameAndAccess {
       RGResourceId id;
@@ -223,13 +245,23 @@ class RenderGraph {
   RGResourceId create_buffer(const BufferInfo& buf_info, std::string_view debug_name = {});
   RGResourceId import_external_texture(rhi::TextureHandle tex_handle,
                                        std::string_view debug_name = {});
+  RGResourceId import_external_texture(const rhi::TextureHandleHolder& tex_handle,
+                                       std::string_view debug_name = {}) {
+    return import_external_texture(tex_handle.handle, debug_name);
+  }
   RGResourceId import_external_buffer(rhi::BufferHandle buf_handle,
                                       std::string_view debug_name = {});
+  RGResourceId import_external_buffer(const rhi::BufferHandleHolder& buf_handle,
+                                      std::string_view debug_name = {}) {
+    return import_external_buffer(buf_handle.handle, debug_name);
+  }
 
   [[nodiscard]] rhi::TextureHandle get_att_img(RGResourceId tex_id) const;
   [[nodiscard]] rhi::TextureHandle get_att_img(RGResourceHandle tex_handle) const;
   [[nodiscard]] rhi::BufferHandle get_buf(RGResourceId buf_id) const;
   [[nodiscard]] rhi::BufferHandle get_buf(RGResourceHandle buf_handle) const;
+  [[nodiscard]] rhi::TextureHandle get_external_texture(RGResourceId id) const;
+  [[nodiscard]] rhi::BufferHandle get_external_buffer(RGResourceId id) const;
 
  private:
   struct StringHash {
@@ -312,6 +344,10 @@ class RenderGraph {
 
   std::unordered_map<uint64_t, RGResourceId> external_tex_handle_to_id_;
   std::unordered_map<uint64_t, RGResourceId> external_buf_handle_to_id_;
+  std::unordered_map<RGResourceId, rhi::TextureHandle, RGResourceIdStableHash, RGResourceIdStableEq>
+      rg_id_to_external_texture_;
+  std::unordered_map<RGResourceId, rhi::BufferHandle, RGResourceIdStableHash, RGResourceIdStableEq>
+      rg_id_to_external_buffer_;
 
   struct ResourceRecord {
     RGResourceType type{};
