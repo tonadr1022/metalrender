@@ -223,28 +223,31 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       prep_meshlets_pass.read_buf(instance_data_id, rhi::PipelineStage::ComputeShader);
     }
 
-    const uint32_t max_draws = static_instance_mgr_.stats().max_instance_data_count;
-    const size_t required_instance_vis_buf_size = static_cast<size_t>(max_draws) * sizeof(uint32_t);
-    for (auto view_id : view_ids) {
-      auto& render_view = get_render_view(view_id);
-      auto* vis_buf = device_->get_buf(render_view.instance_vis_buf);
-      bool created_or_resized = false;
-      if (!vis_buf || vis_buf->size() < required_instance_vis_buf_size) {
-        render_view.instance_vis_buf =
-            device_->create_buf_h({.usage = BufferUsage::Storage,
-                                   .size = required_instance_vis_buf_size,
-                                   .name = "instance_vis_buf"});
-        created_or_resized = true;
-        vis_buf = device_->get_buf(render_view.instance_vis_buf);
-      }
-      RGResourceId vis_rg_id =
-          rg_.import_external_buffer(render_view.instance_vis_buf, "instance_vis_buf");
-      instance_vis_rg_ids.push_back(vis_rg_id);
-      if (created_or_resized) {
-        instance_vis_clear_ids.push_back({.id = vis_rg_id,
-                                          .buf = render_view.instance_vis_buf.handle,
-                                          .size_bytes = required_instance_vis_buf_size,
-                                          .fill_value = 1});
+    if (settings_.culling.object_occlusion) {
+      const uint32_t max_draws = static_instance_mgr_.stats().max_instance_data_count;
+      const size_t required_instance_vis_buf_size =
+          static_cast<size_t>(max_draws) * sizeof(uint32_t);
+      for (auto view_id : view_ids) {
+        auto& render_view = get_render_view(view_id);
+        auto* vis_buf = device_->get_buf(render_view.instance_vis_buf);
+        bool created_or_resized = false;
+        if (!vis_buf || vis_buf->size() < required_instance_vis_buf_size) {
+          render_view.instance_vis_buf =
+              device_->create_buf_h({.usage = BufferUsage::Storage,
+                                     .size = required_instance_vis_buf_size,
+                                     .name = "instance_vis_buf"});
+          created_or_resized = true;
+          vis_buf = device_->get_buf(render_view.instance_vis_buf);
+        }
+        RGResourceId vis_rg_id =
+            rg_.import_external_buffer(render_view.instance_vis_buf, "instance_vis_buf");
+        instance_vis_rg_ids.push_back(vis_rg_id);
+        if (created_or_resized) {
+          instance_vis_clear_ids.push_back({.id = vis_rg_id,
+                                            .buf = render_view.instance_vis_buf.handle,
+                                            .size_bytes = required_instance_vis_buf_size,
+                                            .fill_value = 1});
+        }
       }
     }
 
@@ -340,8 +343,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
               device_->get_buf(task_cmd_buf_alpha_test_handle)->bindless_idx();
           view_cull_setups[i].draw_cnt_buf_idx =
               device_->get_buf(rg_.get_buf(out_draw_count_buf_rg_handle))->bindless_idx();
-          view_cull_setups[i].instance_vis_buf_idx =
-              device_->get_buf(render_view_data.instance_vis_buf)->bindless_idx();
+
+          auto* instance_vis_buf = device_->get_buf(render_view_data.instance_vis_buf);
+          if (instance_vis_buf) {
+            view_cull_setups[i].instance_vis_buf_idx = instance_vis_buf->bindless_idx();
+          }
           view_cull_setups[i].pass = static_cast<uint32_t>(phase);
           view_cull_setups[i].depth_pyramid_tex_idx =
               phase == DrawCullPhase::Late
@@ -350,9 +356,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
           view_cull_setups[i].draw_cmd_count_buf_idx =
               device_->get_buf(rg_.get_buf(draw_cmd_count_buf_ids[(int)view_id]))->bindless_idx();
           view_cull_setups[i].flags = 0;
-          if (settings_.culling.object_occlusion && view_id == main_render_view_id_ &&
-              settings_.culling.meshlet_occlusion && settings_.culling.enabled &&
-              settings_.pipeline.mesh_shaders_enabled) {
+          if (view_id == main_render_view_id_ && settings_.culling.meshlet_occlusion &&
+              settings_.culling.enabled && settings_.pipeline.mesh_shaders_enabled) {
             view_cull_setups[i].flags |= MESHLET_OCCLUSION_CULL_ENABLED_BIT;
           }
           if (settings_.culling.object_occlusion && view_id == main_render_view_id_ &&
@@ -604,7 +609,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     }
   }
 
-  add_draw_cull_pass(DrawCullPhase::Late, task_cmd_buf_rg_ids, out_draw_count_ids_late);
+  if (settings_.culling.object_occlusion) {
+    add_draw_cull_pass(DrawCullPhase::Late, task_cmd_buf_rg_ids, out_draw_count_ids_late);
+  }
 
   if (obj_or_meshlet_occlusion_culling_enabled) {
     auto vid = (int)main_render_view_id_;

@@ -148,7 +148,7 @@ struct DispatchMeshCmd {
 
       TaskCmd cmd;
       cmd.instance_id = dtid;
-      cmd.late_draw_visibility = visible_last_frame ? 1u : 0u;
+      cmd.late_draw_visibility = uint(visible_last_frame);
       for (uint i = 0; i < task_groups; ++i) {
         cmd.task_offset = mesh_data.meshlet_base + i * K_TASK_TG_SIZE;
         cmd.group_base = i * K_TASK_TG_SIZE;

@@ -57,16 +57,21 @@ Texture2D depth_pyramid_tex : register(t3);
 
       meshlet_vis_i = instance_data.meshlet_vis_base + gtid + task_cmd.group_base;
       bool visible_last_frame = true;
-      if ((flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0) {
+      bool meshlet_occlusion_cull_enabled = (flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0;
+      if (meshlet_occlusion_cull_enabled) {
         visible_last_frame = meshlet_vis_buf[meshlet_vis_i] != 0;
       }
       bool skip_draw = false;
 
-      if (pass == 0 && !visible_last_frame) {
-        visible = false;
-      }
-      if (pass != 0 && visible_last_frame) {
-        skip_draw = true;
+      // Per-meshlet early/late only when meshlet occlusion is enabled; otherwise instance
+      // early/late is already split in draw_cull task buffers.
+      if (meshlet_occlusion_cull_enabled) {
+        if (pass == 0 && !visible_last_frame) {
+          visible = false;
+        }
+        if (pass != 0 && visible_last_frame) {
+          skip_draw = true;
+        }
       }
       float3 world_center =
           rotate_quat(instance_data.scale * meshlet.center_radius.xyz, instance_data.rotation) +
@@ -103,7 +108,10 @@ Texture2D depth_pyramid_tex : register(t3);
         visible = visible && !cone_cull(center, radius, cone_axis, cone_cutoff, float3(0, 0, 0));
       }
 
-      if (pass != 0 && (flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0 && visible) {
+      // late_draw_visibility==0: object HZB in draw_cull already passed; meshlet HZB is stricter
+      // and false-culls here when both modes are on. ==1: still need meshlet HZB after early pass.
+      if (pass != 0 && (flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0 && visible &&
+          task_cmd.late_draw_visibility != 0) {
         // occlusion cull test
         ProjectSphereResult proj_res =
             project_sphere(center, radius, cull_data.z_near, cull_data.p00, cull_data.p11);

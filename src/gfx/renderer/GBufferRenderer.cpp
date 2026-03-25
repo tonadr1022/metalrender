@@ -94,11 +94,20 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
   auto& p = rg_.add_graphics_pass(late ? "gbuffer_late" : "gbuffer_early");
   RGResourceId out_draw_count_buf_rg_handle{};
 
+  DrawCullPhase task_cmd_buf_phase;
+  if (settings_.culling.object_occlusion) {
+    task_cmd_buf_phase = cull_phase;
+  } else {
+    task_cmd_buf_phase = DrawCullPhase::Early;
+  }
   if (settings_.pipeline.mesh_shaders_enabled) {
     for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
       if (scene.draw_batch.get_stats().vertex_count > 0) {
-        auto id =
-            view.task_cmd_buf_rg_ids.phase(cull_phase)[static_cast<AlphaMaskType>(alpha_mask_type)];
+        // use phase 0 for task cmd buf ids if object occlusion is disabled, since only one pass for
+        // generating them.
+
+        auto id = view.task_cmd_buf_rg_ids.phase(
+            task_cmd_buf_phase)[static_cast<AlphaMaskType>(alpha_mask_type)];
         ASSERT(id.is_valid());
         p.read_buf(id, PipelineStage::MeshShader | PipelineStage::TaskShader);
       }
@@ -138,44 +147,45 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
   }
 
   const RGResourceId meshlet_vis_for_pass = view.rg_ids.meshlet_vis;
-  p.set_ex([this, late, cull_phase, rg_a = gbuffer_pass_info.gbuffer_a_id,
-            rg_b = gbuffer_pass_info.gbuffer_b_id, rg_depth = gbuffer_pass_info.depth_id,
-            rv = &view.render_view, meshlet_vis_rg = meshlet_vis_for_pass,
-            meshlet_stats_rg = meshlet_stats_for_pass, batch = &scene.draw_batch,
-            materials = scene.materials_buf, frame_globals = scene.frame_globals_buf_info,
-            out_draw_count_rg = out_draw_count_buf_rg_handle,
-            task_cmd_rg = view.task_cmd_buf_rg_ids.phase(cull_phase)](rhi::CmdEncoder* enc) {
-    if (!static_instance_mgr_.has_draws()) {
-      return;
-    }
-    auto depth_handle = rg_.get_att_img(rg_depth);
-    ASSERT(depth_handle.is_valid());
-    auto gbuffer_a_tex = rg_.get_att_img(rg_a);
-    auto gbuffer_b_tex = rg_.get_att_img(rg_b);
-    auto load_op = late ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
-    enc->begin_rendering({
-        RenderAttInfo::color_att(gbuffer_a_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
-        RenderAttInfo::color_att(gbuffer_b_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
-        RenderAttInfo::depth_stencil_att(
-            depth_handle, load_op,
-            {.depth_stencil = {.depth = settings_.pipeline.reverse_z ? 0.f : 1.f}}),
-    });
-    enc->bind_srv(materials, 11);
+  p.set_ex(
+      [this, late, cull_phase, rg_a = gbuffer_pass_info.gbuffer_a_id,
+       rg_b = gbuffer_pass_info.gbuffer_b_id, rg_depth = gbuffer_pass_info.depth_id,
+       rv = &view.render_view, meshlet_vis_rg = meshlet_vis_for_pass,
+       meshlet_stats_rg = meshlet_stats_for_pass, batch = &scene.draw_batch,
+       materials = scene.materials_buf, frame_globals = scene.frame_globals_buf_info,
+       out_draw_count_rg = out_draw_count_buf_rg_handle,
+       task_cmd_rg = view.task_cmd_buf_rg_ids.phase(task_cmd_buf_phase)](rhi::CmdEncoder* enc) {
+        if (!static_instance_mgr_.has_draws()) {
+          return;
+        }
+        auto depth_handle = rg_.get_att_img(rg_depth);
+        ASSERT(depth_handle.is_valid());
+        auto gbuffer_a_tex = rg_.get_att_img(rg_a);
+        auto gbuffer_b_tex = rg_.get_att_img(rg_b);
+        auto load_op = late ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
+        enc->begin_rendering({
+            RenderAttInfo::color_att(gbuffer_a_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
+            RenderAttInfo::color_att(gbuffer_b_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
+            RenderAttInfo::depth_stencil_att(
+                depth_handle, load_op,
+                {.depth_stencil = {.depth = settings_.pipeline.reverse_z ? 0.f : 1.f}}),
+        });
+        enc->bind_srv(materials, 11);
 
-    if (settings_.pipeline.mesh_shaders_enabled) {
-      const SceneBindings mesh_scene{*batch, materials, frame_globals};
-      const MeshletMeshPassView mesh_pass{*rv, meshlet_vis_rg, meshlet_stats_rg, task_cmd_rg,
-                                          rg_.get_buf(out_draw_count_rg)};
-      encode_meshlet_mesh_draw_pass(
-          settings_, device_, rg_, static_instance_mgr_, enc, cull_phase, true, depth_handle,
-          mesh_scene, mesh_pass,
-          std::span<const rhi::PipelineHandleHolder>(gbuffer_meshlet_psos_,
-                                                     static_cast<size_t>(AlphaMaskType::Count)));
-    } else {
-      ASSERT(0 && "Not implemented");
-    }
-    enc->end_rendering();
-  });
+        if (settings_.pipeline.mesh_shaders_enabled) {
+          const SceneBindings mesh_scene{*batch, materials, frame_globals};
+          const MeshletMeshPassView mesh_pass{*rv, meshlet_vis_rg, meshlet_stats_rg, task_cmd_rg,
+                                              rg_.get_buf(out_draw_count_rg)};
+          encode_meshlet_mesh_draw_pass(
+              settings_, device_, rg_, static_instance_mgr_, enc, cull_phase, true, depth_handle,
+              mesh_scene, mesh_pass,
+              std::span<const rhi::PipelineHandleHolder>(
+                  gbuffer_meshlet_psos_, static_cast<size_t>(AlphaMaskType::Count)));
+        } else {
+          ASSERT(0 && "Not implemented");
+        }
+        enc->end_rendering();
+      });
 }
 
 void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthPassInfo& out,
@@ -188,6 +198,8 @@ void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthP
   ASSERT(settings_.pipeline.mesh_shaders_enabled);
   for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
     if (scene.draw_batch.get_stats().vertex_count > 0) {
+      // TODO: handle early phase necessity when object culling is disabled and only one draw_cull
+      // pass is needed.
       auto id =
           view.task_cmd_buf_rg_ids.phase(cull_phase)[static_cast<AlphaMaskType>(alpha_mask_type)];
       ASSERT(id.is_valid());
