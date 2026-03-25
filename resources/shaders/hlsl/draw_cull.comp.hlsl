@@ -50,14 +50,18 @@ struct DispatchMeshCmd {
     Texture2D depth_pyramid_tex = bindless_textures[view_setup.depth_pyramid_tex_idx];
     SamplerState samp = bindless_samplers[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
 
-    RWByteAddressBuffer instance_vis_buf = bindless_rwbuffers[view_setup.instance_vis_buf_idx];
-    uint vis_byte_addr = dtid * sizeof(uint32_t);
     bool object_occlusion_cull_enabled =
         (view_setup.flags & OBJECT_OCCLUSION_CULL_ENABLED_BIT) != 0;
     bool meshlet_occlusion_cull_enabled =
         (view_setup.flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0;
-    bool visible_last_frame =
-        !object_occlusion_cull_enabled || instance_vis_buf.Load(vis_byte_addr) != 0;
+    uint vis_byte_addr = dtid * sizeof(uint32_t);
+    // When object occlusion is disabled, the CPU won't allocate/bind `instance_vis_buf`.
+    // Default to visible to ensure early/late scheduling does not get accidentally gated.
+    bool visible_last_frame = true;
+    if (object_occlusion_cull_enabled) {
+      RWByteAddressBuffer instance_vis_buf = bindless_rwbuffers[view_setup.instance_vis_buf_idx];
+      visible_last_frame = instance_vis_buf.Load(vis_byte_addr) != 0;
+    }
     bool late = view_setup.pass != 0;
 
     // early pass: only process draws that were visible last frame
@@ -159,7 +163,8 @@ struct DispatchMeshCmd {
       }
     }
 
-    if (late) {
+    if (late && object_occlusion_cull_enabled) {
+      RWByteAddressBuffer instance_vis_buf = bindless_rwbuffers[view_setup.instance_vis_buf_idx];
       instance_vis_buf.Store(vis_byte_addr, visible ? 1 : 0);
     }
   }

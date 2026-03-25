@@ -609,7 +609,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     }
   }
 
-  if (settings_.culling.object_occlusion) {
+  // Meshlet occlusion's late meshlet pass relies on the late draw_cull phase to populate
+  // `out_draw_count_ids_late` and late `TaskCmd` buffers.
+  if (settings_.culling.object_occlusion || settings_.culling.meshlet_occlusion) {
     add_draw_cull_pass(DrawCullPhase::Late, task_cmd_buf_rg_ids, out_draw_count_ids_late);
   }
 

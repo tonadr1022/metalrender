@@ -94,8 +94,10 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
   auto& p = rg_.add_graphics_pass(late ? "gbuffer_late" : "gbuffer_early");
   RGResourceId out_draw_count_buf_rg_handle{};
 
+  // When object occlusion is off, we still need the Late task cmd buffer when meshlet occlusion
+  // is enabled; forward_meshlet's late pass depends on `pass != 0` task data.
   DrawCullPhase task_cmd_buf_phase;
-  if (settings_.culling.object_occlusion) {
+  if (settings_.culling.object_occlusion || settings_.culling.meshlet_occlusion) {
     task_cmd_buf_phase = cull_phase;
   } else {
     task_cmd_buf_phase = DrawCullPhase::Early;

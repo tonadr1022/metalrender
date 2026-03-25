@@ -18,7 +18,7 @@ struct RendererSettings {
     bool meshlet_frustum = true;
     bool meshlet_cone = true;
     bool meshlet_occlusion = true;
-    bool object_occlusion = false;
+    bool object_occlusion = true;
   } culling;
 
   struct Shadows {
