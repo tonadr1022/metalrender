@@ -251,10 +251,13 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     for (size_t view_i = 0; view_i < view_ids.size(); ++view_i) {
       auto view_id = view_ids[view_i];
       if (late) {
-        const bool depth_pyramid_valid_for_draw_cull =
-            settings_.culling.meshlet_occlusion && settings_.culling.enabled &&
-            settings_.pipeline.mesh_shaders_enabled && view_id == main_render_view_id_;
-        if (depth_pyramid_valid_for_draw_cull) {
+        // Late draw_cull samples the pyramid for object and/or meshlet occlusion; the graph must
+        // depend on depth_reduce finishing (object-only occlusion previously omitted this).
+        const bool depth_pyramid_read_by_draw_cull =
+            (settings_.culling.object_occlusion || settings_.culling.meshlet_occlusion) &&
+            settings_.culling.enabled && settings_.pipeline.mesh_shaders_enabled &&
+            view_id == main_render_view_id_;
+        if (depth_pyramid_read_by_draw_cull) {
           prep_meshlets_pass.read_tex(final_depth_pyramid_ids[(int)view_id],
                                       rhi::PipelineStage::ComputeShader);
         }

@@ -95,9 +95,9 @@ void main(uint dtid : SV_DispatchThreadID)
                     float lod = floor(log2(max(aabb_size.x, aabb_size.y)));
                     lod = clamp(lod, 0.0, float(cull_data.pyramid_mip_count) - 1.0);
 
-                    uint lod_i = uint(lod);
-                    uint2 mipDims = uint2(max(1u, cull_data.pyramid_width >> lod_i),
-                                          max(1u, cull_data.pyramid_height >> lod_i));
+                    int lod_i = int(lod);
+                    uint2 mipDims = uint2(max(1u, cull_data.pyramid_width >> uint(lod_i)),
+                                          max(1u, cull_data.pyramid_height >> uint(lod_i)));
 
                     float2 texelSize = 1.0f / float2(mipDims);
                     float2 halfTexel = texelSize * 0.5f;
@@ -112,8 +112,10 @@ void main(uint dtid : SV_DispatchThreadID)
 
                     float depth = min(min(d0, d1), min(d2, d3));
 
-                    float depth_sphere = cull_data.z_near / (-center.z - radius);   // adjust if your depth convention differs
-
+                    // Same sphere depth as forward_meshlet.task.hlsl (occlusion test)
+                    float view_z = center.z + radius;
+                    float zn = cull_data.z_near;
+                    float depth_sphere = zn / -view_z;
                     visible = visible && (depth_sphere >= depth);
                 }
             }
