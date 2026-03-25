@@ -353,6 +353,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
           if (settings_.culling.object_occlusion && view_id == main_render_view_id_ &&
               settings_.culling.meshlet_occlusion && settings_.culling.enabled &&
               settings_.pipeline.mesh_shaders_enabled) {
+            view_cull_setups[i].flags |= MESHLET_OCCLUSION_CULL_ENABLED_BIT;
           }
           if (settings_.culling.object_occlusion && view_id == main_render_view_id_ &&
               settings_.culling.enabled && settings_.pipeline.mesh_shaders_enabled) {
@@ -612,7 +613,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     const GBufferRenderer::GBufferViewBindings gbuffer_view{
         task_cmd_buf_rg_ids[vid],
         get_render_view(main_render_view_id_),
-        {meshlet_vis_ids[vid], out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
+        {meshlet_vis_ids[vid], out_draw_count_ids_late[vid], final_depth_pyramid_ids[vid],
          meshlet_draw_stats_buf_ids[vid]}};
     gbuffer_renderer_->bake(gbuffer_pass_info, DrawCullPhase::Late, gbuffer_scene, gbuffer_view);
   }

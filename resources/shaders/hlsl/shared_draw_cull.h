@@ -2,6 +2,7 @@
 #define SHARED_DRAW_CULL_H
 
 #define OBJECT_OCCLUSION_CULL_ENABLED_BIT (1 << 0)
+#define MESHLET_OCCLUSION_CULL_ENABLED_BIT (1 << 1)
 
 #include "shader_core.h"
 

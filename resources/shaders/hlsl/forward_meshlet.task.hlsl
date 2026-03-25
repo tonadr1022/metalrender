@@ -42,7 +42,7 @@ Texture2D depth_pyramid_tex : register(t3);
 
   SamplerState samp = bindless_samplers[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
 
-  StructuredBuffer<uint3> draw_cnt_buf = bindless_buffers_uint3[out_draw_count_buf_idx]; // TODO: fix
+  StructuredBuffer<uint3> draw_cnt_buf = bindless_buffers_uint3[out_draw_count_buf_idx];
   bool valid_task_group = task_group_id < draw_cnt_buf[alpha_test_enabled].x;
   uint lane_tri_contrib = 0u;
 
@@ -65,7 +65,7 @@ Texture2D depth_pyramid_tex : register(t3);
       if (pass == 0 && !visible_last_frame) {
         visible = false;
       }
-      if (pass != 0 && task_cmd.late_draw_visibility == 1u && visible_last_frame) {
+      if (pass != 0 && visible_last_frame) {
         skip_draw = true;
       }
       float3 world_center =
@@ -140,7 +140,6 @@ Texture2D depth_pyramid_tex : register(t3);
         }
       }
 
-      // visible = visible || (cull_data.paused != 0 && visible_last_frame);
       if (cull_data.paused == 0 && (flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0) {
         // Only update visibility when NOT paused
         // visible stays as calculated above
@@ -189,8 +188,10 @@ Texture2D depth_pyramid_tex : register(t3);
     if (gtid == 0 && valid_task_group && global_data.meshlet_stats_enabled != 0) {
       uint tri_sum = s_tris[0];
       if (visible_meshlet_cnt != 0u || tri_sum != 0u) {
-        MeshletDrawStats_AtomicAdd(meshlet_draw_stats, MESHLET_DRAW_STATS_CATEGORY_MESHLETS, pass, visible_meshlet_cnt);
-        MeshletDrawStats_AtomicAdd(meshlet_draw_stats, MESHLET_DRAW_STATS_CATEGORY_TRIANGLES, pass, tri_sum);
+        MeshletDrawStats_AtomicAdd(meshlet_draw_stats, MESHLET_DRAW_STATS_CATEGORY_MESHLETS, pass,
+                                   visible_meshlet_cnt);
+        MeshletDrawStats_AtomicAdd(meshlet_draw_stats, MESHLET_DRAW_STATS_CATEGORY_TRIANGLES, pass,
+                                   tri_sum);
       }
     }
 
