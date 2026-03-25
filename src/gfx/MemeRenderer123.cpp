@@ -350,6 +350,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
           if (settings_.culling.object_occlusion && view_id == main_render_view_id_ &&
               settings_.culling.meshlet_occlusion && settings_.culling.enabled &&
               settings_.pipeline.mesh_shaders_enabled) {
+          }
+          if (settings_.culling.object_occlusion && view_id == main_render_view_id_ &&
+              settings_.culling.enabled && settings_.pipeline.mesh_shaders_enabled) {
             view_cull_setups[i].flags |= OBJECT_OCCLUSION_CULL_ENABLED_BIT;
           }
         }
@@ -501,9 +504,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   GBufferRenderer::GbufferPassInfo gbuffer_pass_info{};
 
-  bool meshlet_occlusion_culling_enabled = settings_.culling.meshlet_occlusion &&
-                                           settings_.culling.enabled &&
-                                           settings_.pipeline.mesh_shaders_enabled;
+  bool obj_or_meshlet_occlusion_culling_enabled =
+      (settings_.culling.object_occlusion || settings_.culling.meshlet_occlusion) &&
+      settings_.culling.enabled && settings_.pipeline.mesh_shaders_enabled;
 
   if (get_shadows_enabled() && mesh_shaders_enabled()) {
     const GBufferRenderer::SceneBindings gbuffer_scene{
@@ -536,7 +539,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     depth_ids[vid] = gbuffer_pass_info.depth_id;
   }
 
-  if (meshlet_occlusion_culling_enabled) {
+  if (obj_or_meshlet_occlusion_culling_enabled) {
     for (auto view_id : view_ids) {
       if (view_id != main_render_view_id_) continue;
       const auto& render_view = get_render_view(view_id);
@@ -599,7 +602,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   add_draw_cull_pass(DrawCullPhase::Late, task_cmd_buf_rg_ids, out_draw_count_ids_late);
 
-  if (meshlet_occlusion_culling_enabled) {
+  if (obj_or_meshlet_occlusion_culling_enabled) {
     auto vid = (int)main_render_view_id_;
     const GBufferRenderer::SceneBindings gbuffer_scene{
         static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
@@ -654,14 +657,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       secondary_view_debug_depth_rg_handle = p.read_tex(depth_ids[(int)shadow_map_render_views_[0]],
                                                         rhi::PipelineStage::FragmentShader);
     }
-    if (meshlet_occlusion_culling_enabled &&
+    if (obj_or_meshlet_occlusion_culling_enabled &&
         settings_.debug.render_mode == DebugRenderMode::DepthReduceMips) {
       p.sample_tex(final_depth_pyramid_ids[(int)main_render_view_id_]);
     }
     p.w_swapchain_tex(swapchain_);
     p.set_ex([this, gbuffer_a_id, gbuffer_b_id, secondary_view_debug_depth_rg_handle,
               secondary_view_debug_enabled,
-              meshlet_occlusion_culling_enabled](rhi::CmdEncoder* enc) {
+              obj_or_meshlet_occlusion_culling_enabled](rhi::CmdEncoder* enc) {
       ZoneScopedN("Final pass");
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_id));
       auto* gbuffer_b_tex = device_->get_tex(rg_.get_att_img(gbuffer_b_id));
@@ -680,7 +683,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
         mult = 100.f;
         tex_idx =
             device_->get_tex(rg_.get_att_img(secondary_view_debug_depth_rg_handle))->bindless_idx();
-      } else if (!meshlet_occlusion_culling_enabled ||
+      } else if (!obj_or_meshlet_occlusion_culling_enabled ||
                  settings_.debug.render_mode != DebugRenderMode::DepthReduceMips) {
         tex_idx = gbuffer_a_tex->bindless_idx();
       } else {
