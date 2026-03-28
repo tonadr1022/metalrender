@@ -37,6 +37,7 @@ add_library(${target_name} SHARED
     gfx/rhi/Texture.cpp
     gfx/rhi/Device.cpp
     util/Stats.cpp
+    util/FuzzyMatch.cpp
 
 )
 
@@ -97,6 +98,7 @@ target_link_libraries(${target_name} PUBLIC
     bs_thread_pool
     concurrentqueue
     ktx
+    fts_fuzzy_match
 )
 
 

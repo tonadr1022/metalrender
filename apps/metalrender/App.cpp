@@ -141,7 +141,9 @@ void App::run() {
     const double curr_time = glfwGetTime();
     auto dt = static_cast<float>(curr_time - last_time);
     last_time = curr_time;
-    camera_.update_pos(window_->get_handle(), dt);
+    if (!imgui_enabled_ || (!ImGui::GetIO().WantTextInput && !ImGui::GetIO().WantCaptureKeyboard)) {
+      camera_.update_pos(window_->get_handle(), dt);
+    }
 
     // if (voxel_world_) {
     //   voxel_world_->update(dt, camera_);
@@ -285,6 +287,7 @@ void App::load_config() {
 }
 
 void App::write_config() {
+  ZoneScoped;
   const std::filesystem::path cvar_path = local_resource_dir_ / "cvars.txt";
   CVarSystem::get().save_to_file(cvar_path);
 

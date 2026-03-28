@@ -1,6 +1,7 @@
 #include "Console.hpp"
 
 #include <algorithm>
+#include <utility>
 
 #include "imgui.h"
 #include "imgui_stdlib.h"
@@ -37,7 +38,8 @@ void Console::close() {
 
 void Console::register_command(const std::string& name, const std::string& description,
                                CommandHandler handler) {
-  commands_.push_back(Command{.name = name, .description = description, .handler = handler});
+  commands_.push_back(
+      Command{.name = name, .description = description, .handler = std::move(handler)});
 }
 
 void Console::set_fallback_handler(FallbackHandler handler) {
@@ -54,6 +56,7 @@ void Console::clear_input() {
   last_error_.clear();
   suggestions_.clear();
   selected_suggestion_ = -1;
+  cursor_to_end_after_suggestion_ = false;
 }
 
 void Console::refresh_suggestions() {
@@ -94,7 +97,20 @@ void Console::apply_suggestion(size_t idx) {
     input_.push_back(' ');
   }
   focus_next_frame_ = true;
+  cursor_to_end_after_suggestion_ = true;
   last_completion_input_.clear();
+}
+
+int Console::input_text_callback(ImGuiInputTextCallbackData* data) {
+  if (data->EventFlag != ImGuiInputTextFlags_CallbackAlways) {
+    return 0;
+  }
+  auto* self = static_cast<Console*>(data->UserData);
+  if (self->cursor_to_end_after_suggestion_) {
+    data->ClearSelection();
+    self->cursor_to_end_after_suggestion_ = false;
+  }
+  return 0;
 }
 
 void Console::submit_line(const std::string& line) {
@@ -152,7 +168,7 @@ void Console::draw_imgui() {
 
   ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
                            ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-                           ImGuiWindowFlags_NoCollapse;
+                           ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoNavInputs;
 
   if (ImGui::Begin("Console##RuntimeConsole", nullptr, flags)) {
     if (focus_next_frame_) {
@@ -160,11 +176,12 @@ void Console::draw_imgui() {
       focus_next_frame_ = false;
     }
 
-    const ImGuiInputTextFlags input_flags =
-        ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll;
-
-    bool submit = ImGui::InputText("##console_input", &input_, input_flags);
+    const ImGuiInputTextFlags input_flags = ImGuiInputTextFlags_CallbackAlways;
+    bool console_focus = ImGui::IsItemFocused();
+    ImGui::InputText("##console_input", &input_, input_flags, &Console::input_text_callback, this);
     bool input_focused = ImGui::IsItemFocused();
+    bool submit = console_focus || (ImGui::IsKeyPressed(ImGuiKey_Enter) ||
+                                    ImGui::IsKeyPressed(ImGuiKey_KeypadEnter));
 
     refresh_suggestions();
 
@@ -180,9 +197,8 @@ void Console::draw_imgui() {
           selected_suggestion_ = (selected_suggestion_ + 1) % (int)suggestions_.size();
         }
         if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
-          selected_suggestion_ = selected_suggestion_ <= 0
-                                     ? (int)suggestions_.size() - 1
-                                     : selected_suggestion_ - 1;
+          selected_suggestion_ =
+              selected_suggestion_ <= 0 ? (int)suggestions_.size() - 1 : selected_suggestion_ - 1;
         }
       }
     }

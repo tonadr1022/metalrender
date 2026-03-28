@@ -30,8 +30,8 @@ enum class CVarValueType : uint8_t {
 };
 
 struct CVarInfoView {
-  std::string_view name;
-  std::string_view description;
+  const std::string& name;
+  const std::string& description;
   CVarValueType type;
   CVarFlags flags;
 };

@@ -10,6 +10,7 @@
 #include <span>
 #include <sstream>
 #include <string_view>
+#include <tracy/Tracy.hpp>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -18,6 +19,7 @@
 #include "core/Logger.hpp"
 #include "imgui.h"
 #include "imgui_stdlib.h"
+#include "util/FuzzyMatch.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -184,7 +186,7 @@ void CVarSystemImpl::for_each_cvar(std::function<void(const CVarInfoView&)> visi
     CVarInfoView view{
         .name = p.name,
         .description = p.description,
-        .type = p.type == CVarKind::Int   ? CVarValueType::Int
+        .type = p.type == CVarKind::Int     ? CVarValueType::Int
                 : p.type == CVarKind::Float ? CVarValueType::Float
                                             : CVarValueType::String,
         .flags = p.flags,
@@ -203,8 +205,7 @@ std::string_view trim_sv(std::string_view s);
 
 }  // namespace
 
-CVarApplyResult CVarSystemImpl::set_cvar_from_string(std::string_view name,
-                                                     std::string_view value,
+CVarApplyResult CVarSystemImpl::set_cvar_from_string(std::string_view name, std::string_view value,
                                                      std::string* error_msg) {
   if (error_msg) {
     error_msg->clear();
@@ -630,6 +631,7 @@ void CVarSystemImpl::load_from_file(const std::string& path) {
 }
 
 void CVarSystemImpl::save_to_file(const std::string& path) {
+  ZoneScoped;
   std::ofstream out(path);
   if (!out.is_open()) {
     return;
@@ -733,7 +735,7 @@ void register_cvar_console(Console& console) {
   });
 
   console.set_completion_provider([](std::string_view input, std::vector<ConsoleSuggestion>& out,
-                                      size_t& replace_start, size_t& replace_len) {
+                                     size_t& replace_start, size_t& replace_len) {
     std::string_view trimmed = trim_sv(input);
     size_t leading = input.find_first_not_of(" \t");
     if (leading == std::string_view::npos) {
@@ -747,12 +749,14 @@ void register_cvar_console(Console& console) {
       return;
     }
 
+    const std::string needle(trimmed);
+
     replace_start = leading;
-    replace_len = trimmed.size();
+    replace_len = needle.size();
 
     std::vector<ConsoleSuggestion> matches;
     CVarSystem::get().for_each_cvar([&](const CVarInfoView& info) {
-      if (info.name.rfind(trimmed, 0) == 0) {
+      if (util::fuzzy_match(needle.c_str(), info.name.c_str())) {
         ConsoleSuggestion s;
         s.label = std::string(info.name);
         switch (info.type) {
