@@ -95,8 +95,8 @@ class CVarSystemImpl : public CVarSystem {
   void load_from_file(const std::string& path) override;
   void save_to_file(const std::string& path) override;
 
-  CVarParameter* create_float_cvar(const char* name, const char* description, double default_value,
-                                   double current_value) final;
+  CVarParameter* create_float_cvar(const char* name, const char* description, float default_value,
+                                   float current_value) final;
 
   CVarParameter* create_string_cvar(const char* name, const char* description,
                                     const char* default_value, const char* current_value) final;
@@ -106,11 +106,11 @@ class CVarSystemImpl : public CVarSystem {
   template <typename T>
   T* get_cvar_current(uint32_t hash);
 
-  double* get_float_cvar(util::hash::HashedString hash) final {
-    return get_cvar_current<double>(hash);
+  float* get_float_cvar(util::hash::HashedString hash) final {
+    return get_cvar_current<float>(hash);
   }
 
-  void set_float_cvar(util::hash::HashedString hash, double value) final {
+  void set_float_cvar(util::hash::HashedString hash, float value) final {
     CVarParameter* param = get_cvar(hash);
     if (param) {
       assign_float(param, value);
@@ -142,7 +142,7 @@ class CVarSystemImpl : public CVarSystem {
   void add_change_callback(const AutoCVarString& cv, std::function<void()> cb) final;
 
   void assign_int(CVarParameter* p, int32_t v);
-  void assign_float(CVarParameter* p, double v);
+  void assign_float(CVarParameter* p, float v);
   void assign_string(CVarParameter* p, std::string v);
   void fire_change_callbacks(util::hash::HashedString name);
 
@@ -170,7 +170,7 @@ class CVarSystemImpl : public CVarSystem {
   std::unordered_map<uint32_t, CVarParameter> saved_cvars_;
   std::unordered_map<uint32_t, std::vector<std::function<void()>>> change_callbacks_;
   CVarArray<int32_t> int_cvars_{200};
-  CVarArray<double> float_cvars_{200};
+  CVarArray<float> float_cvars_{200};
   CVarArray<std::string> string_cvars_{200};
 };
 
@@ -180,7 +180,7 @@ CVarArray<int32_t>& CVarSystemImpl::get_cvar_array() {
 }
 
 template <>
-CVarArray<double>& CVarSystemImpl::get_cvar_array() {
+CVarArray<float>& CVarSystemImpl::get_cvar_array() {
   return float_cvars_;
 }
 
@@ -290,7 +290,7 @@ CVarApplyResult CVarSystemImpl::set_cvar_from_string(std::string_view name, std:
     case CVarKind::Float: {
       std::string val_str(value);
       char* end = nullptr;
-      const double v = std::strtod(val_str.c_str(), &end);
+      const float v = std::strtod(val_str.c_str(), &end);
       if (end != val_str.c_str() + val_str.size()) {
         if (error_msg) {
           *error_msg = "Invalid float value";
@@ -326,7 +326,7 @@ void CVarSystemImpl::draw_imgui_editor() {
   for (auto& v : get_cvar_array<int32_t>().cvars) {
     add_to_edit_list(v.parameter);
   }
-  for (auto& v : get_cvar_array<double>().cvars) {
+  for (auto& v : get_cvar_array<float>().cvars) {
     add_to_edit_list(v.parameter);
   }
   for (auto& v : get_cvar_array<std::string>().cvars) {
@@ -373,11 +373,11 @@ void CVarSystemImpl::draw_imgui_editor() {
 }
 
 CVarParameter* CVarSystemImpl::create_float_cvar(const char* name, const char* description,
-                                                 double default_value, double current_value) {
+                                                 float default_value, float current_value) {
   auto* param = init_cvar(name, description);
   if (!param) return nullptr;
   param->type = CVarKind::Float;
-  get_cvar_array<double>().add(default_value, current_value, param);
+  get_cvar_array<float>().add(default_value, current_value, param);
   return param;
 }
 
@@ -448,7 +448,7 @@ void CVarSystemImpl::assign_int(CVarParameter* p, int32_t v) {
   fire_change_callbacks(util::hash::HashedString{p->name});
 }
 
-void CVarSystemImpl::assign_float(CVarParameter* p, double v) {
+void CVarSystemImpl::assign_float(CVarParameter* p, float v) {
   if (p->type != CVarKind::Float) {
     LWARN("incorrect cvar type");
     return;
@@ -521,18 +521,18 @@ void CVarSystemImpl::draw_imgui_edit_cvar_parameter(CVarParameter* p, float text
     case CVarKind::Float:
       if (is_read_only) {
         std::string display_format = p->name + "= %f";
-        ImGui::Text(display_format.c_str(), get_cvar_array<double>().get_current(p->array_idx));
+        ImGui::Text(display_format.c_str(), get_cvar_array<float>().get_current(p->array_idx));
       } else {
         im_gui_label(p->name.c_str(), text_width);
         ImGui::PushID(p);
         if (is_drag) {
-          auto d = static_cast<float>(get_cvar_array<double>().get_current(p->array_idx));
+          auto d = static_cast<float>(get_cvar_array<float>().get_current(p->array_idx));
           if (ImGui::DragFloat("", &d, .01f)) {
-            set_float_cvar(HashedString{p->name}, static_cast<double>(d));
+            set_float_cvar(HashedString{p->name}, d);
           }
         } else {
-          double d = get_cvar_array<double>().get_current(p->array_idx);
-          if (ImGui::InputDouble("", &d)) {
+          float d = get_cvar_array<float>().get_current(p->array_idx);
+          if (ImGui::InputFloat("", &d)) {
             set_float_cvar(HashedString{p->name}, d);
           }
         }
@@ -594,9 +594,9 @@ void set_cvar_by_idx(uint32_t idx, U&& data) {
   if constexpr (std::is_same_v<T, int32_t>) {
     CVarParameter* p = impl.get_cvar_array<int32_t>().cvars[idx].parameter;
     impl.assign_int(p, static_cast<int32_t>(data));
-  } else if constexpr (std::is_same_v<T, double>) {
-    CVarParameter* p = impl.get_cvar_array<double>().cvars[idx].parameter;
-    impl.assign_float(p, static_cast<double>(data));
+  } else if constexpr (std::is_same_v<T, float>) {
+    CVarParameter* p = impl.get_cvar_array<float>().cvars[idx].parameter;
+    impl.assign_float(p, static_cast<float>(data));
   } else if constexpr (std::is_same_v<T, std::string>) {
     CVarParameter* p = impl.get_cvar_array<std::string>().cvars[idx].parameter;
     impl.assign_string(p, std::forward<U>(data));
@@ -605,7 +605,7 @@ void set_cvar_by_idx(uint32_t idx, U&& data) {
 
 }  // namespace
 
-AutoCVarFloat::AutoCVarFloat(const char* name, const char* description, double default_value,
+AutoCVarFloat::AutoCVarFloat(const char* name, const char* description, float default_value,
                              CVarFlags flags) {
   name_hash_ = util::hash::HashedString{name}.hash_value;
   CVarParameter* param =
@@ -615,13 +615,11 @@ AutoCVarFloat::AutoCVarFloat(const char* name, const char* description, double d
   idx_ = param->array_idx;
 }
 
-double AutoCVarFloat::get() { return get_cvar_current_by_index<double>(idx_); }
+float AutoCVarFloat::get() { return get_cvar_current_by_index<float>(idx_); }
 
-double* AutoCVarFloat::get_ptr() { return get_cvar_current_ptr_by_index<double>(idx_); }
+float* AutoCVarFloat::get_ptr() { return get_cvar_current_ptr_by_index<float>(idx_); }
 
-float AutoCVarFloat::get_float() { return static_cast<float>(get()); }
-
-void AutoCVarFloat::set(double val) { set_cvar_by_idx<double>(idx_, val); }
+void AutoCVarFloat::set(float val) { set_cvar_by_idx<float>(idx_, val); }
 
 AutoCVarInt::AutoCVarInt(const char* name, const char* desc, int initial_value, CVarFlags flags) {
   name_hash_ = util::hash::HashedString{name}.hash_value;
@@ -709,7 +707,7 @@ void apply_cvar_line(CVarSystemImpl& sys, std::string_view key_sv, std::string_v
     case CVarKind::Float: {
       const std::string val_str(value_sv);
       char* end = nullptr;
-      const double v = std::strtod(val_str.c_str(), &end);
+      const float v = std::strtod(val_str.c_str(), &end);
       if (end != val_str.c_str() + val_str.size()) {
         return;
       }
@@ -761,7 +759,7 @@ void CVarSystemImpl::save_to_file(const std::string& path) {
   std::ranges::sort(params, [](CVarParameter* a, CVarParameter* b) { return a->name < b->name; });
 
   std::ostringstream oss;
-  oss << std::setprecision(std::numeric_limits<double>::max_digits10);
+  oss << std::setprecision(std::numeric_limits<float>::max_digits10);
 
   for (CVarParameter* p : params) {
     switch (p->type) {

@@ -52,14 +52,14 @@ class CVarSystem {
   static CVarSystem& get();
   virtual CVarParameter* get_cvar(util::hash::HashedString hash) = 0;
   virtual CVarParameter* create_float_cvar(const char* name, const char* description,
-                                           double default_value, double current_value) = 0;
+                                           float default_value, float current_value) = 0;
   virtual CVarParameter* create_int_cvar(const char* name, const char* description,
                                          int32_t default_value, int32_t current_value) = 0;
   virtual CVarParameter* create_string_cvar(const char* name, const char* description,
                                             const char* default_value,
                                             const char* current_value) = 0;
-  virtual double* get_float_cvar(util::hash::HashedString hash) = 0;
-  virtual void set_float_cvar(util::hash::HashedString hash, double value) = 0;
+  virtual float* get_float_cvar(util::hash::HashedString hash) = 0;
+  virtual void set_float_cvar(util::hash::HashedString hash, float value) = 0;
   virtual int32_t* get_int_cvar(util::hash::HashedString hash) = 0;
   virtual void set_int_cvar(util::hash::HashedString hash, int32_t value) = 0;
   // Pointer is valid only until the stored string is next assigned (reallocation may invalidate).
@@ -101,14 +101,13 @@ struct AutoCVarInt : AutoCVar<int32_t> {
   void set(int32_t val);
 };
 
-struct AutoCVarFloat : AutoCVar<double> {
-  AutoCVarFloat(const char* name, const char* description, double default_value,
+struct AutoCVarFloat : AutoCVar<float> {
+  AutoCVarFloat(const char* name, const char* description, float default_value,
                 CVarFlags flags = CVarFlags::None);
-  double get();
+  float get();
   /// Raw storage; writes do not run change callbacks — prefer set() or CVarSystem::set_float_cvar.
-  double* get_ptr();
-  float get_float();
-  void set(double val);
+  float* get_ptr();
+  void set(float val);
 };
 
 struct AutoCVarString : AutoCVar<std::string> {
