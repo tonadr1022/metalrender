@@ -13,7 +13,7 @@ The initial hard-coded Metal pipeline was written in Metal 3. I switched to Meta
 
 The `pre_rhi` branch contains meshlet occlusion culling and primitive voxel rendering written in hardcoded Metal 3 as a learning experience.
 
-Here's a lot of albedo only Sponzas culled aggresively (new RHI on Metal 4, M4 Pro):
+Here's an outdated screenshot of many Sponzas culled aggressively. At time of last update, it renders ~2000 sponzas in view at ~19 ms/frame on Macbook M4 Pro at full resolution, with ~90% geometry culled, one GBuffer pass and one shading pass that applies diffuse shading.
 
 ![Many Sponzas](./screenshots/many_sponzas.png "Many Sponzas")
 
