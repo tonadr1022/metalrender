@@ -335,7 +335,6 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       }
       enc->bind_pipeline(draw_cull_pso_);
       if (renderer_cv::culling_paused.get() == 0) {
-        // Prepare array of ViewCullSetups to be uploaded
         auto view_cull_setup_alloc =
             frame_gpu_upload_allocator_.alloc(view_ids.size() * sizeof(ViewCullSetup));
         auto* view_cull_setups = static_cast<ViewCullSetup*>(view_cull_setup_alloc.write_ptr);
@@ -545,7 +544,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   if (get_shadows_enabled() && mesh_shaders_enabled()) {
     const DrawPassSceneBindings gbuffer_scene{
         static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
-    for (size_t i = 0; i < shadow_cascade_count_; i++) {
+    for (size_t i = 0; i < csm_renderer_->num_cascades(); i++) {
       const int svid = static_cast<int>(shadow_map_render_views_[i]);
       CSMRenderer::ShadowDepthPassInfo shadow_depth{};
       const ViewBindingsMeshlet shadow_view{
@@ -553,8 +552,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
           get_render_view(shadow_map_render_views_[i]),
           {meshlet_vis_ids[svid], out_draw_count_ids_early[svid], final_depth_pyramid_ids[svid],
            meshlet_draw_stats_buf_ids[svid]}};
-      csm_renderer_->bake(shadow_depth, DrawCullPhase::Early, gbuffer_scene, shadow_view,
-                          reverse_z_);
+
+      for (uint32_t cascade_i = 0; cascade_i < csm_renderer_->num_cascades(); cascade_i++) {
+        csm_renderer_->bake("csm_cascade_" + std::to_string(cascade_i), shadow_depth,
+                            DrawCullPhase::Early, gbuffer_scene, shadow_view, reverse_z_);
+      }
+
       depth_ids[svid] = shadow_depth.depth_id;
     }
   }
@@ -706,9 +709,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     bool secondary_view_debug_enabled =
         debug_mode == DebugRenderMode::SecondaryView && !shadow_map_render_views_.empty();
     if (secondary_view_debug_enabled) {
-      p.sample_tex(depth_ids[(int)shadow_map_render_views_[0]]);
-      secondary_view_debug_depth_rg_handle = p.read_tex(depth_ids[(int)shadow_map_render_views_[0]],
-                                                        rhi::PipelineStage::FragmentShader);
+      auto view_id = (int)shadow_map_render_views_[debug_cascade_level_];
+      p.sample_tex(depth_ids[view_id]);
+      secondary_view_debug_depth_rg_handle =
+          p.read_tex(depth_ids[view_id], rhi::PipelineStage::FragmentShader);
     }
     if (obj_or_meshlet_occlusion_culling_enabled &&
         debug_mode == DebugRenderMode::DepthReduceMips) {
@@ -1188,6 +1192,8 @@ void MemeRenderer123::on_imgui() {
     if (ImGui::BeginTabItem("Overview")) {
       ImGui::Text("Mesh shaders enabled: %d", renderer_cv::pipeline_mesh_shaders.get() != 0);
       ImGui::Text("Render Mode %s", to_string(clamped_debug_render_mode()));
+      ImGui::SliderInt("Debug CSM cascade level", &debug_cascade_level_, 0,
+                       csm_renderer_->num_cascades() - 1);
       ImGui::Separator();
       ImGui::EndTabItem();
     }
@@ -1346,7 +1352,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
                 proj_mat, renderer_cv::culling_paused.get() != 0);
 
   if (get_shadows_enabled()) {
-    for (size_t i = 0; i < shadow_cascade_count_; i++) {
+    for (size_t i = 0; i < csm_renderer_->num_cascades(); i++) {
       const auto& csm_data = csm_renderer_->get_csm_data();
       ViewData shadow_view_data{
           .vp = csm_data.light_vp_matrices[i],
@@ -1630,7 +1636,7 @@ void MemeRenderer123::on_shadows_enabled_change(bool shadows_enabled) {
   }
 
   if (shadows_enabled && shadow_map_render_views_.empty()) {
-    for (size_t i = 0; i < k_max_shadow_cascades; i++) {
+    for (size_t i = 0; i < csm_renderer_->num_cascades(); i++) {
       shadow_map_render_views_.emplace_back(create_render_view());
     }
   }

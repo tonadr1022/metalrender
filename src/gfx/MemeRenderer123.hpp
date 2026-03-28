@@ -23,6 +23,7 @@
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
+#include "hlsl/shared_csm.h"
 #include "hlsl/shared_instance_data.h"
 #include "offsetAllocator.hpp"
 
@@ -147,9 +148,7 @@ class MemeRenderer123 {
   // guaranteed to be densely packed
   std::vector<RenderView> render_views_;
   RenderViewId main_render_view_id_{RenderViewId::Invalid};
-  constexpr static uint32_t k_max_shadow_cascades = 1;
-  gch::small_vector<RenderViewId, k_max_shadow_cascades> shadow_map_render_views_;
-  size_t shadow_cascade_count_{1};
+  gch::small_vector<RenderViewId, CSM_MAX_CASCADES> shadow_map_render_views_;
   bool get_shadows_enabled() const { return renderer_cv::shadows_enabled.get() != 0; }
   void on_shadows_enabled_change(bool shadows_enabled);
 
@@ -244,6 +243,7 @@ class MemeRenderer123 {
   std::unique_ptr<gfx::GBufferRenderer> gbuffer_renderer_;
   std::unique_ptr<gfx::CSMRenderer> csm_renderer_;
 
+  int debug_cascade_level_{0};
   bool reverse_z_{true};
 };
 

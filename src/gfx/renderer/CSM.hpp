@@ -41,24 +41,28 @@ class CSMRenderer {
     RGResourceId depth_id{};
   };
   void update(const glm::mat4& cam_view, glm::vec3 cam_pos, glm::vec3 light_dir);
-  void bake(ShadowDepthPassInfo& out, DrawCullPhase cull_phase, const DrawPassSceneBindings& scene,
-            const ViewBindingsMeshlet& view, bool reverse_z);
+  void bake(std::string_view pass_name, ShadowDepthPassInfo& out, DrawCullPhase cull_phase,
+            const DrawPassSceneBindings& scene, const ViewBindingsMeshlet& view, bool reverse_z);
   void load_pipelines(ShaderManager& shader_mgr);
-  [[nodiscard]] const CSMData& get_csm_data() const { return csn_data_; }
+  [[nodiscard]] uint32_t num_cascades() const { return cascade_count_; }
+
+  [[nodiscard]] const CSMData& get_csm_data() const { return csm_data_; }
   [[nodiscard]] const glm::mat4& get_light_proj(uint32_t cascade_idx) const {
     return light_proj_matrices_[cascade_idx];
   }
   [[nodiscard]] const glm::mat4& get_light_view() const { return light_view_; }
 
  private:
-  CSMData csn_data_;
+  CSMData csm_data_;
   std::array<glm::mat4, CSM_MAX_CASCADES> light_proj_matrices_;
   glm::mat4 light_view_{};
   rhi::PipelineHandleHolder shadow_meshlet_psos_[(size_t)AlphaMaskType::Count];
   InstanceMgr& static_instance_mgr_;
   rhi::Device* device_;
   RenderGraph& rg_;
-  uint32_t cascade_count_{1};
+
+  uint32_t shadow_map_resolutions_[CSM_MAX_CASCADES] = {1024, 1024, 1024, 1024};
+  uint32_t cascade_count_{3};
 };
 
 }  // namespace gfx
