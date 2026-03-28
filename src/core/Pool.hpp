@@ -7,7 +7,6 @@
 
 #include "EAssert.hpp"
 #include "core/Config.hpp"
-#include "core/Logger.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -347,7 +346,7 @@ struct BlockPool2 {
   }
 
   void add_block() {
-    uint32_t block_idx = static_cast<uint32_t>(blocks.size());
+    auto block_idx = static_cast<uint32_t>(blocks.size());
     blocks.emplace_back();
     for (uint32_t i = 0; i < ElementsPerBlock; i++) {
       free_list.push_back({.block = block_idx, .idx = ElementsPerBlock - 1u - i});

@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <string_view>
 #include <tuple>
 
 #include "core/Config.hpp"
@@ -40,6 +41,39 @@ struct tuple_hash<std::tuple<TT...>> {
     return seed;
   }
 };
+
+constexpr uint32_t fnv1a_32(const char* s, std::size_t count) {
+  return ((count ? fnv1a_32(s, count - 1) : 2166136261u) ^ s[count]) * 16777619u;
+}
+
+constexpr size_t str_len(const char* s) {
+  size_t size = 0;
+  while (s[size]) {
+    size++;
+  }
+  return size;
+}
+
+struct HashedString {
+  uint32_t hash_value;
+
+  // explicit keyword
+  // NOLINTBEGIN
+  constexpr HashedString(uint32_t hash) noexcept : hash_value(hash) {}
+  constexpr HashedString(const char* s) noexcept : hash_value(0) {
+    hash_value = fnv1a_32(s, str_len(s));
+  }
+  constexpr HashedString(const char* s, std::size_t cnt) noexcept : hash_value(0) {
+    hash_value = fnv1a_32(s, cnt);
+  }
+  constexpr HashedString(std::string_view s) noexcept : hash_value(0) {
+    hash_value = fnv1a_32(s.data(), s.size());
+  }
+  constexpr operator uint32_t() const noexcept { return hash_value; }
+  // explicit keyword
+  // NOLINTEND
+};
+
 }  // namespace util::hash
 
 }  // namespace TENG_NAMESPACE

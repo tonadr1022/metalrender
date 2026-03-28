@@ -14,6 +14,7 @@ add_library(${target_name} SHARED
     core/FileUtil.cpp
     core/Util.cpp
     core/StringUtil.cpp
+    core/CVar.cpp
 
     gfx/ModelLoader.cpp
     gfx/MemeRenderer123.cpp
