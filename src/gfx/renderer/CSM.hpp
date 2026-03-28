@@ -3,7 +3,12 @@
 #include <span>
 
 #include "core/Config.hpp"
+#include "gfx/RenderGraph.hpp"
+#include "gfx/renderer/AlphaMaskType.hpp"
+#include "gfx/renderer/TaskCmdBufRgIds.hpp"
+#include "gfx/rhi/Device.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
+#include "hlsl/shared_csm.h"
 
 namespace TENG_NAMESPACE {
 
@@ -17,6 +22,9 @@ class Device;
 
 class RenderGraph;
 class ShaderManager;
+class InstanceMgr;
+struct DrawPassSceneBindings;
+struct ViewBindingsMeshlet;
 
 void calc_csm_light_space_vp_matrices(std::span<glm::mat4> matrices,
                                       std::span<glm::mat4> proj_matrices, std::span<float> levels,
@@ -26,13 +34,31 @@ void calc_csm_light_space_vp_matrices(std::span<glm::mat4> matrices,
 
 class CSMRenderer {
  public:
-  CSMRenderer(RenderGraph& rg, ShaderManager& shader_mgr, rhi::Device* device);
-  void bake();
+  CSMRenderer(RenderGraph& rg, InstanceMgr& static_instance_mgr, rhi::Device* device);
+  ~CSMRenderer();
+  struct ShadowDepthPassInfo {
+    // TODO: rename to depth_tex_id
+    RGResourceId depth_id{};
+  };
+  void update(const glm::mat4& cam_view, glm::vec3 cam_pos, glm::vec3 light_dir);
+  void bake(ShadowDepthPassInfo& out, DrawCullPhase cull_phase, const DrawPassSceneBindings& scene,
+            const ViewBindingsMeshlet& view, bool reverse_z);
+  void load_pipelines(ShaderManager& shader_mgr);
+  [[nodiscard]] const CSMData& get_csm_data() const { return csn_data_; }
+  [[nodiscard]] const glm::mat4& get_light_proj(uint32_t cascade_idx) const {
+    return light_proj_matrices_[cascade_idx];
+  }
+  [[nodiscard]] const glm::mat4& get_light_view() const { return light_view_; }
 
  private:
+  CSMData csn_data_;
+  std::array<glm::mat4, CSM_MAX_CASCADES> light_proj_matrices_;
+  glm::mat4 light_view_{};
+  rhi::PipelineHandleHolder shadow_meshlet_psos_[(size_t)AlphaMaskType::Count];
+  InstanceMgr& static_instance_mgr_;
   rhi::Device* device_;
   RenderGraph& rg_;
-  ShaderManager& shader_mgr_;
+  uint32_t cascade_count_{1};
 };
 
 }  // namespace gfx

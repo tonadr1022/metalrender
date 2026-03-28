@@ -31,6 +31,8 @@ add_library(${target_name} SHARED
     gfx/renderer/InstanceMgr.cpp
     gfx/renderer/GBufferRenderer.cpp
     gfx/renderer/RendererCVars.cpp
+    gfx/renderer/CSM.cpp
+    gfx/renderer/DrawPassSceneBindings.cpp
 
     gfx/texture/KtxLoad.cpp
     gfx/rhi/Pipeline.cpp

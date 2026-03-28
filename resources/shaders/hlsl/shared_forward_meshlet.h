@@ -26,9 +26,15 @@ struct Payload {
 
 struct VOut {
   float4 pos : SV_Position;
+#ifdef MESH_SHADER_OUTPUT_NORMAL
   float3 normal : NORMAL;
+#endif
+#ifdef MESH_SHADER_OUTPUT_UV
   float2 uv : TEXCOORD0;
+#endif
+#ifdef MESH_SHADER_OUTPUT_COLOR
   nointerpolation float4 color : COLOR;
+#endif
   nointerpolation uint material_id : MATERIAL_ID;
 };
 

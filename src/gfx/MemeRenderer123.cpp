@@ -18,6 +18,7 @@
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
+#include "gfx/renderer/CSM.hpp"
 #include "gfx/renderer/GBufferRenderer.hpp"
 #include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/renderer/TaskCmdBufRgIds.hpp"
@@ -114,7 +115,10 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
 
   indirect_cmd_buf_ids_.clear();
 
+  glm::vec3 light_dir = glm::normalize(glm::vec3(0.0f, 1.0f, 1.0f));
+  csm_renderer_->update(args.view_mat, args.camera_pos, light_dir);
   set_cull_data_and_globals(args);
+
   static glm::uvec2 prev_fb_size{};
   auto curr_fb_size = window_->get_window_size();
   if (prev_fb_size != curr_fb_size) {
@@ -539,26 +543,25 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       renderer_cv::culling_enabled.get() != 0 && renderer_cv::pipeline_mesh_shaders.get() != 0;
 
   if (get_shadows_enabled() && mesh_shaders_enabled()) {
-    const GBufferRenderer::SceneBindings gbuffer_scene{
+    const DrawPassSceneBindings gbuffer_scene{
         static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
     for (size_t i = 0; i < shadow_cascade_count_; i++) {
       const int svid = static_cast<int>(shadow_map_render_views_[i]);
-      GBufferRenderer::ShadowDepthPassInfo shadow_depth{};
-      const GBufferRenderer::ViewBindingsMeshlet shadow_view{
+      CSMRenderer::ShadowDepthPassInfo shadow_depth{};
+      const ViewBindingsMeshlet shadow_view{
           task_cmd_buf_rg_ids[svid],
           get_render_view(shadow_map_render_views_[i]),
           {meshlet_vis_ids[svid], out_draw_count_ids_early[svid], final_depth_pyramid_ids[svid],
            meshlet_draw_stats_buf_ids[svid]}};
-      gbuffer_renderer_->bake_shadow_depth(std::string("csm_pass_early_") + std::to_string(i),
-                                           shadow_depth, DrawCullPhase::Early, gbuffer_scene,
-                                           shadow_view);
+      csm_renderer_->bake(shadow_depth, DrawCullPhase::Early, gbuffer_scene, shadow_view,
+                          reverse_z_);
       depth_ids[svid] = shadow_depth.depth_id;
     }
   }
 
   {
     auto vid = (int)main_render_view_id_;
-    const GBufferRenderer::SceneBindings gbuffer_scene{
+    const DrawPassSceneBindings gbuffer_scene{
         static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
     RenderView& main_render_view = get_render_view(main_render_view_id_);
     if (renderer_cv::pipeline_mesh_shaders.get() != 0) {
@@ -654,7 +657,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   if (obj_or_meshlet_occlusion_culling_enabled) {
     auto vid = (int)main_render_view_id_;
-    const GBufferRenderer::SceneBindings gbuffer_scene{
+    const DrawPassSceneBindings gbuffer_scene{
         static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
     const GBufferRenderer::ViewBindingsMeshlet gbuffer_view{
         task_cmd_buf_rg_ids[vid],
@@ -1341,14 +1344,14 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
 
   set_cull_data(frame_gpu_upload_allocator_, device_, get_render_view(main_render_view_id_),
                 proj_mat, renderer_cv::culling_paused.get() != 0);
+
   if (get_shadows_enabled()) {
     for (size_t i = 0; i < shadow_cascade_count_; i++) {
-      float shadow_fov = 170.0f;
-      glm::mat4 shadow_proj_mat = get_proj_matrix(shadow_fov);
+      const auto& csm_data = csm_renderer_->get_csm_data();
       ViewData shadow_view_data{
-          .vp = shadow_proj_mat * args.view_mat,
-          .view = args.view_mat,
-          .proj = shadow_proj_mat,
+          .vp = csm_data.light_vp_matrices[i],
+          .view = csm_renderer_->get_light_view(),
+          .proj = csm_renderer_->get_light_proj(i),
           .camera_pos = glm::vec4{args.camera_pos, 0},
       };
       auto [buf, offset, write_ptr] =
@@ -1358,7 +1361,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
       view.data_buf_info.idx = device_->get_buf(buf)->bindless_idx();
       view.data_buf_info.offset_bytes = offset;
 
-      set_cull_data(frame_gpu_upload_allocator_, device_, view, shadow_proj_mat,
+      set_cull_data(frame_gpu_upload_allocator_, device_, view, csm_renderer_->get_light_proj(i),
                     renderer_cv::culling_paused.get() != 0);
     }
   }
@@ -1494,9 +1497,13 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
     depth_reduce_pso_ = shader_mgr_->create_compute_pipeline({"depth_reduce/depth_reduce"});
     shade_pso_ = shader_mgr_->create_compute_pipeline({"shade"});
   }
+  bool reverse_z = true;
   gbuffer_renderer_ =
-      std::make_unique<gfx::GBufferRenderer>(device_, static_instance_mgr_, rg_, true);
+      std::make_unique<gfx::GBufferRenderer>(device_, static_instance_mgr_, rg_, reverse_z);
+  csm_renderer_ = std::make_unique<gfx::CSMRenderer>(rg_, static_instance_mgr_, device_);
+
   gbuffer_renderer_->load_pipelines(*shader_mgr_);
+  csm_renderer_->load_pipelines(*shader_mgr_);
 
   rg_.init(device_);
 

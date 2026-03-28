@@ -38,6 +38,7 @@ class CmdEncoder;
 }
 
 class GBufferRenderer;
+class CSMRenderer;
 
 struct ModelGPUResources {
   OffsetAllocator::Allocation material_alloc;
@@ -241,6 +242,9 @@ class MemeRenderer123 {
 
   // unique to avoid including headers
   std::unique_ptr<gfx::GBufferRenderer> gbuffer_renderer_;
+  std::unique_ptr<gfx::CSMRenderer> csm_renderer_;
+
+  bool reverse_z_{true};
 };
 
 }  // namespace gfx

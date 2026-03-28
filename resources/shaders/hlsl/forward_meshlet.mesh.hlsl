@@ -55,6 +55,7 @@ VOut get_vertex_attributes(in InstanceData instance_data, in float4x4 vp, uint r
 #endif
 
 #ifdef DEBUG_MODE
+#ifdef MESH_SHADER_OUTPUT_COLOR
 #define COLOR_MULTIPLIER 1.71f
   if (render_mode == DEBUG_RENDER_MODE_TRIANGLE_COLORS) {
     v.color =
@@ -66,6 +67,7 @@ VOut get_vertex_attributes(in InstanceData instance_data, in float4x4 vp, uint r
   } else {
     v.color = float4(1.0, 1.0, 1.0, 1.0);
   }
+#endif  // MESH_SHADER_OUTPUT_COLOR
 #endif
 #ifdef MESH_SHADER_OUTPUT_MATERIAL
   v.material_id = instance_data.mat_id;

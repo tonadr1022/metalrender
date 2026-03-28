@@ -3,9 +3,9 @@
 #include <string_view>
 
 #include "core/Config.hpp"
-#include "gfx/DrawBatch.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/AlphaMaskType.hpp"
+#include "gfx/renderer/DrawPassSceneBindings.hpp"
 #include "gfx/renderer/RenderView.hpp"
 #include "gfx/renderer/TaskCmdBufRgIds.hpp"
 
@@ -35,13 +35,6 @@ class GBufferRenderer {
     RGResourceId depth_id{};
   };
 
-  struct ViewRgIds {
-    RGResourceId& meshlet_vis;
-    RGResourceId& draw_count;
-    RGResourceId& final_depth_pyramid;
-    RGResourceId& meshlet_draw_stats;
-  };
-
   struct ViewBindingsMeshlet {
     const TaskCmdBufRgIdsPerView& task_cmd_buf_rg_ids;
     RenderView& render_view;
@@ -52,20 +45,6 @@ class GBufferRenderer {
     RenderView& render_view;
   };
 
-  struct SceneBindings {
-    const GeometryBatch& draw_batch;
-    rhi::BufferHandle materials_buf;
-    IdxOffset frame_globals_buf_info{};
-  };
-
-  struct MeshletMeshPassView {
-    const RenderView& render_view;
-    RGResourceId meshlet_vis{};
-    RGResourceId meshlet_draw_stats{};
-    TaskCmdBufRgIdsByAlphaMask task_cmd_buf_rg_ids{};
-    rhi::BufferHandle out_draw_count_buf;
-  };
-
   struct IndexedIndirectView {
     const RenderView& render_view;
     RGResourceId indirect_cmds_rg{};
@@ -73,18 +52,19 @@ class GBufferRenderer {
     uint32_t max_draw_commands{};
   };
 
-  void bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase, const SceneBindings& scene,
-            const ViewBindingsMeshlet& view);
-  void bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase, const SceneBindings& scene,
-            const ViewBindings& view, IndexedIndirectView indexed_indirect);
+  void bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
+            const DrawPassSceneBindings& scene, const ViewBindingsMeshlet& view);
+  void bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
+            const DrawPassSceneBindings& scene, const ViewBindings& view,
+            IndexedIndirectView indexed_indirect);
 
   struct ShadowDepthPassInfo {
     RGResourceId depth_id{};
   };
 
-  void bake_shadow_depth(std::string_view pass_name, ShadowDepthPassInfo& out,
-                         DrawCullPhase cull_phase, const SceneBindings& scene,
-                         const ViewBindingsMeshlet& view);
+  // void bake_shadow_depth(std::string_view pass_name, ShadowDepthPassInfo& out,
+  //                        DrawCullPhase cull_phase, const DrawPassSceneBindings& scene,
+  //                        const ViewBindingsMeshlet& view);
 
   struct DepthOnlyPassInfo {};
 
@@ -102,7 +82,6 @@ class GBufferRenderer {
   RenderGraph& rg_;
   bool reverse_z_{};
   rhi::PipelineHandleHolder gbuffer_meshlet_psos_[(size_t)AlphaMaskType::Count];
-  rhi::PipelineHandleHolder shadow_meshlet_psos_[(size_t)AlphaMaskType::Count];
   rhi::PipelineHandleHolder gbuffer_indexed_indirect_pso_;
 };
 
