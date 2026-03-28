@@ -106,12 +106,12 @@ void GBufferRenderer::bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase
       p.read_buf(id, PipelineStage::MeshShader | PipelineStage::TaskShader);
     }
   }
-  out_draw_count_buf_rg_handle = p.read_buf(view.rg_ids.draw_count, PipelineStage::TaskShader);
+  out_draw_count_buf_rg_handle = p.read_buf(*view.rg_ids.draw_count, PipelineStage::TaskShader);
   if (late) {
-    p.sample_tex(view.rg_ids.final_depth_pyramid, PipelineStage::TaskShader);
-    view.rg_ids.meshlet_vis = p.rw_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
+    p.sample_tex(*view.rg_ids.final_depth_pyramid, PipelineStage::TaskShader);
+    *view.rg_ids.meshlet_vis = p.rw_buf(*view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
   } else {
-    view.rg_ids.meshlet_vis = p.write_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
+    *view.rg_ids.meshlet_vis = p.write_buf(*view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
   }
 
   if (late) {
@@ -129,11 +129,11 @@ void GBufferRenderer::bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase
         rg_.create_texture({.format = rhi::TextureFormat::D32float}, "depth_tex");
     p.write_depth_output(gbuffer_pass_info.depth_id);
   }
-  view.rg_ids.meshlet_draw_stats =
-      p.rw_buf(view.rg_ids.meshlet_draw_stats, rhi::PipelineStage::TaskShader);
-  RGResourceId meshlet_stats_for_pass = view.rg_ids.meshlet_draw_stats;
+  *view.rg_ids.meshlet_draw_stats =
+      p.rw_buf(*view.rg_ids.meshlet_draw_stats, rhi::PipelineStage::TaskShader);
+  RGResourceId meshlet_stats_for_pass = *view.rg_ids.meshlet_draw_stats;
 
-  const RGResourceId meshlet_vis_for_pass = view.rg_ids.meshlet_vis;
+  const RGResourceId meshlet_vis_for_pass = *view.rg_ids.meshlet_vis;
   p.set_ex(
       [this, late, cull_phase, rg_a = gbuffer_pass_info.gbuffer_a_id,
        rg_b = gbuffer_pass_info.gbuffer_b_id, rg_depth = gbuffer_pass_info.depth_id,

@@ -1,8 +1,6 @@
 # TODOs
 
-
-- if no object occlusion, do we need to have both draw cull passes?
-- maybe use one depth pyramid tex instead of many
+- when drawing the debug CSM texture, use the array/texture views instead of the broke shit that's there.  
 - immediate_submit is jank in MetalDevice.cpp
 - in render graph, track texture usages instead of adding sample/storage automatically
 - timestamp query better organization

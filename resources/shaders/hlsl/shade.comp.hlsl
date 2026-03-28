@@ -2,9 +2,13 @@
 #define COMPUTE_ROOT_SIG
 #include "root_sig.hlsl"
 #include "shared_shade.h"
+#include "shared_csm.h"
 // clang-format on
 
 PUSHCONSTANT(ShadePC, pc);
+
+StructuredBuffer<CSMData> csm_data_buf : register(t4);
+Texture2DArray shadow_tex_array : register(t5);
 
 [NumThreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
   if (dtid.x >= pc.img_dims.x || dtid.y >= pc.img_dims.y) {

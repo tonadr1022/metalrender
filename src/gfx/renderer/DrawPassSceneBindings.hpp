@@ -19,10 +19,10 @@ struct DrawPassSceneBindings {
 };
 
 struct ViewRgIds {
-  RGResourceId& meshlet_vis;
-  RGResourceId& draw_count;
-  RGResourceId& final_depth_pyramid;
-  RGResourceId& meshlet_draw_stats;
+  RGResourceId* meshlet_vis;
+  RGResourceId* draw_count;
+  RGResourceId* final_depth_pyramid;
+  RGResourceId* meshlet_draw_stats;
 };
 
 struct ViewBindingsMeshlet {

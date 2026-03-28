@@ -5,8 +5,10 @@
 #include "core/Config.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/AlphaMaskType.hpp"
+#include "gfx/renderer/DrawPassSceneBindings.hpp"
 #include "gfx/renderer/TaskCmdBufRgIds.hpp"
 #include "gfx/rhi/Device.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
 #include "hlsl/shared_csm.h"
 
@@ -24,7 +26,7 @@ class RenderGraph;
 class ShaderManager;
 class InstanceMgr;
 struct DrawPassSceneBindings;
-struct ViewBindingsMeshlet;
+struct RenderView;
 
 void calc_csm_light_space_vp_matrices(std::span<glm::mat4> matrices,
                                       std::span<glm::mat4> proj_matrices, std::span<float> levels,
@@ -34,6 +36,11 @@ void calc_csm_light_space_vp_matrices(std::span<glm::mat4> matrices,
 
 class CSMRenderer {
  public:
+  struct ViewBindingsMeshlet {
+    std::array<TaskCmdBufRgIdsPerView*, CSM_MAX_CASCADES> task_cmd_buf_rg_ids;
+    std::array<RenderView*, CSM_MAX_CASCADES> render_views;
+    std::array<ViewRgIds, CSM_MAX_CASCADES> rg_ids;
+  };
   CSMRenderer(RenderGraph& rg, InstanceMgr& static_instance_mgr, rhi::Device* device);
   ~CSMRenderer();
   struct ShadowDepthPassInfo {
@@ -55,6 +62,8 @@ class CSMRenderer {
  private:
   CSMData csm_data_;
   std::array<glm::mat4, CSM_MAX_CASCADES> light_proj_matrices_;
+  std::array<int32_t, CSM_MAX_CASCADES> csm_img_views_{-1, -1, -1, -1};
+  rhi::TextureHandle curr_img_;
   glm::mat4 light_view_{};
   rhi::PipelineHandleHolder shadow_meshlet_psos_[(size_t)AlphaMaskType::Count];
   InstanceMgr& static_instance_mgr_;

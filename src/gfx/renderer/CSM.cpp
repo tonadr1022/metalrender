@@ -9,6 +9,7 @@
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/renderer/TaskCmdBufRgIds.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 #include "glm/ext/matrix_clip_space.hpp"
 #include "glm/ext/matrix_transform.hpp"
 #include "hlsl/shared_csm.h"
@@ -103,53 +104,75 @@ void calc_csm_light_space_vp_matrices(std::span<glm::mat4> matrices,
 
 void CSMRenderer::bake(std::string_view pass_name, ShadowDepthPassInfo& out,
                        DrawCullPhase cull_phase, const DrawPassSceneBindings& scene,
-                       const ViewBindingsMeshlet& view, bool reverse_z) {
+                       const ViewBindingsMeshlet& view_binds, bool reverse_z) {
   auto& p = rg_.add_graphics_pass(pass_name);
   // No culling for shadows for now
-  out.depth_id =
-      rg_.create_texture({.format = TextureFormat::D32float,
-                          .dims = {shadow_map_resolutions_[0], shadow_map_resolutions_[0]},
-                          .size_class = SizeClass::Custom},
-                         "shadow_depth_tex");
-  p.write_depth_output(out.depth_id);
+  if (!out.depth_id.is_valid()) {
+    out.depth_id =
+        rg_.create_texture({.format = TextureFormat::D32float,
+                            .dims = {shadow_map_resolutions_[0], shadow_map_resolutions_[0]},
+                            .array_layers = cascade_count_,
+                            .size_class = SizeClass::Custom},
+                           "shadow_depth_tex");
+    p.write_depth_output(out.depth_id);
+  }
 
-  view.rg_ids.meshlet_draw_stats =
-      p.rw_buf(view.rg_ids.meshlet_draw_stats, PipelineStage::TaskShader);
-
-  RGResourceId meshlet_stats_for_pass = view.rg_ids.meshlet_draw_stats;
-
+  std::array<RGResourceId, CSM_MAX_CASCADES> out_draw_count_buf_rg_handles;
+  std::array<RGResourceId, CSM_MAX_CASCADES> meshlet_draw_stats_rg_handles;
+  std::array<TaskCmdBufRgIdsByAlphaMask, CSM_MAX_CASCADES> task_cmd_rg_handles;
+  // No 2 pass occlusion culling for shadows for now
   ASSERT(cull_phase == DrawCullPhase::Early);
   DrawCullPhase task_cmd_buf_phase = DrawCullPhase::Early;
 
-  RGResourceId out_draw_count_buf_rg_handle =
-      p.read_buf(view.rg_ids.draw_count, PipelineStage::TaskShader);
-  p.set_ex([this, cull_phase, rg_depth = out.depth_id, rv = &view.render_view,
+  for (uint32_t cascade_i = 0; cascade_i < cascade_count_; cascade_i++) {
+    *view_binds.rg_ids[cascade_i].meshlet_draw_stats =
+        p.rw_buf(*view_binds.rg_ids[cascade_i].meshlet_draw_stats, PipelineStage::TaskShader);
+    meshlet_draw_stats_rg_handles[cascade_i] = *view_binds.rg_ids[cascade_i].meshlet_draw_stats;
+    out_draw_count_buf_rg_handles[cascade_i] =
+        p.read_buf(*view_binds.rg_ids[cascade_i].draw_count, PipelineStage::TaskShader);
+    task_cmd_rg_handles[cascade_i] =
+        view_binds.task_cmd_buf_rg_ids[cascade_i]->phase(task_cmd_buf_phase);
+  }
+
+  p.set_ex([this, cull_phase, rg_depth = out.depth_id, render_views = view_binds.render_views,
             batch = &scene.draw_batch, materials = scene.materials_buf,
-            meshlet_stats_rg = meshlet_stats_for_pass, frame_globals = scene.frame_globals_buf_info,
-            out_draw_count_rg = out_draw_count_buf_rg_handle,
-            task_cmd_rg = view.task_cmd_buf_rg_ids.phase(task_cmd_buf_phase),
-            reverse_z](CmdEncoder* enc) {
+            out_draw_count_buf_rg_handles, meshlet_draw_stats_rg_handles,
+            task_cmd_rg_handles, frame_globals = scene.frame_globals_buf_info, reverse_z](
+               CmdEncoder* enc) {
     if (!static_instance_mgr_.has_draws()) {
       return;
     }
     auto depth_handle = rg_.get_att_img(rg_depth);
     ASSERT(depth_handle.is_valid());
+    // img views per layer
+    if (depth_handle != curr_img_) {
+      curr_img_ = depth_handle;
+      for (uint32_t cascade_i = 0; cascade_i < cascade_count_; cascade_i++) {
+        csm_img_views_[cascade_i] =
+            device_->create_tex_view(rg_.get_att_img(rg_depth), 0, 1, cascade_i, 1);
+      }
+    }
     auto load_op = LoadOp::Clear;
-    enc->begin_rendering({
-        RenderAttInfo::depth_stencil_att(depth_handle, load_op,
-                                         {.depth_stencil = {.depth = reverse_z ? 0.f : 1.f}}),
-    });
     enc->bind_srv(materials, 11);
-
-    const DrawPassSceneBindings mesh_scene{*batch, materials, frame_globals};
-    const MeshletMeshPassView mesh_pass{
-        *rv, {}, meshlet_stats_rg, task_cmd_rg, rg_.get_buf(out_draw_count_rg)};
-    encode_meshlet_mesh_draw_pass(
-        reverse_z, device_, rg_, static_instance_mgr_, enc, cull_phase, false, depth_handle,
-        mesh_scene, mesh_pass,
-        std::span<const PipelineHandleHolder>(shadow_meshlet_psos_,
-                                              static_cast<size_t>(AlphaMaskType::Count)));
-    enc->end_rendering();
+    for (uint32_t cascade_i = 0; cascade_i < cascade_count_; cascade_i++) {
+      enc->begin_rendering({
+          RenderAttInfo::depth_stencil_att(depth_handle, load_op,
+                                           {.depth_stencil = {.depth = reverse_z ? 0.f : 1.f}},
+                                           rhi::StoreOp::Store, csm_img_views_[cascade_i]),
+      });
+      const DrawPassSceneBindings mesh_scene{*batch, materials, frame_globals};
+      const MeshletMeshPassView mesh_pass{*render_views[cascade_i],
+                                          {},
+                                          meshlet_draw_stats_rg_handles[cascade_i],
+                                          task_cmd_rg_handles[cascade_i],
+                                          rg_.get_buf(out_draw_count_buf_rg_handles[cascade_i])};
+      encode_meshlet_mesh_draw_pass(
+          reverse_z, device_, rg_, static_instance_mgr_, enc, cull_phase, false, depth_handle,
+          mesh_scene, mesh_pass,
+          std::span<const PipelineHandleHolder>(shadow_meshlet_psos_,
+                                                static_cast<size_t>(AlphaMaskType::Count)));
+      enc->end_rendering();
+    }
   });
 }
 

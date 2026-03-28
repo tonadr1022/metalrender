@@ -19,6 +19,7 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/renderer/CSM.hpp"
+#include "gfx/renderer/DrawPassSceneBindings.hpp"
 #include "gfx/renderer/GBufferRenderer.hpp"
 #include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/renderer/TaskCmdBufRgIds.hpp"
@@ -35,6 +36,7 @@
 #include "hlsl/shader_constants.h"
 #include "hlsl/shared_basic_indirect.h"
 #include "hlsl/shared_basic_tri.h"
+#include "hlsl/shared_csm.h"
 #include "hlsl/shared_cull_data.h"
 #include "hlsl/shared_draw_cull.h"
 #include "hlsl/shared_globals.h"
@@ -544,22 +546,21 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   if (get_shadows_enabled() && mesh_shaders_enabled()) {
     const DrawPassSceneBindings gbuffer_scene{
         static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
-    for (size_t i = 0; i < csm_renderer_->num_cascades(); i++) {
-      const int svid = static_cast<int>(shadow_map_render_views_[i]);
-      CSMRenderer::ShadowDepthPassInfo shadow_depth{};
-      const ViewBindingsMeshlet shadow_view{
-          task_cmd_buf_rg_ids[svid],
-          get_render_view(shadow_map_render_views_[i]),
-          {meshlet_vis_ids[svid], out_draw_count_ids_early[svid], final_depth_pyramid_ids[svid],
-           meshlet_draw_stats_buf_ids[svid]}};
-
-      for (uint32_t cascade_i = 0; cascade_i < csm_renderer_->num_cascades(); cascade_i++) {
-        csm_renderer_->bake("csm_cascade_" + std::to_string(cascade_i), shadow_depth,
-                            DrawCullPhase::Early, gbuffer_scene, shadow_view, reverse_z_);
-      }
-
-      depth_ids[svid] = shadow_depth.depth_id;
+    CSMRenderer::ShadowDepthPassInfo shadow_depth;
+    CSMRenderer::ViewBindingsMeshlet shadow_views;
+    for (uint32_t cascade_i = 0; cascade_i < csm_renderer_->num_cascades(); cascade_i++) {
+      shadow_views.render_views[cascade_i] = &get_render_view(shadow_map_render_views_[cascade_i]);
+      auto svid = static_cast<int>(shadow_map_render_views_[cascade_i]);
+      shadow_views.task_cmd_buf_rg_ids[cascade_i] = &task_cmd_buf_rg_ids[svid];
+      shadow_views.rg_ids[cascade_i].meshlet_vis = &meshlet_vis_ids[svid];
+      shadow_views.rg_ids[cascade_i].draw_count = &out_draw_count_ids_early[svid];
+      shadow_views.rg_ids[cascade_i].final_depth_pyramid = &final_depth_pyramid_ids[svid];
+      shadow_views.rg_ids[cascade_i].meshlet_draw_stats = &meshlet_draw_stats_buf_ids[svid];
     }
+
+    csm_renderer_->bake("csm", shadow_depth, DrawCullPhase::Early, gbuffer_scene, shadow_views,
+                        reverse_z_);
+    depth_ids[(int)shadow_map_render_views_[0]] = shadow_depth.depth_id;
   }
 
   {
@@ -571,8 +572,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       const GBufferRenderer::ViewBindingsMeshlet gbuffer_view{
           task_cmd_buf_rg_ids[vid],
           main_render_view,
-          {meshlet_vis_ids[vid], out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
-           meshlet_draw_stats_buf_ids[vid]}};
+          {&meshlet_vis_ids[vid], &out_draw_count_ids_early[vid], &final_depth_pyramid_ids[vid],
+           &meshlet_draw_stats_buf_ids[vid]}};
       gbuffer_renderer_->bake(gbuffer_pass_info, DrawCullPhase::Early, gbuffer_scene, gbuffer_view);
     } else {
       const GBufferRenderer::IndexedIndirectView indirect_gbuf_view{
@@ -665,8 +666,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     const GBufferRenderer::ViewBindingsMeshlet gbuffer_view{
         task_cmd_buf_rg_ids[vid],
         get_render_view(main_render_view_id_),
-        {meshlet_vis_ids[vid], out_draw_count_ids_late[vid], final_depth_pyramid_ids[vid],
-         meshlet_draw_stats_buf_ids[vid]}};
+        {&meshlet_vis_ids[vid], &out_draw_count_ids_late[vid], &final_depth_pyramid_ids[vid],
+         &meshlet_draw_stats_buf_ids[vid]}};
     gbuffer_renderer_->bake(gbuffer_pass_info, DrawCullPhase::Late, gbuffer_scene, gbuffer_view);
   }
 
@@ -709,7 +710,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     bool secondary_view_debug_enabled =
         debug_mode == DebugRenderMode::SecondaryView && !shadow_map_render_views_.empty();
     if (secondary_view_debug_enabled) {
-      auto view_id = (int)shadow_map_render_views_[debug_cascade_level_];
+      auto view_id = (int)shadow_map_render_views_[0];
       p.sample_tex(depth_ids[view_id]);
       secondary_view_debug_depth_rg_handle =
           p.read_tex(depth_ids[view_id], rhi::PipelineStage::FragmentShader);
@@ -733,6 +734,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       enc->set_viewport({0, 0}, dims);
       enc->bind_cbv(frame_globals_buf_info_.buf, GLOBALS_SLOT,
                     frame_globals_buf_info_.offset_bytes);
+
+      const CSMData& csm_data = csm_renderer_->get_csm_data();
+      auto [buf, offset, write_ptr] =
+          frame_gpu_upload_allocator_.alloc(sizeof(CSMData), (void*)&csm_data);
+      enc->bind_cbv(buf, 4, offset);
 
       uint32_t tex_idx{};
       float mult = 1.f;
