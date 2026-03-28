@@ -1210,23 +1210,6 @@ void MemeRenderer123::on_imgui_tab_stats() {
   ImGui::Text("GPU Frame Time: %.2f (%.2f FPS)", stats_.avg_gpu_frame_time,
               1000.f / stats_.avg_gpu_frame_time);
 
-  MeshletDrawStats meshlet_stats{};
-  for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
-    if (view_id >= meshlet_draw_stats_readback_.size()) continue;
-    meshlet_stats = *static_cast<MeshletDrawStats*>(
-        device_->get_buf(meshlet_draw_stats_readback_[view_id][curr_frame_idx_])->contents());
-    size_t tot_drawn_meshlets =
-        meshlet_stats.meshlets_drawn_early + meshlet_stats.meshlets_drawn_late;
-    ImGui::Text(
-        "(View %zu) Meshlets drawn %1zu frames ago: %5zu of %5u (%.2f %%)\nEarly: %7u\tLate %7u",
-        view_id, device_->get_info().frames_in_flight, tot_drawn_meshlets,
-        stats_.total_instance_meshlets,
-        tot_drawn_meshlets == 0
-            ? 0
-            : (float)tot_drawn_meshlets / (float)stats_.total_instance_meshlets * 100.f,
-        meshlet_stats.meshlets_drawn_early, meshlet_stats.meshlets_drawn_late);
-  }
-
   // frames_in_flight - 1 frames ago is guaranteed to be copied back to the cpu (see readback
   // passes above)
   if (frame_num_ >= device_->get_info().frames_in_flight) {
@@ -1571,33 +1554,45 @@ void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
       return s;
     };
 
-    MeshletDrawStats stats{};
     constexpr int frames_ago = 2;
-    if (frame_num_ >= device_->get_info().frames_in_flight) {
-      auto view_id = static_cast<size_t>(main_render_view_id_);
-      if (view_id < meshlet_draw_stats_readback_.size()) {
-        stats = *static_cast<MeshletDrawStats*>(
-            device_->get_buf(meshlet_draw_stats_readback_[view_id][get_frames_ago_idx(frames_ago)])
-                ->contents());
-      }
-    }
-    size_t tot_drawn_meshlets = stats.meshlets_drawn_early + stats.meshlets_drawn_late;
     ImGui::Text(
         "Culling Paused:             %d\n"
         "Culling Enabled:            %d\n"
         "Meshlet Occlusion Enabled:  %d",
         settings_.culling.paused, settings_.culling.enabled, settings_.culling.meshlet_occlusion);
 
-    ImGui::Text(
-        "Meshlets drawn: %10s of %10s \n"
-        "Culled: (%5.2f %%)\n"
-        "Early: %7s\tLate %7s",
-        add_commas(tot_drawn_meshlets).c_str(), add_commas(stats_.total_instance_meshlets).c_str(),
-        tot_drawn_meshlets == 0
-            ? 0
-            : 100.f - (float)tot_drawn_meshlets / (float)stats_.total_instance_meshlets * 100.f,
-        add_commas(stats.meshlets_drawn_early).c_str(),
-        add_commas(stats.meshlets_drawn_late).c_str());
+    for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
+      if (view_id >= meshlet_draw_stats_readback_.size()) continue;
+      MeshletDrawStats view_stats{};
+      if (frame_num_ >= device_->get_info().frames_in_flight) {
+        view_stats = *static_cast<MeshletDrawStats*>(
+            device_->get_buf(meshlet_draw_stats_readback_[view_id][get_frames_ago_idx(frames_ago)])
+                ->contents());
+      }
+      size_t tot_drawn_meshlets =
+          view_stats.meshlets_drawn_early + view_stats.meshlets_drawn_late;
+      ImGui::Text(
+          "(View %zu) Meshlets drawn: %10s of %10s \n"
+          "Culled: (%5.2f %%)\n"
+          "Early: %7s\tLate %7s",
+          view_id, add_commas(tot_drawn_meshlets).c_str(),
+          add_commas(stats_.total_instance_meshlets).c_str(),
+          tot_drawn_meshlets == 0
+              ? 0
+              : 100.f - (float)tot_drawn_meshlets / (float)stats_.total_instance_meshlets * 100.f,
+          add_commas(view_stats.meshlets_drawn_early).c_str(),
+          add_commas(view_stats.meshlets_drawn_late).c_str());
+    }
+
+    MeshletDrawStats stats{};
+    if (frame_num_ >= device_->get_info().frames_in_flight) {
+      auto main_vid = static_cast<size_t>(main_render_view_id_);
+      if (main_vid < meshlet_draw_stats_readback_.size()) {
+        stats = *static_cast<MeshletDrawStats*>(
+            device_->get_buf(meshlet_draw_stats_readback_[main_vid][get_frames_ago_idx(frames_ago)])
+                ->contents());
+      }
+    }
 
     ImGui::Text(
         "Triangles: %12s\n"
