@@ -43,10 +43,14 @@ class GBufferRenderer {
     RGResourceId& meshlet_draw_stats;
   };
 
-  struct GBufferViewBindings {
+  struct GBufferViewBindingsMeshlet {
     const TaskCmdBufRgIdsPerView& task_cmd_buf_rg_ids;
     RenderView& render_view;
     GBufferViewRgIds rg_ids;
+  };
+
+  struct GBufferViewBindings {
+    RenderView& render_view;
   };
 
   struct SceneBindings {
@@ -63,8 +67,18 @@ class GBufferRenderer {
     rhi::BufferHandle out_draw_count_buf;
   };
 
+  struct IndexedIndirectGBufferView {
+    const RenderView& render_view;
+    RGResourceId indirect_cmds_rg{};
+    uint32_t indirect_icb_id{};
+    uint32_t max_draw_commands{};
+  };
+
   void bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
-            const SceneBindings& scene, const GBufferViewBindings& view);
+            const SceneBindings& scene, const GBufferViewBindingsMeshlet& view);
+  void bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
+            const SceneBindings& scene, const GBufferViewBindings& view,
+            IndexedIndirectGBufferView indexed_indirect);
 
   struct ShadowDepthPassInfo {
     RGResourceId depth_id{};
@@ -72,20 +86,26 @@ class GBufferRenderer {
 
   void bake_shadow_depth(std::string_view pass_name, ShadowDepthPassInfo& out,
                          DrawCullPhase cull_phase, const SceneBindings& scene,
-                         const GBufferViewBindings& view);
+                         const GBufferViewBindingsMeshlet& view);
 
   struct DepthOnlyPassInfo {};
 
   void load_pipelines(ShaderManager& shader_mgr);
 
  private:
+  static void declare_indexed_indirect_gbuffer_barriers(RenderGraph::Pass& p,
+                                                        RGResourceId indirect_cmds_rg);
+  void encode_indexed_indirect_gbuffer_pass(rhi::CmdEncoder* enc, rhi::TextureHandle depth_handle,
+                                            uint32_t indirect_icb_id,
+                                            uint32_t max_draw_commands) const;
+
   rhi::Device* device_;
   InstanceMgr& static_instance_mgr_;
   RenderGraph& rg_;
   RendererSettings& settings_;
   rhi::PipelineHandleHolder gbuffer_meshlet_psos_[(size_t)AlphaMaskType::Count];
   rhi::PipelineHandleHolder shadow_meshlet_psos_[(size_t)AlphaMaskType::Count];
-  rhi::PipelineHandleHolder test2_pso_;
+  rhi::PipelineHandleHolder gbuffer_indexed_indirect_pso_;
 };
 
 }  // namespace gfx

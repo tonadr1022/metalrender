@@ -80,6 +80,8 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
     exit(1);
   }
 
+  // Metal-only today: builds ICBs from IndexedIndirectDrawCmd. For non-meshlet GBuffer on Vulkan,
+  // implement vkCmdDrawIndexedIndirect (or multi-draw) instead of exit(1).
   [[nodiscard]] uint32_t prepare_indexed_indirect_draws(
       rhi::BufferHandle /*indirect_buf*/, size_t /*offset*/, size_t /*tot_draw_cnt*/,
       rhi::BufferHandle /*index_buf*/, size_t /*index_buf_offset*/, void* /*push_constant_data*/,

@@ -352,6 +352,7 @@ void VulkanCmdEncoder::barrier(rhi::PipelineStage /*src_stage*/, rhi::AccessFlag
                                rhi::PipelineStage /*dst_stage*/, rhi::AccessFlags /*dst_access*/) {
   ASSERT(0 && "TODO");
 }
+// Stub: pair with prepare_indexed_indirect_draws for a future Vulkan non-meshlet path.
 void VulkanCmdEncoder::draw_indexed_indirect(rhi::BufferHandle /*indirect_buf*/,
                                              uint32_t /* indirect_buf_id */, size_t /*draw_cnt*/,
                                              size_t /*offset_i*/) {}

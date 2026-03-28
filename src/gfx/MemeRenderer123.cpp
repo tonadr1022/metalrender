@@ -109,7 +109,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   static int i = 0;
-  settings_.developer.render_graph_verbose = i++ == 2;
+  settings_.developer.render_graph_verbose = i++ == 0;
   device_->acquire_next_swapchain_image(swapchain_);
   rg_.bake(window_->get_window_size(), settings_.developer.render_graph_verbose);
   static std::vector<rhi::CmdEncoder*> wait_for_encoders;
@@ -272,12 +272,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
         }
       }
 
-      auto& out_draw_count_id = out_draw_count_ids[(int)view_id];
-      if (!settings_.culling.paused) {
-        out_draw_count_id =
-            prep_meshlets_pass.rw_buf(out_draw_count_id, rhi::PipelineStage::ComputeShader);
-      } else {
-        prep_meshlets_pass.write_buf(out_draw_count_id, rhi::PipelineStage::ComputeShader);
+      if (settings_.pipeline.mesh_shaders_enabled) {
+        auto& out_draw_count_id = out_draw_count_ids[(int)view_id];
+        if (!settings_.culling.paused) {
+          out_draw_count_id =
+              prep_meshlets_pass.rw_buf(out_draw_count_id, rhi::PipelineStage::ComputeShader);
+        } else {
+          prep_meshlets_pass.write_buf(out_draw_count_id, rhi::PipelineStage::ComputeShader);
+        }
       }
       draw_cmd_count_buf_ids[(int)view_id] = prep_meshlets_pass.rw_buf(
           draw_cmd_count_buf_ids[(int)view_id], rhi::PipelineStage::ComputeShader);
@@ -418,7 +420,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       });
     }
 
-    add_draw_cull_pass(DrawCullPhase::Early, task_cmd_buf_rg_ids, out_draw_count_ids_early);
+    if (settings_.pipeline.mesh_shaders_enabled) {
+      add_draw_cull_pass(DrawCullPhase::Early, task_cmd_buf_rg_ids, out_draw_count_ids_early);
+    }
 
   } else {
     auto& prepare_indirect_pass = rg_.add_compute_pass("prepare_indirect");
@@ -523,7 +527,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     for (size_t i = 0; i < shadow_cascade_count_; i++) {
       const int svid = static_cast<int>(shadow_map_render_views_[i]);
       GBufferRenderer::ShadowDepthPassInfo shadow_depth{};
-      const GBufferRenderer::GBufferViewBindings shadow_view{
+      const GBufferRenderer::GBufferViewBindingsMeshlet shadow_view{
           task_cmd_buf_rg_ids[svid],
           get_render_view(shadow_map_render_views_[i]),
           {meshlet_vis_ids[svid], out_draw_count_ids_early[svid], final_depth_pyramid_ids[svid],
@@ -539,12 +543,26 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     auto vid = (int)main_render_view_id_;
     const GBufferRenderer::SceneBindings gbuffer_scene{
         static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
-    const GBufferRenderer::GBufferViewBindings gbuffer_view{
-        task_cmd_buf_rg_ids[vid],
-        get_render_view(main_render_view_id_),
-        {meshlet_vis_ids[vid], out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
-         meshlet_draw_stats_buf_ids[vid]}};
-    gbuffer_renderer_->bake(gbuffer_pass_info, DrawCullPhase::Early, gbuffer_scene, gbuffer_view);
+    RenderView& main_render_view = get_render_view(main_render_view_id_);
+    if (settings_.pipeline.mesh_shaders_enabled) {
+      const GBufferRenderer::GBufferViewBindingsMeshlet gbuffer_view{
+          task_cmd_buf_rg_ids[vid],
+          main_render_view,
+          {meshlet_vis_ids[vid], out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
+           meshlet_draw_stats_buf_ids[vid]}};
+      gbuffer_renderer_->bake(gbuffer_pass_info, DrawCullPhase::Early, gbuffer_scene, gbuffer_view);
+    } else {
+      const GBufferRenderer::IndexedIndirectGBufferView indirect_gbuf_view{
+          main_render_view,
+          indirect_buffer_id,
+          // main only, this is hardcoded but corresponds to indirect_cmd_buf_ids_
+          0,
+          static_instance_mgr_.stats().max_instance_data_count,
+      };
+      const GBufferRenderer::GBufferViewBindings gbuffer_view{main_render_view};
+      gbuffer_renderer_->bake(gbuffer_pass_info, DrawCullPhase::Early, gbuffer_scene, gbuffer_view,
+                              indirect_gbuf_view);
+    }
     depth_ids[vid] = gbuffer_pass_info.depth_id;
   }
 
@@ -611,7 +629,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   // Meshlet occlusion's late meshlet pass relies on the late draw_cull phase to populate
   // `out_draw_count_ids_late` and late `TaskCmd` buffers.
-  if (settings_.culling.object_occlusion || settings_.culling.meshlet_occlusion) {
+  if (settings_.pipeline.mesh_shaders_enabled &&
+      (settings_.culling.object_occlusion || settings_.culling.meshlet_occlusion)) {
     add_draw_cull_pass(DrawCullPhase::Late, task_cmd_buf_rg_ids, out_draw_count_ids_late);
   }
 
@@ -619,7 +638,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     auto vid = (int)main_render_view_id_;
     const GBufferRenderer::SceneBindings gbuffer_scene{
         static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
-    const GBufferRenderer::GBufferViewBindings gbuffer_view{
+    const GBufferRenderer::GBufferViewBindingsMeshlet gbuffer_view{
         task_cmd_buf_rg_ids[vid],
         get_render_view(main_render_view_id_),
         {meshlet_vis_ids[vid], out_draw_count_ids_late[vid], final_depth_pyramid_ids[vid],

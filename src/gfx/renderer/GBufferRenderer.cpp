@@ -1,10 +1,9 @@
 #include "GBufferRenderer.hpp"
 
-#include <string>
-
 #include "gfx/ShaderManager.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/renderer/TaskCmdBufRgIds.hpp"
+#include "gfx/rhi/Pipeline.hpp"
 #include "hlsl/shader_constants.h"
 #include "hlsl/shared_forward_meshlet.h"
 #include "hlsl/shared_globals.h"
@@ -81,6 +80,25 @@ void encode_meshlet_mesh_draw_pass(
 
 }  // namespace
 
+void GBufferRenderer::declare_indexed_indirect_gbuffer_barriers(RenderGraph::Pass& p,
+                                                                RGResourceId indirect_cmds_rg) {
+  p.read_buf(indirect_cmds_rg, PipelineStage::DrawIndirect);
+}
+
+void GBufferRenderer::encode_indexed_indirect_gbuffer_pass(rhi::CmdEncoder* enc,
+                                                           rhi::TextureHandle depth_handle,
+                                                           uint32_t indirect_icb_id,
+                                                           uint32_t max_draw_commands) const {
+  enc->set_depth_stencil_state(
+      settings_.pipeline.reverse_z ? rhi::CompareOp::Greater : rhi::CompareOp::Less, true);
+  enc->set_wind_order(rhi::WindOrder::CounterClockwise);
+  enc->set_cull_mode(rhi::CullMode::Back);
+  enc->set_viewport({0, 0}, device_->get_tex(depth_handle)->desc().dims);
+  enc->bind_pipeline(gbuffer_indexed_indirect_pso_);
+  enc->draw_indexed_indirect(static_instance_mgr_.get_draw_cmd_buf(), indirect_icb_id,
+                             max_draw_commands, 0);
+}
+
 // draw_batch / render_view pointers must stay valid until this pass's ExecuteFn runs.
 GBufferRenderer::GBufferRenderer(rhi::Device* device, InstanceMgr& static_instance_mgr,
                                  RenderGraph& rg, RendererSettings& settings)
@@ -89,10 +107,54 @@ GBufferRenderer::GBufferRenderer(rhi::Device* device, InstanceMgr& static_instan
 GBufferRenderer::~GBufferRenderer() = default;
 
 void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
-                           const SceneBindings& scene, const GBufferViewBindings& view) {
+                           const SceneBindings& scene,
+                           [[maybe_unused]] const GBufferViewBindings& view,
+                           IndexedIndirectGBufferView indexed_indirect) {
+  bool late = cull_phase == DrawCullPhase::Late;
+  auto& p = rg_.add_graphics_pass(late ? "gbuffer_late" : "gbuffer_early");
+  declare_indexed_indirect_gbuffer_barriers(p, indexed_indirect.indirect_cmds_rg);
+
+  gbuffer_pass_info.gbuffer_a_id =
+      rg_.create_texture({.format = rhi::TextureFormat::R16G16B16A16Sfloat}, "gbuffer_a");
+  gbuffer_pass_info.gbuffer_b_id =
+      rg_.create_texture({.format = rhi::TextureFormat::R8G8B8A8Unorm}, "gbuffer_b");
+  p.write_color_output(gbuffer_pass_info.gbuffer_a_id);
+  p.write_color_output(gbuffer_pass_info.gbuffer_b_id);
+  gbuffer_pass_info.depth_id =
+      rg_.create_texture({.format = rhi::TextureFormat::D32float}, "depth_tex");
+  p.write_depth_output(gbuffer_pass_info.depth_id);
+
+  p.set_ex([this, late, rg_a = gbuffer_pass_info.gbuffer_a_id,
+            rg_b = gbuffer_pass_info.gbuffer_b_id, rg_depth = gbuffer_pass_info.depth_id,
+            materials = scene.materials_buf, indexed_indirect](rhi::CmdEncoder* enc) {
+    if (!static_instance_mgr_.has_draws()) {
+      return;
+    }
+    auto depth_handle = rg_.get_att_img(rg_depth);
+    ASSERT(depth_handle.is_valid());
+    auto gbuffer_a_tex = rg_.get_att_img(rg_a);
+    auto gbuffer_b_tex = rg_.get_att_img(rg_b);
+    auto load_op = late ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
+    enc->begin_rendering({
+        RenderAttInfo::color_att(gbuffer_a_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
+        RenderAttInfo::color_att(gbuffer_b_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
+        RenderAttInfo::depth_stencil_att(
+            depth_handle, load_op,
+            {.depth_stencil = {.depth = settings_.pipeline.reverse_z ? 0.f : 1.f}}),
+    });
+    enc->bind_srv(materials, 11);
+    encode_indexed_indirect_gbuffer_pass(enc, depth_handle, indexed_indirect.indirect_icb_id,
+                                         indexed_indirect.max_draw_commands);
+    enc->end_rendering();
+  });
+}
+
+void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
+                           const SceneBindings& scene, const GBufferViewBindingsMeshlet& view) {
   bool late = cull_phase == DrawCullPhase::Late;
   auto& p = rg_.add_graphics_pass(late ? "gbuffer_late" : "gbuffer_early");
   RGResourceId out_draw_count_buf_rg_handle{};
+  ASSERT(settings_.pipeline.mesh_shaders_enabled);
 
   // When object occlusion is off, we still need the Late task cmd buffer when meshlet occlusion
   // is enabled; forward_meshlet's late pass depends on `pass != 0` task data.
@@ -102,28 +164,23 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
   } else {
     task_cmd_buf_phase = DrawCullPhase::Early;
   }
-  if (settings_.pipeline.mesh_shaders_enabled) {
-    for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
-      if (scene.draw_batch.get_stats().vertex_count > 0) {
-        // use phase 0 for task cmd buf ids if object occlusion is disabled, since only one pass for
-        // generating them.
+  for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
+    if (scene.draw_batch.get_stats().vertex_count > 0) {
+      // use phase 0 for task cmd buf ids if object occlusion is disabled, since only one pass for
+      // generating them.
 
-        auto id = view.task_cmd_buf_rg_ids.phase(
-            task_cmd_buf_phase)[static_cast<AlphaMaskType>(alpha_mask_type)];
-        ASSERT(id.is_valid());
-        p.read_buf(id, PipelineStage::MeshShader | PipelineStage::TaskShader);
-      }
+      auto id = view.task_cmd_buf_rg_ids.phase(
+          task_cmd_buf_phase)[static_cast<AlphaMaskType>(alpha_mask_type)];
+      ASSERT(id.is_valid());
+      p.read_buf(id, PipelineStage::MeshShader | PipelineStage::TaskShader);
     }
-    out_draw_count_buf_rg_handle = p.read_buf(view.rg_ids.draw_count, PipelineStage::TaskShader);
-    if (late) {
-      p.sample_tex(view.rg_ids.final_depth_pyramid, PipelineStage::TaskShader);
-      view.rg_ids.meshlet_vis = p.rw_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
-    } else {
-      view.rg_ids.meshlet_vis = p.write_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
-    }
+  }
+  out_draw_count_buf_rg_handle = p.read_buf(view.rg_ids.draw_count, PipelineStage::TaskShader);
+  if (late) {
+    p.sample_tex(view.rg_ids.final_depth_pyramid, PipelineStage::TaskShader);
+    view.rg_ids.meshlet_vis = p.rw_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
   } else {
-    // TODO: handle indirect case
-    // p.read_buf(indirect_buffer_id, PipelineStage::DrawIndirect);
+    view.rg_ids.meshlet_vis = p.write_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
   }
 
   if (late) {
@@ -173,26 +230,21 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
                 {.depth_stencil = {.depth = settings_.pipeline.reverse_z ? 0.f : 1.f}}),
         });
         enc->bind_srv(materials, 11);
-
-        if (settings_.pipeline.mesh_shaders_enabled) {
-          const SceneBindings mesh_scene{*batch, materials, frame_globals};
-          const MeshletMeshPassView mesh_pass{*rv, meshlet_vis_rg, meshlet_stats_rg, task_cmd_rg,
-                                              rg_.get_buf(out_draw_count_rg)};
-          encode_meshlet_mesh_draw_pass(
-              settings_, device_, rg_, static_instance_mgr_, enc, cull_phase, true, depth_handle,
-              mesh_scene, mesh_pass,
-              std::span<const rhi::PipelineHandleHolder>(
-                  gbuffer_meshlet_psos_, static_cast<size_t>(AlphaMaskType::Count)));
-        } else {
-          ASSERT(0 && "Not implemented");
-        }
+        const SceneBindings mesh_scene{*batch, materials, frame_globals};
+        const MeshletMeshPassView mesh_pass{*rv, meshlet_vis_rg, meshlet_stats_rg, task_cmd_rg,
+                                            rg_.get_buf(out_draw_count_rg)};
+        encode_meshlet_mesh_draw_pass(
+            settings_, device_, rg_, static_instance_mgr_, enc, cull_phase, true, depth_handle,
+            mesh_scene, mesh_pass,
+            std::span<const rhi::PipelineHandleHolder>(gbuffer_meshlet_psos_,
+                                                       static_cast<size_t>(AlphaMaskType::Count)));
         enc->end_rendering();
       });
 }
 
 void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthPassInfo& out,
                                         DrawCullPhase cull_phase, const SceneBindings& scene,
-                                        const GBufferViewBindings& view) {
+                                        const GBufferViewBindingsMeshlet& view) {
   bool late = cull_phase == DrawCullPhase::Late;
   auto& p = rg_.add_graphics_pass(pass_name);
   RGResourceId out_draw_count_buf_rg_handle{};
@@ -258,9 +310,13 @@ void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthP
 }
 
 void GBufferRenderer::load_pipelines(ShaderManager& shader_mgr) {
-  test2_pso_ = shader_mgr.create_graphics_pipeline({
+  gbuffer_indexed_indirect_pso_ = shader_mgr.create_graphics_pipeline({
       .shaders = {{{"basic_indirect", ShaderType::Vertex},
                    {"basic_indirect", ShaderType::Fragment}}},
+      .rendering = {.color_formats = {rhi::TextureFormat::R16G16B16A16Sfloat,
+                                      rhi::TextureFormat::R8G8B8A8Unorm},
+                    .depth_format = rhi::TextureFormat::D32float},
+      .depth_stencil = rhi::GraphicsPipelineCreateInfo::depth_enable(true, rhi::CompareOp::Less),
   });
 
   for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
