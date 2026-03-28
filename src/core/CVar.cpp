@@ -122,6 +122,7 @@ class CVarSystemImpl : public CVarSystem {
   std::string search_txt;
   std::unordered_map<std::string, std::vector<CVarParameter*>> categorized_params;
   void draw_imgui_editor() final;
+  void merge_cvar_flags(util::hash::HashedString hash, CVarFlags or_flags) final;
 
  private:
   CVarParameter* init_cvar(const char* name, const char* description);
@@ -155,6 +156,15 @@ CVarParameter* CVarSystemImpl::init_cvar(const char* name, const char* descripti
   new_param->name = name;
   new_param->description = description;
   return new_param;
+}
+
+void CVarSystemImpl::merge_cvar_flags(util::hash::HashedString hash, CVarFlags or_flags) {
+  CVarParameter* p = get_cvar(hash);
+  if (!p) {
+    return;
+  }
+  p->flags = static_cast<CVarFlags>(static_cast<uint16_t>(p->flags) |
+                                    static_cast<uint16_t>(or_flags));
 }
 
 void CVarSystemImpl::draw_imgui_editor() {

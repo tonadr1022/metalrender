@@ -29,6 +29,7 @@ add_library(${target_name} SHARED
     gfx/renderer/BufferResize.cpp
     gfx/renderer/InstanceMgr.cpp
     gfx/renderer/GBufferRenderer.cpp
+    gfx/renderer/RendererCVars.cpp
 
     gfx/texture/KtxLoad.cpp
     gfx/rhi/Pipeline.cpp

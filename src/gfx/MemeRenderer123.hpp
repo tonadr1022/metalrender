@@ -19,7 +19,7 @@
 #include "gfx/renderer/BufferResize.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/renderer/RenderView.hpp"
-#include "gfx/renderer/RendererSettings.hpp"
+#include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -99,8 +99,8 @@ class MemeRenderer123 {
   void update_model_instance_transforms(const ModelInstance& model);
   void free_instance(ModelInstanceGPUHandle handle);
   void free_model(ModelGPUHandle handle);
-  bool mesh_shaders_enabled() const { return settings_.pipeline.mesh_shaders_enabled; }
-  void set_imgui_enabled(bool enabled) { settings_.ui.imgui_enabled = enabled; }
+  bool mesh_shaders_enabled() const { return renderer_cv::pipeline_mesh_shaders.get() != 0; }
+  void set_imgui_enabled(bool enabled) { renderer_cv::ui_imgui_enabled.set(enabled ? 1 : 0); }
 
   struct FinalDrawResults {
     uint32_t drawn_meshlets;
@@ -157,7 +157,7 @@ class MemeRenderer123 {
   constexpr static uint32_t k_max_shadow_cascades = 1;
   gch::small_vector<RenderViewId, k_max_shadow_cascades> shadow_map_render_views_;
   size_t shadow_cascade_count_{1};
-  bool get_shadows_enabled() const { return settings_.shadows.enabled; }
+  bool get_shadows_enabled() const { return renderer_cv::shadows_enabled.get() != 0; }
   void on_shadows_enabled_change(bool shadows_enabled);
 
   RGPass* clear_bufs_pass_{};
@@ -247,8 +247,6 @@ class MemeRenderer123 {
 
   rhi::BufferHandleHolder query_resolve_bufs_[k_max_frames_in_flight];
   rhi::Swapchain* swapchain_{};
-
-  RendererSettings settings_{};
 
   // unique to avoid including headers
   std::unique_ptr<gfx::GBufferRenderer> gbuffer_renderer_;

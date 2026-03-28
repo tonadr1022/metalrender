@@ -7,7 +7,6 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/AlphaMaskType.hpp"
 #include "gfx/renderer/RenderView.hpp"
-#include "gfx/renderer/RendererSettings.hpp"
 #include "gfx/renderer/TaskCmdBufRgIds.hpp"
 
 namespace TENG_NAMESPACE {
@@ -27,7 +26,7 @@ class RenderGraph;
 class GBufferRenderer {
  public:
   explicit GBufferRenderer(rhi::Device* device, InstanceMgr& static_instance_mgr, RenderGraph& rg,
-                           RendererSettings& settings);
+                           bool reverse_z);
   ~GBufferRenderer();
 
   struct GbufferPassInfo {
@@ -102,7 +101,7 @@ class GBufferRenderer {
   rhi::Device* device_;
   InstanceMgr& static_instance_mgr_;
   RenderGraph& rg_;
-  RendererSettings& settings_;
+  bool reverse_z_{};
   rhi::PipelineHandleHolder gbuffer_meshlet_psos_[(size_t)AlphaMaskType::Count];
   rhi::PipelineHandleHolder shadow_meshlet_psos_[(size_t)AlphaMaskType::Count];
   rhi::PipelineHandleHolder gbuffer_indexed_indirect_pso_;
