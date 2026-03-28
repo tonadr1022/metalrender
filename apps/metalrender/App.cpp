@@ -11,6 +11,7 @@
 #include "Util.hpp"
 #include "Window.hpp"
 #include "core/CVar.hpp"
+#include "core/Console.hpp"
 #include "core/Logger.hpp"
 #include "gfx/MemeRenderer123.hpp"
 #include "gfx/renderer/RendererCVars.hpp"
@@ -61,6 +62,7 @@ App::App() {
   config_path_ = local_resource_dir_ / "config.txt";
 
   load_config();
+  register_cvar_console(console_);
   window_ = create_platform_window();
   Window::InitInfo win_init_info{
       .key_callback_fn = [this](int key, int action, int mods) { on_key_event(key, action, mods); },
@@ -189,6 +191,20 @@ void App::on_curse_pos_event(double xpos, double ypos) {
 
 void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
   const auto is_press = action == GLFW_PRESS;
+  if (is_press && key == GLFW_KEY_SLASH) {
+    if (!imgui_enabled_) {
+      imgui_enabled_ = true;
+      renderer_->set_imgui_enabled(true);
+      console_forced_imgui_ = true;
+    }
+    console_.open();
+    return;
+  }
+
+  if (console_.is_open() && ImGui::GetIO().WantTextInput) {
+    return;
+  }
+
   if (is_press) {
     if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9 && mods & GLFW_MOD_SUPER) {
       int idx = key - GLFW_KEY_0;
@@ -318,6 +334,14 @@ struct ScrollingBuffer {
 
 void App::on_imgui(float dt) {
   push_font("ComicMono", 16);
+  const bool was_open = console_.is_open();
+  console_.draw_imgui();
+  const bool is_open = console_.is_open();
+  if (was_open && !is_open && console_forced_imgui_) {
+    imgui_enabled_ = false;
+    renderer_->set_imgui_enabled(false);
+    console_forced_imgui_ = false;
+  }
   ImPlot::ShowDemoWindow();
 
   constexpr int num_times = 2000;

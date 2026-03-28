@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/Console.hpp"
 #include "core/Logger.hpp"
 #include "imgui.h"
 #include "imgui_stdlib.h"
@@ -130,6 +131,9 @@ class CVarSystemImpl : public CVarSystem {
   std::unordered_map<std::string, std::vector<CVarParameter*>> categorized_params;
   void draw_imgui_editor() final;
   void merge_cvar_flags(util::hash::HashedString hash, CVarFlags or_flags) final;
+  void for_each_cvar(std::function<void(const CVarInfoView&)> visitor) final;
+  CVarApplyResult set_cvar_from_string(std::string_view name, std::string_view value,
+                                       std::string* error_msg) final;
 
  private:
   CVarParameter* init_cvar(const char* name, const char* description);
@@ -172,6 +176,109 @@ void CVarSystemImpl::merge_cvar_flags(util::hash::HashedString hash, CVarFlags o
   }
   p->flags =
       static_cast<CVarFlags>(static_cast<uint16_t>(p->flags) | static_cast<uint16_t>(or_flags));
+}
+
+void CVarSystemImpl::for_each_cvar(std::function<void(const CVarInfoView&)> visitor) {
+  for (auto& entry : saved_cvars_) {
+    CVarParameter& p = entry.second;
+    CVarInfoView view{
+        .name = p.name,
+        .description = p.description,
+        .type = p.type == CVarKind::Int   ? CVarValueType::Int
+                : p.type == CVarKind::Float ? CVarValueType::Float
+                                            : CVarValueType::String,
+        .flags = p.flags,
+    };
+    visitor(view);
+  }
+}
+
+namespace {
+
+bool has_flag(CVarFlags flags, CVarFlags test) {
+  return (static_cast<uint16_t>(flags) & static_cast<uint16_t>(test)) != 0;
+}
+
+std::string_view trim_sv(std::string_view s);
+
+}  // namespace
+
+CVarApplyResult CVarSystemImpl::set_cvar_from_string(std::string_view name,
+                                                     std::string_view value,
+                                                     std::string* error_msg) {
+  if (error_msg) {
+    error_msg->clear();
+  }
+  name = trim_sv(name);
+  value = trim_sv(value);
+  if (name.empty() || value.empty()) {
+    if (error_msg) {
+      *error_msg = "Missing name or value";
+    }
+    return CVarApplyResult::InvalidValue;
+  }
+
+  using util::hash::HashedString;
+  CVarParameter* param = get_cvar(HashedString{name});
+  if (!param) {
+    if (error_msg) {
+      *error_msg = "Unknown cvar";
+    }
+    return CVarApplyResult::NotFound;
+  }
+
+  if (has_flag(param->flags, CVarFlags::NoEdit) ||
+      has_flag(param->flags, CVarFlags::EditReadOnly)) {
+    if (error_msg) {
+      *error_msg = "CVar is read-only";
+    }
+    return CVarApplyResult::ReadOnly;
+  }
+
+  if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
+    value = value.substr(1, value.size() - 2);
+  } else if (!value.empty() && value.front() == '"' && value.back() != '"') {
+    if (error_msg) {
+      *error_msg = "Unterminated quoted string";
+    }
+    return CVarApplyResult::InvalidValue;
+  }
+
+  switch (param->type) {
+    case CVarKind::Int: {
+      int32_t v{};
+      const auto* begin = value.data();
+      const auto* end = value.data() + value.size();
+      const auto r = std::from_chars(begin, end, v);
+      if (r.ec != std::errc{} || r.ptr != end) {
+        if (error_msg) {
+          *error_msg = "Invalid integer value";
+        }
+        return CVarApplyResult::InvalidValue;
+      }
+      set_int_cvar(HashedString{name}, v);
+      return CVarApplyResult::Ok;
+    }
+    case CVarKind::Float: {
+      std::string val_str(value);
+      char* end = nullptr;
+      const double v = std::strtod(val_str.c_str(), &end);
+      if (end != val_str.c_str() + val_str.size()) {
+        if (error_msg) {
+          *error_msg = "Invalid float value";
+        }
+        return CVarApplyResult::InvalidValue;
+      }
+      set_float_cvar(HashedString{name}, v);
+      return CVarApplyResult::Ok;
+    }
+    case CVarKind::String: {
+      std::string val_str(value);
+      set_string_cvar(HashedString{name}, val_str.c_str());
+      return CVarApplyResult::Ok;
+    }
+  }
+  return CVarApplyResult::InvalidValue;
 }
 
 void CVarSystemImpl::draw_imgui_editor() {
@@ -555,6 +662,124 @@ void CVarSystemImpl::save_to_file(const std::string& path) {
         break;
     }
   }
+}
+
+namespace {
+
+bool parse_console_assignment(std::string_view line, std::string_view& name,
+                              std::string_view& value, std::string& error_msg) {
+  error_msg.clear();
+  std::string_view trimmed = trim_sv(line);
+  if (trimmed.empty()) {
+    error_msg = "Empty input";
+    return false;
+  }
+
+  bool in_quotes = false;
+  size_t eq_pos = std::string_view::npos;
+  for (size_t i = 0; i < trimmed.size(); i++) {
+    char c = trimmed[i];
+    if (c == '"') {
+      in_quotes = !in_quotes;
+    } else if (c == '=' && !in_quotes) {
+      eq_pos = i;
+      break;
+    }
+  }
+
+  if (eq_pos != std::string_view::npos) {
+    name = trim_sv(trimmed.substr(0, eq_pos));
+    value = trim_sv(trimmed.substr(eq_pos + 1));
+  } else {
+    size_t space = trimmed.find_first_of(" \t");
+    if (space == std::string_view::npos) {
+      error_msg = "Missing value";
+      return false;
+    }
+    name = trim_sv(trimmed.substr(0, space));
+    value = trim_sv(trimmed.substr(space + 1));
+  }
+
+  if (name.empty() || value.empty()) {
+    error_msg = "Missing name or value";
+    return false;
+  }
+  return true;
+}
+
+}  // namespace
+
+void register_cvar_console(Console& console) {
+  console.set_fallback_handler([](std::string_view line, std::string* error) {
+    std::string_view name;
+    std::string_view value;
+    std::string parse_error;
+    if (!parse_console_assignment(line, name, value, parse_error)) {
+      if (error) {
+        *error = parse_error;
+      }
+      return false;
+    }
+
+    std::string err;
+    CVarApplyResult result = CVarSystem::get().set_cvar_from_string(name, value, &err);
+    if (result != CVarApplyResult::Ok) {
+      if (error) {
+        *error = err.empty() ? "Failed to set cvar" : err;
+      }
+      return false;
+    }
+    return true;
+  });
+
+  console.set_completion_provider([](std::string_view input, std::vector<ConsoleSuggestion>& out,
+                                      size_t& replace_start, size_t& replace_len) {
+    std::string_view trimmed = trim_sv(input);
+    size_t leading = input.find_first_not_of(" \t");
+    if (leading == std::string_view::npos) {
+      return;
+    }
+    if (trimmed.find_first_of(" \t") != std::string_view::npos ||
+        trimmed.find('=') != std::string_view::npos) {
+      return;
+    }
+    if (trimmed.empty()) {
+      return;
+    }
+
+    replace_start = leading;
+    replace_len = trimmed.size();
+
+    std::vector<ConsoleSuggestion> matches;
+    CVarSystem::get().for_each_cvar([&](const CVarInfoView& info) {
+      if (info.name.rfind(trimmed, 0) == 0) {
+        ConsoleSuggestion s;
+        s.label = std::string(info.name);
+        switch (info.type) {
+          case CVarValueType::Int:
+            s.detail = "int";
+            break;
+          case CVarValueType::Float:
+            s.detail = "float";
+            break;
+          case CVarValueType::String:
+            s.detail = "string";
+            break;
+        }
+        s.insert_text = s.label;
+        matches.push_back(std::move(s));
+      }
+    });
+
+    std::ranges::sort(matches, [](const ConsoleSuggestion& a, const ConsoleSuggestion& b) {
+      return a.label < b.label;
+    });
+
+    constexpr size_t kMaxSuggestions = 10;
+    for (size_t i = 0; i < matches.size() && i < kMaxSuggestions; i++) {
+      out.push_back(std::move(matches[i]));
+    }
+  });
 }
 
 }  // namespace TENG_NAMESPACE

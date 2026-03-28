@@ -3,6 +3,7 @@
 // inspired by https://github.com/vblanco20-1/vulkan-guide/blob/engine/extra-engine/cvars.h
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <string_view>
 
@@ -21,6 +22,27 @@ enum class CVarFlags : uint16_t {
 };
 
 class CVarParameter;
+
+enum class CVarValueType : uint8_t {
+  Int,
+  Float,
+  String,
+};
+
+struct CVarInfoView {
+  std::string_view name;
+  std::string_view description;
+  CVarValueType type;
+  CVarFlags flags;
+};
+
+enum class CVarApplyResult : uint8_t {
+  Ok,
+  NotFound,
+  ReadOnly,
+  InvalidValue,
+};
+
 class CVarSystem {
  public:
   static CVarSystem& get();
@@ -43,6 +65,9 @@ class CVarSystem {
   virtual void load_from_file(const std::string& path) = 0;
   virtual void save_to_file(const std::string& path) = 0;
   virtual void merge_cvar_flags(util::hash::HashedString hash, CVarFlags or_flags) = 0;
+  virtual void for_each_cvar(std::function<void(const CVarInfoView&)> visitor) = 0;
+  virtual CVarApplyResult set_cvar_from_string(std::string_view name, std::string_view value,
+                                               std::string* error_msg) = 0;
 };
 
 template <typename T>
@@ -76,5 +101,8 @@ struct AutoCVarString : AutoCVar<std::string> {
   void set(std::string_view val);
   void set(std::string&& val);
 };
+
+class Console;
+void register_cvar_console(Console& console);
 
 }  // namespace TENG_NAMESPACE
