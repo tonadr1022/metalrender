@@ -43,6 +43,10 @@ enum class CVarApplyResult : uint8_t {
   InvalidValue,
 };
 
+struct AutoCVarInt;
+struct AutoCVarFloat;
+struct AutoCVarString;
+
 class CVarSystem {
  public:
   static CVarSystem& get();
@@ -68,18 +72,31 @@ class CVarSystem {
   virtual void for_each_cvar(std::function<void(const CVarInfoView&)> visitor) = 0;
   virtual CVarApplyResult set_cvar_from_string(std::string_view name, std::string_view value,
                                                std::string* error_msg) = 0;
+  /// Fired after a successful value change via set_*_cvar / AutoCVar::set (not when mutating
+  /// through get_*_cvar / get_ptr()).
+  virtual void add_change_callback(util::hash::HashedString name, std::function<void()> cb) = 0;
+  virtual void add_change_callback(const AutoCVarInt& cv, std::function<void()> cb) = 0;
+  virtual void add_change_callback(const AutoCVarFloat& cv, std::function<void()> cb) = 0;
+  virtual void add_change_callback(const AutoCVarString& cv, std::function<void()> cb) = 0;
 };
 
 template <typename T>
 struct AutoCVar {
+ public:
+  [[nodiscard]] util::hash::HashedString hashed_name() const {
+    return util::hash::HashedString{name_hash_};
+  }
+
  protected:
   uint32_t idx_{};
+  uint32_t name_hash_{};
 };
 
 struct AutoCVarInt : AutoCVar<int32_t> {
   AutoCVarInt(const char* name, const char* desc, int initial_value,
               CVarFlags flags = CVarFlags::None);
   int32_t get();
+  /// Raw storage; writes do not run change callbacks — prefer set() or CVarSystem::set_int_cvar.
   int32_t* get_ptr();
   void set(int32_t val);
 };
@@ -88,6 +105,7 @@ struct AutoCVarFloat : AutoCVar<double> {
   AutoCVarFloat(const char* name, const char* description, double default_value,
                 CVarFlags flags = CVarFlags::None);
   double get();
+  /// Raw storage; writes do not run change callbacks — prefer set() or CVarSystem::set_float_cvar.
   double* get_ptr();
   float get_float();
   void set(double val);

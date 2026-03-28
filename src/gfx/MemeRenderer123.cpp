@@ -9,6 +9,7 @@
 #include "ResourceManager.hpp"
 #include "UI.hpp"
 #include "Window.hpp"
+#include "core/CVar.hpp"
 #include "core/Config.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
@@ -120,8 +121,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   device_->acquire_next_swapchain_image(swapchain_);
-  rg_.bake(window_->get_window_size(),
-            renderer_cv::developer_render_graph_verbose.get() != 0);
+  rg_.bake(window_->get_window_size(), renderer_cv::developer_render_graph_verbose.get() != 0);
   static std::vector<rhi::CmdEncoder*> wait_for_encoders;
   wait_for_encoders.clear();
   {
@@ -267,9 +267,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
         // Late draw_cull samples the pyramid for object and/or meshlet occlusion; the graph must
         // depend on depth_reduce finishing (object-only occlusion previously omitted this).
         const bool depth_pyramid_read_by_draw_cull =
-            (renderer_cv::culling_object_occlusion.get() != 0 || renderer_cv::culling_meshlet_occlusion.get() != 0) &&
-            renderer_cv::culling_enabled.get() != 0 && renderer_cv::pipeline_mesh_shaders.get() != 0 &&
-            view_id == main_render_view_id_;
+            (renderer_cv::culling_object_occlusion.get() != 0 ||
+             renderer_cv::culling_meshlet_occlusion.get() != 0) &&
+            renderer_cv::culling_enabled.get() != 0 &&
+            renderer_cv::pipeline_mesh_shaders.get() != 0 && view_id == main_render_view_id_;
         if (depth_pyramid_read_by_draw_cull) {
           prep_meshlets_pass.read_tex(final_depth_pyramid_ids[(int)view_id],
                                       rhi::PipelineStage::ComputeShader);
@@ -368,12 +369,15 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
           view_cull_setups[i].draw_cmd_count_buf_idx =
               device_->get_buf(rg_.get_buf(draw_cmd_count_buf_ids[(int)view_id]))->bindless_idx();
           view_cull_setups[i].flags = 0;
-          if (view_id == main_render_view_id_ && renderer_cv::culling_meshlet_occlusion.get() != 0 &&
-              renderer_cv::culling_enabled.get() != 0 && renderer_cv::pipeline_mesh_shaders.get() != 0) {
+          if (view_id == main_render_view_id_ &&
+              renderer_cv::culling_meshlet_occlusion.get() != 0 &&
+              renderer_cv::culling_enabled.get() != 0 &&
+              renderer_cv::pipeline_mesh_shaders.get() != 0) {
             view_cull_setups[i].flags |= MESHLET_OCCLUSION_CULL_ENABLED_BIT;
           }
           if (renderer_cv::culling_object_occlusion.get() != 0 && view_id == main_render_view_id_ &&
-              renderer_cv::culling_enabled.get() != 0 && renderer_cv::pipeline_mesh_shaders.get() != 0) {
+              renderer_cv::culling_enabled.get() != 0 &&
+              renderer_cv::pipeline_mesh_shaders.get() != 0) {
             view_cull_setups[i].flags |= OBJECT_OCCLUSION_CULL_ENABLED_BIT;
           }
         }
@@ -528,7 +532,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   GBufferRenderer::GbufferPassInfo gbuffer_pass_info{};
 
   bool obj_or_meshlet_occlusion_culling_enabled =
-      (renderer_cv::culling_object_occlusion.get() != 0 || renderer_cv::culling_meshlet_occlusion.get() != 0) &&
+      (renderer_cv::culling_object_occlusion.get() != 0 ||
+       renderer_cv::culling_meshlet_occlusion.get() != 0) &&
       renderer_cv::culling_enabled.get() != 0 && renderer_cv::pipeline_mesh_shaders.get() != 0;
 
   if (get_shadows_enabled() && mesh_shaders_enabled()) {
@@ -640,7 +645,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   // Meshlet occlusion's late meshlet pass relies on the late draw_cull phase to populate
   // `out_draw_count_ids_late` and late `TaskCmd` buffers.
   if (renderer_cv::pipeline_mesh_shaders.get() != 0 &&
-      (renderer_cv::culling_object_occlusion.get() != 0 || renderer_cv::culling_meshlet_occlusion.get() != 0)) {
+      (renderer_cv::culling_object_occlusion.get() != 0 ||
+       renderer_cv::culling_meshlet_occlusion.get() != 0)) {
     add_draw_cull_pass(DrawCullPhase::Late, task_cmd_buf_rg_ids, out_draw_count_ids_late);
   }
 
@@ -699,7 +705,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       secondary_view_debug_depth_rg_handle = p.read_tex(depth_ids[(int)shadow_map_render_views_[0]],
                                                         rhi::PipelineStage::FragmentShader);
     }
-    if (obj_or_meshlet_occlusion_culling_enabled && debug_mode == DebugRenderMode::DepthReduceMips) {
+    if (obj_or_meshlet_occlusion_culling_enabled &&
+        debug_mode == DebugRenderMode::DepthReduceMips) {
       p.sample_tex(final_depth_pyramid_ids[(int)main_render_view_id_]);
     }
     p.w_swapchain_tex(swapchain_);
@@ -729,8 +736,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
         tex_idx = gbuffer_a_tex->bindless_idx();
       } else {
         const int mip_i = renderer_cv::debug_depth_pyramid_mip.get();
-        tex_idx = device_->get_tex_view_bindless_idx(
-            render_views_[0].depth_pyramid_tex.handle, render_views_[0].depth_pyramid_tex.views[mip_i]);
+        tex_idx =
+            device_->get_tex_view_bindless_idx(render_views_[0].depth_pyramid_tex.handle,
+                                               render_views_[0].depth_pyramid_tex.views[mip_i]);
         mult = 100.f;
       }
       TexOnlyPC pc{
@@ -1203,11 +1211,6 @@ void MemeRenderer123::on_imgui() {
 void MemeRenderer123::on_imgui_tab_overview() {
   ImGui::Text("Mesh shaders enabled: %d", renderer_cv::pipeline_mesh_shaders.get() != 0);
   ImGui::Text("Render Mode %s", to_string(clamped_debug_render_mode()));
-
-  bool shadows_enabled = get_shadows_enabled();
-  if (ImGui::Checkbox("Shadows enabled", &shadows_enabled)) {
-    on_shadows_enabled_change(shadows_enabled);
-  }
   ImGui::Separator();
 }
 
@@ -1256,8 +1259,10 @@ void MemeRenderer123::on_imgui_tab_debug() {
   }
   auto dp_dims = device_->get_tex(render_views_[0].depth_pyramid_tex)->desc().dims;
   auto mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
-  ImGui::SliderInt("Depth pyramid mip view", renderer_cv::debug_depth_pyramid_mip.get_ptr(), 0,
-                   mip_levels - 1);
+  int mip = renderer_cv::debug_depth_pyramid_mip.get();
+  if (ImGui::SliderInt("Depth pyramid mip view", &mip, 0, mip_levels - 1)) {
+    renderer_cv::debug_depth_pyramid_mip.set(mip);
+  }
 }
 
 void MemeRenderer123::on_imgui_tab_textures() {
@@ -1406,8 +1411,8 @@ bool MemeRenderer123::on_key_event(int key, int action, int mods) {
     }
 
     if (key == GLFW_KEY_M && mods & GLFW_MOD_CONTROL && mods & GLFW_MOD_SHIFT) {
-      renderer_cv::culling_meshlet_occlusion.set(renderer_cv::culling_meshlet_occlusion.get() == 0 ? 1
-                                                                                                   : 0);
+      renderer_cv::culling_meshlet_occlusion.set(
+          renderer_cv::culling_meshlet_occlusion.get() == 0 ? 1 : 0);
       return true;
     }
 
@@ -1517,6 +1522,10 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
   imgui_renderer_.emplace(*shader_mgr_, device_);
 
   main_render_view_id_ = create_render_view();
+
+  CVarSystem::get().add_change_callback(
+      renderer_cv::shadows_enabled,
+      [this] { on_shadows_enabled_change(renderer_cv::shadows_enabled.get() != 0); });
   on_shadows_enabled_change(renderer_cv::shadows_enabled.get() != 0);
 
   recreate_swapchain_sized_textures();
@@ -1553,7 +1562,8 @@ void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
         "Culling Paused:             %d\n"
         "Culling Enabled:            %d\n"
         "Meshlet Occlusion Enabled:  %d",
-        renderer_cv::culling_paused.get() != 0, renderer_cv::culling_enabled.get() != 0, renderer_cv::culling_meshlet_occlusion.get() != 0);
+        renderer_cv::culling_paused.get() != 0, renderer_cv::culling_enabled.get() != 0,
+        renderer_cv::culling_meshlet_occlusion.get() != 0);
 
     for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
       if (view_id >= meshlet_draw_stats_readback_.size()) continue;
