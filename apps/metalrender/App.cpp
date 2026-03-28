@@ -1,5 +1,6 @@
 #include "App.hpp"
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <glm/gtc/quaternion.hpp>
@@ -380,9 +381,19 @@ void App::on_imgui(float dt) {
   }
   auto frame_time_ms = total / n;
 
-  ImGui::Begin("Renderer");
+  ImGui::Begin("metalrender");
+
+  ImGui::Text("CPU: %5.2f ms/frame (%5.2f FPS)", frame_time_ms, 1000.f / frame_time_ms);
+  ImGui::Text("GPU: %5.2f ms/frame (%5.2f FPS)", renderer_->get_stats().avg_gpu_frame_time,
+              1000.f / renderer_->get_stats().avg_gpu_frame_time);
+
   if (ImGui::BeginTabBar("Renderer##MainTabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
-    if (ImGui::BeginTabItem("Frame Times")) {  // frame times
+    if (ImGui::BeginTabItem("Renderer")) {
+      renderer_->on_imgui();
+      ImGui::EndTabItem();
+    }
+
+    if (ImGui::BeginTabItem("Frame Times")) {
       ImGui::Text("Avg CPU time %f (ms), %.2f FPS", frame_time_ms, 1000.f / frame_time_ms);
       auto mean = get_mean(frame_times.data);
       auto stddev = std_dev(frame_times.data, mean);
@@ -423,14 +434,6 @@ void App::on_imgui(float dt) {
       ImGui::EndTabItem();
     }
 
-    if (ImGui::BeginTabItem("Renderer")) {
-      ImGui::Text("CPU: %5.2f ms/frame (%5.2f FPS)", frame_time_ms, 1000.f / frame_time_ms);
-      ImGui::Text("GPU: %5.2f ms/frame (%5.2f FPS)", renderer_->get_stats().avg_gpu_frame_time,
-                  1000.f / renderer_->get_stats().avg_gpu_frame_time);
-      renderer_->on_imgui();
-      ImGui::EndTabItem();
-    }
-
     if (ImGui::BeginTabItem("Camera")) {
       ImGui::DragFloat3("Position", &camera_.pos.x, 0.1f);
       ImGui::DragFloat("Move Speed", &camera_.move_speed, 0.1f, 0.1f, 1000.f);
@@ -452,17 +455,37 @@ void App::on_imgui(float dt) {
         }
         ImGui::TreePop();
       }
-      ImGui::EndTabItem();
-    }
-    if (ImGui::TreeNode("Load Scene")) {
-      for (const auto& preset : scene_presets_) {
-        if (ImGui::Button(preset.name.c_str())) {
-          camera_ = preset.cam;
+
+      ImGui::SeparatorText("Presets");
+      static int scene_preset_selection = 0;
+      if (!scene_presets_.empty()) {
+        scene_preset_selection =
+            std::clamp(scene_preset_selection, 0, static_cast<int>(scene_presets_.size()) - 1);
+        const float list_h = ImGui::GetTextLineHeightWithSpacing() * 7.0f;
+        if (ImGui::BeginListBox("##scene_presets", ImVec2(-FLT_MIN, list_h))) {
+          for (int i = 0; i < static_cast<int>(scene_presets_.size()); ++i) {
+            ImGui::PushID(i);
+            const bool selected = (scene_preset_selection == i);
+            if (ImGui::Selectable(scene_presets_[i].name.c_str(), selected,
+                                  ImGuiSelectableFlags_AllowDoubleClick)) {
+              scene_preset_selection = i;
+              if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                camera_ = scene_presets_[i].cam;
+                clear_all_models();
+                scene_presets_[i].load_fn();
+              }
+            }
+            ImGui::PopID();
+          }
+          ImGui::EndListBox();
+        }
+        if (ImGui::Button("Load preset", ImVec2(-FLT_MIN, 0))) {
+          camera_ = scene_presets_[scene_preset_selection].cam;
           clear_all_models();
-          preset.load_fn();
+          scene_presets_[scene_preset_selection].load_fn();
         }
       }
-      ImGui::TreePop();
+      ImGui::EndTabItem();
     }
 
     ImGui::EndTabBar();
