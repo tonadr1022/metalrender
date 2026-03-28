@@ -1,7 +1,11 @@
 #include "CVar.hpp"
 
 #include <algorithm>
+#include <cassert>
+#include <cstdlib>
 #include <span>
+#include <string_view>
+#include <utility>
 #include <unordered_map>
 #include <vector>
 
@@ -10,7 +14,7 @@
 
 namespace TENG_NAMESPACE {
 
-enum class CVarType : char {
+enum class CVarKind : char {
   Int,
   Float,
   String,
@@ -22,7 +26,7 @@ class CVarParameter {
 
   uint32_t array_idx;
 
-  CVarType type;
+  CVarKind type;
   CVarFlags flags;
   std::string name;
   std::string description;
@@ -42,7 +46,10 @@ struct CVarArray {
   explicit CVarArray(size_t size) { cvars.reserve(size); }
   T get_current(uint32_t idx) { return cvars[idx].current; }
   T* get_current_ptr(uint32_t idx) { return &cvars[idx].current; }
-  void set_current(const T& val, uint32_t idx) { cvars[idx].current = val; }
+  template <typename U>
+  void set_current(U&& val, uint32_t idx) {
+    cvars[idx].current = std::forward<U>(val);
+  }
 
   uint32_t add(const T& default_value, const T& current_value, CVarParameter* param) {
     uint32_t idx = cvars.size();
@@ -194,7 +201,14 @@ void CVarSystemImpl::draw_imgui_editor() {
       }
       categorized_params[category].emplace_back(p);
     }
-    for (auto& [category, params] : categorized_params) {
+    std::vector<std::string> category_order;
+    category_order.reserve(categorized_params.size());
+    for (const auto& entry : categorized_params) {
+      category_order.push_back(entry.first);
+    }
+    std::ranges::sort(category_order);
+    for (const std::string& category : category_order) {
+      std::vector<CVarParameter*>& params = categorized_params[category];
       const char* name = category.empty() ? "uncategorized" : category.c_str();
       if (ImGui::BeginMenu(name)) {
         edit_params(params);
@@ -209,7 +223,8 @@ void CVarSystemImpl::draw_imgui_editor() {
 CVarParameter* CVarSystemImpl::create_float_cvar(const char* name, const char* description,
                                                  double default_value, double current_value) {
   auto* param = init_cvar(name, description);
-  param->type = CVarType::Float;
+  if (!param) return nullptr;
+  param->type = CVarKind::Float;
   get_cvar_array<double>().add(default_value, current_value, param);
   return param;
 }
@@ -218,7 +233,8 @@ CVarParameter* CVarSystemImpl::create_string_cvar(const char* name, const char* 
                                                   const char* default_value,
                                                   const char* current_value) {
   auto* param = init_cvar(name, description);
-  param->type = CVarType::Float;
+  if (!param) return nullptr;
+  param->type = CVarKind::String;
   get_cvar_array<std::string>().add(default_value, current_value, param);
   return param;
 }
@@ -226,7 +242,8 @@ CVarParameter* CVarSystemImpl::create_string_cvar(const char* name, const char* 
 CVarParameter* CVarSystemImpl::create_int_cvar(const char* name, const char* description,
                                                int32_t default_value, int32_t current_value) {
   auto* param = init_cvar(name, description);
-  param->type = CVarType::Int;
+  if (!param) return nullptr;
+  param->type = CVarKind::Int;
   get_cvar_array<int32_t>().add(default_value, current_value, param);
   return param;
 }
@@ -266,7 +283,7 @@ void CVarSystemImpl::draw_imgui_edit_cvar_parameter(CVarParameter* p, float text
       static_cast<uint32_t>(p->flags) & static_cast<uint32_t>(CVarFlags::EditFloatDrag);
 
   switch (p->type) {
-    case CVarType::Int:
+    case CVarKind::Int:
       if (is_read_only) {
         std::string display_format = p->name + "= %i";
         ImGui::Text(display_format.c_str(), get_cvar_array<int32_t>().get_current(p->array_idx));
@@ -287,10 +304,10 @@ void CVarSystemImpl::draw_imgui_edit_cvar_parameter(CVarParameter* p, float text
         }
       }
       break;
-    case CVarType::Float:
+    case CVarKind::Float:
       if (is_read_only) {
         std::string display_format = p->name + "= %f";
-        ImGui::Text(display_format.c_str(), get_cvar_array<int32_t>().get_current(p->array_idx));
+        ImGui::Text(display_format.c_str(), get_cvar_array<double>().get_current(p->array_idx));
       } else {
         im_gui_label(p->name.c_str(), text_width);
         ImGui::PushID(p);
@@ -305,7 +322,7 @@ void CVarSystemImpl::draw_imgui_edit_cvar_parameter(CVarParameter* p, float text
         ImGui::PopID();
       }
       break;
-    case CVarType::String:
+    case CVarKind::String:
       if (is_read_only) {
         std::string display_format = p->name + "= %s";
         ImGui::Text(display_format.c_str(),
@@ -327,15 +344,13 @@ CVarSystem& CVarSystem::get() {
   return impl;
 }
 
-AutoCVarFloat::AutoCVarFloat(const char* name, const char* description, double default_value,
-                             CVarFlags flags) {
-  CVarParameter* param =
-      CVarSystemImpl::get().create_float_cvar(name, description, default_value, default_value);
-  param->flags = flags;
-  idx_ = param->array_idx;
-}
-
 namespace {
+
+void assert_unique_cvar_registered(CVarParameter* param) {
+  if (param != nullptr) return;
+  assert(false && "duplicate CVar name; each name must be unique");
+  std::abort();
+}
 
 template <typename T>
 T get_cvar_current_by_index(uint32_t idx) {
@@ -346,52 +361,67 @@ T* get_cvar_current_ptr_by_index(uint32_t idx) {
   return CVarSystemImpl::get().get_cvar_array<T>().get_current_ptr(idx);
 }
 
-template <typename T>
-void set_cvar_by_idx(uint32_t idx, const T& data) {
-  CVarSystemImpl::get().get_cvar_array<T>().set_current(data, idx);
+template <typename T, typename U>
+void set_cvar_by_idx(uint32_t idx, U&& data) {
+  CVarSystemImpl::get().get_cvar_array<T>().set_current(std::forward<U>(data), idx);
 }
 
 }  // namespace
 
-double AutoCVarFloat::get() { return get_cvar_current_by_index<CVarType>(idx_); }
+AutoCVarFloat::AutoCVarFloat(const char* name, const char* description, double default_value,
+                             CVarFlags flags) {
+  CVarParameter* param =
+      CVarSystemImpl::get().create_float_cvar(name, description, default_value, default_value);
+  assert_unique_cvar_registered(param);
+  param->flags = flags;
+  idx_ = param->array_idx;
+}
 
-double* AutoCVarFloat::get_ptr() { return get_cvar_current_ptr_by_index<CVarType>(idx_); }
+double AutoCVarFloat::get() { return get_cvar_current_by_index<double>(idx_); }
+
+double* AutoCVarFloat::get_ptr() { return get_cvar_current_ptr_by_index<double>(idx_); }
 
 float AutoCVarFloat::get_float() { return static_cast<float>(get()); }
 
-float* AutoCVarFloat::get_float_ptr() { return reinterpret_cast<float*>(get_ptr()); }
-
-void AutoCVarFloat::set(double val) { set_cvar_by_idx(idx_, val); }
+void AutoCVarFloat::set(double val) { set_cvar_by_idx<double>(idx_, val); }
 
 AutoCVarInt::AutoCVarInt(const char* name, const char* desc, int initial_value, CVarFlags flags) {
   CVarParameter* param =
       CVarSystemImpl::get().create_int_cvar(name, desc, initial_value, initial_value);
+  assert_unique_cvar_registered(param);
   param->flags = flags;
   idx_ = param->array_idx;
 }
 
-int32_t AutoCVarInt::get() { return get_cvar_current_by_index<CVarType>(idx_); }
+int32_t AutoCVarInt::get() { return get_cvar_current_by_index<int32_t>(idx_); }
 
-int32_t* AutoCVarInt::get_ptr() { return get_cvar_current_ptr_by_index<CVarType>(idx_); }
+int32_t* AutoCVarInt::get_ptr() { return get_cvar_current_ptr_by_index<int32_t>(idx_); }
 
-void AutoCVarInt::set(int32_t val) { set_cvar_by_idx(idx_, val); }
+void AutoCVarInt::set(int32_t val) { set_cvar_by_idx<int32_t>(idx_, val); }
+
 AutoCVarString::AutoCVarString(const char* name, const char* description, const char* default_value,
-                               CVarFlags flags) {
+                                 CVarFlags flags) {
   CVarParameter* param =
       CVarSystemImpl::get().create_string_cvar(name, description, default_value, default_value);
+  assert_unique_cvar_registered(param);
   param->flags = flags;
   idx_ = param->array_idx;
 }
 
-const char* AutoCVarString::get() { return get_cvar_current_ptr_by_index<CVarType>(idx_)->c_str(); }
+const char* AutoCVarString::get() {
+  return get_cvar_current_ptr_by_index<std::string>(idx_)->c_str();
+}
 
-void AutoCVarString::set(std::string&& val) { set_cvar_by_idx<CVarType>(idx_, val); }
+void AutoCVarString::set(std::string_view val) { set_cvar_by_idx<std::string>(idx_, std::string(val)); }
+
+void AutoCVarString::set(std::string&& val) {
+  set_cvar_by_idx<std::string>(idx_, std::move(val));
+}
 
 void CVarSystemImpl::load_from_file(const std::string&) {
-  // std::filesystem::path p{path};
-  // if (p.extension() == ".xml") {
-  // } else if (p.extension() == ".json") {
-  // }
+#if !defined(NDEBUG)
+  assert(false && "CVarSystem::load_from_file is not implemented");
+#endif
 }
 
 }  // namespace TENG_NAMESPACE

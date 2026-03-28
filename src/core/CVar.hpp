@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "Hash.hpp"
 #include "core/Config.hpp"
@@ -12,10 +13,9 @@ namespace TENG_NAMESPACE {
 
 enum class CVarFlags : uint16_t {
   None = 0,
-  NoEdit = 1 << 1,
-  EditReadOnly = 1 << 2,
-  Advanced = 1 << 3,
-
+  NoEdit = 1 << 0,
+  EditReadOnly = 1 << 1,
+  Advanced = 1 << 2,
   EditCheckbox = 1 << 8,
   EditFloatDrag = 1 << 9,
 };
@@ -36,6 +36,7 @@ class CVarSystem {
   virtual void set_float_cvar(util::hash::HashedString hash, double value) = 0;
   virtual int32_t* get_int_cvar(util::hash::HashedString hash) = 0;
   virtual void set_int_cvar(util::hash::HashedString hash, int32_t value) = 0;
+  // Pointer is valid only until the stored string is next assigned (reallocation may invalidate).
   virtual const char* get_string_cvar(util::hash::HashedString hash) = 0;
   virtual void set_string_cvar(util::hash::HashedString hash, const char* value) = 0;
   virtual void draw_imgui_editor() = 0;
@@ -45,8 +46,7 @@ class CVarSystem {
 template <typename T>
 struct AutoCVar {
  protected:
-  uint32_t idx_;
-  using CVarType = T;
+  uint32_t idx_{};
 };
 
 struct AutoCVarInt : AutoCVar<int32_t> {
@@ -63,14 +63,15 @@ struct AutoCVarFloat : AutoCVar<double> {
   double get();
   double* get_ptr();
   float get_float();
-  float* get_float_ptr();
   void set(double val);
 };
 
 struct AutoCVarString : AutoCVar<std::string> {
   AutoCVarString(const char* name, const char* description, const char* default_value,
                  CVarFlags flags = CVarFlags::None);
+  // Same lifetime caveats as CVarSystem::get_string_cvar.
   const char* get();
+  void set(std::string_view val);
   void set(std::string&& val);
 };
 
