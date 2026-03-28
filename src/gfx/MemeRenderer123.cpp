@@ -54,6 +54,8 @@ using namespace rhi;
 
 namespace {
 
+int debug_depth_pyramid_mip = 0;
+
 glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
   // clang-format off
   float f = 1.0f / tanf(fov_y / 2.0f);
@@ -735,7 +737,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
                  clamped_debug_render_mode() != DebugRenderMode::DepthReduceMips) {
         tex_idx = gbuffer_a_tex->bindless_idx();
       } else {
-        const int mip_i = renderer_cv::debug_depth_pyramid_mip.get();
+        const int mip_i = debug_depth_pyramid_mip;
         tex_idx =
             device_->get_tex_view_bindless_idx(render_views_[0].depth_pyramid_tex.handle,
                                                render_views_[0].depth_pyramid_tex.views[mip_i]);
@@ -745,7 +747,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
           .color_mult = glm::vec4{mult, mult, mult, 1},
           .tex_idx = tex_idx,
           .gbuffer_b_idx = gbuffer_b_tex->bindless_idx(),
-          .mip_level = static_cast<uint32_t>(renderer_cv::debug_depth_pyramid_mip.get()),
+          .mip_level = static_cast<uint32_t>(debug_depth_pyramid_mip),
       };
       enc->push_constants(&pc, sizeof(pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
@@ -1181,111 +1183,91 @@ void MemeRenderer123::on_imgui() {
   ZoneScoped;
   if (ImGui::BeginTabBar("MemeRenderer123##MainTabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
     if (ImGui::BeginTabItem("Overview")) {
-      on_imgui_tab_overview();
+      ImGui::Text("Mesh shaders enabled: %d", renderer_cv::pipeline_mesh_shaders.get() != 0);
+      ImGui::Text("Render Mode %s", to_string(clamped_debug_render_mode()));
+      ImGui::Separator();
       ImGui::EndTabItem();
     }
     if (ImGui::BeginTabItem("Stats")) {
-      on_imgui_tab_stats();
+      ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
+                  stats_.total_instance_vertices, stats_.total_instances);
+      ImGui::Text("Total total instance meshlets: %d", stats_.total_instance_meshlets);
+      ImGui::Text("GPU Frame Time: %.2f (%.2f FPS)", stats_.avg_gpu_frame_time,
+                  1000.f / stats_.avg_gpu_frame_time);
+
+      // frames_in_flight - 1 frames ago is guaranteed to be copied back to the cpu (see readback
+      // passes above)
+      if (frame_num_ >= device_->get_info().frames_in_flight) {
+        const size_t frames_ago = device_->get_info().frames_in_flight - 1;
+        for (size_t v = 0; v < render_views_.size(); v++) {
+          if (v >= draw_cmd_counts_readback_.size()) continue;
+          auto* counts = static_cast<uint32_t*>(
+              device_->get_buf(draw_cmd_counts_readback_[v][get_frames_ago_idx(frames_ago)])
+                  ->contents());
+          ImGui::Text("Draw cull cmd counts (view %zu, early/late): %u %u", v, counts[0],
+                      counts[1]);
+        }
+      }
+
+      meshlet_stats_imgui(ResourceManager::get().get_tot_instances_loaded());
+
       ImGui::EndTabItem();
     }
     if (ImGui::BeginTabItem("Culling")) {
-      on_imgui_tab_culling();
+      auto bool_cvar_checkbox = [](const char* label, AutoCVarInt& cv) {
+        bool v = cv.get() != 0;
+        if (ImGui::Checkbox(label, &v)) {
+          cv.set(v ? 1 : 0);
+        }
+      };
+      bool_cvar_checkbox("Culling paused", renderer_cv::culling_paused);
+      bool_cvar_checkbox("Culling enabled", renderer_cv::culling_enabled);
+      bool_cvar_checkbox("Meshlet frustum culling enabled", renderer_cv::culling_meshlet_frustum);
+      bool_cvar_checkbox("Meshlet cone culling enabled", renderer_cv::culling_meshlet_cone);
+      bool_cvar_checkbox("Meshlet occlusion culling enabled",
+                         renderer_cv::culling_meshlet_occlusion);
+      bool_cvar_checkbox("Object occlusion culling enabled", renderer_cv::culling_object_occlusion);
+
       ImGui::EndTabItem();
     }
     if (ImGui::BeginTabItem("Debug")) {
-      on_imgui_tab_debug();
+      if (render_views_.empty()) {
+        ImGui::TextUnformatted("No render views; depth pyramid mip unavailable.");
+        return;
+      }
+      auto dp_dims = device_->get_tex(render_views_[0].depth_pyramid_tex)->desc().dims;
+      auto mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
+      ImGui::SliderInt("Depth pyramid mip view", &debug_depth_pyramid_mip, 0, mip_levels - 1);
+
       ImGui::EndTabItem();
     }
     if (ImGui::BeginTabItem("Textures")) {
-      on_imgui_tab_textures();
+      model_gpu_resource_pool_.for_each([this](const ModelGPUResources& gpu_resource) {
+        for (const auto& tex : gpu_resource.textures) {
+          ImGui::Text("%s", device_->get_tex(tex)->desc().name);
+          ImGui::Image((ImTextureRef)tex.handle.to64(), ImVec2{64, 64}, ImVec2{0, 0}, ImVec2{1, 1});
+        }
+      });
       ImGui::EndTabItem();
     }
     if (ImGui::BeginTabItem("Device")) {
-      on_imgui_tab_device();
+      device_->on_imgui();
+      if (ImGui::TreeNodeEx("GPU Buffers")) {
+        static std::vector<rhi::Buffer*> buffers;
+        buffers.clear();
+        device_->get_all_buffers(buffers);
+        std::ranges::sort(buffers, [](rhi::Buffer* a, rhi::Buffer* b) {
+          return a->desc().size > b->desc().size;
+        });
+        for (auto& b : buffers) {
+          ImGui::Text("%s: %.1f mb", b->desc().name, b->desc().size / 1024.f / 1024.f);
+        }
+        ImGui::TreePop();
+      }
+
       ImGui::EndTabItem();
     }
     ImGui::EndTabBar();
-  }
-}
-
-void MemeRenderer123::on_imgui_tab_overview() {
-  ImGui::Text("Mesh shaders enabled: %d", renderer_cv::pipeline_mesh_shaders.get() != 0);
-  ImGui::Text("Render Mode %s", to_string(clamped_debug_render_mode()));
-  ImGui::Separator();
-}
-
-void MemeRenderer123::on_imgui_tab_stats() {
-  ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
-              stats_.total_instance_vertices, stats_.total_instances);
-  ImGui::Text("Total total instance meshlets: %d", stats_.total_instance_meshlets);
-  ImGui::Text("GPU Frame Time: %.2f (%.2f FPS)", stats_.avg_gpu_frame_time,
-              1000.f / stats_.avg_gpu_frame_time);
-
-  // frames_in_flight - 1 frames ago is guaranteed to be copied back to the cpu (see readback
-  // passes above)
-  if (frame_num_ >= device_->get_info().frames_in_flight) {
-    const size_t frames_ago = device_->get_info().frames_in_flight - 1;
-    for (size_t v = 0; v < render_views_.size(); v++) {
-      if (v >= draw_cmd_counts_readback_.size()) continue;
-      auto* counts = static_cast<uint32_t*>(
-          device_->get_buf(draw_cmd_counts_readback_[v][get_frames_ago_idx(frames_ago)])
-              ->contents());
-      ImGui::Text("Draw cull cmd counts (view %zu, early/late): %u %u", v, counts[0], counts[1]);
-    }
-  }
-
-  meshlet_stats_imgui(ResourceManager::get().get_tot_instances_loaded());
-}
-
-void MemeRenderer123::on_imgui_tab_culling() {
-  auto bool_cvar_checkbox = [](const char* label, AutoCVarInt& cv) {
-    bool v = cv.get() != 0;
-    if (ImGui::Checkbox(label, &v)) {
-      cv.set(v ? 1 : 0);
-    }
-  };
-  bool_cvar_checkbox("Culling paused", renderer_cv::culling_paused);
-  bool_cvar_checkbox("Culling enabled", renderer_cv::culling_enabled);
-  bool_cvar_checkbox("Meshlet frustum culling enabled", renderer_cv::culling_meshlet_frustum);
-  bool_cvar_checkbox("Meshlet cone culling enabled", renderer_cv::culling_meshlet_cone);
-  bool_cvar_checkbox("Meshlet occlusion culling enabled", renderer_cv::culling_meshlet_occlusion);
-  bool_cvar_checkbox("Object occlusion culling enabled", renderer_cv::culling_object_occlusion);
-}
-
-void MemeRenderer123::on_imgui_tab_debug() {
-  if (render_views_.empty()) {
-    ImGui::TextUnformatted("No render views; depth pyramid mip unavailable.");
-    return;
-  }
-  auto dp_dims = device_->get_tex(render_views_[0].depth_pyramid_tex)->desc().dims;
-  auto mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
-  int mip = renderer_cv::debug_depth_pyramid_mip.get();
-  if (ImGui::SliderInt("Depth pyramid mip view", &mip, 0, mip_levels - 1)) {
-    renderer_cv::debug_depth_pyramid_mip.set(mip);
-  }
-}
-
-void MemeRenderer123::on_imgui_tab_textures() {
-  model_gpu_resource_pool_.for_each([this](const ModelGPUResources& gpu_resource) {
-    for (const auto& tex : gpu_resource.textures) {
-      ImGui::Text("%s", device_->get_tex(tex)->desc().name);
-      ImGui::Image((ImTextureRef)tex.handle.to64(), ImVec2{64, 64}, ImVec2{0, 0}, ImVec2{1, 1});
-    }
-  });
-}
-
-void MemeRenderer123::on_imgui_tab_device() {
-  device_->on_imgui();
-  if (ImGui::TreeNodeEx("GPU Buffers")) {
-    static std::vector<rhi::Buffer*> buffers;
-    buffers.clear();
-    device_->get_all_buffers(buffers);
-    std::ranges::sort(
-        buffers, [](rhi::Buffer* a, rhi::Buffer* b) { return a->desc().size > b->desc().size; });
-    for (auto& b : buffers) {
-      ImGui::Text("%s: %.1f mb", b->desc().name, b->desc().size / 1024.f / 1024.f);
-    }
-    ImGui::TreePop();
   }
 }
 
@@ -1523,9 +1505,9 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
 
   main_render_view_id_ = create_render_view();
 
-  CVarSystem::get().add_change_callback(
-      renderer_cv::shadows_enabled,
-      [this] { on_shadows_enabled_change(renderer_cv::shadows_enabled.get() != 0); });
+  CVarSystem::get().add_change_callback(renderer_cv::shadows_enabled, [this] {
+    on_shadows_enabled_change(renderer_cv::shadows_enabled.get() != 0);
+  });
   on_shadows_enabled_change(renderer_cv::shadows_enabled.get() != 0);
 
   recreate_swapchain_sized_textures();

@@ -15,7 +15,6 @@ extern AutoCVarInt culling_meshlet_occlusion;
 extern AutoCVarInt culling_object_occlusion;
 extern AutoCVarInt shadows_enabled;
 extern AutoCVarInt debug_render_mode;
-extern AutoCVarInt debug_depth_pyramid_mip;
 extern AutoCVarInt ui_imgui_enabled;
 extern AutoCVarInt developer_render_graph_verbose;
 extern AutoCVarInt developer_collect_meshlet_draw_stats;

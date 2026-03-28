@@ -26,9 +26,6 @@ AutoCVarInt shadows_enabled{"renderer.shadows.enabled", "Enable shadow mapping."
 AutoCVarInt debug_render_mode{"renderer.debug.render_mode",
                               "Debug visualization mode (see DebugRenderMode).", 0,
                               CVarFlags::Advanced};
-AutoCVarInt debug_depth_pyramid_mip{"renderer.debug.depth_pyramid_mip",
-                                    "Mip level for depth pyramid debug view.", 0,
-                                    CVarFlags::Advanced};
 AutoCVarInt ui_imgui_enabled{"renderer.ui.imgui", "Draw ImGui overlay.", 1,
                              CVarFlags::EditCheckbox};
 AutoCVarInt developer_render_graph_verbose{

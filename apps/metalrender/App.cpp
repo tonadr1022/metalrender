@@ -381,9 +381,9 @@ void App::on_imgui(float dt) {
   auto frame_time_ms = total / n;
 
   ImGui::Begin("Renderer");
-  {  // frame times
-    ImGui::Text("Avg CPU time %f (ms), %.2f FPS", frame_time_ms, 1000.f / frame_time_ms);
-    if (ImGui::TreeNode("Frame Times")) {
+  if (ImGui::BeginTabBar("Renderer##MainTabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+    if (ImGui::BeginTabItem("Frame Times")) {  // frame times
+      ImGui::Text("Avg CPU time %f (ms), %.2f FPS", frame_time_ms, 1000.f / frame_time_ms);
       auto mean = get_mean(frame_times.data);
       auto stddev = std_dev(frame_times.data, mean);
       float min_val = std::numeric_limits<float>::max();
@@ -403,67 +403,71 @@ void App::on_imgui(float dt) {
                          frame_times.data.size(), 0, frame_times.offset, 2 * sizeof(float));
         ImPlot::EndPlot();
       }
-      ImGui::TreePop();
+      ImGui::EndTabItem();
     }
-  }
 
-  if (ImGui::TreeNodeEx("Window", ImGuiTreeNodeFlags_DefaultOpen)) {
-    auto dims = window_->get_window_size();
-    auto win_dims = window_->get_window_not_framebuffer_size();
-    ImGui::Text("Framebuffer dims: %u %u", dims.x, dims.y);
-    ImGui::Text("Window dims: %u %u", win_dims.x, win_dims.y);
-    ImGui::Text("Fullscreen: %d", window_->get_fullscreen());
+    if (ImGui::BeginTabItem("Window")) {
+      auto dims = window_->get_window_size();
+      auto win_dims = window_->get_window_not_framebuffer_size();
+      ImGui::Text("Framebuffer dims: %u %u", dims.x, dims.y);
+      ImGui::Text("Window dims: %u %u", win_dims.x, win_dims.y);
+      ImGui::Text("Fullscreen: %d", window_->get_fullscreen());
 
-    auto* swapchain = device_->get_swapchain(swapchain_);
-    bool vsync = swapchain->desc_.vsync;
-    if (ImGui::Checkbox("VSync", &vsync)) {
-      auto desc = swapchain->desc_;
-      desc.vsync = vsync;
-      device_->recreate_swapchain(desc, swapchain);
+      auto* swapchain = device_->get_swapchain(swapchain_);
+      bool vsync = swapchain->desc_.vsync;
+      if (ImGui::Checkbox("VSync", &vsync)) {
+        auto desc = swapchain->desc_;
+        desc.vsync = vsync;
+        device_->recreate_swapchain(desc, swapchain);
+      }
+      ImGui::EndTabItem();
     }
-    ImGui::TreePop();
-  }
 
-  if (ImGui::TreeNodeEx("Renderer", ImGuiTreeNodeFlags_DefaultOpen)) {
-    ImGui::Text("CPU: %5.2f ms/frame (%5.2f FPS)", frame_time_ms, 1000.f / frame_time_ms);
-    ImGui::Text("GPU: %5.2f ms/frame (%5.2f FPS)", renderer_->get_stats().avg_gpu_frame_time,
-                1000.f / renderer_->get_stats().avg_gpu_frame_time);
-    renderer_->on_imgui();
-    ImGui::TreePop();
-  }
+    if (ImGui::BeginTabItem("Renderer")) {
+      ImGui::Text("CPU: %5.2f ms/frame (%5.2f FPS)", frame_time_ms, 1000.f / frame_time_ms);
+      ImGui::Text("GPU: %5.2f ms/frame (%5.2f FPS)", renderer_->get_stats().avg_gpu_frame_time,
+                  1000.f / renderer_->get_stats().avg_gpu_frame_time);
+      renderer_->on_imgui();
+      ImGui::EndTabItem();
+    }
 
-  if (ImGui::TreeNodeEx("Camera", ImGuiTreeNodeFlags_DefaultOpen)) {
-    ImGui::DragFloat3("Position", &camera_.pos.x, 0.1f);
-    ImGui::DragFloat("Move Speed", &camera_.move_speed, 0.1f, 0.1f, 1000.f);
-    ImGui::Text("Pitch: %.1f Yaw: %.1f", camera_.pitch, camera_.yaw);
-    ImGui::DragFloat("Mouse Sensitivity", &camera_.mouse_sensitivity, 0.01f, 0.01f, 1.f);
-    ImGui::TreePop();
-  }
-  if (ImGui::TreeNode("Scene")) {
-    ImGui::Text("Loaded Models: %zu", ResourceManager::get().get_tot_models_loaded());
-    ImGui::Text("Total Model Instances: %zu", ResourceManager::get().get_tot_instances_loaded());
-    if (ImGui::TreeNode("Models")) {
-      for (const auto& model_handle : models_) {
-        auto* model = ResourceManager::get().get_model(model_handle);
-        ASSERT(model);
-        ImGui::PushID(model_handle.to64());
-        imgui_node(0, *model);
-        ImGui::PopID();
+    if (ImGui::BeginTabItem("Camera")) {
+      ImGui::DragFloat3("Position", &camera_.pos.x, 0.1f);
+      ImGui::DragFloat("Move Speed", &camera_.move_speed, 0.1f, 0.1f, 1000.f);
+      ImGui::Text("Pitch: %.1f Yaw: %.1f", camera_.pitch, camera_.yaw);
+      ImGui::DragFloat("Mouse Sensitivity", &camera_.mouse_sensitivity, 0.01f, 0.01f, 1.f);
+      ImGui::EndTabItem();
+    }
+
+    if (ImGui::BeginTabItem("Scene")) {
+      ImGui::Text("Loaded Models: %zu", ResourceManager::get().get_tot_models_loaded());
+      ImGui::Text("Total Model Instances: %zu", ResourceManager::get().get_tot_instances_loaded());
+      if (ImGui::TreeNode("Models")) {
+        for (const auto& model_handle : models_) {
+          auto* model = ResourceManager::get().get_model(model_handle);
+          ASSERT(model);
+          ImGui::PushID(model_handle.to64());
+          imgui_node(0, *model);
+          ImGui::PopID();
+        }
+        ImGui::TreePop();
+      }
+      ImGui::EndTabItem();
+    }
+    if (ImGui::TreeNode("Load Scene")) {
+      for (const auto& preset : scene_presets_) {
+        if (ImGui::Button(preset.name.c_str())) {
+          camera_ = preset.cam;
+          clear_all_models();
+          preset.load_fn();
+        }
       }
       ImGui::TreePop();
     }
-    ImGui::TreePop();
+
+    ImGui::EndTabBar();
   }
-  if (ImGui::TreeNode("Load Scene")) {
-    for (const auto& preset : scene_presets_) {
-      if (ImGui::Button(preset.name.c_str())) {
-        camera_ = preset.cam;
-        clear_all_models();
-        preset.load_fn();
-      }
-    }
-    ImGui::TreePop();
-  }
+
   ImGui::ColorEdit4("Clear Color", &config_.clear_color.r, ImGuiColorEditFlags_Float);
   ImGui::End();
 
