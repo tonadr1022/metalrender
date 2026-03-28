@@ -1,7 +1,6 @@
 #include "MemeRenderer123.hpp"
 
 #include <algorithm>
-#include <fstream>
 #include <glm/ext/vector_integer.hpp>
 #include <string>
 #include <tracy/Tracy.hpp>
@@ -1466,23 +1465,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
   ZoneScoped;
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
-  config_file_path_ = cinfo.config_file_path;
   swapchain_ = cinfo.swapchain;
-  init_renderer_cvars_from_startup(cinfo.mesh_shaders_enabled, config_file_path_);
-  {
-    constexpr const char* key_mesh_shaders_enabled = "mesh_shaders_enabled";
-    std::ifstream probe(config_file_path_);
-    if (!probe.is_open()) {
-      std::ofstream file(config_file_path_);
-      if (file.is_open()) {
-        file << key_mesh_shaders_enabled << '='
-             << (renderer_cv::pipeline_mesh_shaders.get() != 0 ? "1" : "0") << '\n';
-      } else {
-        ASSERT(0 && "Failed to open config file for writing");
-        LINFO("Failed to open config file for writing: {}", config_file_path_.string());
-      }
-    }
-  }
 
   // TODO: renderer shouldn't own this
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();

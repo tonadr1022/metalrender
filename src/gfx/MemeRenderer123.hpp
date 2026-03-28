@@ -70,8 +70,6 @@ class MemeRenderer123 {
     rhi::Swapchain* swapchain;
     Window* window;
     std::filesystem::path resource_dir;
-    std::filesystem::path config_file_path;
-    bool mesh_shaders_enabled{true};
   };
   explicit MemeRenderer123(const CreateInfo& cinfo);
   ~MemeRenderer123();
@@ -201,7 +199,6 @@ class MemeRenderer123 {
   size_t curr_frame_idx_{};
 
   std::filesystem::path resource_dir_;
-  std::filesystem::path config_file_path_;
 
   InstanceMgr static_instance_mgr_;
   GeometryBatch static_draw_batch_;

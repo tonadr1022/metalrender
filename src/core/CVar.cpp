@@ -2,13 +2,19 @@
 
 #include <algorithm>
 #include <cassert>
+#include <charconv>
 #include <cstdlib>
+#include <fstream>
+#include <iomanip>
+#include <limits>
 #include <span>
+#include <sstream>
 #include <string_view>
-#include <utility>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
+#include "core/Logger.hpp"
 #include "imgui.h"
 #include "imgui_stdlib.h"
 
@@ -75,6 +81,7 @@ class CVarSystemImpl : public CVarSystem {
     return nullptr;
   }
   void load_from_file(const std::string& path) override;
+  void save_to_file(const std::string& path) override;
 
   CVarParameter* create_float_cvar(const char* name, const char* description, double default_value,
                                    double current_value) final;
@@ -163,8 +170,8 @@ void CVarSystemImpl::merge_cvar_flags(util::hash::HashedString hash, CVarFlags o
   if (!p) {
     return;
   }
-  p->flags = static_cast<CVarFlags>(static_cast<uint16_t>(p->flags) |
-                                    static_cast<uint16_t>(or_flags));
+  p->flags =
+      static_cast<CVarFlags>(static_cast<uint16_t>(p->flags) | static_cast<uint16_t>(or_flags));
 }
 
 void CVarSystemImpl::draw_imgui_editor() {
@@ -410,7 +417,7 @@ int32_t* AutoCVarInt::get_ptr() { return get_cvar_current_ptr_by_index<int32_t>(
 void AutoCVarInt::set(int32_t val) { set_cvar_by_idx<int32_t>(idx_, val); }
 
 AutoCVarString::AutoCVarString(const char* name, const char* description, const char* default_value,
-                                 CVarFlags flags) {
+                               CVarFlags flags) {
   CVarParameter* param =
       CVarSystemImpl::get().create_string_cvar(name, description, default_value, default_value);
   assert_unique_cvar_registered(param);
@@ -422,16 +429,132 @@ const char* AutoCVarString::get() {
   return get_cvar_current_ptr_by_index<std::string>(idx_)->c_str();
 }
 
-void AutoCVarString::set(std::string_view val) { set_cvar_by_idx<std::string>(idx_, std::string(val)); }
-
-void AutoCVarString::set(std::string&& val) {
-  set_cvar_by_idx<std::string>(idx_, std::move(val));
+void AutoCVarString::set(std::string_view val) {
+  set_cvar_by_idx<std::string>(idx_, std::string(val));
 }
 
-void CVarSystemImpl::load_from_file(const std::string&) {
-#if !defined(NDEBUG)
-  assert(false && "CVarSystem::load_from_file is not implemented");
-#endif
+void AutoCVarString::set(std::string&& val) { set_cvar_by_idx<std::string>(idx_, std::move(val)); }
+
+namespace {
+
+constexpr std::string_view kLegacyMeshShadersKey = "mesh_shaders_enabled";
+constexpr std::string_view kMeshShadersCVar = "renderer.pipeline.mesh_shaders";
+
+bool is_space(char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\v' || c == '\f'; }
+
+std::string_view trim_sv(std::string_view s) {
+  while (!s.empty() && is_space(static_cast<unsigned char>(s.front()))) {
+    s.remove_prefix(1);
+  }
+  while (!s.empty() && is_space(static_cast<unsigned char>(s.back()))) {
+    s.remove_suffix(1);
+  }
+  return s;
+}
+
+void apply_cvar_line(CVarSystemImpl& sys, std::string_view key_sv, std::string_view value_sv) {
+  key_sv = trim_sv(key_sv);
+  value_sv = trim_sv(value_sv);
+  if (key_sv.empty()) {
+    return;
+  }
+
+  using util::hash::HashedString;
+
+  if (key_sv == kLegacyMeshShadersKey) {
+    const int32_t mesh = (value_sv == "1") ? 1 : 0;
+    sys.set_int_cvar(HashedString{kMeshShadersCVar}, mesh);
+    return;
+  }
+
+  CVarParameter* param = sys.get_cvar(HashedString{key_sv});
+  if (!param) {
+    return;
+  }
+
+  switch (param->type) {
+    case CVarKind::Int: {
+      const std::string val_str(value_sv);
+      int32_t v{};
+      const auto r = std::from_chars(val_str.data(), val_str.data() + val_str.size(), v);
+      if (r.ec != std::errc{} || r.ptr != val_str.data() + val_str.size()) {
+        return;
+      }
+      sys.set_int_cvar(HashedString{key_sv}, v);
+      break;
+    }
+    case CVarKind::Float: {
+      const std::string val_str(value_sv);
+      char* end = nullptr;
+      const double v = std::strtod(val_str.c_str(), &end);
+      if (end != val_str.c_str() + val_str.size()) {
+        return;
+      }
+      sys.set_float_cvar(HashedString{key_sv}, v);
+      break;
+    }
+    case CVarKind::String: {
+      const std::string val_str(value_sv);
+      sys.set_string_cvar(HashedString{key_sv}, val_str.c_str());
+      break;
+    }
+  }
+}
+
+}  // namespace
+
+void CVarSystemImpl::load_from_file(const std::string& path) {
+  std::ifstream file(path);
+  if (!file.is_open()) {
+    return;
+  }
+  std::string line;
+  while (std::getline(file, line)) {
+    std::string_view line_sv = trim_sv(line);
+    if (line_sv.empty() || line_sv.front() == '#') {
+      continue;
+    }
+    const size_t eq = line_sv.find('=');
+    if (eq == std::string_view::npos) {
+      continue;
+    }
+    apply_cvar_line(*this, line_sv.substr(0, eq), line_sv.substr(eq + 1));
+  }
+}
+
+void CVarSystemImpl::save_to_file(const std::string& path) {
+  std::ofstream out(path);
+  if (!out.is_open()) {
+    return;
+  }
+  out << "# teng cvars\n";
+
+  std::vector<CVarParameter*> params;
+  params.reserve(saved_cvars_.size());
+  for (auto& entry : saved_cvars_) {
+    params.push_back(&entry.second);
+  }
+  std::ranges::sort(params, [](CVarParameter* a, CVarParameter* b) { return a->name < b->name; });
+
+  std::ostringstream oss;
+  oss << std::setprecision(std::numeric_limits<double>::max_digits10);
+
+  for (CVarParameter* p : params) {
+    switch (p->type) {
+      case CVarKind::Int:
+        out << p->name << '=' << int_cvars_.get_current(p->array_idx) << '\n';
+        break;
+      case CVarKind::Float:
+        oss.str({});
+        oss.clear();
+        oss << float_cvars_.get_current(p->array_idx);
+        out << p->name << '=' << oss.str() << '\n';
+        break;
+      case CVarKind::String:
+        out << p->name << '=' << string_cvars_.get_current(p->array_idx) << '\n';
+        break;
+    }
+  }
 }
 
 }  // namespace TENG_NAMESPACE

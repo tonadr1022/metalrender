@@ -1,5 +1,6 @@
 #include "App.hpp"
 
+#include <filesystem>
 #include <fstream>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtc/random.hpp>
@@ -9,8 +10,10 @@
 #include "UI.hpp"
 #include "Util.hpp"
 #include "Window.hpp"
+#include "core/CVar.hpp"
 #include "core/Logger.hpp"
 #include "gfx/MemeRenderer123.hpp"
+#include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "glm/ext/matrix_transform.hpp"
@@ -83,12 +86,16 @@ App::App() {
       .vsync = true,
   });
   on_hide_mouse_change();
+
+  // TODO: lol
+  constexpr bool mesh_shaders_capable = true;
+  gfx::apply_renderer_cvar_device_constraints(mesh_shaders_capable);
+
   renderer_ = std::make_unique<gfx::MemeRenderer123>(gfx::MemeRenderer123::CreateInfo{
       .device = device_.get(),
       .swapchain = device_->get_swapchain(swapchain_),
       .window = window_.get(),
       .resource_dir = resource_dir_,
-      .config_file_path = local_resource_dir_ / "renderer_config.txt",
   });
   ResourceManager::init(ResourceManager::CreateInfo{.renderer = renderer_.get()});
   camera_.pos.x = -5;
@@ -230,6 +237,7 @@ void App::on_hide_mouse_change() {
 }
 
 void App::load_config() {
+  CVarSystem::get().load_from_file(local_resource_dir_ / "cvars.txt");
   ZoneScoped;
   std::ifstream f(std::filesystem::exists(config_path_) ? config_path_
                                                         : resource_dir_ / "default_config.txt");
@@ -261,6 +269,9 @@ void App::load_config() {
 }
 
 void App::write_config() {
+  const std::filesystem::path cvar_path = local_resource_dir_ / "cvars.txt";
+  CVarSystem::get().save_to_file(cvar_path);
+
   std::ofstream f(config_path_);
   auto win_dims = window_->get_window_not_framebuffer_size();
   f << "win_dims " << win_dims.x << ' ' << win_dims.y << '\n';

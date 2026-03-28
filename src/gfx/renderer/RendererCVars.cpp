@@ -1,24 +1,19 @@
 #include "gfx/renderer/RendererCVars.hpp"
 
-#include <fstream>
-#include <string>
-
-#include "core/StringUtil.hpp"
-
 namespace TENG_NAMESPACE {
 namespace gfx {
 namespace renderer_cv {
 
-AutoCVarInt pipeline_mesh_shaders{"renderer.pipeline.mesh_shaders",
-                                  "Use mesh-shader path when supported (requires restart if toggled "
-                                  "from a state that skipped pipeline creation).",
-                                  1, CVarFlags::EditCheckbox};
+AutoCVarInt pipeline_mesh_shaders{
+    "renderer.pipeline.mesh_shaders",
+    "Use mesh-shader path when supported (requires restart if toggled).", 1,
+    CVarFlags::EditCheckbox};
 AutoCVarInt culling_paused{"renderer.culling.paused", "Freeze culling updates.", 0,
                            CVarFlags::EditCheckbox};
 AutoCVarInt culling_enabled{"renderer.culling.enabled", "Master switch for culling.", 1,
                             CVarFlags::EditCheckbox};
-AutoCVarInt culling_meshlet_frustum{"renderer.culling.meshlet_frustum",
-                                    "Meshlet frustum culling.", 1, CVarFlags::EditCheckbox};
+AutoCVarInt culling_meshlet_frustum{"renderer.culling.meshlet_frustum", "Meshlet frustum culling.",
+                                    1, CVarFlags::EditCheckbox};
 AutoCVarInt culling_meshlet_cone{"renderer.culling.meshlet_cone", "Meshlet cone culling.", 1,
                                  CVarFlags::EditCheckbox};
 AutoCVarInt culling_meshlet_occlusion{"renderer.culling.meshlet_occlusion",
@@ -41,36 +36,18 @@ AutoCVarInt developer_render_graph_verbose{
     static_cast<CVarFlags>(static_cast<uint16_t>(CVarFlags::EditCheckbox) |
                            static_cast<uint16_t>(CVarFlags::Advanced))};
 AutoCVarInt developer_collect_meshlet_draw_stats{
-    "renderer.developer.collect_meshlet_draw_stats",
-    "Record meshlet draw statistics for readback.", 1,
+    "renderer.developer.collect_meshlet_draw_stats", "Record meshlet draw statistics for readback.",
+    1,
     static_cast<CVarFlags>(static_cast<uint16_t>(CVarFlags::EditCheckbox) |
                            static_cast<uint16_t>(CVarFlags::Advanced))};
 
 }  // namespace renderer_cv
 
-void init_renderer_cvars_from_startup(bool device_mesh_shaders_capable,
-                                      const std::filesystem::path& config_file_path) {
+void apply_renderer_cvar_device_constraints(bool device_mesh_shaders_capable) {
   using util::hash::HashedString;
 
-  int32_t mesh = device_mesh_shaders_capable ? 1 : 0;
-  constexpr const char* key_mesh_shaders_enabled = "mesh_shaders_enabled";
-
-  std::ifstream file(config_file_path);
-  if (file.is_open()) {
-    std::string line;
-    while (std::getline(file, line)) {
-      auto kv = core::split_string_at_first(line, '=');
-      if (kv.first == key_mesh_shaders_enabled) {
-        mesh = kv.second == "1" ? 1 : 0;
-      }
-    }
-  }
-
   if (!device_mesh_shaders_capable) {
-    mesh = 0;
-  }
-  renderer_cv::pipeline_mesh_shaders.set(mesh);
-  if (!device_mesh_shaders_capable) {
+    renderer_cv::pipeline_mesh_shaders.set(0);
     CVarSystem::get().merge_cvar_flags(HashedString{"renderer.pipeline.mesh_shaders"},
                                        CVarFlags::EditReadOnly);
   }

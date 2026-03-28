@@ -1,7 +1,5 @@
 #pragma once
 
-#include <filesystem>
-
 #include "core/CVar.hpp"
 
 namespace TENG_NAMESPACE {
@@ -24,8 +22,7 @@ extern AutoCVarInt developer_collect_meshlet_draw_stats;
 
 }  // namespace renderer_cv
 
-void init_renderer_cvars_from_startup(bool device_mesh_shaders_capable,
-                                      const std::filesystem::path& config_file_path);
+void apply_renderer_cvar_device_constraints(bool device_mesh_shaders_capable);
 
 }  // namespace gfx
 }  // namespace TENG_NAMESPACE

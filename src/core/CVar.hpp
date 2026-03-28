@@ -41,6 +41,7 @@ class CVarSystem {
   virtual void set_string_cvar(util::hash::HashedString hash, const char* value) = 0;
   virtual void draw_imgui_editor() = 0;
   virtual void load_from_file(const std::string& path) = 0;
+  virtual void save_to_file(const std::string& path) = 0;
   virtual void merge_cvar_flags(util::hash::HashedString hash, CVarFlags or_flags) = 0;
 };
 
