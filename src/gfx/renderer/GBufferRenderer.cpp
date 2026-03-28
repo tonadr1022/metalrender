@@ -264,7 +264,11 @@ void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthP
   if (late) {
     p.sample_tex(view.rg_ids.final_depth_pyramid, PipelineStage::TaskShader);
   }
-  view.rg_ids.meshlet_vis = p.rw_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
+  if (late) {
+    view.rg_ids.meshlet_vis = p.rw_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
+  } else {
+    view.rg_ids.meshlet_vis = p.write_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
+  }
 
   if (late) {
     out.depth_id = p.rw_depth_output(out.depth_id);
