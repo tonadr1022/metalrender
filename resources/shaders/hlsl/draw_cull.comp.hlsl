@@ -141,9 +141,11 @@ struct DispatchMeshCmd {
     }
 
     if (should_emit) {
-      RWByteAddressBuffer draw_cmd_count_buf =
-          bindless_rwbuffers[view_setup.draw_cmd_count_buf_idx];
-      draw_cmd_count_buf.InterlockedAdd(sizeof(uint32_t) * 2 * view_setup.pass, 1);
+      if (visible) {
+        RWByteAddressBuffer draw_cmd_count_buf =
+            bindless_rwbuffers[view_setup.draw_cmd_count_buf_idx];
+        draw_cmd_count_buf.InterlockedAdd(sizeof(uint32_t) * view_setup.pass, 1);
+      }
 
       RWByteAddressBuffer task_cmd_cnt_buf = bindless_rwbuffers[view_setup.draw_cnt_buf_idx];
       uint task_group_base_i;

@@ -56,10 +56,11 @@ Texture2D depth_pyramid_tex : register(t3);
       InstanceData instance_data = instance_data_buf[task_cmd.instance_id];
 
       meshlet_vis_i = instance_data.meshlet_vis_base + gtid + task_cmd.group_base;
+      bool instance_visible_last = (task_cmd.late_draw_visibility != 0);
       bool visible_last_frame = true;
       bool meshlet_occlusion_cull_enabled = (flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0;
       if (meshlet_occlusion_cull_enabled) {
-        visible_last_frame = meshlet_vis_buf[meshlet_vis_i] != 0;
+        visible_last_frame = instance_visible_last ? (meshlet_vis_buf[meshlet_vis_i] != 0) : false;
       }
       bool skip_draw = false;
 

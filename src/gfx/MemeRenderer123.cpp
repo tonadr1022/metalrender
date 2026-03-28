@@ -1195,10 +1195,10 @@ void MemeRenderer123::on_imgui() {
     const size_t frames_ago = device_->get_info().frames_in_flight - 1;
     for (size_t v = 0; v < render_views_.size(); v++) {
       if (v >= draw_cmd_counts_readback_.size()) continue;
-      auto* conts = static_cast<uint32_t*>(
+      auto* counts = static_cast<uint32_t*>(
           device_->get_buf(draw_cmd_counts_readback_[v][get_frames_ago_idx(frames_ago)])
               ->contents());
-      ImGui::Text("Draw cull cmd counts (view %zu, early/late): %u %u", v, conts[0], conts[1]);
+      ImGui::Text("Draw cull cmd counts (view %zu, early/late): %u %u", v, counts[0], counts[1]);
     }
   }
 
@@ -1413,6 +1413,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
   config_file_path_ = cinfo.config_file_path;
   swapchain_ = cinfo.swapchain;
   settings_.pipeline.mesh_shaders_enabled = cinfo.mesh_shaders_enabled;
+  settings_.developer.render_graph_verbose = true;
   {
     constexpr const char* key_mesh_shaders_enabled = "mesh_shaders_enabled";
     std::ifstream file(config_file_path_);
