@@ -1247,7 +1247,7 @@ void MemeRenderer123::on_imgui_tab_debug() {
 }
 
 void MemeRenderer123::on_imgui_tab_textures() {
-  model_gpu_resource_pool_.iterate_entries([this](const ModelGPUResources& gpu_resource) {
+  model_gpu_resource_pool_.for_each([this](const ModelGPUResources& gpu_resource) {
     for (const auto& tex : gpu_resource.textures) {
       ImGui::Text("%s", device_->get_tex(tex)->desc().name);
       ImGui::Image((ImTextureRef)tex.handle.to64(), ImVec2{64, 64}, ImVec2{0, 0}, ImVec2{1, 1});
@@ -1569,8 +1569,7 @@ void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
             device_->get_buf(meshlet_draw_stats_readback_[view_id][get_frames_ago_idx(frames_ago)])
                 ->contents());
       }
-      size_t tot_drawn_meshlets =
-          view_stats.meshlets_drawn_early + view_stats.meshlets_drawn_late;
+      size_t tot_drawn_meshlets = view_stats.meshlets_drawn_early + view_stats.meshlets_drawn_late;
       ImGui::Text(
           "(View %zu) Meshlets drawn: %10s of %10s \n"
           "Culled: (%5.2f %%)\n"

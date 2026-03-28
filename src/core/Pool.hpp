@@ -122,7 +122,7 @@ struct BlockPool {
   BlockPool(const BlockPool& other) = delete;
   BlockPool(BlockPool&& other) = delete;
 
-  void iterate_entries(auto&& f) {
+  void for_each(auto&& f) {
     std::unique_lock lock(mtx_);
     for (size_t i = 0; i < num_blocks(); i++) {
       for (const auto& entry : get_block_entries(i)) {
