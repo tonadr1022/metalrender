@@ -26,7 +26,7 @@ std::unique_ptr<Device> create_device(GfxAPI api) {
       std::exit(1);
       return nullptr;
 #else
-      return std::make_unique<mtl::MetalDevice>();
+      return std::make_unique<mtl::Device>();
 #endif
     case rhi::GfxAPI::Vulkan:
 #ifndef VULKAN_BACKEND

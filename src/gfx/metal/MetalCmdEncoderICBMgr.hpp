@@ -19,18 +19,18 @@ namespace TENG_NAMESPACE {
 
 namespace gfx::mtl {
 
-class MetalDevice;
+class Device;
 
-class MetalCmdEncoderICBMgr {
+class CmdEncoderICBMgr {
  public:
-  MetalCmdEncoderICBMgr() = default;
-  MetalCmdEncoderICBMgr(const MetalCmdEncoderICBMgr&) = delete;
-  MetalCmdEncoderICBMgr(MetalCmdEncoderICBMgr&&) = delete;
-  MetalCmdEncoderICBMgr& operator=(const MetalCmdEncoderICBMgr&) = delete;
-  MetalCmdEncoderICBMgr& operator=(MetalCmdEncoderICBMgr&&) = delete;
-  ~MetalCmdEncoderICBMgr();
+  CmdEncoderICBMgr() = default;
+  CmdEncoderICBMgr(const CmdEncoderICBMgr&) = delete;
+  CmdEncoderICBMgr(CmdEncoderICBMgr&&) = delete;
+  CmdEncoderICBMgr& operator=(const CmdEncoderICBMgr&) = delete;
+  CmdEncoderICBMgr& operator=(CmdEncoderICBMgr&&) = delete;
+  ~CmdEncoderICBMgr();
 
-  void init(MetalDevice* device) { device_ = device; }
+  void init(Device* device) { device_ = device; }
   void init_icb_arg_encoder_and_buf_and_set_icb(std::span<MTL::IndirectCommandBuffer*> icbs,
                                                 size_t i);
   MTL::Buffer* get_icb(size_t i);
@@ -38,7 +38,7 @@ class MetalCmdEncoderICBMgr {
  private:
   std::vector<rhi::BufferHandleHolder> main_icb_container_buf_;
   MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
-  MetalDevice* device_{};
+  Device* device_{};
 };
 
 }  // namespace gfx::mtl

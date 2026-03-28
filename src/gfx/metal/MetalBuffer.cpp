@@ -8,16 +8,16 @@ namespace TENG_NAMESPACE {
 
 namespace gfx::mtl {
 
-MetalBuffer::MetalBuffer(const rhi::BufferDesc& desc, MTL::Buffer* buffer,
-                         MTL::ResourceOptions resource_options, uint32_t bindless_idx)
-    : Buffer(desc, bindless_idx), resource_options_(resource_options), buffer_(buffer) {}
+Buffer::Buffer(const rhi::BufferDesc& desc, MTL::Buffer* buffer,
+               MTL::ResourceOptions resource_options, uint32_t bindless_idx)
+    : rhi::Buffer(desc, bindless_idx), resource_options_(resource_options), buffer_(buffer) {}
 
-void* MetalBuffer::contents() {
+void* Buffer::contents() {
   assert(buffer_);
   return buffer_->contents();
 }
 
-const void* MetalBuffer::contents() const {
+const void* Buffer::contents() const {
   assert(buffer_);
   return buffer_->contents();
 }

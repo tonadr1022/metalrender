@@ -41,7 +41,7 @@ namespace TENG_NAMESPACE {
 
 namespace gfx::mtl {
 
-class MetalDevice;
+class Device;
 
 struct MTL3_State {
   MTL::RenderCommandEncoder* render_enc{};
@@ -59,18 +59,18 @@ struct MTL4_State {
 };
 
 template <typename API>
-typename API::RPDesc* create_render_pass(MetalDevice* device,
+typename API::RPDesc* create_render_pass(Device* device,
                                          const std::vector<rhi::RenderAttInfo>& attachments);
 
 template <bool UseMTL4 = true>
-class MetalCmdEncoderBase : public rhi::CmdEncoder {
+class CmdEncoderBase : public rhi::CmdEncoder {
  public:
-  friend class MetalDevice;
-  MetalCmdEncoderBase() = default;
-  MetalCmdEncoderBase(const MetalCmdEncoderBase&) = delete;
-  MetalCmdEncoderBase(MetalCmdEncoderBase&&) = delete;
-  MetalCmdEncoderBase& operator=(const MetalCmdEncoderBase&) = delete;
-  MetalCmdEncoderBase& operator=(MetalCmdEncoderBase&&) = delete;
+  friend class Device;
+  CmdEncoderBase() = default;
+  CmdEncoderBase(const CmdEncoderBase&) = delete;
+  CmdEncoderBase(CmdEncoderBase&&) = delete;
+  CmdEncoderBase& operator=(const CmdEncoderBase&) = delete;
+  CmdEncoderBase& operator=(CmdEncoderBase&&) = delete;
 
   void set_label(const std::string& label) override;
   void set_debug_name(const char* name) override;
@@ -139,14 +139,14 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
 
   MTL3_State m3;
   MTL4_State m4;
-  std::vector<MetalSemaphore> waits_;
-  std::vector<MetalSemaphore> signals_;
+  std::vector<Semaphore> waits_;
+  std::vector<Semaphore> signals_;
   MTL4_State& m4_state() { return m4; }
   MTL3_State& m3_state() { return m3; }
   gch::small_vector<NS::SharedPtr<CA::MetalDrawable>, 8> presents_;
-  MetalDevice* device_{};
+  Device* device_{};
   std::string curr_debug_name_;
-  MetalCmdEncoderICBMgr cmd_icb_mgr_;
+  CmdEncoderICBMgr cmd_icb_mgr_;
 
   RootLayout root_layout_{};
   rhi::DescriptorBindingTable binding_table_{};
@@ -162,7 +162,7 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
  private:
   void pre_dispatch();
   void pre_blit();
-  void reset(MetalDevice* device);
+  void reset(Device* device);
   void flush_barriers();
   void start_blit_encoder();
   void start_compute_encoder();
@@ -174,8 +174,8 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   void set_buffer(uint32_t bind_point, MTL::Buffer* buffer, size_t offset, uint32_t stages);
 };
 
-using Metal3CmdEncoder = MetalCmdEncoderBase<false>;
-using Metal4CmdEncoder = MetalCmdEncoderBase<true>;
+using Metal3CmdEncoder = CmdEncoderBase<false>;
+using Metal4CmdEncoder = CmdEncoderBase<true>;
 
 }  // namespace gfx::mtl
 

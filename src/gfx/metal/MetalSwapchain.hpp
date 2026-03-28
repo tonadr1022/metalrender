@@ -15,7 +15,7 @@ namespace TENG_NAMESPACE {
 
 namespace gfx::mtl {
 
-class MetalSwapchain : public rhi::Swapchain {
+class Swapchain : public rhi::Swapchain {
  public:
   using SwapchainTextures = std::array<rhi::TextureHandleHolder, k_max_frames_in_flight>;
 

@@ -13,10 +13,10 @@ class CounterHeap;
 namespace TENG_NAMESPACE {
 namespace gfx::mtl {
 
-class MetalQueryPool : public rhi::QueryPool {
+class QueryPool : public rhi::QueryPool {
  public:
-  explicit MetalQueryPool(NS::SharedPtr<MTL4::CounterHeap> heap) : heap_(std::move(heap)) {}
-  MetalQueryPool() = default;
+  explicit QueryPool(NS::SharedPtr<MTL4::CounterHeap> heap) : heap_(std::move(heap)) {}
+  QueryPool() = default;
 
   NS::SharedPtr<MTL4::CounterHeap> heap_;
 };

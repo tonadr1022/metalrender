@@ -13,13 +13,12 @@ class Buffer;
 namespace TENG_NAMESPACE {
 
 namespace gfx::mtl {
-class MetalBuffer final : public rhi::Buffer {
+class Buffer final : public rhi::Buffer {
  public:
-  MetalBuffer(const rhi::BufferDesc& desc, MTL::Buffer* buffer,
-              MTL::ResourceOptions resource_options,
-              uint32_t bindless_idx = rhi::k_invalid_bindless_idx);
-  MetalBuffer() = default;
-  ~MetalBuffer() = default;
+  Buffer(const rhi::BufferDesc& desc, MTL::Buffer* buffer, MTL::ResourceOptions resource_options,
+         uint32_t bindless_idx = rhi::k_invalid_bindless_idx);
+  Buffer() = default;
+  ~Buffer() = default;
   void* contents() override;
   [[nodiscard]] const void* contents() const override;
   [[nodiscard]] MTL::Buffer* buffer() { return buffer_; }

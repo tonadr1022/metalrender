@@ -42,8 +42,8 @@ enum EncoderSetBufferStage : uint32_t {
 }  // namespace
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::set_buffer(uint32_t bind_point, MTL::Buffer* buffer,
-                                              size_t offset, uint32_t stages) {
+void CmdEncoderBase<UseMTL4>::set_buffer(uint32_t bind_point, MTL::Buffer* buffer, size_t offset,
+                                         uint32_t stages) {
   if constexpr (UseMTL4) {
     m4_state().arg_table->setAddress(buffer->gpuAddress() + offset, bind_point);
   } else {
@@ -70,7 +70,7 @@ void MetalCmdEncoderBase<UseMTL4>::set_buffer(uint32_t bind_point, MTL::Buffer* 
   }
 }
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
+void CmdEncoderBase<UseMTL4>::begin_rendering(
     std::initializer_list<rhi::RenderAttInfo> attachments) {
   // TODO: consolidate
   NS::SharedPtr<MTL4::RenderPassDescriptor> m4_desc;
@@ -83,7 +83,7 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
     for (const auto& att : attachments) {
       if (att.type == rhi::RenderAttInfo::Type::DepthStencil) {
         depth_desc = NS::TransferPtr(MTL::RenderPassDepthAttachmentDescriptor::alloc()->init());
-        auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
+        auto* tex = reinterpret_cast<Texture*>(device_->get_tex(att.image));
         curr_render_target_info_.depth_format = tex->desc().format;
         depth_desc->setTexture(tex->texture());
         depth_desc->setLoadAction(mtl::util::convert(att.load_op));
@@ -92,7 +92,7 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
         m4_desc->setDepthAttachment(depth_desc.get());
       } else {
         auto* color_desc = m4_desc->colorAttachments()->object(color_att_i);
-        auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
+        auto* tex = reinterpret_cast<Texture*>(device_->get_tex(att.image));
         curr_render_target_info_.color_formats.push_back(tex->desc().format);
         color_desc->setTexture(tex->texture());
         color_desc->setLoadAction(mtl::util::convert(att.load_op));
@@ -110,7 +110,7 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
     for (const auto& att : attachments) {
       if (att.type == rhi::RenderAttInfo::Type::DepthStencil) {
         depth_desc = NS::TransferPtr(MTL::RenderPassDepthAttachmentDescriptor::alloc()->init());
-        auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
+        auto* tex = reinterpret_cast<Texture*>(device_->get_tex(att.image));
         curr_render_target_info_.depth_format = tex->desc().format;
         depth_desc->setTexture(tex->texture());
         depth_desc->setLoadAction(mtl::util::convert(att.load_op));
@@ -120,7 +120,7 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
       } else {
         auto color_desc =
             NS::TransferPtr(MTL::RenderPassColorAttachmentDescriptor::alloc()->init());
-        auto* tex = reinterpret_cast<MetalTexture*>(device_->get_tex(att.image));
+        auto* tex = reinterpret_cast<Texture*>(device_->get_tex(att.image));
         curr_render_target_info_.color_formats.push_back(tex->desc().format);
         color_desc->setTexture(tex->texture());
         color_desc->setLoadAction(mtl::util::convert(att.load_op));
@@ -163,7 +163,7 @@ void MetalCmdEncoderBase<UseMTL4>::begin_rendering(
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::reset(MetalDevice* device) {
+void CmdEncoderBase<UseMTL4>::reset(Device* device) {
   device_ = device;
   // TODO: refactor
   cmd_icb_mgr_.init(device_);
@@ -194,7 +194,7 @@ void MetalCmdEncoderBase<UseMTL4>::reset(MetalDevice* device) {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::flush_barriers() {
+void CmdEncoderBase<UseMTL4>::flush_barriers() {
   if constexpr (UseMTL4) {
     if (m4_state().compute_enc && device_->compute_enc_flush_stages_) {
       constexpr MTL4::VisibilityOptions visibility_options = MTL4::VisibilityOptionNone;
@@ -238,7 +238,7 @@ void MetalCmdEncoderBase<UseMTL4>::flush_barriers() {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::end_encoding() {
+void CmdEncoderBase<UseMTL4>::end_encoding() {
   flush_barriers();
   end_render_encoder();
   end_compute_encoder();
@@ -252,7 +252,7 @@ void MetalCmdEncoderBase<UseMTL4>::end_encoding() {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::pre_dispatch() {
+void CmdEncoderBase<UseMTL4>::pre_dispatch() {
   flush_barriers();
   ASSERT(m4_state().compute_enc);
   if constexpr (!UseMTL4) {
@@ -263,7 +263,7 @@ void MetalCmdEncoderBase<UseMTL4>::pre_dispatch() {
   }
 }
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::pre_blit() {
+void CmdEncoderBase<UseMTL4>::pre_blit() {
   flush_barriers();
   if constexpr (UseMTL4) {
     pre_dispatch();
@@ -275,8 +275,8 @@ void MetalCmdEncoderBase<UseMTL4>::pre_blit() {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
-  auto* pipeline = reinterpret_cast<MetalPipeline*>(device_->get_pipeline(handle));
+void CmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
+  auto* pipeline = reinterpret_cast<Pipeline*>(device_->get_pipeline(handle));
   ASSERT(pipeline);
   ASSERT(pipeline->render_pso || pipeline->compute_pso);
 
@@ -297,9 +297,9 @@ void MetalCmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
       if (it == device_->all_pipelines.end()) {
         auto new_pipeline = device_->create_graphics_pipeline(new_desc);
         device_->all_pipelines[hash] = new_pipeline;
-        pipeline = reinterpret_cast<MetalPipeline*>(device_->get_pipeline(new_pipeline));
+        pipeline = reinterpret_cast<Pipeline*>(device_->get_pipeline(new_pipeline));
       } else {
-        pipeline = reinterpret_cast<MetalPipeline*>(device_->get_pipeline(it->second));
+        pipeline = reinterpret_cast<Pipeline*>(device_->get_pipeline(it->second));
       }
     }
     if constexpr (UseMTL4) {
@@ -341,7 +341,7 @@ void MetalCmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::set_viewport(glm::uvec2 min, glm::uvec2 extent) {
+void CmdEncoderBase<UseMTL4>::set_viewport(glm::uvec2 min, glm::uvec2 extent) {
   MTL::Viewport vp;
   vp.originX = min.x;
   vp.originY = min.y;
@@ -356,7 +356,7 @@ void MetalCmdEncoderBase<UseMTL4>::set_viewport(glm::uvec2 min, glm::uvec2 exten
   }
 }
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::set_scissor(glm::uvec2 min, glm::uvec2 extent) {
+void CmdEncoderBase<UseMTL4>::set_scissor(glm::uvec2 min, glm::uvec2 extent) {
   MTL::ScissorRect r{.x = min.x, .y = min.y, .width = extent.x, .height = extent.y};
   if constexpr (UseMTL4) {
     m4_state().render_enc->setScissorRect(r);
@@ -366,9 +366,8 @@ void MetalCmdEncoderBase<UseMTL4>::set_scissor(glm::uvec2 min, glm::uvec2 extent
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::draw_primitives(rhi::PrimitiveTopology topology,
-                                                   size_t vertex_start, size_t count,
-                                                   size_t instance_count) {
+void CmdEncoderBase<UseMTL4>::draw_primitives(rhi::PrimitiveTopology topology, size_t vertex_start,
+                                              size_t count, size_t instance_count) {
   flush_binds();
   if constexpr (UseMTL4) {
     m4_state().render_enc->drawPrimitives(mtl::util::convert(topology), vertex_start, count,
@@ -380,7 +379,7 @@ void MetalCmdEncoderBase<UseMTL4>::draw_primitives(rhi::PrimitiveTopology topolo
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::push_constants(void* data, size_t size) {
+void CmdEncoderBase<UseMTL4>::push_constants(void* data, size_t size) {
   if constexpr (UseMTL4) {
     // TODO: address potential misbindings as a result of ICB management
   }
@@ -390,10 +389,12 @@ void MetalCmdEncoderBase<UseMTL4>::push_constants(void* data, size_t size) {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::draw_indexed_primitives(
-    rhi::PrimitiveTopology topology, rhi::BufferHandle index_buf, size_t index_start, size_t count,
-    size_t instance_count, size_t base_vertex_idx, size_t base_instance,
-    rhi::IndexType index_type) {
+void CmdEncoderBase<UseMTL4>::draw_indexed_primitives(rhi::PrimitiveTopology topology,
+                                                      rhi::BufferHandle index_buf,
+                                                      size_t index_start, size_t count,
+                                                      size_t instance_count, size_t base_vertex_idx,
+                                                      size_t base_instance,
+                                                      rhi::IndexType index_type) {
   ZoneScoped;
   root_layout_.first_instance = base_instance;
   root_layout_.vertex_offset = base_vertex_idx;
@@ -414,8 +415,8 @@ void MetalCmdEncoderBase<UseMTL4>::draw_indexed_primitives(
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::set_depth_stencil_state(rhi::CompareOp depth_compare_op,
-                                                           bool depth_write_enabled) {
+void CmdEncoderBase<UseMTL4>::set_depth_stencil_state(rhi::CompareOp depth_compare_op,
+                                                      bool depth_write_enabled) {
   // TODO: cache this pls
   auto depth_stencil_desc = NS::TransferPtr(MTL::DepthStencilDescriptor::alloc()->init());
   depth_stencil_desc->setDepthCompareFunction(mtl::util::convert(depth_compare_op));
@@ -430,7 +431,7 @@ void MetalCmdEncoderBase<UseMTL4>::set_depth_stencil_state(rhi::CompareOp depth_
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::set_wind_order(rhi::WindOrder wind_order) {
+void CmdEncoderBase<UseMTL4>::set_wind_order(rhi::WindOrder wind_order) {
   if constexpr (UseMTL4) {
     m4_state().render_enc->setFrontFacingWinding(mtl::util::convert(wind_order));
   } else {
@@ -439,7 +440,7 @@ void MetalCmdEncoderBase<UseMTL4>::set_wind_order(rhi::WindOrder wind_order) {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::set_cull_mode(rhi::CullMode cull_mode) {
+void CmdEncoderBase<UseMTL4>::set_cull_mode(rhi::CullMode cull_mode) {
   if constexpr (UseMTL4) {
     m4_state().render_enc->setCullMode(mtl::util::convert(cull_mode));
   } else {
@@ -448,19 +449,18 @@ void MetalCmdEncoderBase<UseMTL4>::set_cull_mode(rhi::CullMode cull_mode) {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
-                                                       size_t src_bytes_per_row,
-                                                       rhi::TextureHandle dst_tex) {
+void CmdEncoderBase<UseMTL4>::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
+                                                  size_t src_bytes_per_row,
+                                                  rhi::TextureHandle dst_tex) {
   upload_texture_data(src_buf, src_offset, src_bytes_per_row, dst_tex,
                       device_->get_tex(dst_tex)->desc().dims, glm::uvec3{0, 0, 0}, -1);
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
-                                                       size_t src_bytes_per_row,
-                                                       rhi::TextureHandle dst_tex,
-                                                       glm::uvec3 src_size, glm::uvec3 dst_origin,
-                                                       int mip_level) {
+void CmdEncoderBase<UseMTL4>::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
+                                                  size_t src_bytes_per_row,
+                                                  rhi::TextureHandle dst_tex, glm::uvec3 src_size,
+                                                  glm::uvec3 dst_origin, int mip_level) {
   start_blit_equivalent_encoder();
   auto* buf = device_->get_mtl_buf(src_buf);
   auto* tex = device_->get_mtl_tex(dst_tex);
@@ -494,7 +494,7 @@ void MetalCmdEncoderBase<UseMTL4>::upload_texture_data(rhi::BufferHandle src_buf
 }
 
 template <bool UseMTL4>
-uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
+uint32_t CmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
     rhi::BufferHandle indirect_buf, size_t offset, size_t tot_draw_cnt, rhi::BufferHandle index_buf,
     size_t index_buf_offset, void* push_constant_data, size_t push_constant_size,
     size_t vertex_stride) {
@@ -584,8 +584,8 @@ uint32_t MetalCmdEncoderBase<UseMTL4>::prepare_indexed_indirect_draws(
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
-                                           rhi::PipelineStage dst_stage, rhi::AccessFlags) {
+void CmdEncoderBase<UseMTL4>::barrier(rhi::PipelineStage src_stage, rhi::AccessFlags,
+                                      rhi::PipelineStage dst_stage, rhi::AccessFlags) {
   auto src_mtl_stage = mtl::util::convert_stage(src_stage);
   auto dst_mtl_stage = mtl::util::convert_stage(dst_stage);
   if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
@@ -605,7 +605,7 @@ void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::PipelineStage src_stage, rhi::Ac
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::GPUBarrier* gpu_barriers, size_t barrier_count) {
+void CmdEncoderBase<UseMTL4>::barrier(rhi::GPUBarrier* gpu_barriers, size_t barrier_count) {
   for (size_t i = 0; i < barrier_count; i++) {
     auto& gpu_barrier = gpu_barriers[i];
     auto src_mtl_stage = mtl::util::convert_stages(gpu_barrier.type == rhi::GPUBarrier::Type::Buffer
@@ -633,9 +633,9 @@ void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::GPUBarrier* gpu_barriers, size_t
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::BufferHandle, rhi::PipelineStage src_stage,
-                                           rhi::AccessFlags, rhi::PipelineStage dst_stage,
-                                           rhi::AccessFlags) {
+void CmdEncoderBase<UseMTL4>::barrier(rhi::BufferHandle, rhi::PipelineStage src_stage,
+                                      rhi::AccessFlags, rhi::PipelineStage dst_stage,
+                                      rhi::AccessFlags) {
   auto src_mtl_stage = mtl::util::convert_stage(src_stage);
   auto dst_mtl_stage = mtl::util::convert_stage(dst_stage);
   if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
@@ -655,9 +655,9 @@ void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::BufferHandle, rhi::PipelineStage
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::TextureHandle, rhi::PipelineStage src_stage,
-                                           rhi::AccessFlags, rhi::PipelineStage dst_stage,
-                                           rhi::AccessFlags) {
+void CmdEncoderBase<UseMTL4>::barrier(rhi::TextureHandle, rhi::PipelineStage src_stage,
+                                      rhi::AccessFlags, rhi::PipelineStage dst_stage,
+                                      rhi::AccessFlags) {
   auto src_mtl_stage = mtl::util::convert_stage(src_stage);
   auto dst_mtl_stage = mtl::util::convert_stage(dst_stage);
   if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {
@@ -677,9 +677,9 @@ void MetalCmdEncoderBase<UseMTL4>::barrier(rhi::TextureHandle, rhi::PipelineStag
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
-                                                         uint32_t indirect_buf_id, size_t draw_cnt,
-                                                         size_t offset_i) {
+void CmdEncoderBase<UseMTL4>::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
+                                                    uint32_t indirect_buf_id, size_t draw_cnt,
+                                                    size_t offset_i) {
   flush_binds();
   ASSERT(indirect_buf.is_valid());
   const auto& icbs = device_->icb_mgr_draw_indexed_.get(indirect_buf, indirect_buf_id);
@@ -694,9 +694,9 @@ void MetalCmdEncoderBase<UseMTL4>::draw_indexed_indirect(rhi::BufferHandle indir
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice,
-                                                   size_t src_level, rhi::BufferHandle dst_buf,
-                                                   size_t dst_offset) {
+void CmdEncoderBase<UseMTL4>::copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice,
+                                              size_t src_level, rhi::BufferHandle dst_buf,
+                                              size_t dst_offset) {
   start_blit_equivalent_encoder();
   auto* tex = device_->get_mtl_tex(src_tex);
   auto* buf = device_->get_mtl_buf(dst_buf);
@@ -714,9 +714,9 @@ void MetalCmdEncoderBase<UseMTL4>::copy_tex_to_buf(rhi::TextureHandle src_tex, s
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::draw_mesh_threadgroups(
-    glm::uvec3 thread_groups, glm::uvec3 threads_per_task_thread_group,
-    glm::uvec3 threads_per_mesh_thread_group) {
+void CmdEncoderBase<UseMTL4>::draw_mesh_threadgroups(glm::uvec3 thread_groups,
+                                                     glm::uvec3 threads_per_task_thread_group,
+                                                     glm::uvec3 threads_per_mesh_thread_group) {
   flush_binds();
   if constexpr (UseMTL4) {
     m4_state().render_enc->drawMeshThreadgroups(
@@ -736,7 +736,7 @@ void MetalCmdEncoderBase<UseMTL4>::draw_mesh_threadgroups(
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::pop_debug_group() {
+void CmdEncoderBase<UseMTL4>::pop_debug_group() {
   ALWAYS_ASSERT(push_debug_group_stack_size_ > 0);
   push_debug_group_stack_size_--;
   if constexpr (UseMTL4) {
@@ -747,7 +747,7 @@ void MetalCmdEncoderBase<UseMTL4>::pop_debug_group() {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::push_debug_group(const char* name) {
+void CmdEncoderBase<UseMTL4>::push_debug_group(const char* name) {
   if constexpr (UseMTL4) {
     m4_state().cmd_buf->pushDebugGroup(mtl::util::string(name));
   } else {
@@ -757,8 +757,8 @@ void MetalCmdEncoderBase<UseMTL4>::push_debug_group(const char* name) {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::dispatch_compute(glm::uvec3 thread_groups,
-                                                    glm::uvec3 threads_per_threadgroup) {
+void CmdEncoderBase<UseMTL4>::dispatch_compute(glm::uvec3 thread_groups,
+                                               glm::uvec3 threads_per_threadgroup) {
   flush_binds();
   pre_dispatch();
   // TODO: address misbindings of descriptor/sampler heap
@@ -777,8 +777,8 @@ void MetalCmdEncoderBase<UseMTL4>::dispatch_compute(glm::uvec3 thread_groups,
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes,
-                                               uint32_t size, uint32_t value) {
+void CmdEncoderBase<UseMTL4>::fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes,
+                                          uint32_t size, uint32_t value) {
   auto* buf = device_->get_mtl_buf(handle);
   ASSERT(buf);
   start_blit_equivalent_encoder();
@@ -790,7 +790,7 @@ void MetalCmdEncoderBase<UseMTL4>::fill_buffer(rhi::BufferHandle handle, uint32_
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::draw_mesh_threadgroups_indirect(
+void CmdEncoderBase<UseMTL4>::draw_mesh_threadgroups_indirect(
     rhi::BufferHandle indirect_buf, size_t indirect_buf_offset,
     glm::uvec3 threads_per_task_thread_group, glm::uvec3 threads_per_mesh_thread_group) {
   flush_binds();
@@ -814,13 +814,12 @@ void MetalCmdEncoderBase<UseMTL4>::draw_mesh_threadgroups_indirect(
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::copy_buffer_to_buffer(rhi::BufferHandle src_buf,
-                                                         size_t src_offset,
-                                                         rhi::BufferHandle dst_buf,
-                                                         size_t dst_offset, size_t size) {
+void CmdEncoderBase<UseMTL4>::copy_buffer_to_buffer(rhi::BufferHandle src_buf, size_t src_offset,
+                                                    rhi::BufferHandle dst_buf, size_t dst_offset,
+                                                    size_t size) {
   start_blit_equivalent_encoder();
-  auto* src_b = (MetalBuffer*)device_->get_buf(src_buf);
-  auto* dst_b = (MetalBuffer*)device_->get_buf(dst_buf);
+  auto* src_b = (Buffer*)device_->get_buf(src_buf);
+  auto* dst_b = (Buffer*)device_->get_buf(dst_buf);
   if (src_b->is_cpu_visible() && dst_b->is_cpu_visible()) {
     // both buffers are CPU accessible, do a memcpy
     memcpy((uint8_t*)dst_b->buffer()->contents() + dst_offset,
@@ -837,7 +836,7 @@ void MetalCmdEncoderBase<UseMTL4>::copy_buffer_to_buffer(rhi::BufferHandle src_b
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::start_blit_equivalent_encoder() {
+void CmdEncoderBase<UseMTL4>::start_blit_equivalent_encoder() {
   flush_barriers();
   if constexpr (UseMTL4) {
     start_compute_encoder();
@@ -847,17 +846,17 @@ void MetalCmdEncoderBase<UseMTL4>::start_blit_equivalent_encoder() {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::set_debug_name(const char* name) {
+void CmdEncoderBase<UseMTL4>::set_debug_name(const char* name) {
   curr_debug_name_ = name;
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::end_rendering() {
+void CmdEncoderBase<UseMTL4>::end_rendering() {
   end_render_encoder();
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
+void CmdEncoderBase<UseMTL4>::flush_binds() {
   if (binding_table_dirty_ || push_constant_dirty_) {
     if (binding_table_dirty_) {
       ResourceTable table = {};
@@ -975,8 +974,8 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::bind_srv(rhi::TextureHandle texture, uint32_t slot,
-                                            int subresource_id) {
+void CmdEncoderBase<UseMTL4>::bind_srv(rhi::TextureHandle texture, uint32_t slot,
+                                       int subresource_id) {
   ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
   binding_table_.SRV[slot] = texture.to64();
   binding_table_.SRV_subresources[slot] = subresource_id;
@@ -984,8 +983,8 @@ void MetalCmdEncoderBase<UseMTL4>::bind_srv(rhi::TextureHandle texture, uint32_t
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::bind_uav(rhi::TextureHandle texture, uint32_t slot,
-                                            int subresource_id) {
+void CmdEncoderBase<UseMTL4>::bind_uav(rhi::TextureHandle texture, uint32_t slot,
+                                       int subresource_id) {
   ASSERT(slot < ARRAY_SIZE(binding_table_.UAV));
   binding_table_.UAV[slot] = texture.to64();
   binding_table_.UAV_subresources[slot] = subresource_id;
@@ -993,8 +992,8 @@ void MetalCmdEncoderBase<UseMTL4>::bind_uav(rhi::TextureHandle texture, uint32_t
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::bind_cbv(rhi::BufferHandle buffer, uint32_t slot,
-                                            size_t offset_bytes) {
+void CmdEncoderBase<UseMTL4>::bind_cbv(rhi::BufferHandle buffer, uint32_t slot,
+                                       size_t offset_bytes) {
   ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
   binding_table_.CBV[slot] = buffer;
   binding_table_.CBV_offsets[slot] = offset_bytes;
@@ -1002,8 +1001,8 @@ void MetalCmdEncoderBase<UseMTL4>::bind_cbv(rhi::BufferHandle buffer, uint32_t s
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::bind_uav(rhi::BufferHandle buffer, uint32_t slot,
-                                            size_t offset_bytes) {
+void CmdEncoderBase<UseMTL4>::bind_uav(rhi::BufferHandle buffer, uint32_t slot,
+                                       size_t offset_bytes) {
   ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
   binding_table_.UAV[slot] = buffer.to64();
   binding_table_.UAV_subresources[slot] = rhi::DescriptorBindingTable::k_buffer_resource;
@@ -1012,8 +1011,8 @@ void MetalCmdEncoderBase<UseMTL4>::bind_uav(rhi::BufferHandle buffer, uint32_t s
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::bind_srv(rhi::BufferHandle buffer, uint32_t slot,
-                                            size_t offset_bytes) {
+void CmdEncoderBase<UseMTL4>::bind_srv(rhi::BufferHandle buffer, uint32_t slot,
+                                       size_t offset_bytes) {
   ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
   binding_table_.SRV[slot] = buffer.to64();
   binding_table_.SRV_subresources[slot] = rhi::DescriptorBindingTable::k_buffer_resource;
@@ -1022,10 +1021,10 @@ void MetalCmdEncoderBase<UseMTL4>::bind_srv(rhi::BufferHandle buffer, uint32_t s
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::write_timestamp(rhi::QueryPoolHandle query_pool,
-                                                   uint32_t query_index) {
+void CmdEncoderBase<UseMTL4>::write_timestamp(rhi::QueryPoolHandle query_pool,
+                                              uint32_t query_index) {
   if constexpr (UseMTL4) {
-    auto* pool = (MetalQueryPool*)device_->get_query_pool(query_pool);
+    auto* pool = (QueryPool*)device_->get_query_pool(query_pool);
     if (m4_state().compute_enc) {
       m4_state().compute_enc->writeTimestamp(MTL4::TimestampGranularityPrecise, pool->heap_.get(),
                                              query_index);
@@ -1039,18 +1038,18 @@ void MetalCmdEncoderBase<UseMTL4>::write_timestamp(rhi::QueryPoolHandle query_po
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::set_label(const std::string& label) {
+void CmdEncoderBase<UseMTL4>::set_label(const std::string& label) {
   if constexpr (UseMTL4) {
     m4_state().cmd_buf->setLabel(mtl::util::string(label.c_str()));
   }
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::query_resolve(rhi::QueryPoolHandle query_pool,
-                                                 uint32_t start_query, uint32_t query_count,
-                                                 rhi::BufferHandle dst_buffer, size_t dst_offset) {
+void CmdEncoderBase<UseMTL4>::query_resolve(rhi::QueryPoolHandle query_pool, uint32_t start_query,
+                                            uint32_t query_count, rhi::BufferHandle dst_buffer,
+                                            size_t dst_offset) {
   if constexpr (UseMTL4) {
-    auto* pool = (MetalQueryPool*)device_->get_query_pool(query_pool);
+    auto* pool = (QueryPool*)device_->get_query_pool(query_pool);
     auto* buf = device_->get_mtl_buf(dst_buffer);
     auto range =
         MTL4::BufferRange::Make(buf->gpuAddress() + dst_offset, query_count * sizeof(uint64_t));
@@ -1063,7 +1062,7 @@ void MetalCmdEncoderBase<UseMTL4>::query_resolve(rhi::QueryPoolHandle query_pool
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::end_compute_encoder() {
+void CmdEncoderBase<UseMTL4>::end_compute_encoder() {
   if constexpr (UseMTL4) {
     if (m4_state().compute_enc) {
       m4_state().compute_enc->endEncoding();
@@ -1078,7 +1077,7 @@ void MetalCmdEncoderBase<UseMTL4>::end_compute_encoder() {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::end_blit_encoder() {
+void CmdEncoderBase<UseMTL4>::end_blit_encoder() {
   if constexpr (!UseMTL4) {
     if (m3_state().blit_enc) {
       m3_state().blit_enc->endEncoding();
@@ -1088,7 +1087,7 @@ void MetalCmdEncoderBase<UseMTL4>::end_blit_encoder() {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::end_render_encoder() {
+void CmdEncoderBase<UseMTL4>::end_render_encoder() {
   if constexpr (UseMTL4) {
     if (m4_state().render_enc) {
       m4_state().render_enc->endEncoding();
@@ -1103,7 +1102,7 @@ void MetalCmdEncoderBase<UseMTL4>::end_render_encoder() {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::start_blit_encoder() {
+void CmdEncoderBase<UseMTL4>::start_blit_encoder() {
   if constexpr (!UseMTL4) {
     if (!m3_state().blit_enc) {
       end_compute_encoder();
@@ -1114,7 +1113,7 @@ void MetalCmdEncoderBase<UseMTL4>::start_blit_encoder() {
 }
 
 template <bool UseMTL4>
-void MetalCmdEncoderBase<UseMTL4>::start_compute_encoder() {
+void CmdEncoderBase<UseMTL4>::start_compute_encoder() {
   if constexpr (UseMTL4) {
     if (!m4_state().compute_enc) {
       end_render_encoder();
@@ -1130,8 +1129,8 @@ void MetalCmdEncoderBase<UseMTL4>::start_compute_encoder() {
   }
 }
 
-template class MetalCmdEncoderBase<true>;
-template class MetalCmdEncoderBase<false>;
+template class CmdEncoderBase<true>;
+template class CmdEncoderBase<false>;
 
 }  // namespace gfx::mtl
 

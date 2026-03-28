@@ -45,19 +45,19 @@ namespace gfx::mtl {
 
 struct TextureDesc;
 
-struct MetalDeviceInitInfo {
+struct DeviceInitInfo {
   bool prefer_mtl4{};
 };
 
 using ICBs = std::array<MTL::IndirectCommandBuffer*, k_max_frames_in_flight>;
 
-class MetalDevice : public rhi::Device {
+class Device : public rhi::Device {
  public:
   using rhi::Device::get_buf;
   using rhi::Device::get_pipeline;
   using rhi::Device::get_tex;
   void shutdown() override;
-  bool init(const InitInfo& init_info, const MetalDeviceInitInfo& metal_init_info);
+  bool init(const InitInfo& init_info, const DeviceInitInfo& metal_init_info);
   void init(const InitInfo& init_info) override;
   void on_imgui() override;
   rhi::ShaderTarget get_supported_shader_targets() override { return rhi::ShaderTarget::MSL; }
@@ -76,7 +76,7 @@ class MetalDevice : public rhi::Device {
                                          uint32_t layer_count) override;
   void destroy(rhi::TextureHandle handle, int subresource_id) override;
   uint32_t get_tex_view_bindless_idx(rhi::TextureHandle handle, int subresource_id) override;
-  MetalTexture::TexView* get_tex_view(rhi::TextureHandle handle, int subresource_id);
+  Texture::TexView* get_tex_view(rhi::TextureHandle handle, int subresource_id);
   rhi::Texture* get_tex(rhi::TextureHandle handle) override { return texture_pool_.get(handle); }
   rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) override;
 
@@ -150,12 +150,12 @@ class MetalDevice : public rhi::Device {
       const rhi::ShaderCreateInfo& shader_info);
 
   size_t curr_cmd_list_idx_{};
-  BlockPool<rhi::BufferHandle, MetalBuffer> buffer_pool_{128, 1, true};
-  BlockPool<rhi::TextureHandle, MetalTexture> texture_pool_{128, 1, true};
-  BlockPool<rhi::PipelineHandle, MetalPipeline> pipeline_pool_{20, 1, true};
-  BlockPool<rhi::SamplerHandle, MetalSampler> sampler_pool_{16, 1, true};
-  BlockPool<rhi::QueryPoolHandle, MetalQueryPool> querypool_pool_{16, 1, true};
-  BlockPool<rhi::SwapchainHandle, MetalSwapchain> swapchain_pool_{16, 1, true};
+  BlockPool<rhi::BufferHandle, Buffer> buffer_pool_{128, 1, true};
+  BlockPool<rhi::TextureHandle, Texture> texture_pool_{128, 1, true};
+  BlockPool<rhi::PipelineHandle, Pipeline> pipeline_pool_{20, 1, true};
+  BlockPool<rhi::SamplerHandle, Sampler> sampler_pool_{16, 1, true};
+  BlockPool<rhi::QueryPoolHandle, QueryPool> querypool_pool_{16, 1, true};
+  BlockPool<rhi::SwapchainHandle, Swapchain> swapchain_pool_{16, 1, true};
 
   Info info_{};
   std::filesystem::path metal_shader_dir_;
@@ -166,13 +166,13 @@ class MetalDevice : public rhi::Device {
     NS::SharedPtr<MTL::CommandQueue> mtl3_queue;
     std::vector<MTL::CommandBuffer*> mtl3_submit_cmd_bufs;
 
-    void signal(const MetalSemaphore& sem) const {
+    void signal(const Semaphore& sem) const {
       if (is_valid()) {
         queue->signalEvent(sem.event.get(), sem.value);
       }
     }
 
-    void wait(const MetalSemaphore& sem) const {
+    void wait(const Semaphore& sem) const {
       if (is_valid()) {
         queue->wait(sem.event.get(), sem.value);
       }
@@ -272,14 +272,14 @@ class MetalDevice : public rhi::Device {
   void write_bindless_resource_descriptor(uint32_t bindless_idx, MTL::Texture* tex);
 
   MTL::Buffer* get_mtl_buf(const rhi::BufferHandleHolder& handle) {
-    return reinterpret_cast<MetalBuffer*>(get_buf(handle.handle))->buffer();
+    return reinterpret_cast<Buffer*>(get_buf(handle.handle))->buffer();
   }
   MTL::Buffer* get_mtl_buf(rhi::BufferHandle handle) {
-    return reinterpret_cast<MetalBuffer*>(get_buf(handle))->buffer();
+    return reinterpret_cast<Buffer*>(get_buf(handle))->buffer();
   }
 
   MTL::Texture* get_mtl_tex(rhi::TextureHandle handle) {
-    return reinterpret_cast<MetalTexture*>(get_tex(handle))->texture();
+    return reinterpret_cast<Texture*>(get_tex(handle))->texture();
   }
 
   MTL::Library* create_or_get_lib(const std::filesystem::path& path, bool replace = false);
@@ -287,7 +287,7 @@ class MetalDevice : public rhi::Device {
 
   class ICB_Mgr {
    public:
-    ICB_Mgr(MetalDevice* device, MTL::IndirectCommandType cmd_types)
+    ICB_Mgr(Device* device, MTL::IndirectCommandType cmd_types)
         : device_(device), cmd_types_(cmd_types) {}
 
     struct ICB_Data {
@@ -306,7 +306,7 @@ class MetalDevice : public rhi::Device {
     void remove(rhi::BufferHandle indirect_buf);
 
     std::unordered_map<uint64_t, ICB_Data> indirect_buffer_handle_to_icb_;
-    MetalDevice* device_{};
+    Device* device_{};
     MTL::IndirectCommandType cmd_types_{};
   };
 
@@ -333,10 +333,10 @@ class MetalDevice : public rhi::Device {
 
   void destroy_actual(rhi::BufferHandle handle);
 
-  MetalSemaphore get_semaphore() {
-    MetalSemaphore sem;
+  Semaphore get_semaphore() {
+    Semaphore sem;
     if (free_semaphores_.empty()) {
-      sem = MetalSemaphore{NS::TransferPtr(device_->newEvent()->retain()), 0};
+      sem = Semaphore{NS::TransferPtr(device_->newEvent()->retain()), 0};
     } else {
       sem = free_semaphores_.back();
       free_semaphores_.pop_back();
@@ -345,10 +345,10 @@ class MetalDevice : public rhi::Device {
     return sem;
   }
 
-  MetalFence get_fence() {
-    MetalFence fence;
+  Fence get_fence() {
+    Fence fence;
     if (free_fences_.empty()) {
-      fence = MetalFence{NS::TransferPtr(device_->newSharedEvent()->retain()), 0};
+      fence = Fence{NS::TransferPtr(device_->newSharedEvent()->retain()), 0};
     } else {
       fence = free_fences_.back();
       free_fences_.pop_back();
@@ -357,15 +357,15 @@ class MetalDevice : public rhi::Device {
     return fence;
   }
 
-  void free_semaphore(MetalSemaphore sem) { free_semaphores_.emplace_back(std::move(sem)); }
-  void free_fence(MetalFence fence) { free_fences_.emplace_back(std::move(fence)); }
+  void free_semaphore(Semaphore sem) { free_semaphores_.emplace_back(std::move(sem)); }
+  void free_fence(Fence fence) { free_fences_.emplace_back(std::move(fence)); }
 
-  std::vector<MetalSemaphore> free_semaphores_;
-  std::vector<MetalFence> free_fences_;
+  std::vector<Semaphore> free_semaphores_;
+  std::vector<Fence> free_fences_;
 
  private:
   struct DeleteQueues {
-    explicit DeleteQueues(MetalDevice* device) : device_(device) {}
+    explicit DeleteQueues(Device* device) : device_(device) {}
     template <typename HandleT>
     struct Entry {
       HandleT handle;
@@ -376,7 +376,7 @@ class MetalDevice : public rhi::Device {
 
    private:
     std::queue<Entry<rhi::BufferHandle>> to_delete_buffers;
-    MetalDevice* device_{};
+    Device* device_{};
   };
 
   MTL4_Resources& m4res() {
