@@ -42,8 +42,16 @@ struct tuple_hash<std::tuple<TT...>> {
   }
 };
 
+// FNV-1a over exactly `count` bytes s[0..count-1]. (The old recursive form XORed
+// s[count], so const char* hashing included a trailing NUL while string_view did
+// not — and s[count] was out of bounds for a view of length `count`.)
 constexpr uint32_t fnv1a_32(const char* s, std::size_t count) {
-  return ((count ? fnv1a_32(s, count - 1) : 2166136261u) ^ s[count]) * 16777619u;
+  uint32_t hash = 2166136261u;
+  for (std::size_t i = 0; i < count; ++i) {
+    hash ^= static_cast<unsigned char>(s[i]);
+    hash *= 16777619u;
+  }
+  return hash;
 }
 
 constexpr size_t str_len(const char* s) {

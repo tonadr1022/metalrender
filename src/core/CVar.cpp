@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cassert>
 #include <charconv>
+#include <cstdint>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -10,13 +11,18 @@
 #include <span>
 #include <sstream>
 #include <string_view>
+#include <tracy/Tracy.hpp>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "core/Console.hpp"
 #include "core/Logger.hpp"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "imgui_stdlib.h"
+#include "util/FuzzyMatch.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -25,6 +31,8 @@ enum class CVarKind : char {
   Float,
   String,
 };
+
+class CVarSystemImpl;
 
 class CVarParameter {
  public:
@@ -47,15 +55,13 @@ struct CVarStorage {
 
 template <typename T>
 struct CVarArray {
+  friend class CVarSystemImpl;
+
   std::vector<CVarStorage<T>> cvars;
   uint32_t last_cvar{0};
   explicit CVarArray(size_t size) { cvars.reserve(size); }
   T get_current(uint32_t idx) { return cvars[idx].current; }
   T* get_current_ptr(uint32_t idx) { return &cvars[idx].current; }
-  template <typename U>
-  void set_current(U&& val, uint32_t idx) {
-    cvars[idx].current = std::forward<U>(val);
-  }
 
   uint32_t add(const T& default_value, const T& current_value, CVarParameter* param) {
     uint32_t idx = cvars.size();
@@ -68,6 +74,12 @@ struct CVarArray {
     cvars.emplace_back(value, value, param);
     param->array_idx = idx;
     return idx;
+  }
+
+ private:
+  template <typename U>
+  void set_current(U&& val, uint32_t idx) {
+    cvars[idx].current = std::forward<U>(val);
   }
 };
 
@@ -83,8 +95,8 @@ class CVarSystemImpl : public CVarSystem {
   void load_from_file(const std::string& path) override;
   void save_to_file(const std::string& path) override;
 
-  CVarParameter* create_float_cvar(const char* name, const char* description, double default_value,
-                                   double current_value) final;
+  CVarParameter* create_float_cvar(const char* name, const char* description, float default_value,
+                                   float current_value) final;
 
   CVarParameter* create_string_cvar(const char* name, const char* description,
                                     const char* default_value, const char* current_value) final;
@@ -93,29 +105,46 @@ class CVarSystemImpl : public CVarSystem {
 
   template <typename T>
   T* get_cvar_current(uint32_t hash);
-  template <typename T>
-  void set_cvar_current(uint32_t hash, const T& value);
 
-  double* get_float_cvar(util::hash::HashedString hash) final {
-    return get_cvar_current<double>(hash);
+  float* get_float_cvar(util::hash::HashedString hash) final {
+    return get_cvar_current<float>(hash);
   }
 
-  void set_float_cvar(util::hash::HashedString hash, double value) final {
-    set_cvar_current<double>(hash, value);
+  void set_float_cvar(util::hash::HashedString hash, float value) final {
+    CVarParameter* param = get_cvar(hash);
+    if (param) {
+      assign_float(param, value);
+    }
   }
 
   int32_t* get_int_cvar(util::hash::HashedString hash) final {
     return get_cvar_current<int32_t>(hash);
   }
   void set_int_cvar(util::hash::HashedString hash, int32_t value) final {
-    set_cvar_current<int32_t>(hash, value);
+    CVarParameter* param = get_cvar(hash);
+    if (param) {
+      assign_int(param, value);
+    }
   }
   const char* get_string_cvar(util::hash::HashedString hash) final {
     return get_cvar_current<std::string>(hash)->c_str();
   }
   void set_string_cvar(util::hash::HashedString hash, const char* value) final {
-    set_cvar_current<std::string>(hash, value);
+    CVarParameter* param = get_cvar(hash);
+    if (param) {
+      assign_string(param, value ? std::string(value) : std::string{});
+    }
   }
+
+  void add_change_callback(util::hash::HashedString name, std::function<void()> cb) final;
+  void add_change_callback(const AutoCVarInt& cv, std::function<void()> cb) final;
+  void add_change_callback(const AutoCVarFloat& cv, std::function<void()> cb) final;
+  void add_change_callback(const AutoCVarString& cv, std::function<void()> cb) final;
+
+  void assign_int(CVarParameter* p, int32_t v);
+  void assign_float(CVarParameter* p, float v);
+  void assign_string(CVarParameter* p, std::string v);
+  void fire_change_callbacks(util::hash::HashedString name);
 
   template <typename T>
   CVarArray<T>& get_cvar_array();
@@ -130,14 +159,18 @@ class CVarSystemImpl : public CVarSystem {
   std::unordered_map<std::string, std::vector<CVarParameter*>> categorized_params;
   void draw_imgui_editor() final;
   void merge_cvar_flags(util::hash::HashedString hash, CVarFlags or_flags) final;
+  void for_each_cvar(std::function<void(const CVarInfoView&)> visitor) final;
+  CVarApplyResult set_cvar_from_string(std::string_view name, std::string_view value,
+                                       std::string* error_msg) final;
 
  private:
   CVarParameter* init_cvar(const char* name, const char* description);
 
   std::vector<CVarParameter*> active_edit_parameters_;
   std::unordered_map<uint32_t, CVarParameter> saved_cvars_;
+  std::unordered_map<uint32_t, std::vector<std::function<void()>>> change_callbacks_;
   CVarArray<int32_t> int_cvars_{200};
-  CVarArray<double> float_cvars_{200};
+  CVarArray<float> float_cvars_{200};
   CVarArray<std::string> string_cvars_{200};
 };
 
@@ -147,7 +180,7 @@ CVarArray<int32_t>& CVarSystemImpl::get_cvar_array() {
 }
 
 template <>
-CVarArray<double>& CVarSystemImpl::get_cvar_array() {
+CVarArray<float>& CVarSystemImpl::get_cvar_array() {
   return float_cvars_;
 }
 
@@ -174,6 +207,108 @@ void CVarSystemImpl::merge_cvar_flags(util::hash::HashedString hash, CVarFlags o
       static_cast<CVarFlags>(static_cast<uint16_t>(p->flags) | static_cast<uint16_t>(or_flags));
 }
 
+void CVarSystemImpl::for_each_cvar(std::function<void(const CVarInfoView&)> visitor) {
+  for (auto& entry : saved_cvars_) {
+    CVarParameter& p = entry.second;
+    CVarInfoView view{
+        .name = p.name,
+        .description = p.description,
+        .type = p.type == CVarKind::Int     ? CVarValueType::Int
+                : p.type == CVarKind::Float ? CVarValueType::Float
+                                            : CVarValueType::String,
+        .flags = p.flags,
+    };
+    visitor(view);
+  }
+}
+
+namespace {
+
+bool has_flag(CVarFlags flags, CVarFlags test) {
+  return (static_cast<uint16_t>(flags) & static_cast<uint16_t>(test)) != 0;
+}
+
+std::string_view trim_sv(std::string_view s);
+
+}  // namespace
+
+CVarApplyResult CVarSystemImpl::set_cvar_from_string(std::string_view name, std::string_view value,
+                                                     std::string* error_msg) {
+  if (error_msg) {
+    error_msg->clear();
+  }
+  name = trim_sv(name);
+  value = trim_sv(value);
+  if (name.empty() || value.empty()) {
+    if (error_msg) {
+      *error_msg = "Missing name or value";
+    }
+    return CVarApplyResult::InvalidValue;
+  }
+
+  using util::hash::HashedString;
+  CVarParameter* param = get_cvar(HashedString{name});
+  if (!param) {
+    if (error_msg) {
+      *error_msg = "Unknown cvar";
+    }
+    return CVarApplyResult::NotFound;
+  }
+
+  if (has_flag(param->flags, CVarFlags::NoEdit) ||
+      has_flag(param->flags, CVarFlags::EditReadOnly)) {
+    if (error_msg) {
+      *error_msg = "CVar is read-only";
+    }
+    return CVarApplyResult::ReadOnly;
+  }
+
+  if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
+    value = value.substr(1, value.size() - 2);
+  } else if (!value.empty() && value.front() == '"' && value.back() != '"') {
+    if (error_msg) {
+      *error_msg = "Unterminated quoted string";
+    }
+    return CVarApplyResult::InvalidValue;
+  }
+
+  switch (param->type) {
+    case CVarKind::Int: {
+      int32_t v{};
+      const auto* begin = value.data();
+      const auto* end = value.data() + value.size();
+      const auto r = std::from_chars(begin, end, v);
+      if (r.ec != std::errc{} || r.ptr != end) {
+        if (error_msg) {
+          *error_msg = "Invalid integer value";
+        }
+        return CVarApplyResult::InvalidValue;
+      }
+      set_int_cvar(HashedString{name}, v);
+      return CVarApplyResult::Ok;
+    }
+    case CVarKind::Float: {
+      std::string val_str(value);
+      char* end = nullptr;
+      const float v = std::strtod(val_str.c_str(), &end);
+      if (end != val_str.c_str() + val_str.size()) {
+        if (error_msg) {
+          *error_msg = "Invalid float value";
+        }
+        return CVarApplyResult::InvalidValue;
+      }
+      set_float_cvar(HashedString{name}, v);
+      return CVarApplyResult::Ok;
+    }
+    case CVarKind::String: {
+      std::string val_str(value);
+      set_string_cvar(HashedString{name}, val_str.c_str());
+      return CVarApplyResult::Ok;
+    }
+  }
+  return CVarApplyResult::InvalidValue;
+}
+
 void CVarSystemImpl::draw_imgui_editor() {
   ImGui::InputText("Filter", &search_txt);
   ImGui::Checkbox("Advanced", &show_advanced);
@@ -191,7 +326,7 @@ void CVarSystemImpl::draw_imgui_editor() {
   for (auto& v : get_cvar_array<int32_t>().cvars) {
     add_to_edit_list(v.parameter);
   }
-  for (auto& v : get_cvar_array<double>().cvars) {
+  for (auto& v : get_cvar_array<float>().cvars) {
     add_to_edit_list(v.parameter);
   }
   for (auto& v : get_cvar_array<std::string>().cvars) {
@@ -238,11 +373,11 @@ void CVarSystemImpl::draw_imgui_editor() {
 }
 
 CVarParameter* CVarSystemImpl::create_float_cvar(const char* name, const char* description,
-                                                 double default_value, double current_value) {
+                                                 float default_value, float current_value) {
   auto* param = init_cvar(name, description);
   if (!param) return nullptr;
   param->type = CVarKind::Float;
-  get_cvar_array<double>().add(default_value, current_value, param);
+  get_cvar_array<float>().add(default_value, current_value, param);
   return param;
 }
 
@@ -272,12 +407,69 @@ T* CVarSystemImpl::get_cvar_current(uint32_t hash) {
   return get_cvar_array<T>().get_current_ptr(param->array_idx);
 }
 
-template <typename T>
-void CVarSystemImpl::set_cvar_current(uint32_t hash, const T& value) {
-  CVarParameter* param = get_cvar(hash);
-  if (param) {
-    get_cvar_array<T>().set_current(value, param->array_idx);
+void CVarSystemImpl::add_change_callback(util::hash::HashedString name, std::function<void()> cb) {
+  if (!get_cvar(name)) {
+    return;
   }
+  change_callbacks_[name.hash_value].push_back(std::move(cb));
+}
+
+void CVarSystemImpl::add_change_callback(const AutoCVarInt& cv, std::function<void()> cb) {
+  add_change_callback(cv.hashed_name(), std::move(cb));
+}
+
+void CVarSystemImpl::add_change_callback(const AutoCVarFloat& cv, std::function<void()> cb) {
+  add_change_callback(cv.hashed_name(), std::move(cb));
+}
+
+void CVarSystemImpl::add_change_callback(const AutoCVarString& cv, std::function<void()> cb) {
+  add_change_callback(cv.hashed_name(), std::move(cb));
+}
+
+void CVarSystemImpl::fire_change_callbacks(util::hash::HashedString name) {
+  auto it = change_callbacks_.find(name.hash_value);
+  if (it == change_callbacks_.end()) {
+    return;
+  }
+  for (const auto& cb : it->second) {
+    cb();
+  }
+}
+
+void CVarSystemImpl::assign_int(CVarParameter* p, int32_t v) {
+  if (p->type != CVarKind::Int) {
+    LWARN("incorrect cvar type");
+    return;
+  }
+  if (int_cvars_.get_current(p->array_idx) == v) {
+    return;
+  }
+  int_cvars_.set_current(v, p->array_idx);
+  fire_change_callbacks(util::hash::HashedString{p->name});
+}
+
+void CVarSystemImpl::assign_float(CVarParameter* p, float v) {
+  if (p->type != CVarKind::Float) {
+    LWARN("incorrect cvar type");
+    return;
+  }
+  if (float_cvars_.get_current(p->array_idx) == v) {
+    return;
+  }
+  float_cvars_.set_current(v, p->array_idx);
+  fire_change_callbacks(util::hash::HashedString{p->name});
+}
+
+void CVarSystemImpl::assign_string(CVarParameter* p, std::string v) {
+  if (p->type != CVarKind::String) {
+    LWARN("incorrect cvar type");
+    return;
+  }
+  if (string_cvars_.get_current(p->array_idx) == v) {
+    return;
+  }
+  string_cvars_.set_current(std::move(v), p->array_idx);
+  fire_change_callbacks(util::hash::HashedString{p->name});
 }
 
 void CVarSystemImpl::im_gui_label(const char* label, float text_width) {
@@ -299,6 +491,8 @@ void CVarSystemImpl::draw_imgui_edit_cvar_parameter(CVarParameter* p, float text
   const bool is_drag =
       static_cast<uint32_t>(p->flags) & static_cast<uint32_t>(CVarFlags::EditFloatDrag);
 
+  using util::hash::HashedString;
+
   switch (p->type) {
     case CVarKind::Int:
       if (is_read_only) {
@@ -310,13 +504,16 @@ void CVarSystemImpl::draw_imgui_edit_cvar_parameter(CVarParameter* p, float text
           ImGui::PushID(p);
           bool is_checked = get_cvar_array<int32_t>().get_current(p->array_idx) != 0;
           if (ImGui::Checkbox("", &is_checked)) {
-            get_cvar_array<int32_t>().set_current(static_cast<int32_t>(is_checked), p->array_idx);
+            set_int_cvar(HashedString{p->name}, static_cast<int32_t>(is_checked));
           }
           ImGui::PopID();
         } else {
           im_gui_label(p->name.c_str(), text_width);
           ImGui::PushID(p);
-          ImGui::InputInt("", get_cvar_array<int32_t>().get_current_ptr(p->array_idx));
+          int v = get_cvar_array<int32_t>().get_current(p->array_idx);
+          if (ImGui::InputInt("", &v)) {
+            set_int_cvar(HashedString{p->name}, static_cast<int32_t>(v));
+          }
           ImGui::PopID();
         }
       }
@@ -324,17 +521,20 @@ void CVarSystemImpl::draw_imgui_edit_cvar_parameter(CVarParameter* p, float text
     case CVarKind::Float:
       if (is_read_only) {
         std::string display_format = p->name + "= %f";
-        ImGui::Text(display_format.c_str(), get_cvar_array<double>().get_current(p->array_idx));
+        ImGui::Text(display_format.c_str(), get_cvar_array<float>().get_current(p->array_idx));
       } else {
         im_gui_label(p->name.c_str(), text_width);
         ImGui::PushID(p);
         if (is_drag) {
-          float d = get_cvar_array<double>().get_current(p->array_idx);
-          if (ImGui::DragFloat("", &d, .01)) {
-            *get_cvar_array<double>().get_current_ptr(p->array_idx) = static_cast<double>(d);
+          auto d = static_cast<float>(get_cvar_array<float>().get_current(p->array_idx));
+          if (ImGui::DragFloat("", &d, .01f)) {
+            set_float_cvar(HashedString{p->name}, d);
           }
         } else {
-          ImGui::InputDouble("", get_cvar_array<double>().get_current_ptr(p->array_idx));
+          float d = get_cvar_array<float>().get_current(p->array_idx);
+          if (ImGui::InputFloat("", &d)) {
+            set_float_cvar(HashedString{p->name}, d);
+          }
         }
         ImGui::PopID();
       }
@@ -347,7 +547,17 @@ void CVarSystemImpl::draw_imgui_edit_cvar_parameter(CVarParameter* p, float text
       } else {
         im_gui_label(p->name.c_str(), text_width);
         ImGui::PushID(p);
-        ImGui::InputText("", get_cvar_array<std::string>().get_current_ptr(p->array_idx));
+        static std::unordered_map<uintptr_t, std::string> string_edit_bufs;
+        std::string& edit_buf = string_edit_bufs[reinterpret_cast<uintptr_t>(p)];
+        const ImGuiID str_id = ImGui::GetID("##cvarstr");
+        const bool editing = (ImGui::GetActiveID() == str_id);
+        if (!editing) {
+          edit_buf = get_cvar_array<std::string>().get_current(p->array_idx);
+        }
+        ImGui::InputText("##cvarstr", &edit_buf);
+        if (ImGui::IsItemDeactivatedAfterEdit()) {
+          set_string_cvar(HashedString{p->name}, edit_buf.c_str());
+        }
         ImGui::PopID();
       }
   }
@@ -380,13 +590,24 @@ T* get_cvar_current_ptr_by_index(uint32_t idx) {
 
 template <typename T, typename U>
 void set_cvar_by_idx(uint32_t idx, U&& data) {
-  CVarSystemImpl::get().get_cvar_array<T>().set_current(std::forward<U>(data), idx);
+  auto& impl = CVarSystemImpl::get();
+  if constexpr (std::is_same_v<T, int32_t>) {
+    CVarParameter* p = impl.get_cvar_array<int32_t>().cvars[idx].parameter;
+    impl.assign_int(p, static_cast<int32_t>(data));
+  } else if constexpr (std::is_same_v<T, float>) {
+    CVarParameter* p = impl.get_cvar_array<float>().cvars[idx].parameter;
+    impl.assign_float(p, static_cast<float>(data));
+  } else if constexpr (std::is_same_v<T, std::string>) {
+    CVarParameter* p = impl.get_cvar_array<std::string>().cvars[idx].parameter;
+    impl.assign_string(p, std::forward<U>(data));
+  }
 }
 
 }  // namespace
 
-AutoCVarFloat::AutoCVarFloat(const char* name, const char* description, double default_value,
+AutoCVarFloat::AutoCVarFloat(const char* name, const char* description, float default_value,
                              CVarFlags flags) {
+  name_hash_ = util::hash::HashedString{name}.hash_value;
   CVarParameter* param =
       CVarSystemImpl::get().create_float_cvar(name, description, default_value, default_value);
   assert_unique_cvar_registered(param);
@@ -394,15 +615,14 @@ AutoCVarFloat::AutoCVarFloat(const char* name, const char* description, double d
   idx_ = param->array_idx;
 }
 
-double AutoCVarFloat::get() { return get_cvar_current_by_index<double>(idx_); }
+float AutoCVarFloat::get() { return get_cvar_current_by_index<float>(idx_); }
 
-double* AutoCVarFloat::get_ptr() { return get_cvar_current_ptr_by_index<double>(idx_); }
+float* AutoCVarFloat::get_ptr() { return get_cvar_current_ptr_by_index<float>(idx_); }
 
-float AutoCVarFloat::get_float() { return static_cast<float>(get()); }
-
-void AutoCVarFloat::set(double val) { set_cvar_by_idx<double>(idx_, val); }
+void AutoCVarFloat::set(float val) { set_cvar_by_idx<float>(idx_, val); }
 
 AutoCVarInt::AutoCVarInt(const char* name, const char* desc, int initial_value, CVarFlags flags) {
+  name_hash_ = util::hash::HashedString{name}.hash_value;
   CVarParameter* param =
       CVarSystemImpl::get().create_int_cvar(name, desc, initial_value, initial_value);
   assert_unique_cvar_registered(param);
@@ -418,6 +638,7 @@ void AutoCVarInt::set(int32_t val) { set_cvar_by_idx<int32_t>(idx_, val); }
 
 AutoCVarString::AutoCVarString(const char* name, const char* description, const char* default_value,
                                CVarFlags flags) {
+  name_hash_ = util::hash::HashedString{name}.hash_value;
   CVarParameter* param =
       CVarSystemImpl::get().create_string_cvar(name, description, default_value, default_value);
   assert_unique_cvar_registered(param);
@@ -486,7 +707,7 @@ void apply_cvar_line(CVarSystemImpl& sys, std::string_view key_sv, std::string_v
     case CVarKind::Float: {
       const std::string val_str(value_sv);
       char* end = nullptr;
-      const double v = std::strtod(val_str.c_str(), &end);
+      const float v = std::strtod(val_str.c_str(), &end);
       if (end != val_str.c_str() + val_str.size()) {
         return;
       }
@@ -523,6 +744,7 @@ void CVarSystemImpl::load_from_file(const std::string& path) {
 }
 
 void CVarSystemImpl::save_to_file(const std::string& path) {
+  ZoneScoped;
   std::ofstream out(path);
   if (!out.is_open()) {
     return;
@@ -537,7 +759,7 @@ void CVarSystemImpl::save_to_file(const std::string& path) {
   std::ranges::sort(params, [](CVarParameter* a, CVarParameter* b) { return a->name < b->name; });
 
   std::ostringstream oss;
-  oss << std::setprecision(std::numeric_limits<double>::max_digits10);
+  oss << std::setprecision(std::numeric_limits<float>::max_digits10);
 
   for (CVarParameter* p : params) {
     switch (p->type) {
@@ -555,6 +777,126 @@ void CVarSystemImpl::save_to_file(const std::string& path) {
         break;
     }
   }
+}
+
+namespace {
+
+bool parse_console_assignment(std::string_view line, std::string_view& name,
+                              std::string_view& value, std::string& error_msg) {
+  error_msg.clear();
+  std::string_view trimmed = trim_sv(line);
+  if (trimmed.empty()) {
+    error_msg = "Empty input";
+    return false;
+  }
+
+  bool in_quotes = false;
+  size_t eq_pos = std::string_view::npos;
+  for (size_t i = 0; i < trimmed.size(); i++) {
+    char c = trimmed[i];
+    if (c == '"') {
+      in_quotes = !in_quotes;
+    } else if (c == '=' && !in_quotes) {
+      eq_pos = i;
+      break;
+    }
+  }
+
+  if (eq_pos != std::string_view::npos) {
+    name = trim_sv(trimmed.substr(0, eq_pos));
+    value = trim_sv(trimmed.substr(eq_pos + 1));
+  } else {
+    size_t space = trimmed.find_first_of(" \t");
+    if (space == std::string_view::npos) {
+      error_msg = "Missing value";
+      return false;
+    }
+    name = trim_sv(trimmed.substr(0, space));
+    value = trim_sv(trimmed.substr(space + 1));
+  }
+
+  if (name.empty() || value.empty()) {
+    error_msg = "Missing name or value";
+    return false;
+  }
+  return true;
+}
+
+}  // namespace
+
+void register_cvar_console(Console& console) {
+  console.set_fallback_handler([](std::string_view line, std::string* error) {
+    std::string_view name;
+    std::string_view value;
+    std::string parse_error;
+    if (!parse_console_assignment(line, name, value, parse_error)) {
+      if (error) {
+        *error = parse_error;
+      }
+      return false;
+    }
+
+    std::string err;
+    CVarApplyResult result = CVarSystem::get().set_cvar_from_string(name, value, &err);
+    if (result != CVarApplyResult::Ok) {
+      if (error) {
+        *error = err.empty() ? "Failed to set cvar" : err;
+      }
+      return false;
+    }
+    return true;
+  });
+
+  console.set_completion_provider([](std::string_view input, std::vector<ConsoleSuggestion>& out,
+                                     size_t& replace_start, size_t& replace_len) {
+    std::string_view trimmed = trim_sv(input);
+    size_t leading = input.find_first_not_of(" \t");
+    if (leading == std::string_view::npos) {
+      return;
+    }
+    if (trimmed.find_first_of(" \t") != std::string_view::npos ||
+        trimmed.find('=') != std::string_view::npos) {
+      return;
+    }
+    if (trimmed.empty()) {
+      return;
+    }
+
+    const std::string needle(trimmed);
+
+    replace_start = leading;
+    replace_len = needle.size();
+
+    std::vector<ConsoleSuggestion> matches;
+    CVarSystem::get().for_each_cvar([&](const CVarInfoView& info) {
+      if (util::fuzzy_match(needle.c_str(), info.name.c_str())) {
+        ConsoleSuggestion s;
+        s.label = std::string(info.name);
+        switch (info.type) {
+          case CVarValueType::Int:
+            s.detail = "int";
+            break;
+          case CVarValueType::Float:
+            s.detail = "float";
+            break;
+          case CVarValueType::String:
+            s.detail = "string";
+            break;
+        }
+        s.insert_text = s.label;
+        matches.push_back(std::move(s));
+      }
+    });
+
+    std::ranges::sort(matches, [](const ConsoleSuggestion& a, const ConsoleSuggestion& b) {
+      return a.label < b.label;
+    });
+
+    constexpr size_t kMaxSuggestions = 10;
+    for (size_t i = 0; i < matches.size() && i < kMaxSuggestions; i++) {
+      out.push_back(std::move(matches[i]));
+    }
+  });
 }
 
 }  // namespace TENG_NAMESPACE

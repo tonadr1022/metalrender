@@ -117,3 +117,6 @@ endif()
 
 add_library(cgltf INTERFACE)
 target_include_directories(cgltf INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/cgltf/include)
+
+add_library(fts_fuzzy_match INTERFACE)
+target_include_directories(fts_fuzzy_match INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/fts_fuzzy_match)

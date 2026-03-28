@@ -3,6 +3,7 @@
 #include <span>
 
 #include "Camera.hpp"
+#include "core/Console.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
@@ -82,6 +83,8 @@ struct App {
   bool first_mouse_{true};
   bool hide_mouse_{false};
   bool imgui_enabled_{true};
+  bool console_forced_imgui_{false};
+  teng::Console console_;
 
   glm::vec2 last_pos_{};
   // TODO: ptr for impl/RHI
