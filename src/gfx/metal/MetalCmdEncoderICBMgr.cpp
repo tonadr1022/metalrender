@@ -7,6 +7,8 @@
 
 namespace TENG_NAMESPACE {
 
+namespace gfx::mtl {
+
 void MetalCmdEncoderICBMgr::init_icb_arg_encoder_and_buf_and_set_icb(
     std::span<MTL::IndirectCommandBuffer*> icbs, size_t i) {
   auto encode_icb = [this, i, icbs]() {
@@ -43,5 +45,7 @@ MTL::Buffer* MetalCmdEncoderICBMgr::get_icb(size_t i) {
   ASSERT(i < main_icb_container_buf_.size());
   return device_->get_mtl_buf(main_icb_container_buf_[i]);
 }
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

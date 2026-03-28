@@ -3,11 +3,11 @@
 #include <vulkan/vulkan_core.h>
 
 #include "core/Config.hpp"
-#include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Pipeline.hpp"
 #include "gfx/rhi/Queue.hpp"
+#include "gfx/rhi/RootLayout.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -168,7 +168,7 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   // only valid during render pass
   rhi::RenderTargetInfo curr_render_target_info_;
 
-  DescriptorBindingTable binding_table_{};
+  rhi::DescriptorBindingTable binding_table_{};
   bool descriptors_dirty_{false};
 
   // initial use is for swapchain rendering

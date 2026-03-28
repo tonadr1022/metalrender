@@ -32,6 +32,8 @@
 
 namespace TENG_NAMESPACE {
 
+namespace gfx {
+
 namespace {
 
 void load_stb_image(const void *data, size_t data_size, const std::filesystem::path &path,
@@ -69,11 +71,11 @@ void free_ktx_texture(void *ktx_tex) {
 
 void load_ktx(const void *data, size_t data_size, const std::filesystem::path &path,
               TextureUpload &upload) {
-  gfx::LoadKtxTextureResult load_result;
+  LoadKtxTextureResult load_result;
   if (data) {
-    load_result = gfx::load_ktx_texture(data, data_size);
+    load_result = load_ktx_texture(data, data_size);
   } else {
-    load_result = gfx::load_ktx_texture(path);
+    load_result = load_ktx_texture(path);
   }
   auto *ktx_tex = load_result.texture;
   const rhi::TextureDesc desc{
@@ -261,8 +263,6 @@ MeshletLoadResult load_meshlet_data(std::span<DefaultVertex> vertices,
 }
 
 }  // namespace
-
-namespace model {
 
 bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transform,
                 ModelInstance &out_model, ModelLoadResult &out_load_result) {
@@ -650,6 +650,6 @@ bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transfo
   return true;
 }
 
-}  // namespace model
+}  // namespace gfx
 
 }  // namespace TENG_NAMESPACE

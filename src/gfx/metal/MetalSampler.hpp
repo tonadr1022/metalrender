@@ -9,6 +9,8 @@ class SamplerState;
 
 namespace TENG_NAMESPACE {
 
+namespace gfx::mtl {
+
 class MetalSampler : public rhi::Sampler {
  public:
   MetalSampler(const rhi::SamplerDesc& desc, MTL::SamplerState* sampler,
@@ -21,5 +23,7 @@ class MetalSampler : public rhi::Sampler {
  private:
   MTL::SamplerState* sampler_{};
 };
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

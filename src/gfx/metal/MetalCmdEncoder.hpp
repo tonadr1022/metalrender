@@ -39,6 +39,8 @@ class BlitCommandEncoder;
 
 namespace TENG_NAMESPACE {
 
+namespace gfx::mtl {
+
 class MetalDevice;
 
 struct MTL3_State {
@@ -147,7 +149,7 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
   MetalCmdEncoderICBMgr cmd_icb_mgr_;
 
   RootLayout root_layout_{};
-  DescriptorBindingTable binding_table_{};
+  rhi::DescriptorBindingTable binding_table_{};
   bool binding_table_dirty_{false};
   bool push_constant_dirty_{false};
   bool draw_id_dirty_{false};
@@ -174,5 +176,7 @@ class MetalCmdEncoderBase : public rhi::CmdEncoder {
 
 using Metal3CmdEncoder = MetalCmdEncoderBase<false>;
 using Metal4CmdEncoder = MetalCmdEncoderBase<true>;
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

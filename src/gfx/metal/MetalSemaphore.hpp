@@ -6,6 +6,7 @@
 
 namespace TENG_NAMESPACE {
 
+namespace gfx::mtl {
 struct MetalSemaphore {
   NS::SharedPtr<MTL::Event> event;
   size_t value;
@@ -15,5 +16,7 @@ struct MetalFence {
   NS::SharedPtr<MTL::SharedEvent> event;
   size_t value;
 };
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

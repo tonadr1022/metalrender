@@ -8,7 +8,7 @@
 
 namespace TENG_NAMESPACE {
 
-namespace rhi {
+namespace gfx::rhi {
 
 enum class ShaderType : uint8_t { None, Vertex, Fragment, Task, Mesh, Compute };
 
@@ -136,6 +136,6 @@ class Pipeline {
   std::variant<GraphicsPipelineCreateInfo, ShaderCreateInfo> desc_;
 };
 
-}  // namespace rhi
+}  // namespace gfx::rhi
 
 }  // namespace TENG_NAMESPACE

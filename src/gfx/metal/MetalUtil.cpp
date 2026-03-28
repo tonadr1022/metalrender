@@ -9,7 +9,7 @@
 
 namespace TENG_NAMESPACE {
 
-namespace mtl::util {
+namespace gfx::mtl::util {
 
 void print_err(NS::Error* err) {
   assert(err);
@@ -275,6 +275,6 @@ MTL::Stages convert_stages(rhi::ResourceState state) {
 
   return result;
 }
-}  // namespace mtl::util
+}  // namespace gfx::mtl::util
 
 }  // namespace TENG_NAMESPACE

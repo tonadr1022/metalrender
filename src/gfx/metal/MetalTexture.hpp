@@ -7,6 +7,8 @@
 
 namespace TENG_NAMESPACE {
 
+namespace gfx::mtl {
+
 class MetalTexture : public rhi::Texture {
  public:
   MetalTexture(const rhi::TextureDesc& desc, uint32_t gpu_slot, MTL::Texture* tex,
@@ -26,5 +28,7 @@ class MetalTexture : public rhi::Texture {
   MTL::Texture* tex_{};
   bool is_drawable_tex_{};
 };
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

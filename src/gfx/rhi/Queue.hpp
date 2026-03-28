@@ -6,7 +6,7 @@
 
 namespace TENG_NAMESPACE {
 
-namespace rhi {
+namespace gfx::rhi {
 
 enum class QueueType : uint8_t {
   Graphics,
@@ -28,6 +28,6 @@ inline const char* to_string(QueueType type) {
   }
 }
 
-}  // namespace rhi
+}  // namespace gfx::rhi
 
 }  // namespace TENG_NAMESPACE

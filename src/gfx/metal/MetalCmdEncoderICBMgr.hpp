@@ -17,6 +17,8 @@ class ArgumentDescriptor;
 
 namespace TENG_NAMESPACE {
 
+namespace gfx::mtl {
+
 class MetalDevice;
 
 class MetalCmdEncoderICBMgr {
@@ -38,5 +40,7 @@ class MetalCmdEncoderICBMgr {
   MTL::ArgumentEncoder* main_icb_container_arg_enc_{};
   MetalDevice* device_{};
 };
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

@@ -13,6 +13,8 @@ class MetalDrawable;
 
 namespace TENG_NAMESPACE {
 
+namespace gfx::mtl {
+
 class MetalSwapchain : public rhi::Swapchain {
  public:
   using SwapchainTextures = std::array<rhi::TextureHandleHolder, k_max_frames_in_flight>;
@@ -30,5 +32,7 @@ class MetalSwapchain : public rhi::Swapchain {
   uint32_t curr_image_index_{};
   // NS::SharedPtr<
 };
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

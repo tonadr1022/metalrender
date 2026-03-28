@@ -8,6 +8,8 @@
 
 namespace TENG_NAMESPACE {
 
+namespace gfx::mtl {
+
 struct MetalPipeline final : rhi::Pipeline {
   MetalPipeline(MTL::RenderPipelineState* render_pso, const rhi::GraphicsPipelineCreateInfo& cinfo)
       : rhi::Pipeline(cinfo), render_pso(render_pso) {}
@@ -20,5 +22,7 @@ struct MetalPipeline final : rhi::Pipeline {
   MTL::ComputePipelineState* compute_pso;
   size_t render_target_info_hash;
 };
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

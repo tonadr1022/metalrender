@@ -1,12 +1,11 @@
 #include "Pipeline.hpp"
 
-#include "core/Hash.hpp"
-
 #include "core/Config.hpp"
+#include "core/Hash.hpp"
 
 namespace TENG_NAMESPACE {
 
-namespace rhi {
+namespace gfx::rhi {
 
 const char* to_string(ShaderType type) {
   switch (type) {
@@ -33,6 +32,6 @@ size_t compute_render_target_info_hash(const rhi::RenderTargetInfo& render_targe
   }
   return hash;
 }
-}  // namespace rhi
+}  // namespace gfx::rhi
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

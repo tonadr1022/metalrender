@@ -8,7 +8,7 @@
 
 namespace TENG_NAMESPACE {
 
-namespace rhi {
+namespace gfx::rhi {
 
 class Buffer;
 class Device;
@@ -440,6 +440,6 @@ struct SamplerDesc {
   SamplerDescFlags flags{};
 };
 
-}  // namespace rhi
+}  // namespace gfx::rhi
 
 }  // namespace TENG_NAMESPACE

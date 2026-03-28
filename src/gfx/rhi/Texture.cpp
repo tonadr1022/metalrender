@@ -5,7 +5,7 @@
 
 namespace TENG_NAMESPACE {
 
-namespace gfx {
+namespace gfx::rhi {
 
 uint32_t get_block_width_bytes(rhi::TextureFormat format) {
   switch (format) {
@@ -45,10 +45,6 @@ bool is_stencil_format(rhi::TextureFormat format) {
   }
 }
 
-}  // namespace gfx
-
-namespace rhi {
-
 TexAndViewHolder::~TexAndViewHolder() {
   for (auto v : views) {
     context->destroy(handle, v);
@@ -56,5 +52,6 @@ TexAndViewHolder::~TexAndViewHolder() {
   views.clear();
 }
 
-}  // namespace rhi
+}  // namespace gfx::rhi
+
 }  // namespace TENG_NAMESPACE

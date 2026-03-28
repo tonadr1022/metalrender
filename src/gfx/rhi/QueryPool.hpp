@@ -6,7 +6,7 @@
 #include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
-namespace rhi {
+namespace gfx::rhi {
 
 struct QueryPoolDesc {
   uint32_t count;
@@ -15,6 +15,6 @@ struct QueryPoolDesc {
 
 class QueryPool {};
 
-}  // namespace rhi
+}  // namespace gfx::rhi
 
 }  // namespace TENG_NAMESPACE

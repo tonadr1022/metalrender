@@ -16,7 +16,7 @@ class Error;
 
 namespace TENG_NAMESPACE {
 
-namespace mtl::util {
+namespace gfx::mtl::util {
 
 void print_err(NS::Error *err);
 
@@ -48,6 +48,6 @@ rhi::TextureFormat convert(MTL::PixelFormat format);
 MTL::Stages convert_stage(rhi::PipelineStage stage);
 MTL::Stages convert_stages(rhi::ResourceState state);
 
-}  // namespace mtl::util
+}  // namespace gfx::mtl::util
 
 }  // namespace TENG_NAMESPACE

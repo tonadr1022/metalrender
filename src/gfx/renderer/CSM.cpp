@@ -87,7 +87,7 @@ void calc_csm_light_space_vp_matrices(std::span<glm::mat4> matrices,
                           shadow_map_res, proj_matrices[matrices.size() - 1]);
 }
 
-void calc_csm_data() {
+[[maybe_unused]] void calc_csm_data() {
   constexpr uint32_t k_max_cascade_levels = 4;
   uint32_t cascade_count_ = k_max_cascade_levels - 1;
   std::array<float, k_max_cascade_levels - 1> levels;

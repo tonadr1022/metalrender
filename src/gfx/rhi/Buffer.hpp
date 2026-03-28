@@ -7,7 +7,7 @@
 
 namespace TENG_NAMESPACE {
 
-namespace rhi {
+namespace gfx::rhi {
 
 class Buffer {
  public:
@@ -31,6 +31,6 @@ class Buffer {
   uint32_t bindless_idx_{k_invalid_bindless_idx};
 };
 
-}  // namespace rhi
+}  // namespace gfx::rhi
 
 }  // namespace TENG_NAMESPACE

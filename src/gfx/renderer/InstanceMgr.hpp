@@ -8,13 +8,13 @@
 
 namespace TENG_NAMESPACE {
 
+namespace gfx {
+
 namespace rhi {
 class Device;
 class CmdEncoder;
 
 }  // namespace rhi
-
-namespace gfx {
 
 class MemeRenderer123;
 

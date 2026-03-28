@@ -7,6 +7,8 @@
 
 namespace TENG_NAMESPACE {
 
+namespace gfx {
+
 class GPUFrameAllocator;
 namespace rhi {
 class Device;
@@ -64,5 +66,7 @@ void PerFrameBuffer<ElementT>::fill(const ElementT& data) {
       i) = data;
   }
 }
+
+}  // namespace gfx
 
 }  // namespace TENG_NAMESPACE

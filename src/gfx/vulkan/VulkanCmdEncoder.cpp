@@ -4,7 +4,6 @@
 #include "core/Hash.hpp"
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
-#include "gfx/metal/RootLayout.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/vulkan/VkUtil.hpp"
 #include "gfx/vulkan/VulkanCommon.hpp"
@@ -593,15 +592,15 @@ void DescriptorBinderPool::init(VulkanDevice& device) {
   VkDevice vk_device = device.vk_device();
 
   VkDescriptorPoolSize pool_sizes[]{
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, DESCRIPTOR_TABLE_CBV_COUNT * pool_size},
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, DESCRIPTOR_TABLE_CBV_COUNT * pool_size},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, TOTAL_SRV_BINDINGS * pool_size},
-      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, TOTAL_SRV_BINDINGS * pool_size},
-      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, TOTAL_SRV_BINDINGS * pool_size},
-      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, TOTAL_UAV_BINDINGS * pool_size},
-      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, TOTAL_UAV_BINDINGS * pool_size},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, rhi::DESCRIPTOR_TABLE_CBV_COUNT * pool_size},
+      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, rhi::DESCRIPTOR_TABLE_CBV_COUNT * pool_size},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, rhi::TOTAL_SRV_BINDINGS * pool_size},
+      {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, rhi::TOTAL_SRV_BINDINGS * pool_size},
+      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, rhi::TOTAL_SRV_BINDINGS * pool_size},
+      {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, rhi::TOTAL_UAV_BINDINGS * pool_size},
+      {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, rhi::TOTAL_UAV_BINDINGS * pool_size},
       // TODO: separate sampler thing in table
-      {VK_DESCRIPTOR_TYPE_SAMPLER, TOTAL_UAV_BINDINGS * pool_size},
+      {VK_DESCRIPTOR_TYPE_SAMPLER, rhi::TOTAL_UAV_BINDINGS * pool_size},
   };
 
   VkDescriptorPoolCreateInfo pool_info{
@@ -658,7 +657,7 @@ void VulkanCmdEncoder::bind_srv(rhi::TextureHandle texture, uint32_t slot, int s
 
 void VulkanCmdEncoder::bind_srv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) {
   binding_table_.SRV[slot] = buffer.to64();
-  binding_table_.SRV_subresources[slot] = DescriptorBindingTable::k_buffer_resource;
+  binding_table_.SRV_subresources[slot] = rhi::DescriptorBindingTable::k_buffer_resource;
   binding_table_.SRV_offsets[slot] = offset_bytes;
   descriptors_dirty_ = true;
 }

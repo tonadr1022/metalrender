@@ -7,7 +7,7 @@ namespace TENG_NAMESPACE {
 
 class Window;
 
-namespace rhi {
+namespace gfx::rhi {
 
 struct SwapchainDesc {
   Window* window;
@@ -27,6 +27,6 @@ class Swapchain {
  private:
 };
 
-}  // namespace rhi
+}  // namespace gfx::rhi
 
 }  // namespace TENG_NAMESPACE

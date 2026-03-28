@@ -1,12 +1,13 @@
 #pragma once
 
-#include <cstddef>
 #include <cstdint>
 
 #include "core/Config.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
 namespace TENG_NAMESPACE {
+
+namespace gfx::rhi {
 
 constexpr uint32_t ROOT_CBV_COUNT = 3;
 constexpr uint32_t DESCRIPTOR_TABLE_CBV_COUNT = 9;
@@ -15,7 +16,7 @@ constexpr uint32_t TOTAL_SRV_BINDINGS = 12;
 constexpr uint32_t TOTAL_UAV_BINDINGS = 12;
 
 struct DescriptorBindingTable {
-  rhi::BufferHandle CBV[TOTAL_CBV_BINDINGS] = {};
+  BufferHandle CBV[TOTAL_CBV_BINDINGS] = {};
   int CBV_offsets[TOTAL_CBV_BINDINGS] = {};
   // uint64_t version of rhi::BufferHandle/TextureHandle
   uint64_t SRV[TOTAL_SRV_BINDINGS] = {};
@@ -29,5 +30,7 @@ struct DescriptorBindingTable {
   int UAV_subresources[TOTAL_SRV_BINDINGS] = {};
   int UAV_offsets[TOTAL_SRV_BINDINGS] = {};
 };
+
+}  // namespace gfx::rhi
 
 }  // namespace TENG_NAMESPACE

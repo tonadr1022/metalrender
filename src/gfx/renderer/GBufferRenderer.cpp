@@ -11,9 +11,9 @@
 
 namespace TENG_NAMESPACE {
 
-using namespace rhi;
-
 namespace gfx {
+
+using namespace rhi;
 
 namespace {
 

@@ -8,7 +8,7 @@
 
 namespace TENG_NAMESPACE {
 
-namespace rhi {
+namespace gfx::rhi {
 
 using AccessFlagsBits = uint64_t;
 
@@ -113,6 +113,6 @@ class CmdEncoder {
                              size_t dst_offset) = 0;
 };
 
-}  // namespace rhi
+}  // namespace gfx::rhi
 
 }  // namespace TENG_NAMESPACE

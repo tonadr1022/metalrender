@@ -22,10 +22,6 @@ namespace gfx {
 
 enum class SizeClass : uint8_t { Swapchain, Custom };
 
-inline bool is_depth_format(rhi::TextureFormat format) {
-  return format == rhi::TextureFormat::D32float;
-}
-
 struct AttachmentInfo {
   rhi::TextureFormat format{rhi::TextureFormat::Undefined};
   glm::uvec2 dims{};

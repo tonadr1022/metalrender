@@ -15,7 +15,7 @@ namespace TENG_NAMESPACE {
 
 class Window;
 
-namespace rhi {
+namespace gfx::rhi {
 
 struct SwapchainDesc;
 struct GraphicsPipelineCreateInfo;
@@ -151,6 +151,6 @@ enum class GfxAPI { Vulkan, Metal };
 
 std::unique_ptr<Device> create_device(GfxAPI api);
 
-}  // namespace rhi
+}  // namespace gfx::rhi
 
 }  // namespace TENG_NAMESPACE

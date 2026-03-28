@@ -7,7 +7,6 @@
 #include <Metal/Metal.hpp>
 #include <tracy/Tracy.hpp>
 #include "core/Hash.hpp"
-#include "gfx/metal/RootLayout.hpp"
 #define IR_RUNTIME_METALCPP
 #include <metal_irconverter_runtime/metal_irconverter_runtime_wrapper.h>
 // clang-format on
@@ -21,6 +20,8 @@
 #include "gfx/rhi/GFXTypes.hpp"
 
 namespace TENG_NAMESPACE {
+
+namespace gfx::mtl {
 
 enum EncoderType {
   EncoderType_Render = 1,
@@ -291,7 +292,7 @@ void MetalCmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
       auto new_desc = pipeline->gfx_desc();
       new_desc.rendering = curr_render_target_info_;
       auto h = std::make_tuple(render_target_info_hash, handle.to64());
-      auto hash = util::hash::tuple_hash<decltype(h)>()(h);
+      auto hash = teng::util::hash::tuple_hash<decltype(h)>()(h);
       auto it = device_->all_pipelines.find(hash);
       if (it == device_->all_pipelines.end()) {
         auto new_pipeline = device_->create_graphics_pipeline(new_desc);
@@ -865,12 +866,12 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
           continue;
         }
         const auto resource_id = binding_table_.SRV_subresources[i];
-        if (resource_id == DescriptorBindingTable::k_buffer_resource) {
+        if (resource_id == rhi::DescriptorBindingTable::k_buffer_resource) {
           const auto* buf = device_->get_mtl_buf(rhi::BufferHandle{binding_table_.SRV[i]});
           const size_t metadata = buf->length();
           IRDescriptorTableSetBuffer(&table.srvs[i],
                                      buf->gpuAddress() + binding_table_.SRV_offsets[i], metadata);
-        } else if (resource_id == DescriptorBindingTable::k_tex_resource) {
+        } else if (resource_id == rhi::DescriptorBindingTable::k_tex_resource) {
           auto* tex = device_->get_mtl_tex(rhi::TextureHandle{binding_table_.SRV[i]});
           IRDescriptorTableSetTexture(&table.srvs[i], tex, 0.0f, 0);
         } else {
@@ -885,12 +886,12 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
           continue;
         }
         auto id = binding_table_.UAV_subresources[i];
-        if (id == DescriptorBindingTable::k_buffer_resource) {
+        if (id == rhi::DescriptorBindingTable::k_buffer_resource) {
           const auto* buf = device_->get_mtl_buf(rhi::BufferHandle{binding_table_.UAV[i]});
           const size_t metadata = buf->length();
           IRDescriptorTableSetBuffer(&table.uavs[i],
                                      buf->gpuAddress() + binding_table_.UAV_offsets[i], metadata);
-        } else if (id == DescriptorBindingTable::k_tex_resource) {
+        } else if (id == rhi::DescriptorBindingTable::k_tex_resource) {
           auto* tex = device_->get_mtl_tex(rhi::TextureHandle{binding_table_.UAV[i]});
           IRDescriptorTableSetTexture(&table.uavs[i], tex, 0.0f, 0);
         } else {
@@ -901,7 +902,7 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
       }
 
       // TODO: dirty root flag instead of only dirty resources flag.
-      for (uint32_t i = 0; i < ROOT_CBV_COUNT; i++) {
+      for (uint32_t i = 0; i < rhi::ROOT_CBV_COUNT; i++) {
         if (!binding_table_.CBV[i].is_valid()) {
           continue;
         }
@@ -917,7 +918,7 @@ void MetalCmdEncoderBase<UseMTL4>::flush_binds() {
         const auto* buf = device_->get_mtl_buf(binding_table_.CBV[i]);
         const auto gpu_va = buf->gpuAddress() + binding_table_.CBV_offsets[i];
         const size_t metadata = buf->length();
-        ASSERT(i - ROOT_CBV_COUNT < ARRAY_SIZE(table.cbvs));
+        ASSERT(i - rhi::ROOT_CBV_COUNT < ARRAY_SIZE(table.cbvs));
         IRDescriptorTableSetBuffer(table.cbvs + (i - ARRAY_SIZE(root_layout_.root_cbvs)), gpu_va,
                                    metadata);
       }
@@ -1005,7 +1006,7 @@ void MetalCmdEncoderBase<UseMTL4>::bind_uav(rhi::BufferHandle buffer, uint32_t s
                                             size_t offset_bytes) {
   ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
   binding_table_.UAV[slot] = buffer.to64();
-  binding_table_.UAV_subresources[slot] = DescriptorBindingTable::k_buffer_resource;
+  binding_table_.UAV_subresources[slot] = rhi::DescriptorBindingTable::k_buffer_resource;
   binding_table_.UAV_offsets[slot] = offset_bytes;
   binding_table_dirty_ = true;
 }
@@ -1015,7 +1016,7 @@ void MetalCmdEncoderBase<UseMTL4>::bind_srv(rhi::BufferHandle buffer, uint32_t s
                                             size_t offset_bytes) {
   ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
   binding_table_.SRV[slot] = buffer.to64();
-  binding_table_.SRV_subresources[slot] = DescriptorBindingTable::k_buffer_resource;
+  binding_table_.SRV_subresources[slot] = rhi::DescriptorBindingTable::k_buffer_resource;
   binding_table_.SRV_offsets[slot] = offset_bytes;
   binding_table_dirty_ = true;
 }
@@ -1131,5 +1132,7 @@ void MetalCmdEncoderBase<UseMTL4>::start_compute_encoder() {
 
 template class MetalCmdEncoderBase<true>;
 template class MetalCmdEncoderBase<false>;
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

@@ -11,12 +11,16 @@ namespace teng {
 
 namespace gfx {
 class MemeRenderer123;
-}
 
 namespace rhi {
+
 class Device;
 class Swapchain;
+
 }  // namespace rhi
+
+}  // namespace gfx
+
 class Window;
 
 }  // namespace teng
@@ -73,8 +77,8 @@ struct App {
   std::filesystem::path local_resource_dir_;
   std::filesystem::path camera_path_;
   std::filesystem::path config_path_;
-  std::unique_ptr<teng::rhi::Device> device_;
-  teng::rhi::SwapchainHandleHolder swapchain_;
+  std::unique_ptr<teng::gfx::rhi::Device> device_;
+  teng::gfx::rhi::SwapchainHandleHolder swapchain_;
   std::unique_ptr<teng::Window> window_;
   std::unique_ptr<teng::gfx::MemeRenderer123> renderer_;
   static constexpr int k_camera_config_version{1};

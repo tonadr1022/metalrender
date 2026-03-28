@@ -31,11 +31,11 @@ namespace TENG_NAMESPACE {
 struct ImDrawData;
 class Window;
 
+namespace gfx {
+
 namespace rhi {
 class CmdEncoder;
 }
-
-namespace gfx {
 
 class GBufferRenderer;
 

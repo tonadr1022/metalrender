@@ -25,6 +25,7 @@
 #include "tracy/Tracy.hpp"
 
 using namespace teng;
+using namespace teng::gfx;
 
 namespace {
 
@@ -75,14 +76,14 @@ App::App() {
   };
   window_->init(win_init_info);
   window_->set_window_position(config_.win_pos);
-  device_ = rhi::create_device(rhi::GfxAPI::Metal);
+  device_ = gfx::rhi::create_device(gfx::rhi::GfxAPI::Metal);
   device_->init({
       .shader_lib_dir = resource_dir_ / "shader_out",
       .app_name = "lol",
       .frames_in_flight = 3,
   });
   auto win_dims = window_->get_window_size();
-  swapchain_ = device_->create_swapchain_h(rhi::SwapchainDesc{
+  swapchain_ = device_->create_swapchain_h(gfx::rhi::SwapchainDesc{
       .window = window_.get(),
       .width = win_dims.x,
       .height = win_dims.y,

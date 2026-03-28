@@ -50,8 +50,6 @@
 
 namespace TENG_NAMESPACE {
 
-using namespace rhi;
-
 namespace {
 
 int debug_depth_pyramid_mip = 0;
@@ -78,6 +76,8 @@ uint32_t prev_pow2(uint32_t val) {
 }  // namespace
 
 namespace gfx {
+
+using namespace rhi;
 
 namespace {
 
@@ -834,7 +834,7 @@ bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::m
                                  ModelInstance& model, ModelGPUHandle& out_handle) {
   ZoneScoped;
   ModelLoadResult result;
-  if (!model::load_model(path, root_transform, model, result)) {
+  if (!::teng::gfx::load_model(path, root_transform, model, result)) {
     return false;
   }
 

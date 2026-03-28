@@ -17,6 +17,8 @@ class Device;
 
 namespace TENG_NAMESPACE {
 
+namespace gfx {
+
 enum class CPUTextureLoadType : uint8_t {
   None,
   StbImage,
@@ -85,12 +87,9 @@ struct ModelLoadResult {
   MeshletProcessResult meshlet_process_result;
 };
 
-// TODO: re-evaluate whether renderer is needed. images can be loaded in renderer itself
-namespace model {
-
 bool load_model(const std::filesystem::path &path, const glm::mat4 &root_transform,
                 ModelInstance &out_model, ModelLoadResult &out_load_result);
 
-}
+}  // namespace gfx
 
 }  // namespace TENG_NAMESPACE

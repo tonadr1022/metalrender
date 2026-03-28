@@ -11,11 +11,11 @@
 
 namespace TENG_NAMESPACE {
 
-namespace rhi {
+namespace gfx::rhi {
 
 class Device;
 
-}  // namespace rhi
+}  // namespace gfx::rhi
 
 namespace gfx {
 

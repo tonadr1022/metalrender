@@ -14,9 +14,9 @@
 
 namespace TENG_NAMESPACE {
 
-extern std::unique_ptr<rhi::Device> create_vulkan_device();
+namespace gfx::rhi {
 
-namespace rhi {
+extern std::unique_ptr<Device> create_vulkan_device();
 
 std::unique_ptr<Device> create_device(GfxAPI api) {
   switch (api) {
@@ -26,7 +26,7 @@ std::unique_ptr<Device> create_device(GfxAPI api) {
       std::exit(1);
       return nullptr;
 #else
-      return std::make_unique<MetalDevice>();
+      return std::make_unique<mtl::MetalDevice>();
 #endif
     case rhi::GfxAPI::Vulkan:
 #ifndef VULKAN_BACKEND
@@ -38,6 +38,6 @@ std::unique_ptr<Device> create_device(GfxAPI api) {
   }
 }
 
-}  // namespace rhi
+}  // namespace gfx::rhi
 
 }  // namespace TENG_NAMESPACE

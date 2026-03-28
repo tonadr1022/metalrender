@@ -3,7 +3,7 @@
 #include "GFXTypes.hpp"
 namespace TENG_NAMESPACE {
 
-namespace rhi {
+namespace gfx::rhi {
 
 struct GPUBarrier {
   enum class Type : uint8_t { Buffer, Texture } type;
@@ -51,5 +51,5 @@ struct GPUBarrier {
   }
 };
 
-}  // namespace rhi
+}  // namespace gfx::rhi
 }  // namespace TENG_NAMESPACE

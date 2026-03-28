@@ -41,11 +41,9 @@ namespace TENG_NAMESPACE {
 
 class Window;
 
-namespace rhi {
+namespace gfx::mtl {
 
 struct TextureDesc;
-
-}  // namespace rhi
 
 struct MetalDeviceInitInfo {
   bool prefer_mtl4{};
@@ -392,5 +390,7 @@ class MetalDevice : public rhi::Device {
 
   DeleteQueues delete_queues_{this};
 };
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

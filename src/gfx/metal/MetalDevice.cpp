@@ -37,6 +37,8 @@
 
 namespace TENG_NAMESPACE {
 
+namespace gfx::mtl {
+
 namespace {
 MTL::BlendFactor convert(rhi::BlendFactor factor) {
   switch (factor) {
@@ -1476,5 +1478,7 @@ void MetalDevice::immediate_submit(rhi::QueueType queue_type, ImmediateSubmitFn&
     free_fence(fence);
   }
 }
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

@@ -3,7 +3,6 @@
 #include <bit>
 
 #include "core/Config.hpp"
-#include "core/Logger.hpp"
 #include "gfx/renderer/BufferResize.hpp"
 
 namespace TENG_NAMESPACE {

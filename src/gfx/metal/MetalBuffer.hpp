@@ -12,6 +12,7 @@ class Buffer;
 
 namespace TENG_NAMESPACE {
 
+namespace gfx::mtl {
 class MetalBuffer final : public rhi::Buffer {
  public:
   MetalBuffer(const rhi::BufferDesc& desc, MTL::Buffer* buffer,
@@ -32,5 +33,7 @@ class MetalBuffer final : public rhi::Buffer {
   MTL::ResourceOptions resource_options_{};
   [[maybe_unused]] MTL::Buffer* buffer_{};
 };
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

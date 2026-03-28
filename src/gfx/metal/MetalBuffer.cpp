@@ -6,6 +6,8 @@
 
 namespace TENG_NAMESPACE {
 
+namespace gfx::mtl {
+
 MetalBuffer::MetalBuffer(const rhi::BufferDesc& desc, MTL::Buffer* buffer,
                          MTL::ResourceOptions resource_options, uint32_t bindless_idx)
     : Buffer(desc, bindless_idx), resource_options_(resource_options), buffer_(buffer) {}
@@ -19,5 +21,7 @@ const void* MetalBuffer::contents() const {
   assert(buffer_);
   return buffer_->contents();
 }
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE

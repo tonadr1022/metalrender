@@ -11,6 +11,7 @@ class CounterHeap;
 }
 
 namespace TENG_NAMESPACE {
+namespace gfx::mtl {
 
 class MetalQueryPool : public rhi::QueryPool {
  public:
@@ -19,5 +20,7 @@ class MetalQueryPool : public rhi::QueryPool {
 
   NS::SharedPtr<MTL4::CounterHeap> heap_;
 };
+
+}  // namespace gfx::mtl
 
 }  // namespace TENG_NAMESPACE
