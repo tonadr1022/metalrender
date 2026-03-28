@@ -90,7 +90,6 @@ class MemeRenderer123 {
   void render(const RenderArgs& args);
   void draw_minimal_triangle();
   void on_imgui();
-  void meshlet_stats_imgui(size_t total_scene_models);
   bool on_key_event(int key, int action, int mods);
   bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
                   ModelInstance& model, ModelGPUHandle& out_handle);
@@ -122,6 +121,13 @@ class MemeRenderer123 {
  private:
   void init_imgui();
   void shutdown_imgui();
+  void on_imgui_tab_overview();
+  void on_imgui_tab_stats();
+  void on_imgui_tab_culling();
+  void on_imgui_tab_debug();
+  void on_imgui_tab_textures();
+  void on_imgui_tab_device();
+  void meshlet_stats_imgui(size_t total_scene_models);
   void flush_pending_texture_uploads(rhi::CmdEncoder* enc);
   [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandleHolder& buf) const;
   [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandle& buf) const {

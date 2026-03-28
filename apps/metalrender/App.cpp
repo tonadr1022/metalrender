@@ -391,18 +391,6 @@ void App::on_imgui(float dt) {
     ImGui::Text("GPU: %5.2f ms/frame (%5.2f FPS)", renderer_->get_stats().avg_gpu_frame_time,
                 1000.f / renderer_->get_stats().avg_gpu_frame_time);
     renderer_->on_imgui();
-    // ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.f, 0.f, 0.f, 0.8f});
-    // ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);
-    // if (ImGui::Begin("Meshlet Stats", nullptr,
-    //                  ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar |
-    //                      ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings)) {
-    // ImGui::PushFont(ImGui::GetFont(), 36);
-    // push_font("RobotoMono-Regular", 36.0f);
-    renderer_->meshlet_stats_imgui(ResourceManager::get().get_tot_instances_loaded());
-    // ImGui::PopFont();
-    // }
-    // ImGui::End();
-    // ImGui::PopStyleColor();
     ImGui::TreePop();
   }
 

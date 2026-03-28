@@ -7,6 +7,7 @@
 #include <tracy/Tracy.hpp>
 
 #include "GLFW/glfw3.h"
+#include "ResourceManager.hpp"
 #include "UI.hpp"
 #include "Window.hpp"
 #include "core/Config.hpp"
@@ -1162,52 +1163,70 @@ void MemeRenderer123::shutdown_imgui() { ZoneScoped; }
 
 void MemeRenderer123::on_imgui() {
   ZoneScoped;
-  if (ImGui::TreeNodeEx("Config")) {
-    ImGui::Text("Mesh shaders enabled: %d", settings_.pipeline.mesh_shaders_enabled);
-    ImGui::Text("Render Mode %s", to_string(settings_.debug.render_mode));
-
-    bool shadows_enabled = get_shadows_enabled();
-    if (ImGui::Checkbox("Shadows enabled", &shadows_enabled)) {
-      on_shadows_enabled_change(shadows_enabled);
+  if (ImGui::BeginTabBar("MemeRenderer123##MainTabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+    if (ImGui::BeginTabItem("Overview")) {
+      on_imgui_tab_overview();
+      ImGui::EndTabItem();
     }
-    ImGui::TreePop();
-  }
-  if (ImGui::TreeNodeEx("Textures")) {
-    model_gpu_resource_pool_.iterate_entries([this](const ModelGPUResources& gpu_resource) {
-      for (const auto& tex : gpu_resource.textures) {
-        ImGui::Text("%s", device_->get_tex(tex)->desc().name);
-        ImGui::Image((ImTextureRef)tex.handle.to64(), ImVec2{64, 64}, ImVec2{0, 0}, ImVec2{1, 1});
-      }
-    });
-    ImGui::TreePop();
-  }
-  if (ImGui::TreeNodeEx("Stats", ImGuiTreeNodeFlags_DefaultOpen)) {
-    ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
-                stats_.total_instance_vertices, stats_.total_instances);
-    ImGui::Text("Total total instance meshlets: %d", stats_.total_instance_meshlets);
-    ImGui::Text("GPU Frame Time: %.2f (%.2f FPS)", stats_.avg_gpu_frame_time,
-                1000.f / stats_.avg_gpu_frame_time);
-
-    MeshletDrawStats stats{};
-    for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
-      if (view_id >= meshlet_draw_stats_readback_.size()) continue;
-      stats = *static_cast<MeshletDrawStats*>(
-          device_->get_buf(meshlet_draw_stats_readback_[view_id][curr_frame_idx_])->contents());
-      size_t tot_drawn_meshlets = stats.meshlets_drawn_early + stats.meshlets_drawn_late;
-      ImGui::Text(
-          "(View %zu) Meshlets drawn %1zu frames ago: %5zu of %5u (%.2f %%)\nEarly: %7u\tLate %7u",
-          view_id, device_->get_info().frames_in_flight, tot_drawn_meshlets,
-          stats_.total_instance_meshlets,
-          tot_drawn_meshlets == 0
-              ? 0
-              : (float)tot_drawn_meshlets / (float)stats_.total_instance_meshlets * 100.f,
-          stats.meshlets_drawn_early, stats.meshlets_drawn_late);
+    if (ImGui::BeginTabItem("Stats")) {
+      on_imgui_tab_stats();
+      ImGui::EndTabItem();
     }
-    ImGui::TreePop();
+    if (ImGui::BeginTabItem("Culling")) {
+      on_imgui_tab_culling();
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem("Debug")) {
+      on_imgui_tab_debug();
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem("Textures")) {
+      on_imgui_tab_textures();
+      ImGui::EndTabItem();
+    }
+    if (ImGui::BeginTabItem("Device")) {
+      on_imgui_tab_device();
+      ImGui::EndTabItem();
+    }
+    ImGui::EndTabBar();
+  }
+}
+
+void MemeRenderer123::on_imgui_tab_overview() {
+  ImGui::Text("Mesh shaders enabled: %d", settings_.pipeline.mesh_shaders_enabled);
+  ImGui::Text("Render Mode %s", to_string(settings_.debug.render_mode));
+
+  bool shadows_enabled = get_shadows_enabled();
+  if (ImGui::Checkbox("Shadows enabled", &shadows_enabled)) {
+    on_shadows_enabled_change(shadows_enabled);
+  }
+  ImGui::Separator();
+}
+
+void MemeRenderer123::on_imgui_tab_stats() {
+  ImGui::Text("Total possible vertices drawn: %d\nTotal objects: %u",
+              stats_.total_instance_vertices, stats_.total_instances);
+  ImGui::Text("Total total instance meshlets: %d", stats_.total_instance_meshlets);
+  ImGui::Text("GPU Frame Time: %.2f (%.2f FPS)", stats_.avg_gpu_frame_time,
+              1000.f / stats_.avg_gpu_frame_time);
+
+  MeshletDrawStats meshlet_stats{};
+  for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
+    if (view_id >= meshlet_draw_stats_readback_.size()) continue;
+    meshlet_stats = *static_cast<MeshletDrawStats*>(
+        device_->get_buf(meshlet_draw_stats_readback_[view_id][curr_frame_idx_])->contents());
+    size_t tot_drawn_meshlets =
+        meshlet_stats.meshlets_drawn_early + meshlet_stats.meshlets_drawn_late;
+    ImGui::Text(
+        "(View %zu) Meshlets drawn %1zu frames ago: %5zu of %5u (%.2f %%)\nEarly: %7u\tLate %7u",
+        view_id, device_->get_info().frames_in_flight, tot_drawn_meshlets,
+        stats_.total_instance_meshlets,
+        tot_drawn_meshlets == 0
+            ? 0
+            : (float)tot_drawn_meshlets / (float)stats_.total_instance_meshlets * 100.f,
+        meshlet_stats.meshlets_drawn_early, meshlet_stats.meshlets_drawn_late);
   }
 
-  ImGui::Text("Culling paused: %d", settings_.culling.paused);
-  ImGui::Text("Culling enabled: %d", settings_.culling.enabled);
   // frames_in_flight - 1 frames ago is guaranteed to be copied back to the cpu (see readback
   // passes above)
   if (frame_num_ >= device_->get_info().frames_in_flight) {
@@ -1221,32 +1240,49 @@ void MemeRenderer123::on_imgui() {
     }
   }
 
+  meshlet_stats_imgui(ResourceManager::get().get_tot_instances_loaded());
+}
+
+void MemeRenderer123::on_imgui_tab_culling() {
+  ImGui::Checkbox("Culling paused", &settings_.culling.paused);
+  ImGui::Checkbox("Culling enabled", &settings_.culling.enabled);
+  ImGui::Checkbox("Meshlet frustum culling enabled", &settings_.culling.meshlet_frustum);
+  ImGui::Checkbox("Meshlet cone culling enabled", &settings_.culling.meshlet_cone);
+  ImGui::Checkbox("Meshlet occlusion culling enabled", &settings_.culling.meshlet_occlusion);
+  ImGui::Checkbox("Object occlusion culling enabled", &settings_.culling.object_occlusion);
+}
+
+void MemeRenderer123::on_imgui_tab_debug() {
+  if (render_views_.empty()) {
+    ImGui::TextUnformatted("No render views; depth pyramid mip unavailable.");
+    return;
+  }
   auto dp_dims = device_->get_tex(render_views_[0].depth_pyramid_tex)->desc().dims;
   auto mip_levels = math::get_mip_levels(dp_dims.x, dp_dims.y);
-  ImGui::SliderInt("mip view", &settings_.debug.depth_pyramid_mip_view, 0, mip_levels - 1);
+  ImGui::SliderInt("Depth pyramid mip view", &settings_.debug.depth_pyramid_mip_view, 0,
+                   mip_levels - 1);
+}
 
-  if (ImGui::TreeNodeEx("Device", ImGuiTreeNodeFlags_DefaultOpen)) {
-    device_->on_imgui();
-    if (ImGui::TreeNode("GPU Buffers")) {
-      static std::vector<rhi::Buffer*> buffers;
-      buffers.clear();
-      device_->get_all_buffers(buffers);
-      std::ranges::sort(
-          buffers, [](rhi::Buffer* a, rhi::Buffer* b) { return a->desc().size > b->desc().size; });
-      for (auto& b : buffers) {
-        ImGui::Text("%s: %.1f mb", b->desc().name, b->desc().size / 1024.f / 1024.f);
-      }
-      ImGui::TreePop();
+void MemeRenderer123::on_imgui_tab_textures() {
+  model_gpu_resource_pool_.iterate_entries([this](const ModelGPUResources& gpu_resource) {
+    for (const auto& tex : gpu_resource.textures) {
+      ImGui::Text("%s", device_->get_tex(tex)->desc().name);
+      ImGui::Image((ImTextureRef)tex.handle.to64(), ImVec2{64, 64}, ImVec2{0, 0}, ImVec2{1, 1});
     }
-    ImGui::TreePop();
-  }
-  if (ImGui::TreeNodeEx("Culling")) {
-    ImGui::Checkbox("Culling paused", &settings_.culling.paused);
-    ImGui::Checkbox("Culling enabled", &settings_.culling.enabled);
-    ImGui::Checkbox("Meshlet frustum culling enabled", &settings_.culling.meshlet_frustum);
-    ImGui::Checkbox("Meshlet cone culling enabled", &settings_.culling.meshlet_cone);
-    ImGui::Checkbox("Meshlet occlusion culling enabled", &settings_.culling.meshlet_occlusion);
-    ImGui::Checkbox("Object occlusion culling enabled", &settings_.culling.object_occlusion);
+  });
+}
+
+void MemeRenderer123::on_imgui_tab_device() {
+  device_->on_imgui();
+  if (ImGui::TreeNodeEx("GPU Buffers")) {
+    static std::vector<rhi::Buffer*> buffers;
+    buffers.clear();
+    device_->get_all_buffers(buffers);
+    std::ranges::sort(
+        buffers, [](rhi::Buffer* a, rhi::Buffer* b) { return a->desc().size > b->desc().size; });
+    for (auto& b : buffers) {
+      ImGui::Text("%s: %.1f mb", b->desc().name, b->desc().size / 1024.f / 1024.f);
+    }
     ImGui::TreePop();
   }
 }
@@ -1522,6 +1558,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
 
 void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
   if (settings_.pipeline.mesh_shaders_enabled) {
+    ImGui::Separator();
     ImGui::Checkbox("Collect meshlet draw stats (GPU atomics)",
                     &settings_.developer.collect_meshlet_draw_stats);
     auto add_commas = [](uint64_t n) -> std::string {
