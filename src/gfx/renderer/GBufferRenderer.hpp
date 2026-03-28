@@ -29,26 +29,26 @@ class GBufferRenderer {
                            bool reverse_z);
   ~GBufferRenderer();
 
-  struct GbufferPassInfo {
+  struct PassInfo {
     RGResourceId gbuffer_a_id{};
     RGResourceId gbuffer_b_id{};
     RGResourceId depth_id{};
   };
 
-  struct GBufferViewRgIds {
+  struct ViewRgIds {
     RGResourceId& meshlet_vis;
     RGResourceId& draw_count;
     RGResourceId& final_depth_pyramid;
     RGResourceId& meshlet_draw_stats;
   };
 
-  struct GBufferViewBindingsMeshlet {
+  struct ViewBindingsMeshlet {
     const TaskCmdBufRgIdsPerView& task_cmd_buf_rg_ids;
     RenderView& render_view;
-    GBufferViewRgIds rg_ids;
+    ViewRgIds rg_ids;
   };
 
-  struct GBufferViewBindings {
+  struct ViewBindings {
     RenderView& render_view;
   };
 
@@ -66,18 +66,17 @@ class GBufferRenderer {
     rhi::BufferHandle out_draw_count_buf;
   };
 
-  struct IndexedIndirectGBufferView {
+  struct IndexedIndirectView {
     const RenderView& render_view;
     RGResourceId indirect_cmds_rg{};
     uint32_t indirect_icb_id{};
     uint32_t max_draw_commands{};
   };
 
-  void bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
-            const SceneBindings& scene, const GBufferViewBindingsMeshlet& view);
-  void bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
-            const SceneBindings& scene, const GBufferViewBindings& view,
-            IndexedIndirectGBufferView indexed_indirect);
+  void bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase, const SceneBindings& scene,
+            const ViewBindingsMeshlet& view);
+  void bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase, const SceneBindings& scene,
+            const ViewBindings& view, IndexedIndirectView indexed_indirect);
 
   struct ShadowDepthPassInfo {
     RGResourceId depth_id{};
@@ -85,7 +84,7 @@ class GBufferRenderer {
 
   void bake_shadow_depth(std::string_view pass_name, ShadowDepthPassInfo& out,
                          DrawCullPhase cull_phase, const SceneBindings& scene,
-                         const GBufferViewBindingsMeshlet& view);
+                         const ViewBindingsMeshlet& view);
 
   struct DepthOnlyPassInfo {};
 

@@ -104,10 +104,9 @@ GBufferRenderer::GBufferRenderer(rhi::Device* device, InstanceMgr& static_instan
 
 GBufferRenderer::~GBufferRenderer() = default;
 
-void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
-                           const SceneBindings& scene,
-                           [[maybe_unused]] const GBufferViewBindings& view,
-                           IndexedIndirectGBufferView indexed_indirect) {
+void GBufferRenderer::bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
+                           const SceneBindings& scene, [[maybe_unused]] const ViewBindings& view,
+                           IndexedIndirectView indexed_indirect) {
   bool late = cull_phase == DrawCullPhase::Late;
   auto& p = rg_.add_graphics_pass(late ? "gbuffer_late" : "gbuffer_early");
   declare_indexed_indirect_gbuffer_barriers(p, indexed_indirect.indirect_cmds_rg);
@@ -136,9 +135,8 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
     enc->begin_rendering({
         RenderAttInfo::color_att(gbuffer_a_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
         RenderAttInfo::color_att(gbuffer_b_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
-        RenderAttInfo::depth_stencil_att(
-            depth_handle, load_op,
-            {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
+        RenderAttInfo::depth_stencil_att(depth_handle, load_op,
+                                         {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
     });
     enc->bind_srv(materials, 11);
     encode_indexed_indirect_gbuffer_pass(enc, depth_handle, indexed_indirect.indirect_icb_id,
@@ -147,8 +145,8 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
   });
 }
 
-void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
-                           const SceneBindings& scene, const GBufferViewBindingsMeshlet& view) {
+void GBufferRenderer::bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase,
+                           const SceneBindings& scene, const ViewBindingsMeshlet& view) {
   bool late = cull_phase == DrawCullPhase::Late;
   auto& p = rg_.add_graphics_pass(late ? "gbuffer_late" : "gbuffer_early");
   RGResourceId out_draw_count_buf_rg_handle{};
@@ -224,9 +222,8 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
         enc->begin_rendering({
             RenderAttInfo::color_att(gbuffer_a_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
             RenderAttInfo::color_att(gbuffer_b_tex, load_op, {.color = glm::vec4(0, 0, 0, 0)}),
-            RenderAttInfo::depth_stencil_att(
-                depth_handle, load_op,
-                {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
+            RenderAttInfo::depth_stencil_att(depth_handle, load_op,
+                                             {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
         });
         enc->bind_srv(materials, 11);
         const SceneBindings mesh_scene{*batch, materials, frame_globals};
@@ -243,7 +240,7 @@ void GBufferRenderer::bake(GbufferPassInfo& gbuffer_pass_info, DrawCullPhase cul
 
 void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthPassInfo& out,
                                         DrawCullPhase cull_phase, const SceneBindings& scene,
-                                        const GBufferViewBindingsMeshlet& view) {
+                                        const ViewBindingsMeshlet& view) {
   bool late = cull_phase == DrawCullPhase::Late;
   auto& p = rg_.add_graphics_pass(pass_name);
   RGResourceId out_draw_count_buf_rg_handle{};
@@ -294,9 +291,8 @@ void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthP
     ASSERT(depth_handle.is_valid());
     auto load_op = late ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
     enc->begin_rendering({
-        RenderAttInfo::depth_stencil_att(
-            depth_handle, load_op,
-            {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
+        RenderAttInfo::depth_stencil_att(depth_handle, load_op,
+                                         {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
     });
     enc->bind_srv(materials, 11);
 

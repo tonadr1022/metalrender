@@ -531,7 +531,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     }
   }
 
-  GBufferRenderer::GbufferPassInfo gbuffer_pass_info{};
+  GBufferRenderer::PassInfo gbuffer_pass_info{};
 
   bool obj_or_meshlet_occlusion_culling_enabled =
       (renderer_cv::culling_object_occlusion.get() != 0 ||
@@ -544,7 +544,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     for (size_t i = 0; i < shadow_cascade_count_; i++) {
       const int svid = static_cast<int>(shadow_map_render_views_[i]);
       GBufferRenderer::ShadowDepthPassInfo shadow_depth{};
-      const GBufferRenderer::GBufferViewBindingsMeshlet shadow_view{
+      const GBufferRenderer::ViewBindingsMeshlet shadow_view{
           task_cmd_buf_rg_ids[svid],
           get_render_view(shadow_map_render_views_[i]),
           {meshlet_vis_ids[svid], out_draw_count_ids_early[svid], final_depth_pyramid_ids[svid],
@@ -562,21 +562,21 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
         static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
     RenderView& main_render_view = get_render_view(main_render_view_id_);
     if (renderer_cv::pipeline_mesh_shaders.get() != 0) {
-      const GBufferRenderer::GBufferViewBindingsMeshlet gbuffer_view{
+      const GBufferRenderer::ViewBindingsMeshlet gbuffer_view{
           task_cmd_buf_rg_ids[vid],
           main_render_view,
           {meshlet_vis_ids[vid], out_draw_count_ids_early[vid], final_depth_pyramid_ids[vid],
            meshlet_draw_stats_buf_ids[vid]}};
       gbuffer_renderer_->bake(gbuffer_pass_info, DrawCullPhase::Early, gbuffer_scene, gbuffer_view);
     } else {
-      const GBufferRenderer::IndexedIndirectGBufferView indirect_gbuf_view{
+      const GBufferRenderer::IndexedIndirectView indirect_gbuf_view{
           main_render_view,
           indirect_buffer_id,
           // main only, this is hardcoded but corresponds to indirect_cmd_buf_ids_
           0,
           static_instance_mgr_.stats().max_instance_data_count,
       };
-      const GBufferRenderer::GBufferViewBindings gbuffer_view{main_render_view};
+      const GBufferRenderer::ViewBindings gbuffer_view{main_render_view};
       gbuffer_renderer_->bake(gbuffer_pass_info, DrawCullPhase::Early, gbuffer_scene, gbuffer_view,
                               indirect_gbuf_view);
     }
@@ -656,7 +656,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     auto vid = (int)main_render_view_id_;
     const GBufferRenderer::SceneBindings gbuffer_scene{
         static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
-    const GBufferRenderer::GBufferViewBindingsMeshlet gbuffer_view{
+    const GBufferRenderer::ViewBindingsMeshlet gbuffer_view{
         task_cmd_buf_rg_ids[vid],
         get_render_view(main_render_view_id_),
         {meshlet_vis_ids[vid], out_draw_count_ids_late[vid], final_depth_pyramid_ids[vid],
