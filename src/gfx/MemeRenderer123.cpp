@@ -129,6 +129,13 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   device_->acquire_next_swapchain_image(swapchain_);
+  static size_t i = 0;
+  if (i++ == 0) {
+    renderer_cv::developer_render_graph_verbose.set(1);
+  } else {
+    renderer_cv::developer_render_graph_verbose.set(0);
+  }
+
   rg_.bake(window_->get_window_size(), renderer_cv::developer_render_graph_verbose.get() != 0);
   static std::vector<rhi::CmdEncoder*> wait_for_encoders;
   wait_for_encoders.clear();
@@ -543,6 +550,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
        renderer_cv::culling_meshlet_occlusion.get() != 0) &&
       renderer_cv::culling_enabled.get() != 0 && renderer_cv::pipeline_mesh_shaders.get() != 0;
 
+  RGResourceId csm_depth_id{};
   if (get_shadows_enabled() && mesh_shaders_enabled()) {
     const DrawPassSceneBindings gbuffer_scene{
         static_draw_batch_, materials_buf_.get_buffer_handle(), frame_globals_buf_info_};
@@ -560,6 +568,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
     csm_renderer_->bake("csm", shadow_depth, DrawCullPhase::Early, gbuffer_scene, shadow_views,
                         reverse_z_);
+    csm_depth_id = shadow_depth.depth_id;
     depth_ids[(int)shadow_map_render_views_[0]] = shadow_depth.depth_id;
   }
 
@@ -708,12 +717,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     RGResourceId secondary_view_debug_depth_rg_handle{};
     const DebugRenderMode debug_mode = clamped_debug_render_mode();
     bool secondary_view_debug_enabled =
-        debug_mode == DebugRenderMode::SecondaryView && !shadow_map_render_views_.empty();
+        debug_mode == DebugRenderMode::SecondaryView && csm_depth_id.is_valid();
     if (secondary_view_debug_enabled) {
-      auto view_id = (int)shadow_map_render_views_[0];
-      p.sample_tex(depth_ids[view_id]);
+      // p.sample_tex(csm_depth_id);
       secondary_view_debug_depth_rg_handle =
-          p.read_tex(depth_ids[view_id], rhi::PipelineStage::FragmentShader);
+          p.read_tex(csm_depth_id, rhi::PipelineStage::FragmentShader);
     }
     if (obj_or_meshlet_occlusion_culling_enabled &&
         debug_mode == DebugRenderMode::DepthReduceMips) {
@@ -743,9 +751,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       uint32_t tex_idx{};
       float mult = 1.f;
       if (secondary_view_debug_enabled) {
-        mult = 100.f;
-        tex_idx =
-            device_->get_tex(rg_.get_att_img(secondary_view_debug_depth_rg_handle))->bindless_idx();
+        mult = 1000.f;
+        auto depth_tex = rg_.get_att_img(secondary_view_debug_depth_rg_handle);
+        tex_idx = get_csm_debug_tex_idx(depth_tex, static_cast<uint32_t>(debug_cascade_level_));
       } else if (!obj_or_meshlet_occlusion_culling_enabled ||
                  clamped_debug_render_mode() != DebugRenderMode::DepthReduceMips) {
         tex_idx = gbuffer_a_tex->bindless_idx();
@@ -841,6 +849,42 @@ void MemeRenderer123::flush_pending_texture_uploads(rhi::CmdEncoder* enc) {
   }
 
   pending_texture_uploads_.clear();
+}
+
+void MemeRenderer123::reset_csm_debug_views() {
+  if (!csm_debug_depth_tex_.is_valid()) {
+    return;
+  }
+  for (auto view : csm_debug_depth_views_) {
+    if (view >= 0) {
+      device_->destroy(csm_debug_depth_tex_, view);
+    }
+  }
+  csm_debug_depth_tex_ = {};
+  csm_debug_depth_views_.fill(-1);
+}
+
+uint32_t MemeRenderer123::get_csm_debug_tex_idx(rhi::TextureHandle depth_tex,
+                                                uint32_t cascade_idx) {
+  if (!depth_tex.is_valid()) {
+    return rhi::k_invalid_bindless_idx;
+  }
+  if (csm_debug_depth_tex_ != depth_tex) {
+    reset_csm_debug_views();
+    csm_debug_depth_tex_ = depth_tex;
+    const uint32_t cascade_count = csm_renderer_->num_cascades();
+    for (uint32_t i = 0; i < cascade_count; i++) {
+      csm_debug_depth_views_[i] = device_->create_tex_view(depth_tex, 0, 1, i, 1);
+    }
+  }
+  const uint32_t cascade_count = csm_renderer_->num_cascades();
+  const uint32_t clamped_cascade = std::min(cascade_idx, cascade_count - 1);
+  const auto view = csm_debug_depth_views_[clamped_cascade];
+  if (view < 0) {
+    ASSERT(0);
+    return device_->get_tex(depth_tex)->bindless_idx();
+  }
+  return device_->get_tex_view_bindless_idx(depth_tex, view);
 }
 
 bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
@@ -1434,6 +1478,7 @@ void MemeRenderer123::recreate_swapchain_sized_textures() {
 }
 
 MemeRenderer123::~MemeRenderer123() {
+  reset_csm_debug_views();
   shader_mgr_->shutdown();
   rg_.shutdown();
 

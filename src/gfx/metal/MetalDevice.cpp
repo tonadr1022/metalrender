@@ -1009,8 +1009,9 @@ rhi::TextureViewHandle Device::create_tex_view(rhi::TextureHandle handle, uint32
   auto* tex = reinterpret_cast<Texture*>(get_tex(handle));
   ALWAYS_ASSERT(tex);
   auto* mtl_tex = tex->texture();
-  auto* view = mtl_tex->newTextureView(mtl::util::convert(tex->desc().format),
-                                       get_texture_type(tex->desc().dims, tex->desc().array_length),
+  auto* view = mtl_tex->newTextureView(
+      mtl::util::convert(tex->desc().format),
+      get_texture_type(tex->desc().dims, layer_count),
                                        NS::Range::Make(base_mip_level, level_count),
                                        NS::Range::Make(base_array_layer, layer_count));
   auto bindless_idx = resource_desc_heap_allocator_.alloc_idx();

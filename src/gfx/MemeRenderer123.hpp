@@ -143,6 +143,9 @@ class MemeRenderer123 {
   RenderViewId create_render_view();
   void destroy_render_view(RenderViewId view_id);
   void make_depth_pyramid_tex(RenderViewId view_id, glm::uvec2 main_size);
+  void reset_csm_debug_views();
+  [[nodiscard]] uint32_t get_csm_debug_tex_idx(rhi::TextureHandle depth_tex,
+                                               uint32_t cascade_idx);
   std::vector<RenderViewId> free_render_view_ids_;
 
   // guaranteed to be densely packed
@@ -244,6 +247,8 @@ class MemeRenderer123 {
   std::unique_ptr<gfx::CSMRenderer> csm_renderer_;
 
   int debug_cascade_level_{0};
+  rhi::TextureHandle csm_debug_depth_tex_{};
+  std::array<rhi::TextureViewHandle, CSM_MAX_CASCADES> csm_debug_depth_views_{-1, -1, -1, -1};
   bool reverse_z_{true};
 };
 
