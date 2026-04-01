@@ -136,9 +136,8 @@ void CSMRenderer::bake(std::string_view pass_name, ShadowDepthPassInfo& out,
 
   p.set_ex([this, cull_phase, rg_depth = out.depth_id, render_views = view_binds.render_views,
             batch = &scene.draw_batch, materials = scene.materials_buf,
-            out_draw_count_buf_rg_handles, meshlet_draw_stats_rg_handles,
-            task_cmd_rg_handles, frame_globals = scene.frame_globals_buf_info, reverse_z](
-               CmdEncoder* enc) {
+            out_draw_count_buf_rg_handles, meshlet_draw_stats_rg_handles, task_cmd_rg_handles,
+            frame_globals = scene.frame_globals_buf_info, reverse_z](CmdEncoder* enc) {
     if (!static_instance_mgr_.has_draws()) {
       return;
     }
@@ -152,11 +151,10 @@ void CSMRenderer::bake(std::string_view pass_name, ShadowDepthPassInfo& out,
             device_->create_tex_view(rg_.get_att_img(rg_depth), 0, 1, cascade_i, 1);
       }
     }
-    auto load_op = LoadOp::Clear;
     enc->bind_srv(materials, 11);
     for (uint32_t cascade_i = 0; cascade_i < cascade_count_; cascade_i++) {
       enc->begin_rendering({
-          RenderAttInfo::depth_stencil_att(depth_handle, load_op,
+          RenderAttInfo::depth_stencil_att(depth_handle, LoadOp::Clear,
                                            {.depth_stencil = {.depth = reverse_z ? 0.f : 1.f}},
                                            rhi::StoreOp::Store, csm_img_views_[cascade_i]),
       });

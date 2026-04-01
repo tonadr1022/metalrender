@@ -129,12 +129,12 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   device_->acquire_next_swapchain_image(swapchain_);
-  static size_t i = 0;
-  if (i++ == 0) {
-    renderer_cv::developer_render_graph_verbose.set(1);
-  } else {
-    renderer_cv::developer_render_graph_verbose.set(0);
-  }
+  // static size_t i = 0;
+  // if (i++ == 0) {
+  //   renderer_cv::developer_render_graph_verbose.set(1);
+  // } else {
+  //   renderer_cv::developer_render_graph_verbose.set(0);
+  // }
 
   rg_.bake(window_->get_window_size(), renderer_cv::developer_render_graph_verbose.get() != 0);
   static std::vector<rhi::CmdEncoder*> wait_for_encoders;
@@ -701,40 +701,28 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   }
 
   {
-    struct ShadePassInfo {
-      RGResourceId gbuffer_a_id{};
-      RGResourceId gbuffer_b_id{};
-    };
-
-    ShadePassInfo shade_pass_info{
-        .gbuffer_a_id = gbuffer_pass_info.gbuffer_a_id,
-        .gbuffer_b_id = gbuffer_pass_info.gbuffer_b_id,
-    };
-
     auto& p = rg_.add_graphics_pass("shade");
-    auto gbuffer_a_id = p.sample_tex(shade_pass_info.gbuffer_a_id);
-    auto gbuffer_b_id = p.sample_tex(shade_pass_info.gbuffer_b_id);
-    RGResourceId secondary_view_debug_depth_rg_handle{};
+    auto depth_tex_id = p.sample_tex(depth_ids[(int)main_render_view_id_]);
+    auto gbuffer_a_id = p.sample_tex(gbuffer_pass_info.gbuffer_a_id);
+    auto gbuffer_b_id = p.sample_tex(gbuffer_pass_info.gbuffer_b_id);
     const DebugRenderMode debug_mode = clamped_debug_render_mode();
     bool secondary_view_debug_enabled =
         debug_mode == DebugRenderMode::SecondaryView && csm_depth_id.is_valid();
-    if (secondary_view_debug_enabled) {
-      // p.sample_tex(csm_depth_id);
-      secondary_view_debug_depth_rg_handle =
-          p.read_tex(csm_depth_id, rhi::PipelineStage::FragmentShader);
-    }
+    RGResourceId shadow_tex_rg_handle = p.sample_tex(csm_depth_id);
     if (obj_or_meshlet_occlusion_culling_enabled &&
         debug_mode == DebugRenderMode::DepthReduceMips) {
       p.sample_tex(final_depth_pyramid_ids[(int)main_render_view_id_]);
     }
     p.w_swapchain_tex(swapchain_);
-    p.set_ex([this, gbuffer_a_id, gbuffer_b_id, secondary_view_debug_depth_rg_handle,
+    p.set_ex([this, gbuffer_a_id, gbuffer_b_id, depth_tex_id, shadow_tex_rg_handle,
               secondary_view_debug_enabled,
               obj_or_meshlet_occlusion_culling_enabled](rhi::CmdEncoder* enc) {
       ZoneScopedN("Final pass");
       auto* gbuffer_a_tex = device_->get_tex(rg_.get_att_img(gbuffer_a_id));
       auto* gbuffer_b_tex = device_->get_tex(rg_.get_att_img(gbuffer_b_id));
+      auto* depth_tex = device_->get_tex(rg_.get_att_img(depth_tex_id));
       auto dims = gbuffer_a_tex->desc().dims;
+      ASSERT(depth_tex->desc().dims == dims);
       device_->begin_swapchain_rendering(swapchain_, enc);
       enc->bind_pipeline(tex_only_pso_);
       enc->set_wind_order(rhi::WindOrder::Clockwise);
@@ -742,17 +730,22 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       enc->set_viewport({0, 0}, dims);
       enc->bind_cbv(frame_globals_buf_info_.buf, GLOBALS_SLOT,
                     frame_globals_buf_info_.offset_bytes);
+      auto& main_view = get_render_view(main_render_view_id_);
+      enc->bind_cbv(main_view.data_buf_info.buf, VIEW_DATA_SLOT,
+                    main_view.data_buf_info.offset_bytes);
 
       const CSMData& csm_data = csm_renderer_->get_csm_data();
       auto [buf, offset, write_ptr] =
           frame_gpu_upload_allocator_.alloc(sizeof(CSMData), (void*)&csm_data);
-      enc->bind_cbv(buf, 4, offset);
+      enc->bind_srv(buf, 0, offset);
+      auto shadow_tex = rg_.get_att_img(shadow_tex_rg_handle);
+      enc->bind_srv(shadow_tex, 1);
 
       uint32_t tex_idx{};
       float mult = 1.f;
       if (secondary_view_debug_enabled) {
         mult = 1000.f;
-        auto depth_tex = rg_.get_att_img(secondary_view_debug_depth_rg_handle);
+        auto depth_tex = rg_.get_att_img(shadow_tex_rg_handle);
         tex_idx = get_csm_debug_tex_idx(depth_tex, static_cast<uint32_t>(debug_cascade_level_));
       } else if (!obj_or_meshlet_occlusion_culling_enabled ||
                  clamped_debug_render_mode() != DebugRenderMode::DepthReduceMips) {
@@ -766,9 +759,12 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       }
       TexOnlyPC pc{
           .color_mult = glm::vec4{mult, mult, mult, 1},
+          .img_dims = dims,
           .tex_idx = tex_idx,
           .gbuffer_b_idx = gbuffer_b_tex->bindless_idx(),
+          .depth_tex_idx = depth_tex->bindless_idx(),
           .mip_level = static_cast<uint32_t>(debug_depth_pyramid_mip),
+          .shadows_enabled = (uint32_t)renderer_cv::shadows_enabled.get(),
       };
       enc->push_constants(&pc, sizeof(pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
@@ -1353,6 +1349,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
   {
     ViewData view_data{
         .vp = proj_mat * args.view_mat,
+        .inv_vp = glm::inverse(view_data.vp),
         .view = args.view_mat,
         .proj = proj_mat,
         .camera_pos = glm::vec4{args.camera_pos, 0},
@@ -1406,6 +1403,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
       const auto& csm_data = csm_renderer_->get_csm_data();
       ViewData shadow_view_data{
           .vp = csm_data.light_vp_matrices[i],
+          .inv_vp = glm::inverse(shadow_view_data.vp),
           .view = csm_renderer_->get_light_view(),
           .proj = csm_renderer_->get_light_proj(i),
           .camera_pos = glm::vec4{args.camera_pos, 0},

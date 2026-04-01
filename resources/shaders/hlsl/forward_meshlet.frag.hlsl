@@ -21,26 +21,33 @@ FOut main(VOut input) {
   if (render_mode == DEBUG_RENDER_MODE_TRIANGLE_COLORS ||
       render_mode == DEBUG_RENDER_MODE_MESHLET_COLORS ||
       render_mode == DEBUG_RENDER_MODE_INSTANCE_COLORS) {
+#ifdef MESH_SHADER_OUTPUT_COLOR
     fout.gbuffer_a = input.color;
+#endif
     fout.gbuffer_b = float4(0, 0, 0, 0);
     return fout;
   }
 #endif
   M4Material material = material_buf[input.material_id];
   SamplerState samp = bindless_samplers[LINEAR_SAMPLER_IDX];
-  /*
-    float4 normal_tex_normal = float4(1, 1, 1, 1);
-    if (material.normal_tex_idx != INVALID_TEX_ID) {
-      normal_tex_normal = bindless_textures[material.normal_tex_idx].Sample(samp, input.uv);
-    }
-  */
+/*
+  float4 normal_tex_normal = float4(1, 1, 1, 1);
+  if (material.normal_tex_idx != INVALID_TEX_ID) {
+    normal_tex_normal = bindless_textures[material.normal_tex_idx].Sample(samp, input.uv);
+  }
+*/
+#ifdef MESH_SHADER_OUTPUT_NORMAL
   float4 normal = float4(input.normal, 1);
   fout.gbuffer_b = normal;
+#endif
   float4 albedo = material.color;
-  //  albedo = float4(1, 1, 1, 1);
+
+#ifdef MESH_SHADER_OUTPUT_UV
   if (material.albedo_tex_idx != INVALID_TEX_ID) {
     albedo *= (bindless_textures[material.albedo_tex_idx]).Sample(samp, input.uv);
   }
+#endif
+
 #ifdef ALPHA_TEST
   if (albedo.a < 0.5) {
     discard;

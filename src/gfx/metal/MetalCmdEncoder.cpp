@@ -83,18 +83,34 @@ void CmdEncoderBase<UseMTL4>::begin_rendering(
     for (const auto& att : attachments) {
       if (att.type == rhi::RenderAttInfo::Type::DepthStencil) {
         depth_desc = NS::TransferPtr(MTL::RenderPassDepthAttachmentDescriptor::alloc()->init());
+        MTL::Texture* mtl_tex{};
         auto* tex = reinterpret_cast<Texture*>(device_->get_tex(att.image));
+        if (att.subresource != -1) {
+          auto* tex_view = device_->get_tex_view(att.image, att.subresource);
+          mtl_tex = tex_view->tex;
+        } else {
+          mtl_tex = tex->texture();
+        }
+        ASSERT(mtl_tex);
         curr_render_target_info_.depth_format = tex->desc().format;
-        depth_desc->setTexture(tex->texture());
+        depth_desc->setTexture(mtl_tex);
         depth_desc->setLoadAction(mtl::util::convert(att.load_op));
         depth_desc->setStoreAction(mtl::util::convert(att.store_op));
         depth_desc->setClearDepth(att.clear_value.depth_stencil.depth);
         m4_desc->setDepthAttachment(depth_desc.get());
       } else {
         auto* color_desc = m4_desc->colorAttachments()->object(color_att_i);
+        MTL::Texture* mtl_tex{};
         auto* tex = reinterpret_cast<Texture*>(device_->get_tex(att.image));
+        if (att.subresource != -1) {
+          auto* tex_view = device_->get_tex_view(att.image, att.subresource);
+          mtl_tex = tex_view->tex;
+        } else {
+          mtl_tex = tex->texture();
+        }
+        ASSERT(mtl_tex);
         curr_render_target_info_.color_formats.push_back(tex->desc().format);
-        color_desc->setTexture(tex->texture());
+        color_desc->setTexture(mtl_tex);
         color_desc->setLoadAction(mtl::util::convert(att.load_op));
         color_desc->setStoreAction(mtl::util::convert(att.store_op));
         color_desc->setClearColor(

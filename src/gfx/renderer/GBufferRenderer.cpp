@@ -256,7 +256,7 @@ void GBufferRenderer::load_pipelines(ShaderManager& shader_mgr) {
         .shaders = {{{"forward_meshlet", ShaderType::Task},
                      {"gbuffer_meshlet", ShaderType::Mesh},
                      {alpha_mask_type == AlphaMaskType::Mask ? "forward_meshlet_alphatest"
-                                                             : "forward_meshlet",
+                                                             : "forward_meshlet_gbuffer",
                       ShaderType::Fragment}}},
     });
   }

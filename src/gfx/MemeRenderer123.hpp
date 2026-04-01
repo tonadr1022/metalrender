@@ -144,8 +144,7 @@ class MemeRenderer123 {
   void destroy_render_view(RenderViewId view_id);
   void make_depth_pyramid_tex(RenderViewId view_id, glm::uvec2 main_size);
   void reset_csm_debug_views();
-  [[nodiscard]] uint32_t get_csm_debug_tex_idx(rhi::TextureHandle depth_tex,
-                                               uint32_t cascade_idx);
+  [[nodiscard]] uint32_t get_csm_debug_tex_idx(rhi::TextureHandle depth_tex, uint32_t cascade_idx);
   std::vector<RenderViewId> free_render_view_ids_;
 
   // guaranteed to be densely packed
@@ -157,6 +156,7 @@ class MemeRenderer123 {
 
   RGPass* clear_bufs_pass_{};
 
+  // TODO: needs work
   void set_cull_data_and_globals(const RenderArgs& args);
   GeometryBatch::Alloc upload_geometry(GeometryBatchType type,
                                        const std::vector<DefaultVertex>& vertices,

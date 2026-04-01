@@ -71,7 +71,7 @@ class CSMRenderer {
   RenderGraph& rg_;
 
   uint32_t shadow_map_resolutions_[CSM_MAX_CASCADES] = {1024, 1024, 1024, 1024};
-  uint32_t cascade_count_{3};
+  uint32_t cascade_count_{1};
 };
 
 }  // namespace gfx
