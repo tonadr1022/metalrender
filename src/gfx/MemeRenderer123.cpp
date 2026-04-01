@@ -118,7 +118,9 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   indirect_cmd_buf_ids_.clear();
 
   glm::vec3 light_dir = glm::normalize(glm::vec3(0.0f, 1.0f, 1.0f));
-  csm_renderer_->update(args.view_mat, args.camera_pos, light_dir);
+  auto win_dims = window_->get_window_size();
+  float aspect_ratio = static_cast<float>(win_dims.x) / static_cast<float>(win_dims.y);
+  csm_renderer_->update(args.view_mat, args.camera_pos, light_dir, k_default_fov_deg, aspect_ratio);
   set_cull_data_and_globals(args);
 
   static glm::uvec2 prev_fb_size{};
@@ -567,7 +569,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     }
 
     csm_renderer_->bake("csm", shadow_depth, DrawCullPhase::Early, gbuffer_scene, shadow_views,
-                        reverse_z_);
+                        false);
     csm_depth_id = shadow_depth.depth_id;
     depth_ids[(int)shadow_map_render_views_[0]] = shadow_depth.depth_id;
   }

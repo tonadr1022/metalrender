@@ -19,16 +19,53 @@ CONSTANT_BUFFER(ViewData, view_data, VIEW_DATA_SLOT);
 StructuredBuffer<CSMData> csm_data_buf : register(t0);
 Texture2DArray shadow_tex_array : register(t1);
 
-float calculate_shadow_factor(float3 world_pos, in CSMData csm_data, SamplerState samp) {
-  for (uint i = 0; i < 1; i++) {
-    float4 shadow_pos = mul(csm_data.light_vp_matrices[i], float4(world_pos, 1.0));
-    shadow_pos.xyz /= shadow_pos.w;
-    // [-1,1] to [0,1]
-    shadow_pos.xy = shadow_pos.xy * 0.5 + 0.5;
-    float shadow_depth = shadow_tex_array.SampleLevel(samp, float3(shadow_pos.xy, i), 0).r;
-    if (shadow_depth < shadow_pos.z) {
-      return 0.0f;
+uint select_cascade(in CSMData csm_data, float view_depth) {
+  uint cascade_count = min(csm_data.num_cascades, CSM_MAX_CASCADES);
+  if (cascade_count <= 1) {
+    return 0;
+  }
+
+  uint cascade_idx = 0;
+  [unroll]
+  for (uint i = 0; i < CSM_MAX_CASCADES - 1; i++) {
+    if (i >= cascade_count - 1) {
+      break;
     }
+    if (view_depth > csm_data.cascade_levels[i]) {
+      cascade_idx = i + 1;
+    }
+  }
+  return cascade_idx;
+}
+
+float calculate_shadow_factor(float3 world_pos, in CSMData csm_data, SamplerState samp) {
+  uint cascade_count = min(csm_data.num_cascades, CSM_MAX_CASCADES);
+  if (cascade_count == 0) {
+    return 1.0f;
+  }
+
+  float3 view_pos = mul(view_data.view, float4(world_pos, 1.0)).xyz;
+  float view_depth = abs(view_pos.z);
+  uint cascade_idx = select_cascade(csm_data, view_depth);
+
+  float4 shadow_pos = mul(csm_data.light_vp_matrices[cascade_idx], float4(world_pos, 1.0));
+  shadow_pos.xyz /= shadow_pos.w;
+  shadow_pos.xy = shadow_pos.xy * 0.5 + 0.5;
+
+  if (shadow_pos.x < 0.0 || shadow_pos.x > 1.0 || shadow_pos.y < 0.0 || shadow_pos.y > 1.0 ||
+      shadow_pos.z < 0.0 || shadow_pos.z > 1.0) {
+    return 1.0f;
+  }
+
+  float bias = csm_data.biases.x;
+  if (cascade_count > 1) {
+    float t = cascade_idx / float(cascade_count - 1);
+    bias = lerp(csm_data.biases.x, csm_data.biases.y, t);
+  }
+
+  float shadow_depth = shadow_tex_array.SampleLevel(samp, float3(shadow_pos.xy, cascade_idx), 0).r;
+  if (shadow_depth < shadow_pos.z - bias) {
+    return 0.0f;
   }
   return 1.0f;
 }
@@ -45,9 +82,10 @@ float4 main(VOut input) : SV_Target {
     float3 N = gbuffer_b.rgb;
     float NdotL = dot(N, L);
     if (shadows_enabled) {
-      float2 uv = (float2(input.uv) + .5) / float2(img_dims);
+      float2 uv = input.uv;
       float depth = depth_tex.SampleLevel(samp, uv, 0).r;
-      float4 clip_pos = float4(uv * 2. - 1., depth, 1.);
+      float2 clip_xy = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+      float4 clip_pos = float4(clip_xy, depth, 1.0);
       float4 wpos_pre_divide = mul(view_data.inv_vp, clip_pos);
       float3 world_pos = wpos_pre_divide.xyz / wpos_pre_divide.w;
       float shadow_factor = calculate_shadow_factor(world_pos, csm_data_buf[0], samp);

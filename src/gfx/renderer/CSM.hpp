@@ -47,7 +47,8 @@ class CSMRenderer {
     // TODO: rename to depth_tex_id
     RGResourceId depth_id{};
   };
-  void update(const glm::mat4& cam_view, glm::vec3 cam_pos, glm::vec3 light_dir);
+  void update(const glm::mat4& cam_view, glm::vec3 cam_pos, glm::vec3 light_dir, float fov_deg,
+              float aspect_ratio);
   void bake(std::string_view pass_name, ShadowDepthPassInfo& out, DrawCullPhase cull_phase,
             const DrawPassSceneBindings& scene, const ViewBindingsMeshlet& view, bool reverse_z);
   void load_pipelines(ShaderManager& shader_mgr);

@@ -1,5 +1,6 @@
 #include "CSM.hpp"
 
+#include <cmath>
 #include <span>
 
 #include "core/EAssert.hpp"
@@ -33,8 +34,9 @@ void calc_frustum_corners_world_space(std::span<glm::vec4> corners, const glm::m
 }
 
 glm::mat4 calc_light_space_vp(const glm::mat4& cam_view, const glm::mat4& light_view,
-                              const glm::mat4& cam_proj, float, glm::mat4& light_proj) {
-  glm::vec3 center;
+                              const glm::mat4& cam_proj, float shadow_map_res,
+                              glm::mat4& light_proj) {
+  glm::vec3 center{};
   std::array<glm::vec4, 8> corners;
   calc_frustum_corners_world_space(corners, cam_proj * cam_view);
   for (auto v : corners) {
@@ -68,6 +70,21 @@ glm::mat4 calc_light_space_vp(const glm::mat4& cam_view, const glm::mat4& light_
   // } else {
   //   max.z *= z_mult;
   // }
+  // Stabilize shadows by snapping the ortho center to shadow-map texel increments.
+  if (shadow_map_res > 0.0f) {
+    const float extent_x = max.x - min.x;
+    const float extent_y = max.y - min.y;
+    const float texel_size_x = extent_x / shadow_map_res;
+    const float texel_size_y = extent_y / shadow_map_res;
+    glm::vec3 snapped_center = (min + max) * 0.5f;
+    snapped_center.x = std::floor(snapped_center.x / texel_size_x) * texel_size_x;
+    snapped_center.y = std::floor(snapped_center.y / texel_size_y) * texel_size_y;
+    min.x = snapped_center.x - extent_x * 0.5f;
+    max.x = snapped_center.x + extent_x * 0.5f;
+    min.y = snapped_center.y - extent_y * 0.5f;
+    max.y = snapped_center.y + extent_y * 0.5f;
+  }
+
   light_proj = glm::orthoRH_ZO(min.x, max.x, max.y, min.y, min.z, max.z);
   return light_proj * light_view;
 }
@@ -79,9 +96,8 @@ void calc_csm_light_space_vp_matrices(std::span<glm::mat4> matrices,
                                       std::span<uint32_t> shadow_map_resolutions) {
   ASSERT((matrices.size() && matrices.size() - 1 == levels.size()));
   auto get_proj = [&](float near, float far) {
-    auto mat = glm::perspective(glm::radians(fov_deg), aspect, near, far);
-    mat[1][1] *= -1;
-    return mat;
+    // Metal uses depth range [0, 1], keep CSM projection consistent with ZO clip space.
+    return glm::perspective(glm::radians(fov_deg), aspect, near, far);
   };
 
   if (levels.empty()) {
@@ -92,11 +108,11 @@ void calc_csm_light_space_vp_matrices(std::span<glm::mat4> matrices,
                                       shadow_map_resolutions[0], proj_matrices[0]);
     for (uint32_t i = 1; i < matrices.size() - 1; i++) {
       matrices[i] = calc_light_space_vp(cam_view, light_view, get_proj(levels[i - 1], levels[i]),
-                                        shadow_map_resolutions[0], proj_matrices[i]);
+                                        shadow_map_resolutions[i], proj_matrices[i]);
     }
-    matrices[matrices.size() - 1] =
-        calc_light_space_vp(cam_view, light_view, get_proj(levels[levels.size() - 1], cam_far),
-                            shadow_map_resolutions[0], proj_matrices[matrices.size() - 1]);
+    matrices[matrices.size() - 1] = calc_light_space_vp(
+        cam_view, light_view, get_proj(levels[levels.size() - 1], cam_far),
+        shadow_map_resolutions[matrices.size() - 1], proj_matrices[matrices.size() - 1]);
   }
 }
 
@@ -165,7 +181,7 @@ void CSMRenderer::bake(std::string_view pass_name, ShadowDepthPassInfo& out,
                                           task_cmd_rg_handles[cascade_i],
                                           rg_.get_buf(out_draw_count_buf_rg_handles[cascade_i])};
       encode_meshlet_mesh_draw_pass(
-          reverse_z, device_, rg_, static_instance_mgr_, enc, cull_phase, false, depth_handle,
+          false, device_, rg_, static_instance_mgr_, enc, cull_phase, false, depth_handle,
           mesh_scene, mesh_pass,
           std::span<const PipelineHandleHolder>(shadow_meshlet_psos_,
                                                 static_cast<size_t>(AlphaMaskType::Count)));
@@ -193,15 +209,16 @@ void CSMRenderer::load_pipelines(ShaderManager& shader_mgr) {
   }
 }
 
-void CSMRenderer::update(const glm::mat4& cam_view, glm::vec3 cam_pos, glm::vec3 light_dir) {
+void CSMRenderer::update(const glm::mat4& cam_view, glm::vec3 cam_pos, glm::vec3 light_dir,
+                         float fov_deg, float aspect_ratio) {
   glm::mat4 light_view = glm::lookAt(cam_pos, cam_pos + light_dir, glm::vec3(0.0f, 1.0f, 0.0f));
   light_view_ = light_view;
   float shadow_z_near_ = 0.1f;
   float shadow_z_far_ = 100.0f;
   float cascade_linear_factor_ = 0.95f;
-  float fov_deg = 90.0f;
-  // TODO: no
-  float aspect_ratio = 1.0f;
+  csm_data_.num_cascades = cascade_count_;
+  csm_data_.biases = glm::vec4(0.0004f, 0.0025f, 0.0f, shadow_z_far_);
+  csm_data_.cascade_levels = glm::vec4(shadow_z_far_);
 
   for (uint32_t i = 0; i < cascade_count_ - 1; i++) {
     float p = (i + 1) / static_cast<float>(cascade_count_);
