@@ -11,15 +11,17 @@
 namespace teng {
 namespace gfx {
 class ShaderManager;
-}
-class Window;
 
 namespace rhi {
+
 class CmdEncoder;
 class Device;
 class Swapchain;
 
 }  // namespace rhi
+
+}  // namespace gfx
+class Window;
 
 namespace gfx {
 

@@ -12,7 +12,8 @@
 #include "hlsl/default_vertex.h"
 
 using namespace teng;
-using namespace teng::rhi;
+using namespace teng::gfx;
+using namespace teng::gfx::rhi;
 
 namespace teng::gfx {
 
