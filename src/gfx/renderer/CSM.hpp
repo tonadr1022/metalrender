@@ -28,12 +28,6 @@ class InstanceMgr;
 struct DrawPassSceneBindings;
 struct RenderView;
 
-void calc_csm_light_space_vp_matrices(std::span<glm::mat4> matrices,
-                                      std::span<glm::mat4> proj_matrices, std::span<float> levels,
-                                      const glm::mat4& cam_view, glm::vec3 light_dir, float fov_deg,
-                                      float aspect, float cam_near, float cam_far,
-                                      uint32_t shadow_map_res);
-
 class CSMRenderer {
  public:
   struct ViewBindingsMeshlet {
@@ -58,21 +52,23 @@ class CSMRenderer {
   [[nodiscard]] const glm::mat4& get_light_proj(uint32_t cascade_idx) const {
     return light_proj_matrices_[cascade_idx];
   }
-  [[nodiscard]] const glm::mat4& get_light_view() const { return light_view_; }
+  [[nodiscard]] const glm::mat4& get_light_view(uint32_t cascade_idx) const {
+    return light_views_[cascade_idx];
+  }
 
  private:
   CSMData csm_data_;
   std::array<glm::mat4, CSM_MAX_CASCADES> light_proj_matrices_;
+  std::array<glm::mat4, CSM_MAX_CASCADES> light_views_{};
   std::array<int32_t, CSM_MAX_CASCADES> csm_img_views_{-1, -1, -1, -1};
   rhi::TextureHandle curr_img_;
-  glm::mat4 light_view_{};
   rhi::PipelineHandleHolder shadow_meshlet_psos_[(size_t)AlphaMaskType::Count];
   InstanceMgr& static_instance_mgr_;
   rhi::Device* device_;
   RenderGraph& rg_;
 
   uint32_t shadow_map_resolutions_[CSM_MAX_CASCADES] = {1024, 1024, 1024, 1024};
-  uint32_t cascade_count_{1};
+  uint32_t cascade_count_{3};
 };
 
 }  // namespace gfx

@@ -26,8 +26,7 @@ uint select_cascade(in CSMData csm_data, float view_depth) {
   }
 
   uint cascade_idx = 0;
-  [unroll]
-  for (uint i = 0; i < CSM_MAX_CASCADES - 1; i++) {
+  [unroll] for (uint i = 0; i < CSM_MAX_CASCADES - 1; i++) {
     if (i >= cascade_count - 1) {
       break;
     }
@@ -97,6 +96,39 @@ float4 main(VOut input) : SV_Target {
     float4 light_out = float4(albedo.xyz * NdotL, albedo.a) + float4(ambient, 0);
     light_out = float4(tonemap(light_out.xyz), light_out.a);
     return light_out;
+  } else if (render_mode == DEBUG_RENDER_MODE_CSM_CASCADE_COLORS) {
+    const CSMData csm_data = csm_data_buf[0];
+    uint cascade_count = min(csm_data.num_cascades, CSM_MAX_CASCADES);
+    if (cascade_count == 0) {
+      return float4(0.0, 0.0, 0.0, 1.0);
+    }
+
+    float2 uv = input.uv;
+    float depth = depth_tex.SampleLevel(samp, uv, 0).r;
+    // Reconstruct NDC
+    float2 ndc_xy = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
+    float4 ndc_pos = float4(ndc_xy, depth, 1.0);
+
+    float4 wpos_pre_divide = mul(view_data.inv_vp, ndc_pos);
+    float3 world_pos = wpos_pre_divide.xyz / wpos_pre_divide.w;
+    float3 view_pos = mul(view_data.view, float4(world_pos, 1.0)).xyz;
+    float view_depth = abs(view_pos.z);
+
+    // float4 view_pos_h = mul(view_data.inv_proj, ndc_pos);
+    // float3 view_pos = view_pos_h.xyz / view_pos_h.w;
+    // float view_depth = abs(view_pos.z);
+
+    uint cascade_idx = select_cascade(csm_data, view_depth);
+    cascade_idx = min(cascade_idx, cascade_count - 1);
+
+    float4 colors[CSM_MAX_CASCADES] = {
+        float4(1.0, 0.0, 0.0, 1.0),
+        float4(0.0, 1.0, 0.0, 1.0),
+        float4(0.0, 0.0, 1.0, 1.0),
+        float4(1.0, 1.0, 0.0, 1.0),
+    };
+    // return float4(float3(view_depth, view_depth, view_depth), 1.0);
+    return colors[cascade_idx];
   } else if (render_mode == DEBUG_RENDER_MODE_SECONDARY_VIEW) {
     float4 color_out = color_mult * tex.SampleLevel(samp, input.uv, 0);
     return color_out;

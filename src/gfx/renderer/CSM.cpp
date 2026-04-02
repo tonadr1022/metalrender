@@ -33,9 +33,9 @@ void calc_frustum_corners_world_space(std::span<glm::vec4> corners, const glm::m
   }
 }
 
-glm::mat4 calc_light_space_vp(const glm::mat4& cam_view, const glm::mat4& light_view,
-                              const glm::mat4& cam_proj, float shadow_map_res,
-                              glm::mat4& light_proj) {
+glm::mat4 calc_light_space_vp(const glm::mat4& cam_view, const glm::mat4& cam_proj,
+                              const glm::vec3& light_dir, float shadow_map_res,
+                              glm::mat4& light_proj, glm::mat4& light_view) {
   glm::vec3 center{};
   std::array<glm::vec4, 8> corners;
   calc_frustum_corners_world_space(corners, cam_proj * cam_view);
@@ -43,6 +43,8 @@ glm::mat4 calc_light_space_vp(const glm::mat4& cam_view, const glm::mat4& light_
     center += glm::vec3(v);
   }
   center /= 8;
+
+  light_view = glm::lookAt(center + light_dir, center, glm::vec3(0.0f, 1.0f, 0.0f));
 
   glm::vec3 min{std::numeric_limits<float>::max()};
   glm::vec3 max{std::numeric_limits<float>::lowest()};
@@ -90,29 +92,31 @@ glm::mat4 calc_light_space_vp(const glm::mat4& cam_view, const glm::mat4& light_
 }
 
 void calc_csm_light_space_vp_matrices(std::span<glm::mat4> matrices,
-                                      std::span<glm::mat4> proj_matrices, std::span<float> levels,
-                                      const glm::mat4& cam_view, const glm::mat4& light_view,
+                                      std::span<glm::mat4> proj_matrices,
+                                      std::span<glm::mat4> light_views, std::span<float> levels,
+                                      const glm::mat4& cam_view, const glm::vec3& light_dir,
                                       float fov_deg, float aspect, float cam_near, float cam_far,
                                       std::span<uint32_t> shadow_map_resolutions) {
   ASSERT((matrices.size() && matrices.size() - 1 == levels.size()));
   auto get_proj = [&](float near, float far) {
-    // Metal uses depth range [0, 1], keep CSM projection consistent with ZO clip space.
-    return glm::perspective(glm::radians(fov_deg), aspect, near, far);
+    return glm::perspectiveRH_ZO(glm::radians(fov_deg), aspect, near, far);
   };
 
   if (levels.empty()) {
-    matrices[0] = calc_light_space_vp(cam_view, light_view, get_proj(cam_near, cam_far),
-                                      shadow_map_resolutions[0], proj_matrices[0]);
+    matrices[0] = calc_light_space_vp(cam_view, get_proj(cam_near, cam_far), light_dir,
+                                      shadow_map_resolutions[0], proj_matrices[0], light_views[0]);
   } else {
-    matrices[0] = calc_light_space_vp(cam_view, light_view, get_proj(cam_near, levels[0]),
-                                      shadow_map_resolutions[0], proj_matrices[0]);
+    matrices[0] = calc_light_space_vp(cam_view, get_proj(cam_near, levels[0]), light_dir,
+                                      shadow_map_resolutions[0], proj_matrices[0], light_views[0]);
     for (uint32_t i = 1; i < matrices.size() - 1; i++) {
-      matrices[i] = calc_light_space_vp(cam_view, light_view, get_proj(levels[i - 1], levels[i]),
-                                        shadow_map_resolutions[i], proj_matrices[i]);
+      matrices[i] = calc_light_space_vp(cam_view, get_proj(levels[i - 1], levels[i]), light_dir,
+                                        shadow_map_resolutions[i], proj_matrices[i],
+                                        light_views[i]);
     }
     matrices[matrices.size() - 1] = calc_light_space_vp(
-        cam_view, light_view, get_proj(levels[levels.size() - 1], cam_far),
-        shadow_map_resolutions[matrices.size() - 1], proj_matrices[matrices.size() - 1]);
+        cam_view, get_proj(levels[levels.size() - 1], cam_far), light_dir,
+        shadow_map_resolutions[matrices.size() - 1],
+        proj_matrices[matrices.size() - 1], light_views[matrices.size() - 1]);
   }
 }
 
@@ -211,10 +215,10 @@ void CSMRenderer::load_pipelines(ShaderManager& shader_mgr) {
 
 void CSMRenderer::update(const glm::mat4& cam_view, glm::vec3 cam_pos, glm::vec3 light_dir,
                          float fov_deg, float aspect_ratio) {
-  glm::mat4 light_view = glm::lookAt(cam_pos, cam_pos + light_dir, glm::vec3(0.0f, 1.0f, 0.0f));
-  light_view_ = light_view;
+  (void)cam_pos;
+  glm::vec3 light_dir_ws = -glm::normalize(light_dir);
   float shadow_z_near_ = 0.1f;
-  float shadow_z_far_ = 100.0f;
+  float shadow_z_far_ = 200.0f;
   float cascade_linear_factor_ = 0.95f;
   csm_data_.num_cascades = cascade_count_;
   csm_data_.biases = glm::vec4(0.0004f, 0.0025f, 0.0f, shadow_z_far_);
@@ -230,8 +234,9 @@ void CSMRenderer::update(const glm::mat4& cam_view, glm::vec3 cam_pos, glm::vec3
 
   calc_csm_light_space_vp_matrices(std::span(csm_data_.light_vp_matrices, cascade_count_),
                                    std::span(light_proj_matrices_.data(), cascade_count_),
+                                   std::span(light_views_.data(), cascade_count_),
                                    std::span(&csm_data_.cascade_levels.x, cascade_count_ - 1),
-                                   cam_view, light_view, fov_deg, aspect_ratio, shadow_z_near_,
+                                   cam_view, light_dir_ws, fov_deg, aspect_ratio, shadow_z_near_,
                                    shadow_z_far_, shadow_map_resolutions_);
 }
 

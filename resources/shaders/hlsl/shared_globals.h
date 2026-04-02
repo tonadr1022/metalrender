@@ -3,15 +3,16 @@
 
 #include "shader_core.h"
 
-#define DEBUG_RENDER_MODE_LIST(X)                             \
-  X(None, DEBUG_RENDER_MODE_NONE, 0u)                         \
-  X(DepthReduceMips, DEBUG_RENDER_MODE_DEPTH_REDUCE_MIPS, 1u) \
-  X(SecondaryView, DEBUG_RENDER_MODE_SECONDARY_VIEW, 2u)      \
-  X(MeshletColors, DEBUG_RENDER_MODE_MESHLET_COLORS, 3u)      \
-  X(TriangleColors, DEBUG_RENDER_MODE_TRIANGLE_COLORS, 4u)    \
-  X(InstanceColors, DEBUG_RENDER_MODE_INSTANCE_COLORS, 5u)    \
-  X(Albedo, DEBUG_RENDER_MODE_ALBEDO, 6u)                     \
-  X(Count, DEBUG_RENDER_MODE_COUNT, 7u)
+#define DEBUG_RENDER_MODE_LIST(X)                               \
+  X(None, DEBUG_RENDER_MODE_NONE, 0u)                           \
+  X(DepthReduceMips, DEBUG_RENDER_MODE_DEPTH_REDUCE_MIPS, 1u)   \
+  X(SecondaryView, DEBUG_RENDER_MODE_SECONDARY_VIEW, 2u)        \
+  X(MeshletColors, DEBUG_RENDER_MODE_MESHLET_COLORS, 3u)        \
+  X(TriangleColors, DEBUG_RENDER_MODE_TRIANGLE_COLORS, 4u)      \
+  X(InstanceColors, DEBUG_RENDER_MODE_INSTANCE_COLORS, 5u)      \
+  X(Albedo, DEBUG_RENDER_MODE_ALBEDO, 6u)                       \
+  X(CSMCascadeColors, DEBUG_RENDER_MODE_CSM_CASCADE_COLORS, 7u) \
+  X(Count, DEBUG_RENDER_MODE_COUNT, 8u)
 #if defined(__cplusplus)
 
 enum class DebugRenderMode : uint32_t {
@@ -53,6 +54,7 @@ struct ViewData {
   float4x4 inv_vp;
   float4x4 view;
   float4x4 proj;
+  float4x4 inv_proj;
   float4 camera_pos;
 };
 

@@ -117,7 +117,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
 
   indirect_cmd_buf_ids_.clear();
 
-  glm::vec3 light_dir = glm::normalize(glm::vec3(0.0f, 1.0f, 1.0f));
+  glm::vec3 light_dir = glm::normalize(glm::vec3(1.0f, 2.0f, 1.0f));
   auto win_dims = window_->get_window_size();
   float aspect_ratio = static_cast<float>(win_dims.x) / static_cast<float>(win_dims.y);
   csm_renderer_->update(args.view_mat, args.camera_pos, light_dir, k_default_fov_deg, aspect_ratio);
@@ -1349,11 +1349,13 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
     frame_globals_buf_info_.offset_bytes = offset;
   }
   {
+    const glm::mat4 vp = proj_mat * args.view_mat;
     ViewData view_data{
-        .vp = proj_mat * args.view_mat,
-        .inv_vp = glm::inverse(view_data.vp),
+        .vp = vp,
+        .inv_vp = glm::inverse(vp),
         .view = args.view_mat,
         .proj = proj_mat,
+        .inv_proj = glm::inverse(proj_mat),
         .camera_pos = glm::vec4{args.camera_pos, 0},
     };
     auto& main_view = get_render_view(main_render_view_id_);
@@ -1403,11 +1405,14 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
   if (get_shadows_enabled()) {
     for (size_t i = 0; i < csm_renderer_->num_cascades(); i++) {
       const auto& csm_data = csm_renderer_->get_csm_data();
+      const glm::mat4 shadow_vp = csm_data.light_vp_matrices[i];
+      const glm::mat4 light_proj = csm_renderer_->get_light_proj(i);
       ViewData shadow_view_data{
-          .vp = csm_data.light_vp_matrices[i],
-          .inv_vp = glm::inverse(shadow_view_data.vp),
-          .view = csm_renderer_->get_light_view(),
-          .proj = csm_renderer_->get_light_proj(i),
+          .vp = shadow_vp,
+          .inv_vp = glm::inverse(shadow_vp),
+          .view = csm_renderer_->get_light_view(static_cast<uint32_t>(i)),
+          .proj = light_proj,
+          .inv_proj = glm::inverse(light_proj),
           .camera_pos = glm::vec4{args.camera_pos, 0},
       };
       auto [buf, offset, write_ptr] =
