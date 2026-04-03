@@ -6,6 +6,7 @@
 #include "core/Util.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/vulkan/VkUtil.hpp"
+#include "gfx/vulkan/VulkanBuffer.hpp"
 #include "gfx/vulkan/VulkanCommon.hpp"
 #include "gfx/vulkan/VulkanDevice.hpp"
 #include "gfx/vulkan/VulkanTexture.hpp"
@@ -353,6 +354,23 @@ void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle /*src_buf*/, size_t
 void VulkanCmdEncoder::copy_tex_to_buf(rhi::TextureHandle /*src_tex*/, size_t /*src_slice*/,
                                        size_t /*src_level*/, rhi::BufferHandle /*dst_buf*/,
                                        size_t /*dst_offset*/) {}
+
+void VulkanCmdEncoder::copy_buffer_to_buffer(rhi::BufferHandle src_buf, size_t src_offset,
+                                             rhi::BufferHandle dst_buf, size_t dst_offset,
+                                             size_t size) {
+  if (size == 0) {
+    return;
+  }
+  flush_barriers();
+  auto* src_b = static_cast<VulkanBuffer*>(device_->get_buf(src_buf));
+  auto* dst_b = static_cast<VulkanBuffer*>(device_->get_buf(dst_buf));
+  const VkBufferCopy region{
+      .srcOffset = static_cast<VkDeviceSize>(src_offset),
+      .dstOffset = static_cast<VkDeviceSize>(dst_offset),
+      .size = static_cast<VkDeviceSize>(size),
+  };
+  vkCmdCopyBuffer(cmd(), src_b->buffer(), dst_b->buffer(), 1, &region);
+}
 
 void VulkanCmdEncoder::barrier(rhi::PipelineStage /*src_stage*/, rhi::AccessFlags /*src_access*/,
                                rhi::PipelineStage /*dst_stage*/, rhi::AccessFlags /*dst_access*/) {

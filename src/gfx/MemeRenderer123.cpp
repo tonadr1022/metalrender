@@ -145,9 +145,8 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
     auto* enc = device_->begin_cmd_encoder(rhi::QueueType::Copy);
     if (!buffer_copy_mgr_.get_copies().empty()) {
       for (const auto& copy : buffer_copy_mgr_.get_copies()) {
-        enc->barrier(copy.src_buf, PipelineStage::AllCommands,
-                     AccessFlags::AnyRead | AccessFlags::AnyWrite, PipelineStage::AllTransfer,
-                     AccessFlags::TransferRead);
+        enc->barrier(copy.src_buf, PipelineStage::AllCommands, AccessFlags::AnyWrite,
+                     PipelineStage::AllTransfer, AccessFlags::TransferRead);
         enc->barrier(copy.dst_buf, PipelineStage::AllCommands,
                      AccessFlags::AnyRead | AccessFlags::AnyWrite, PipelineStage::AllTransfer,
                      AccessFlags::TransferWrite);
