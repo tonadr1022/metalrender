@@ -131,6 +131,7 @@ class CmdEncoderBase : public rhi::CmdEncoder {
   void bind_srv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
   void bind_uav(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
   void bind_uav(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
+  // TODO: this won't compile
   void bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
 
   void write_timestamp(rhi::QueryPoolHandle query_pool, uint32_t query_index) override;

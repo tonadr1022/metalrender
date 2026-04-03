@@ -15,14 +15,15 @@
 Texture2D<float> in_tex : register(t0);
 RWTexture2D<float> out_tex : register(u0);
 
-[RootSignature(ROOT_SIGNATURE)][NumThreads(8, 8, 1)] void main(uint2 dtid : SV_DispatchThreadID) {
-  if (dtid.x >= out_tex_dim_x || dtid.y >= out_tex_dim_y) return;
+[RootSignature(ROOT_SIGNATURE)][NumThreads(8, 8, 1)] void main(uint2 dtid
+                                                               : SV_DispatchThreadID) {
+  if (dtid.x >= pc.out_tex_dim_x || dtid.y >= pc.out_tex_dim_y) return;
 
-  int2 in_start =
-      int2(dtid.x * in_tex_dim_x / out_tex_dim_x, dtid.y * in_tex_dim_y / out_tex_dim_y);
+  int2 in_start = int2(dtid.x * pc.in_tex_dim_x / pc.out_tex_dim_x,
+                       dtid.y * pc.in_tex_dim_y / pc.out_tex_dim_y);
 
-  int2 in_end = int2((dtid.x + 1) * in_tex_dim_x / out_tex_dim_x,
-                     (dtid.y + 1) * in_tex_dim_y / out_tex_dim_y);
+  int2 in_end = int2((dtid.x + 1) * pc.in_tex_dim_x / pc.out_tex_dim_x,
+                     (dtid.y + 1) * pc.in_tex_dim_y / pc.out_tex_dim_y);
 
   float depth = INVALID_DEPTH;
 

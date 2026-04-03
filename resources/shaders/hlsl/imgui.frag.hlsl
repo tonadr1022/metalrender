@@ -2,7 +2,7 @@
 #include "shared_imgui.h"
 
 float4 main(VOut input) : SV_Target {
-  Texture2D tex = bindless_textures[tex_idx];
+  Texture2D tex = bindless_textures[pc.tex_idx];
   SamplerState samp = bindless_samplers[LINEAR_SAMPLER_IDX];
   float4 c = input.color * tex.Sample(samp, input.uv);
   return c;

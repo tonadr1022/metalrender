@@ -18,6 +18,7 @@ constexpr uint32_t TOTAL_UAV_BINDINGS = 12;
 struct DescriptorBindingTable {
   BufferHandle CBV[TOTAL_CBV_BINDINGS] = {};
   int CBV_offsets[TOTAL_CBV_BINDINGS] = {};
+  int CBV_sizes[TOTAL_CBV_BINDINGS] = {};
   // uint64_t version of rhi::BufferHandle/TextureHandle
   uint64_t SRV[TOTAL_SRV_BINDINGS] = {};
   // -2 == buffer, -1 == texture, >= 0 == texture view;

@@ -65,7 +65,7 @@ struct GPUFrameAllocator3 {
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> buffers;
   uint32_t frame_idx_{};
   rhi::Device* device_;
-  constexpr static uint32_t k_alignment = 16;
+  constexpr static uint32_t k_alignment = 64;
 };
 
 }  // namespace gfx

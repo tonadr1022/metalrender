@@ -149,7 +149,7 @@ bool compile_hlsl_file(const fs::path& source_hlsl, const CompileOptions& option
         path_str, "-Fo", spirv_path.string(), "-T", shader_model, "-E", "main", "-spirv",
         "-fspv-target-env=vulkan1.3", "-fspv-extension=SPV_NV_mesh_shader",
         "-fspv-extension=SPV_EXT_descriptor_indexing", "-fvk-use-dx-layout", "-fvk-u-shift", "1000",
-        "0", "-fvk-t-shift", "2000", "0",
+        "0", "-fvk-t-shift", "2000", "0", "-fvk-b-shift", "3000", "0",
         //  "-rootsig-define",
         //  "ROOT_SIGNATURE",
         "-D", "VULKAN"};

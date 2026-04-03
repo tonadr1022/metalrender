@@ -156,6 +156,18 @@ VkAccessFlags2 convert(rhi::AccessFlags access) {
   return flags;
 }
 
+void augment_memory_barrier2_stages_for_access(VkPipelineStageFlags2& src_stage,
+                                               VkAccessFlags2 src_access,
+                                               VkPipelineStageFlags2& dst_stage,
+                                               VkAccessFlags2 dst_access) {
+  if (src_access & (VK_ACCESS_2_HOST_READ_BIT | VK_ACCESS_2_HOST_WRITE_BIT)) {
+    src_stage |= VK_PIPELINE_STAGE_2_HOST_BIT;
+  }
+  if (dst_access & (VK_ACCESS_2_HOST_READ_BIT | VK_ACCESS_2_HOST_WRITE_BIT)) {
+    dst_stage |= VK_PIPELINE_STAGE_2_HOST_BIT;
+  }
+}
+
 VkPrimitiveTopology convert_prim_topology(rhi::PrimitiveTopology top) {
   switch (top) {
     default:

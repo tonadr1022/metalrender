@@ -18,25 +18,26 @@ struct DispatchMeshCmd {
   uint tg_z;
 };
 
-[NumThreads(64, 1, 1)] void main(uint dtid : SV_DispatchThreadID) {
-  if (dtid >= max_draws) return;
+[NumThreads(64, 1, 1)] void main(uint dtid
+                                 : SV_DispatchThreadID) {
+  if (dtid >= pc.max_draws) return;
 
   InstanceData instance_data =
-      bindless_buffers[instance_data_buf_idx].Load<InstanceData>(dtid * sizeof(InstanceData));
+      bindless_buffers[pc.instance_data_buf_idx].Load<InstanceData>(dtid * sizeof(InstanceData));
   if (instance_data.mesh_id == 0xFFFFFFFF) return;
 
-  MeshData mesh_data =
-      bindless_buffers[mesh_data_buf_idx].Load<MeshData>(instance_data.mesh_id * sizeof(MeshData));
+  MeshData mesh_data = bindless_buffers[pc.mesh_data_buf_idx].Load<MeshData>(instance_data.mesh_id *
+                                                                             sizeof(MeshData));
 
-  M4Material material = bindless_buffers[materials_buf_idx].Load<M4Material>(instance_data.mat_id *
-                                                                             sizeof(M4Material));
+  M4Material material = bindless_buffers[pc.materials_buf_idx].Load<M4Material>(
+      instance_data.mat_id * sizeof(M4Material));
   bool alpha_test_enabled = (material.flags & M4MAT_FLAG_ALPHATEST) != 0;
 
   uint task_groups = (mesh_data.meshlet_count + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
 
-  for (uint v = 0; v < view_cull_setup_count; ++v) {
-    ViewCullSetup view_setup = bindless_buffers[view_cull_setup_buf_idx].Load<ViewCullSetup>(
-        view_cull_setup_buf_offset_bytes + v * sizeof(ViewCullSetup));
+  for (uint v = 0; v < pc.view_cull_setup_count; ++v) {
+    ViewCullSetup view_setup = bindless_buffers[pc.view_cull_setup_buf_idx].Load<ViewCullSetup>(
+        pc.view_cull_setup_buf_offset_bytes + v * sizeof(ViewCullSetup));
 
     ViewData view_data = bindless_buffers[view_setup.view_data_buf_idx].Load<ViewData>(
         view_setup.view_data_buf_offset_bytes);
@@ -69,7 +70,7 @@ struct DispatchMeshCmd {
 
     bool visible = true;
 
-    if (culling_enabled != 0) {
+    if (pc.culling_enabled != 0) {
       float3 world_center =
           rotate_quat(instance_data.scale * mesh_data.center, instance_data.rotation) +
           instance_data.translation;

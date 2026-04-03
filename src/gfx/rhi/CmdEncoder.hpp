@@ -105,7 +105,8 @@ class CmdEncoder {
   virtual void bind_uav(rhi::BufferHandle buffer, uint32_t slot) { bind_uav(buffer, slot, 0); }
   virtual void bind_uav(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) = 0;
 
-  virtual void bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) = 0;
+  virtual void bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes,
+                        size_t size_bytes) = 0;
 
   virtual void write_timestamp(rhi::QueryPoolHandle query_pool, uint32_t query_index) = 0;
   virtual void query_resolve(rhi::QueryPoolHandle query_pool, uint32_t start_query,

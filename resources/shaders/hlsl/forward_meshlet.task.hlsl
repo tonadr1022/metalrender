@@ -12,6 +12,9 @@
 #include "shared_meshlet_draw_stats.hlsli"
 #include "default_vertex.h"
 // clang-format on
+#ifndef LATE
+#define LATE false
+#endif
 
 #define UINT_MAX 0xFFFFFFFFu
 
@@ -29,9 +32,10 @@ RWStructuredBuffer<uint> meshlet_vis_buf : register(u1);
 RWStructuredBuffer<uint> meshlet_draw_stats : register(u2);
 Texture2D depth_pyramid_tex : register(t3);
 
-[NumThreads(K_TASK_TG_SIZE, 1, 1)] void main(uint gtid : SV_GroupThreadID,
-                                             uint dtid : SV_DispatchThreadID,
-                                             uint gid : SV_GroupID) {
+[NumThreads(K_TASK_TG_SIZE, 1, 1)] void main(uint gtid
+                                             : SV_GroupThreadID, uint dtid
+                                             : SV_DispatchThreadID, uint gid
+                                             : SV_GroupID) {
   // pass 1: draw meshlets visible last frame and write to depth buffer
   // pass 2: draw  meshlets not visible last frame that pass the cull test against depth pyramid.
   uint task_group_id = gid;
@@ -42,8 +46,8 @@ Texture2D depth_pyramid_tex : register(t3);
 
   SamplerState samp = bindless_samplers[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
 
-  StructuredBuffer<uint3> draw_cnt_buf = bindless_buffers_uint3[out_draw_count_buf_idx];
-  bool valid_task_group = task_group_id < draw_cnt_buf[alpha_test_enabled].x;
+  StructuredBuffer<uint3> draw_cnt_buf = bindless_buffers_uint3[pc.out_draw_count_buf_idx];
+  bool valid_task_group = task_group_id < draw_cnt_buf[pc.alpha_test_enabled].x;
   uint lane_tri_contrib = 0u;
 
   if (valid_task_group) {
@@ -58,7 +62,7 @@ Texture2D depth_pyramid_tex : register(t3);
       meshlet_vis_i = instance_data.meshlet_vis_base + gtid + task_cmd.group_base;
       bool instance_visible_last = (task_cmd.late_draw_visibility != 0);
       bool visible_last_frame = true;
-      bool meshlet_occlusion_cull_enabled = (flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0;
+      bool meshlet_occlusion_cull_enabled = (pc.flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0;
       if (meshlet_occlusion_cull_enabled) {
         visible_last_frame = instance_visible_last ? (meshlet_vis_buf[meshlet_vis_i] != 0) : false;
       }
@@ -67,10 +71,10 @@ Texture2D depth_pyramid_tex : register(t3);
       // Per-meshlet early/late only when meshlet occlusion is enabled; otherwise instance
       // early/late is already split in draw_cull task buffers.
       if (meshlet_occlusion_cull_enabled) {
-        if (pass == 0 && !visible_last_frame) {
+        if (!LATE && !visible_last_frame) {
           visible = false;
         }
-        if (pass != 0 && visible_last_frame) {
+        if (LATE && visible_last_frame) {
           skip_draw = true;
         }
       }
@@ -82,7 +86,7 @@ Texture2D depth_pyramid_tex : register(t3);
       // Ref:
       // https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
       // frustum cull, plane symmetry
-      if ((flags & MESHLET_FRUSTUM_CULL_ENABLED_BIT) != 0) {
+      if ((pc.flags & MESHLET_FRUSTUM_CULL_ENABLED_BIT) != 0) {
         visible = visible && ((-center.z + radius) > cull_data.z_near &&
                               (-center.z - radius) < cull_data.z_far);
         visible = visible && (center.z * cull_data.frustum[3] -
@@ -92,7 +96,7 @@ Texture2D depth_pyramid_tex : register(t3);
       }
 
       // normal cone culling
-      if ((flags & MESHLET_CONE_CULL_ENABLED_BIT) != 0) {
+      if ((pc.flags & MESHLET_CONE_CULL_ENABLED_BIT) != 0) {
         // 8-bit SNORM quantized
         float3 cone_axis = float3(int(meshlet.cone_axis_cutoff << 24) >> 24,
                                   int(meshlet.cone_axis_cutoff << 16) >> 24,
@@ -111,7 +115,7 @@ Texture2D depth_pyramid_tex : register(t3);
 
       // late_draw_visibility==0: object HZB in draw_cull already passed; meshlet HZB is stricter
       // and false-culls here when both modes are on. ==1: still need meshlet HZB after early pass.
-      if (pass != 0 && (flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0 && visible &&
+      if (LATE && (pc.flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0 && visible &&
           task_cmd.late_draw_visibility != 0) {
         // occlusion cull test
         ProjectSphereResult proj_res =
@@ -149,10 +153,10 @@ Texture2D depth_pyramid_tex : register(t3);
         }
       }
 
-      if (cull_data.paused == 0 && (flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0) {
+      if (cull_data.paused == 0 && (pc.flags & MESHLET_OCCLUSION_CULL_ENABLED_BIT) != 0) {
         // Only update visibility when NOT paused
         // visible stays as calculated above
-        if (pass != 0 && meshlet_vis_i != UINT_MAX) {
+        if (LATE && meshlet_vis_i != UINT_MAX) {
           meshlet_vis_buf[meshlet_vis_i] = visible;
         }
       } else if (cull_data.paused != 0) {
@@ -197,10 +201,10 @@ Texture2D depth_pyramid_tex : register(t3);
     if (gtid == 0 && valid_task_group && global_data.meshlet_stats_enabled != 0) {
       uint tri_sum = s_tris[0];
       if (visible_meshlet_cnt != 0u || tri_sum != 0u) {
-        MeshletDrawStats_AtomicAdd(meshlet_draw_stats, MESHLET_DRAW_STATS_CATEGORY_MESHLETS, pass,
-                                   visible_meshlet_cnt);
-        MeshletDrawStats_AtomicAdd(meshlet_draw_stats, MESHLET_DRAW_STATS_CATEGORY_TRIANGLES, pass,
-                                   tri_sum);
+        MeshletDrawStats_AtomicAdd(meshlet_draw_stats, MESHLET_DRAW_STATS_CATEGORY_MESHLETS,
+                                   LATE ? 1 : 0, visible_meshlet_cnt);
+        MeshletDrawStats_AtomicAdd(meshlet_draw_stats, MESHLET_DRAW_STATS_CATEGORY_TRIANGLES,
+                                   LATE ? 1 : 0, tri_sum);
       }
     }
 

@@ -145,6 +145,14 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
     auto* enc = device_->begin_cmd_encoder(rhi::QueueType::Copy);
     if (!buffer_copy_mgr_.get_copies().empty()) {
       for (const auto& copy : buffer_copy_mgr_.get_copies()) {
+        if (!copy.src_buf.is_valid() || !device_->get_buf(copy.src_buf)) {
+          LERROR("Invalid source buffer for copy");
+          continue;
+        }
+        if (!copy.dst_buf.is_valid() || !device_->get_buf(copy.dst_buf)) {
+          LERROR("Invalid destination buffer for copy");
+          continue;
+        }
         enc->barrier(copy.src_buf, PipelineStage::AllCommands, AccessFlags::AnyWrite,
                      PipelineStage::AllTransfer, AccessFlags::TransferRead);
         enc->barrier(copy.dst_buf, PipelineStage::AllCommands,
@@ -737,11 +745,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       enc->set_wind_order(rhi::WindOrder::Clockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, dims);
-      enc->bind_cbv(frame_globals_buf_info_.buf, GLOBALS_SLOT,
-                    frame_globals_buf_info_.offset_bytes);
+      enc->bind_cbv(frame_globals_buf_info_.buf, GLOBALS_SLOT, frame_globals_buf_info_.offset_bytes,
+                    sizeof(GlobalData));
       auto& main_view = get_render_view(main_render_view_id_);
       enc->bind_cbv(main_view.data_buf_info.buf, VIEW_DATA_SLOT,
-                    main_view.data_buf_info.offset_bytes);
+                    main_view.data_buf_info.offset_bytes, sizeof(ViewData));
 
       const CSMData& csm_data = csm_renderer_->get_csm_data();
       auto [buf, offset, write_ptr] =

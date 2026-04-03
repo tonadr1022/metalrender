@@ -71,16 +71,16 @@ float calculate_shadow_factor(float3 world_pos, in CSMData csm_data, SamplerStat
 
 float4 main(VOut input) : SV_Target {
   uint render_mode = globals.render_mode;
-  Texture2D tex = bindless_textures[tex_idx];
+  Texture2D tex = bindless_textures[pc.tex_idx];
   SamplerState samp = bindless_samplers[NEAREST_SAMPLER_IDX];
-  Texture2D depth_tex = bindless_textures[depth_tex_idx];
+  Texture2D depth_tex = bindless_textures[pc.depth_tex_idx];
   if (render_mode == DEBUG_RENDER_MODE_NONE) {
-    Texture2D gbuffer_b_tex = bindless_textures[gbuffer_b_idx];
+    Texture2D gbuffer_b_tex = bindless_textures[pc.gbuffer_b_idx];
     float4 gbuffer_b = gbuffer_b_tex.SampleLevel(samp, input.uv, 0);
     float3 L = normalize(float3(1, 2, 1));
     float3 N = gbuffer_b.rgb;
     float NdotL = dot(N, L);
-    if (shadows_enabled) {
+    if (pc.shadows_enabled) {
       float2 uv = input.uv;
       float depth = depth_tex.SampleLevel(samp, uv, 0).r;
       float2 clip_xy = float2(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
@@ -130,10 +130,10 @@ float4 main(VOut input) : SV_Target {
     // return float4(float3(view_depth, view_depth, view_depth), 1.0);
     return colors[cascade_idx];
   } else if (render_mode == DEBUG_RENDER_MODE_SECONDARY_VIEW) {
-    float4 color_out = color_mult * tex.SampleLevel(samp, input.uv, 0);
+    float4 color_out = pc.color_mult * tex.SampleLevel(samp, input.uv, 0);
     return color_out;
   } else {
-    float4 color_out = color_mult * tex.SampleLevel(samp, input.uv, 0);
+    float4 color_out = pc.color_mult * tex.SampleLevel(samp, input.uv, 0);
     color_out = float4(tonemap(color_out.xyz), color_out.a);
     return color_out;
   }

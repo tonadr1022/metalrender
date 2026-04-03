@@ -1,5 +1,7 @@
 #include "RenderGraph.hpp"
 
+#include <vulkan/vk_enum_string_helper.h>
+
 #include <algorithm>
 #include <ranges>
 #include <string>
@@ -14,6 +16,7 @@
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
+#include "gfx/vulkan/VkUtil.hpp"
 #include "small_vector/small_vector.hpp"
 
 namespace TENG_NAMESPACE {
@@ -35,7 +38,7 @@ const char* to_string(RGPassType type) {
   }
 }
 
-std::string rhi_pipeline_stage_to_string(rhi::PipelineStage stage) {
+std::string to_string(rhi::PipelineStage stage) {
   std::string result;
   if (has_flag(stage, rhi::PipelineStage::TopOfPipe)) {
     result += "PipelineStage_TopOfPipe | ";
@@ -91,7 +94,7 @@ std::string rhi_pipeline_stage_to_string(rhi::PipelineStage stage) {
   return result;
 }
 
-std::string rhi_access_to_string(rhi::AccessFlags access) {
+std::string to_string(rhi::AccessFlags access) {
   std::string result;
   if (has_flag(access, rhi::AccessFlags::IndirectCommandRead)) {
     result += "IndirectCommandRead | ";
@@ -165,46 +168,46 @@ constexpr Flags flag_or(Flags x, Bits y) noexcept {
                             static_cast<uint64_t>(y));
 }
 
-[[maybe_unused]] rhi::ResourceState convert_resource_state(rhi::AccessFlags access) {
-  if (has_flag(access, rhi::AccessFlags::ColorAttachmentWrite)) {
-    return rhi::ResourceState::ColorWrite;
-  }
-  if (has_flag(access, rhi::AccessFlags::DepthStencilWrite)) {
-    return rhi::ResourceState::DepthStencilWrite;
-  }
-  if (has_flag(access, rhi::AccessFlags::ShaderWrite)) {
-    return rhi::ResourceState::ShaderWrite;
-  }
-  if (has_flag(access, rhi::AccessFlags::TransferWrite)) {
-    return rhi::ResourceState::TransferWrite;
-  }
-  if (has_flag(access, rhi::AccessFlags::ShaderRead)) {
-    return rhi::ResourceState::ShaderRead;
-  }
-  if (has_flag(access, rhi::AccessFlags::ColorAttachmentRead)) {
-    return rhi::ResourceState::ColorRead;
-  }
-  if (has_flag(access, rhi::AccessFlags::DepthStencilRead)) {
-    return rhi::ResourceState::DepthStencilRead;
-  }
-  if (has_flag(access, rhi::AccessFlags::IndirectCommandRead)) {
-    return rhi::ResourceState::IndirectRead;
-  }
-  if (has_flag(access, rhi::AccessFlags::IndexRead)) {
-    return rhi::ResourceState::IndexRead;
-  }
-  if (has_flag(access, rhi::AccessFlags::VertexAttributeRead)) {
-    return rhi::ResourceState::VertexRead;
-  }
-  if (has_flag(access, rhi::AccessFlags::UniformRead)) {
-    return rhi::ResourceState::ShaderRead;
-  }
-  if (has_flag(access, rhi::AccessFlags::InputAttachmentRead)) {
-    ASSERT(0);
-  }
-  ASSERT(0);
-  return rhi::ResourceState::None;
-}
+// [[maybe_unused]] rhi::ResourceState convert_resource_state(rhi::AccessFlags access) {
+//   if (has_flag(access, rhi::AccessFlags::ColorAttachmentWrite)) {
+//     return rhi::ResourceState::ColorWrite;
+//   }
+//   if (has_flag(access, rhi::AccessFlags::DepthStencilWrite)) {
+//     return rhi::ResourceState::DepthStencilWrite;
+//   }
+//   if (has_flag(access, rhi::AccessFlags::ShaderWrite)) {
+//     return rhi::ResourceState::ShaderWrite;
+//   }
+//   if (has_flag(access, rhi::AccessFlags::TransferWrite)) {
+//     return rhi::ResourceState::TransferWrite;
+//   }
+//   if (has_flag(access, rhi::AccessFlags::ShaderRead)) {
+//     return rhi::ResourceState::ShaderRead;
+//   }
+//   if (has_flag(access, rhi::AccessFlags::ColorAttachmentRead)) {
+//     return rhi::ResourceState::ColorRead;
+//   }
+//   if (has_flag(access, rhi::AccessFlags::DepthStencilRead)) {
+//     return rhi::ResourceState::DepthStencilRead;
+//   }
+//   if (has_flag(access, rhi::AccessFlags::IndirectCommandRead)) {
+//     return rhi::ResourceState::IndirectRead;
+//   }
+//   if (has_flag(access, rhi::AccessFlags::IndexRead)) {
+//     return rhi::ResourceState::IndexRead;
+//   }
+//   if (has_flag(access, rhi::AccessFlags::VertexAttributeRead)) {
+//     return rhi::ResourceState::VertexRead;
+//   }
+//   if (has_flag(access, rhi::AccessFlags::UniformRead)) {
+//     return rhi::ResourceState::ShaderRead;
+//   }
+//   if (has_flag(access, rhi::AccessFlags::InputAttachmentRead)) {
+//     ASSERT(0);
+//   }
+//   ASSERT(0);
+//   return rhi::ResourceState::None;
+// }
 
 }  // namespace
 
@@ -409,8 +412,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
             &pass.get_external_writes()};
         for (auto& arr : arrays) {
           for (const auto& u : *arr) {
-            LINFO("{:<50}\t{:<50}\t{:<50}", debug_name(u.id), rhi_access_to_string(u.acc),
-                  rhi_pipeline_stage_to_string(u.stage));
+            LINFO("{:<50}\t{:<50}\t{:<50}", debug_name(u.id), to_string(u.acc), to_string(u.stage));
           }
         }
       }
@@ -531,12 +533,23 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   for (auto pass_i : pass_stack_) {
     ASSERT(pass_i < passes_.size());
     const auto& pass = passes_[pass_i];
+    LINFO("Pass: {}", pass.get_name());
     auto& barriers = pass_barrier_infos_[pass_i];
 
     for (const auto& write_use : pass.get_external_writes()) {
       auto rg_resource_handle = get_physical_handle(write_use.id);
       auto& resource_state = get_resource_state(rg_resource_handle);
       if (has_flag(write_use.acc, rhi::AccessFlags::AnyWrite)) {
+        // LINFO("Adding external write barrier: {} {} {} {}", to_string(write_use.stage),
+        //       to_string(write_use.acc), to_string(resource_state.stage),
+        //       to_string(resource_state.access));
+        // LINFO(
+        //     "Adding external write barrier: src_stage={} src_access={} dst_stage={}
+        //     dst_access={}", string_VkPipelineStageFlags2(gfx::vk::convert(resource_state.stage)),
+        //     string_VkAccessFlags2(gfx::vk::convert(resource_state.access)),
+        //     string_VkPipelineStageFlags2(gfx::vk::convert(write_use.stage)),
+        //     string_VkAccessFlags2(gfx::vk::convert(write_use.acc)));
+
         barriers.emplace_back(BarrierInfo{
             .resource = rg_resource_handle,
             .src_stage = resource_state.stage,
@@ -555,6 +568,16 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       auto rg_resource_handle = get_physical_handle(write_use.id);
       auto& resource_state = get_resource_state(rg_resource_handle);
       if (has_flag(write_use.acc, rhi::AccessFlags::AnyWrite)) {
+        // LINFO("Adding internal write barrier: {} {} {} {}", to_string(write_use.stage),
+        //       to_string(write_use.acc), to_string(resource_state.stage),
+        //       to_string(resource_state.access));
+        // LINFO(
+        //     "Adding internal write barrier: src_stage={} src_access={} dst_stage={}
+        //     dst_access={}", string_VkPipelineStageFlags2(gfx::vk::convert(resource_state.stage)),
+        //     string_VkAccessFlags2(gfx::vk::convert(resource_state.access)),
+        //     string_VkPipelineStageFlags2(gfx::vk::convert(write_use.stage)),
+        //     string_VkAccessFlags2(gfx::vk::convert(write_use.acc)));
+
         barriers.emplace_back(BarrierInfo{
             .resource = rg_resource_handle,
             .src_stage = resource_state.stage,
@@ -608,13 +631,13 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
         const auto dbg_name = debug_name(barrier.debug_id);
         LINFO(CLR_PURPLE "RESOURCE: {}" CLR_RESET "", dbg_name.size() ? dbg_name : "no name lol");
         LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "SRC_ACCESS:"),
-              rhi_access_to_string(barrier.src_access));
+              to_string(barrier.src_access));
         LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "DST_ACCESS:"),
-              rhi_access_to_string(barrier.dst_access));
+              to_string(barrier.dst_access));
         LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "SRC_STAGE:"),
-              rhi_pipeline_stage_to_string(barrier.src_stage));
+              to_string(barrier.src_stage));
         LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "DST_STAGE:"),
-              rhi_pipeline_stage_to_string(barrier.dst_stage));
+              to_string(barrier.dst_stage));
       }
       LINFO("");
     }
@@ -928,12 +951,17 @@ RGResourceId RGPass::read_buf(RGResourceId id, rhi::PipelineStage stage) {
 
 RGResourceId RGPass::write_buf(RGResourceId id, rhi::PipelineStage stage) {
   rhi::AccessFlags access{};
-  if (id.type == RGResourceType::ExternalBuffer) {
-    access = (type_ == RGPassType::Transfer) ? rhi::AccessFlags::TransferWrite
-                                             : rhi::AccessFlags::ShaderWrite;
+  if (type_ == RGPassType::Transfer) {
+    access = rhi::AccessFlags::TransferWrite;
   } else {
     access = rhi::AccessFlags::ShaderStorageWrite;
   }
+  // if (id.type == RGResourceType::ExternalBuffer) {
+  //   access = (type_ == RGPassType::Transfer) ? rhi::AccessFlags::TransferWrite
+  //                                            : rhi::AccessFlags::ShaderWrite;
+  // } else {
+  //   access = rhi::AccessFlags::ShaderStorageWrite;
+  // }
   add_write_usage(id, stage, access);
   return id;
 }

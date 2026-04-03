@@ -98,7 +98,7 @@ class VulkanDevice : public rhi::Device {
   void immediate_submit(rhi::QueueType, ImmediateSubmitFn&&) override { ASSERT(0); }
 
   void cmd_encoder_wait_for(rhi::CmdEncoder* /*cmd_enc*/, rhi::CmdEncoder* /*wait_for*/) override {
-    ASSERT(0);
+    //    ASSERT(0);
   }
 
   bool recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapchain* swapchain) override;

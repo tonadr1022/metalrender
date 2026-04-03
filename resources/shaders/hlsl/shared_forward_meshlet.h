@@ -7,12 +7,14 @@
 #define MESHLET_CONE_CULL_ENABLED_BIT (1 << 1)
 #define MESHLET_OCCLUSION_CULL_ENABLED_BIT (1 << 2)
 
-cbuffer Task2PC HLSL_PC_REG {
-  uint pass;
+struct Task2PC {
+  // uint pass;
   uint flags;
   uint alpha_test_enabled;
   uint out_draw_count_buf_idx;
 };
+
+PUSHCONSTANT(Task2PC, pc);
 
 #define MESHLET_VIS_BUF_SLOT 2
 

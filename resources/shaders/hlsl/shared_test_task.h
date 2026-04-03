@@ -3,7 +3,7 @@
 
 #include "shader_core.h"
 
-cbuffer TestTaskPC HLSL_PC_REG {
+struct TestTaskPC {
   float4x4 vp;
   uint task_cmd_buf_idx;
   uint task_cmd_idx;
@@ -15,6 +15,8 @@ cbuffer TestTaskPC HLSL_PC_REG {
   uint instance_data_idx;
   uint mat_buf_idx;
 };
+
+PUSHCONSTANT(TestTaskPC, pc);
 
 #ifdef __HLSL__
 

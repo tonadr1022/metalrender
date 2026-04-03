@@ -163,7 +163,7 @@ void GBufferRenderer::bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase
         encode_meshlet_mesh_draw_pass(
             reverse_z_, device_, rg_, static_instance_mgr_, enc, cull_phase, true, depth_handle,
             mesh_scene, mesh_pass,
-            std::span<const rhi::PipelineHandleHolder>(gbuffer_meshlet_psos_,
+            std::span<const rhi::PipelineHandleHolder>(gbuffer_meshlet_psos_[late],
                                                        static_cast<size_t>(AlphaMaskType::Count)));
         enc->end_rendering();
       });
@@ -252,13 +252,15 @@ void GBufferRenderer::load_pipelines(ShaderManager& shader_mgr) {
   });
 
   for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
-    gbuffer_meshlet_psos_[alpha_mask_type] = shader_mgr.create_graphics_pipeline({
-        .shaders = {{{"forward_meshlet", ShaderType::Task},
-                     {"gbuffer_meshlet", ShaderType::Mesh},
-                     {alpha_mask_type == AlphaMaskType::Mask ? "forward_meshlet_alphatest"
-                                                             : "forward_meshlet_gbuffer",
-                      ShaderType::Fragment}}},
-    });
+    for (size_t late = 0; late < 2; late++) {
+      gbuffer_meshlet_psos_[alpha_mask_type][late] = shader_mgr.create_graphics_pipeline({
+          .shaders = {{{late ? "forward_meshlet_late" : "forward_meshlet", ShaderType::Task},
+                       {"gbuffer_meshlet", ShaderType::Mesh},
+                       {alpha_mask_type == AlphaMaskType::Mask ? "forward_meshlet_alphatest"
+                                                               : "forward_meshlet_gbuffer",
+                        ShaderType::Fragment}}},
+      });
+    }
   }
 }
 

@@ -106,19 +106,14 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
                               glm::uvec3 /*threads_per_mesh_thread_group*/) override {
     ASSERT(0);
   }
-  void draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indirect_buf*/,
-                                       size_t /*indirect_buf_offset*/,
-                                       glm::uvec3 /*threads_per_task_thread_group*/,
-                                       glm::uvec3 /*threads_per_mesh_thread_group*/) override {
-    ASSERT(0);
-  }
+  void draw_mesh_threadgroups_indirect(rhi::BufferHandle indirect_buf, size_t indirect_buf_offset,
+                                       glm::uvec3 threads_per_task_thread_group,
+                                       glm::uvec3 threads_per_mesh_thread_group) override;
 
   void dispatch_compute(glm::uvec3 thread_groups, glm::uvec3 threads_per_threadgroup) override;
 
-  void fill_buffer(rhi::BufferHandle /*handle*/, uint32_t /*offset_bytes*/, uint32_t /*size*/,
-                   uint32_t /*value*/) override {
-    ASSERT(0);
-  }
+  void fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes, uint32_t size,
+                   uint32_t value) override;
   void push_debug_group(const char* /*name*/) override { ASSERT(0); }
   void pop_debug_group() override { ASSERT(0); }
 
@@ -127,22 +122,16 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   void bind_srv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
 
   void bind_uav(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
-  void bind_uav(rhi::BufferHandle /*buffer*/, uint32_t /*slot*/, size_t /*offset_bytes*/) override {
-    ASSERT(0);
-  }
+  void bind_uav(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) override;
 
-  void bind_cbv(rhi::BufferHandle /*buffer*/, uint32_t /*slot*/, size_t /*offset_bytes*/) override {
-    ASSERT(0);
-  }
+  void bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes,
+                size_t size_bytes) override;
 
-  void write_timestamp(rhi::QueryPoolHandle /*query_pool*/, uint32_t /*query_index*/) override {
-    ASSERT(0);
-  }
+  void write_timestamp(rhi::QueryPoolHandle /*query_pool*/, uint32_t /*query_index*/) override {}
+
   void query_resolve(rhi::QueryPoolHandle /*query_pool*/, uint32_t /*start_query*/,
                      uint32_t /*query_count*/, rhi::BufferHandle /*dst_buffer*/,
-                     size_t /*dst_offset*/) override {
-    ASSERT(0);
-  }
+                     size_t /*dst_offset*/) override {}
 
  private:
   friend class VulkanDevice;

@@ -3,7 +3,7 @@
 
 #include "shader_core.h"
 
-cbuffer TexOnlyPC HLSL_PC_REG {
+struct TexOnlyPC {
   float4 color_mult;
   uint2 img_dims;
   uint tex_idx;
@@ -12,4 +12,7 @@ cbuffer TexOnlyPC HLSL_PC_REG {
   uint mip_level;
   uint shadows_enabled;
 };
+
+PUSHCONSTANT(TexOnlyPC, pc);
+
 #endif

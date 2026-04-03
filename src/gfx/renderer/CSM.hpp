@@ -62,7 +62,7 @@ class CSMRenderer {
   std::array<glm::mat4, CSM_MAX_CASCADES> light_views_{};
   std::array<int32_t, CSM_MAX_CASCADES> csm_img_views_{-1, -1, -1, -1};
   rhi::TextureHandle curr_img_;
-  rhi::PipelineHandleHolder shadow_meshlet_psos_[(size_t)AlphaMaskType::Count];
+  rhi::PipelineHandleHolder shadow_meshlet_psos_[2][(size_t)AlphaMaskType::Count];
   InstanceMgr& static_instance_mgr_;
   rhi::Device* device_;
   RenderGraph& rg_;

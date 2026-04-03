@@ -81,7 +81,7 @@ class GBufferRenderer {
   InstanceMgr& static_instance_mgr_;
   RenderGraph& rg_;
   bool reverse_z_{};
-  rhi::PipelineHandleHolder gbuffer_meshlet_psos_[(size_t)AlphaMaskType::Count];
+  rhi::PipelineHandleHolder gbuffer_meshlet_psos_[2][(size_t)AlphaMaskType::Count];
   rhi::PipelineHandleHolder gbuffer_indexed_indirect_pso_;
 };
 

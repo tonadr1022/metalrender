@@ -1,11 +1,13 @@
 #include "DrawPassSceneBindings.hpp"
 
+#include "core/Logger.hpp"
 #include "gfx/DrawBatch.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/renderer/TaskCmdBufRgIds.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "hlsl/shader_constants.h"
+#include "hlsl/shared_cull_data.h"
 #include "hlsl/shared_forward_meshlet.h"
 #include "hlsl/shared_globals.h"
 
@@ -28,6 +30,7 @@ void encode_meshlet_mesh_draw_pass(
   if (enable_meshlet_occlusion_cull) {
     enc->bind_uav(rg.get_external_buffer(mesh_pass.meshlet_vis), 1);
     if (cull_phase == DrawCullPhase::Late) {
+      LINFO("bind depth pyramid tex");
       enc->bind_srv(mesh_pass.render_view.depth_pyramid_tex.handle, 3);
     }
   }
@@ -40,13 +43,12 @@ void encode_meshlet_mesh_draw_pass(
   enc->bind_srv(scene.draw_batch.vertex_buf.get_buffer_handle(), 9);
   enc->bind_srv(static_instance_mgr.get_instance_data_buf(), 10);
   enc->bind_cbv(scene.frame_globals_buf_info.buf, GLOBALS_SLOT,
-                scene.frame_globals_buf_info.offset_bytes);
+                scene.frame_globals_buf_info.offset_bytes, sizeof(GlobalData));
   enc->bind_cbv(mesh_pass.render_view.data_buf_info.buf, VIEW_DATA_SLOT,
-                mesh_pass.render_view.data_buf_info.offset_bytes);
+                mesh_pass.render_view.data_buf_info.offset_bytes, sizeof(ViewData));
   enc->bind_cbv(mesh_pass.render_view.cull_data_buf_info.buf, 4,
-                mesh_pass.render_view.cull_data_buf_info.offset_bytes);
+                mesh_pass.render_view.cull_data_buf_info.offset_bytes, sizeof(CullData));
   Task2PC pc{
-      .pass = static_cast<uint32_t>(cull_phase),
       .flags = 0,
       .out_draw_count_buf_idx = device->get_buf(mesh_pass.out_draw_count_buf)->bindless_idx(),
   };

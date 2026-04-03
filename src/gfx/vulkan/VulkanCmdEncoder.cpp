@@ -381,6 +381,17 @@ void VulkanCmdEncoder::draw_indexed_indirect(rhi::BufferHandle /*indirect_buf*/,
                                              uint32_t /* indirect_buf_id */, size_t /*draw_cnt*/,
                                              size_t /*offset_i*/) {}
 
+void VulkanCmdEncoder::draw_mesh_threadgroups_indirect(
+    rhi::BufferHandle indirect_buf, size_t indirect_buf_offset,
+    [[maybe_unused]] glm::uvec3 threads_per_task_thread_group,
+    [[maybe_unused]] glm::uvec3 threads_per_mesh_thread_group) {
+  flush_binds();
+  auto* buf = static_cast<VulkanBuffer*>(device_->get_buf(indirect_buf));
+  ASSERT(buf);
+  vkCmdDrawMeshTasksIndirectEXT(cmd(), buf->buffer(), indirect_buf_offset, 1,
+                                sizeof(VkDrawMeshTasksIndirectCommandEXT));
+}
+
 void VulkanCmdEncoder::end_rendering() {
   vkCmdEndRenderingKHR(cmd());
   for (auto& b : render_pass_end_img_barriers_) {
@@ -399,13 +410,20 @@ void VulkanCmdEncoder::barrier(rhi::BufferHandle buf, rhi::PipelineStage src_sta
 void VulkanCmdEncoder::barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage,
                                rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
                                rhi::AccessFlags dst_access, size_t offset, size_t size) {
+  VkPipelineStageFlags2 src_st = convert(src_stage);
+  VkAccessFlags2 src_acc = convert(src_access);
+  VkPipelineStageFlags2 dst_st = convert(dst_stage);
+  VkAccessFlags2 dst_acc = convert(dst_access);
+  augment_memory_barrier2_stages_for_access(src_st, src_acc, dst_st, dst_acc);
+  auto* buf_obj = device_->get_buf(buf);
+  ASSERT(buf_obj);
   buf_barriers_.emplace_back(VkBufferMemoryBarrier2{
       .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-      .srcStageMask = convert(src_stage),
-      .srcAccessMask = convert(src_access),
-      .dstStageMask = convert(dst_stage),
-      .dstAccessMask = convert(dst_access),
-      .buffer = ((VulkanBuffer*)device_->get_buf(buf))->buffer(),
+      .srcStageMask = src_st,
+      .srcAccessMask = src_acc,
+      .dstStageMask = dst_st,
+      .dstAccessMask = dst_acc,
+      .buffer = ((VulkanBuffer*)buf_obj)->buffer(),
       .offset = offset,
       .size = size,
   });
@@ -432,14 +450,19 @@ void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_st
     aspect_mask |= VK_IMAGE_ASPECT_COLOR_BIT;
   }
 
+  VkPipelineStageFlags2 src_st = convert(src_stage);
+  VkAccessFlags2 src_acc = convert(src_access);
+  VkPipelineStageFlags2 dst_st = convert(dst_stage);
+  VkAccessFlags2 dst_acc = convert(dst_access);
+  augment_memory_barrier2_stages_for_access(src_st, src_acc, dst_st, dst_acc);
   img_barriers_.emplace_back(VkImageMemoryBarrier2{
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-      .srcStageMask = convert(src_stage),
-      .srcAccessMask = convert(src_access),
-      .dstStageMask = convert(dst_stage),
-      .dstAccessMask = convert(dst_access),
-      .oldLayout = layout_from_vk_access(convert(src_access)),
-      .newLayout = layout_from_vk_access(convert(dst_access)),
+      .srcStageMask = src_st,
+      .srcAccessMask = src_acc,
+      .dstStageMask = dst_st,
+      .dstAccessMask = dst_acc,
+      .oldLayout = layout_from_vk_access(src_acc),
+      .newLayout = layout_from_vk_access(dst_acc),
       .image = ((VulkanTexture*)device_->get_tex(tex))->image(),
       .subresourceRange = VkImageSubresourceRange{.aspectMask = aspect_mask,
                                                   .baseMipLevel = 0,
@@ -451,6 +474,23 @@ void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_st
 
 void VulkanCmdEncoder::flush_barriers() {
   if (!buf_barriers_.empty() || !img_barriers_.empty()) {
+    for (const auto& buf_barrier : buf_barriers_) {
+      // LINFO("buf_barrier: src_stage={} src_access={} dst_stage={} dst_access={}",
+      //       string_VkPipelineStageFlags2(buf_barrier.srcStageMask),
+      //       string_VkAccessFlags2(buf_barrier.srcAccessMask),
+      //       string_VkPipelineStageFlags2(buf_barrier.dstStageMask),
+      //       string_VkAccessFlags2(buf_barrier.dstAccessMask));
+    }
+    for (const auto& img_barrier : img_barriers_) {
+      // std::println(
+      //     "img_barrier: {} {} {} {} {} {}",
+      //     string_VkPipelineStageFlags2(img_barrier.srcStageMask),
+      //     string_VkAccessFlags2(img_barrier.srcAccessMask),
+      //     string_VkPipelineStageFlags2(img_barrier.dstStageMask),
+      //     string_VkAccessFlags2(img_barrier.dstAccessMask),
+      //     string_VkImageLayout(img_barrier.oldLayout),
+      //     string_VkImageLayout(img_barrier.newLayout));
+    }
     VkDependencyInfo info{
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .bufferMemoryBarrierCount = (uint32_t)buf_barriers_.size(),
@@ -471,6 +511,7 @@ void VulkanCmdEncoder::barrier(rhi::GPUBarrier* gpu_barrier, size_t barrier_coun
       auto& buf_barr = gpu_barr.buf;
       auto [src_stage, src_access] = convert_pipeline_stage_and_access(buf_barr.src_state);
       auto [dst_stage, dst_access] = convert_pipeline_stage_and_access(buf_barr.dst_state);
+      augment_memory_barrier2_stages_for_access(src_stage, src_access, dst_stage, dst_access);
       buf_barriers_.emplace_back(VkBufferMemoryBarrier2{
           .sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
           .srcStageMask = src_stage,
@@ -485,6 +526,7 @@ void VulkanCmdEncoder::barrier(rhi::GPUBarrier* gpu_barrier, size_t barrier_coun
       auto& img_barr = gpu_barr.tex;
       auto [src_stage, src_access] = convert_pipeline_stage_and_access(img_barr.src_layout);
       auto [dst_stage, dst_access] = convert_pipeline_stage_and_access(img_barr.dst_layout);
+      augment_memory_barrier2_stages_for_access(src_stage, src_access, dst_stage, dst_access);
       img_barriers_.emplace_back(VkImageMemoryBarrier2{
           .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
           .srcStageMask = src_stage,
@@ -507,6 +549,23 @@ void VulkanCmdEncoder::barrier(rhi::GPUBarrier* gpu_barrier, size_t barrier_coun
 void VulkanCmdEncoder::bind_uav(rhi::TextureHandle texture, uint32_t slot, int subresource_id) {
   binding_table_.UAV[slot] = texture.to64();
   binding_table_.UAV_subresources[slot] = subresource_id;
+  descriptors_dirty_ = true;
+}
+
+void VulkanCmdEncoder::bind_uav(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes) {
+  binding_table_.UAV[slot] = buffer.to64();
+  binding_table_.UAV_subresources[slot] = rhi::DescriptorBindingTable::k_buffer_resource;
+  binding_table_.UAV_offsets[slot] = offset_bytes;
+  descriptors_dirty_ = true;
+}
+
+void VulkanCmdEncoder::bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes,
+                                size_t size_bytes) {
+  binding_table_.CBV[slot] = buffer;
+  ASSERT(offset_bytes != 0);
+  LINFO("binding cbv: {} offset: {}", buffer.to64(), offset_bytes);
+  binding_table_.CBV_offsets[slot] = offset_bytes;
+  binding_table_.CBV_sizes[slot] = size_bytes;
   descriptors_dirty_ = true;
 }
 
@@ -533,6 +592,7 @@ void VulkanCmdEncoder::flush_binds() {
     } while (result == VK_ERROR_OUT_OF_POOL_MEMORY);
     constexpr uint32_t k_uav_binding_start = 1000;
     constexpr uint32_t k_srv_binding_start = 2000;
+    constexpr uint32_t k_cbv_binding_start = 3000;
     binder_.writes.clear();
     binder_.img_infos.clear();
     binder_.buf_infos.clear();
@@ -551,25 +611,53 @@ void VulkanCmdEncoder::flush_binds() {
       write.descriptorCount = binding.descriptorCount;
       write.descriptorType = binding.descriptorType;
       if (binding.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) {
-        auto table_index = binding.binding - k_uav_binding_start;
-        auto tex_handle = rhi::TextureHandle{binding_table_.UAV[table_index]};
-        ASSERT((table_index >= 0 && table_index < ARRAY_SIZE(binding_table_.UAV)));
-        auto subresource_id = binding_table_.UAV_subresources[table_index];
-        auto& img_info = binder_.img_infos.emplace_back();
-        img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-        img_info.imageView = device_->get_vk_tex_view(tex_handle, subresource_id);
-
-        write.pImageInfo = &img_info;
+        if (binding.binding >= k_srv_binding_start) {
+          // srv
+          auto table_index = binding.binding - k_srv_binding_start;
+          auto tex_handle = rhi::TextureHandle{binding_table_.SRV[table_index]};
+          ASSERT((table_index >= 0 && table_index < ARRAY_SIZE(binding_table_.SRV)));
+          auto subresource_id = binding_table_.SRV_subresources[table_index];
+          auto& img_info = binder_.img_infos.emplace_back();
+          img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+          img_info.imageView = device_->get_vk_tex_view(tex_handle, subresource_id);
+          write.pImageInfo = &img_info;
+        } else if (binding.binding >= k_uav_binding_start) {
+          // uav
+          auto table_index = binding.binding - k_uav_binding_start;
+          auto tex_handle = rhi::TextureHandle{binding_table_.UAV[table_index]};
+          ASSERT((table_index >= 0 && table_index < ARRAY_SIZE(binding_table_.UAV)));
+          auto subresource_id = binding_table_.UAV_subresources[table_index];
+          auto& img_info = binder_.img_infos.emplace_back();
+          img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+          img_info.imageView = device_->get_vk_tex_view(tex_handle, subresource_id);
+          write.pImageInfo = &img_info;
+        } else {
+          ASSERT(0);
+        }
       } else if (binding.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) {
-        auto table_index = binding.binding - k_srv_binding_start;
-        auto tex_handle = rhi::TextureHandle{binding_table_.SRV[table_index]};
-        ASSERT((table_index >= 0 && table_index < ARRAY_SIZE(binding_table_.SRV)));
-        auto subresource_id = binding_table_.SRV_subresources[table_index];
-        auto& img_info = binder_.img_infos.emplace_back();
-        img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        img_info.imageView = device_->get_vk_tex_view(tex_handle, subresource_id);
-        write.pImageInfo = &img_info;
-
+        if (binding.binding >= k_srv_binding_start) {
+          // srv
+          auto table_index = binding.binding - k_srv_binding_start;
+          auto tex_handle = rhi::TextureHandle{binding_table_.SRV[table_index]};
+          ASSERT((table_index >= 0 && table_index < ARRAY_SIZE(binding_table_.SRV)));
+          auto subresource_id = binding_table_.SRV_subresources[table_index];
+          auto& img_info = binder_.img_infos.emplace_back();
+          img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+          img_info.imageView = device_->get_vk_tex_view(tex_handle, subresource_id);
+          write.pImageInfo = &img_info;
+        } else if (binding.binding >= k_uav_binding_start) {
+          // uav
+          auto table_index = binding.binding - k_uav_binding_start;
+          auto tex_handle = rhi::TextureHandle{binding_table_.UAV[table_index]};
+          ASSERT((table_index >= 0 && table_index < ARRAY_SIZE(binding_table_.UAV)));
+          auto subresource_id = binding_table_.UAV_subresources[table_index];
+          auto& img_info = binder_.img_infos.emplace_back();
+          img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+          img_info.imageView = device_->get_vk_tex_view(tex_handle, subresource_id);
+          write.pImageInfo = &img_info;
+        } else {
+          ASSERT(0);
+        }
       } else if (binding.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {
         if (binding.binding >= k_srv_binding_start) {
           // srv
@@ -582,9 +670,32 @@ void VulkanCmdEncoder::flush_binds() {
           buf_info.offset = binding_table_.SRV_offsets[table_index];
           buf_info.range = VK_WHOLE_SIZE;
           write.pBufferInfo = &buf_info;
+        } else if (binding.binding >= k_uav_binding_start) {
+          // uav
+          auto table_index = binding.binding - k_uav_binding_start;
+          auto buf_handle = rhi::BufferHandle{binding_table_.UAV[table_index]};
+          ASSERT((table_index >= 0 && table_index < ARRAY_SIZE(binding_table_.UAV)));
+          auto& buf_info = binder_.buf_infos.emplace_back();
+          auto* buf = device_->get_vk_buf(buf_handle);
+          buf_info.buffer = buf->buffer_;
+          buf_info.offset = binding_table_.UAV_offsets[table_index];
+          buf_info.range = VK_WHOLE_SIZE;
+          write.pBufferInfo = &buf_info;
         } else {
           ASSERT(0);
         }
+      } else if (binding.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+        ASSERT(binding.binding >= k_cbv_binding_start);
+        auto table_index = binding.binding - k_cbv_binding_start;
+        auto buf_handle = rhi::BufferHandle{binding_table_.CBV[table_index]};
+        ASSERT((table_index >= 0 && table_index < ARRAY_SIZE(binding_table_.CBV)));
+        auto& buf_info = binder_.buf_infos.emplace_back();
+        auto* buf = device_->get_vk_buf(buf_handle);
+        ASSERT(buf);
+        buf_info.buffer = buf->buffer_;
+        buf_info.offset = binding_table_.CBV_offsets[table_index];
+        buf_info.range = binding_table_.CBV_sizes[table_index];
+        write.pBufferInfo = &buf_info;
       } else if (binding.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) {
         LINFO("Failed descriptor type: {}", string_VkDescriptorType(binding.descriptorType));
         LINFO("Binding: {}", binding.binding);
@@ -673,6 +784,14 @@ void VulkanCmdEncoder::bind_srv(rhi::BufferHandle buffer, uint32_t slot, size_t 
   binding_table_.SRV_subresources[slot] = rhi::DescriptorBindingTable::k_buffer_resource;
   binding_table_.SRV_offsets[slot] = offset_bytes;
   descriptors_dirty_ = true;
+}
+
+void VulkanCmdEncoder::fill_buffer(rhi::BufferHandle handle, uint32_t offset_bytes, uint32_t size,
+                                   uint32_t value) {
+  flush_barriers();
+  auto* buf = device_->get_buf(handle);
+  ASSERT(buf);
+  vkCmdFillBuffer(cmd(), ((VulkanBuffer*)buf)->buffer(), offset_bytes, size, value);
 }
 
 }  // namespace gfx::vk

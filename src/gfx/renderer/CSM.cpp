@@ -187,7 +187,7 @@ void CSMRenderer::bake(std::string_view pass_name, ShadowDepthPassInfo& out,
       encode_meshlet_mesh_draw_pass(
           false, device_, rg_, static_instance_mgr_, enc, cull_phase, false, depth_handle,
           mesh_scene, mesh_pass,
-          std::span<const PipelineHandleHolder>(shadow_meshlet_psos_,
+          std::span<const PipelineHandleHolder>(shadow_meshlet_psos_[0],
                                                 static_cast<size_t>(AlphaMaskType::Count)));
       enc->end_rendering();
     }
@@ -201,17 +201,19 @@ CSMRenderer::~CSMRenderer() = default;
 
 void CSMRenderer::load_pipelines(ShaderManager& shader_mgr) {
   for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
-    shadow_meshlet_psos_[alpha_mask_type] = shader_mgr.create_graphics_pipeline({
-        .shaders = {{{"forward_meshlet", ShaderType::Task},
-                     {alpha_mask_type == AlphaMaskType::Mask ? "csm_meshlet_alphatest"
-                                                             : "csm_meshlet",
-                      ShaderType::Mesh},
-                     {alpha_mask_type == AlphaMaskType::Mask ? "shadow_depth_meshlet_alphatest"
-                                                             : "shadow_depth_meshlet",
-                      ShaderType::Fragment}}},
-        .rendering = {.depth_format = TextureFormat::D32float},
-        .depth_stencil = GraphicsPipelineCreateInfo::depth_enable(true, CompareOp::Less),
-    });
+    for (size_t late = 0; late < 2; late++) {
+      shadow_meshlet_psos_[alpha_mask_type][late] = shader_mgr.create_graphics_pipeline({
+          .shaders = {{{late ? "forward_meshlet_late" : "forward_meshlet", ShaderType::Task},
+                       {alpha_mask_type == AlphaMaskType::Mask ? "csm_meshlet_alphatest"
+                                                               : "csm_meshlet",
+                        ShaderType::Mesh},
+                       {alpha_mask_type == AlphaMaskType::Mask ? "shadow_depth_meshlet_alphatest"
+                                                               : "shadow_depth_meshlet",
+                        ShaderType::Fragment}}},
+          .rendering = {.depth_format = TextureFormat::D32float},
+          .depth_stencil = GraphicsPipelineCreateInfo::depth_enable(true, CompareOp::Less),
+      });
+    }
   }
 }
 

@@ -1,10 +1,8 @@
 # Agent Instructions
 
 ### Target Names
-vulkan app target_name: vktest
-metal app target_name: metalrender
+always use target_name: metalrender unless told otherwise.
 
-Metal app is the main app
 ### Configure
 cmake --preset Debug
 ### Build

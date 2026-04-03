@@ -3,11 +3,13 @@
 
 #include "shader_core.h"
 
-cbuffer ImGuiPC HLSL_PC_REG {
+struct ImGuiPC {
   float4x4 proj;
   uint vert_buf_idx;
   uint tex_idx;
 };
+
+PUSHCONSTANT(ImGuiPC, pc);
 
 struct ImGuiVertex {
   float2 position;

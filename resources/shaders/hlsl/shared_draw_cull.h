@@ -21,7 +21,7 @@ struct ViewCullSetup {
   uint flags;
 };
 
-cbuffer DrawCullPC HLSL_PC_REG {
+struct DrawCullPC {
   uint view_cull_setup_buf_idx;
   uint view_cull_setup_count;
   uint view_cull_setup_buf_offset_bytes;
@@ -31,5 +31,7 @@ cbuffer DrawCullPC HLSL_PC_REG {
   uint max_draws;
   uint culling_enabled;
 };
+
+PUSHCONSTANT(DrawCullPC, pc);
 
 #endif

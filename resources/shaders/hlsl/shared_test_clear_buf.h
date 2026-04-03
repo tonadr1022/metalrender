@@ -3,6 +3,10 @@
 
 #include "shader_core.h"
 
-cbuffer TestClearBufPC HLSL_PC_REG { uint buf_idx; };
+struct TestClearBufPC {
+  uint buf_idx;
+};
+
+PUSHCONSTANT(TestClearBufPC, pc);
 
 #endif
