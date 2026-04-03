@@ -26,6 +26,7 @@ class VulkanBuffer final : public rhi::Buffer {
   [[nodiscard]] const void* contents() const override { return mapped_ptr_; }
   [[nodiscard]] VkBuffer buffer() const { return buffer_; }
   [[nodiscard]] VmaAllocation allocation() const { return allocation_; }
+  [[nodiscard]] uint32_t raw_bindless_idx() const { return bindless_idx_; }
 
   [[nodiscard]] bool is_cpu_visible() const override {
     return alloc_flags & VMA_ALLOCATION_CREATE_MAPPED_BIT;

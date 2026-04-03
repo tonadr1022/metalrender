@@ -5,6 +5,7 @@
 #include <VkBootstrap.h>
 #include <algorithm>
 #include <fstream>
+#include <mutex>
 // clang-format on
 
 #include "VMAWrapper.hpp"  // IWYU pragma: keep
@@ -313,12 +314,17 @@ void VulkanDevice::shutdown() {
     vkDestroyPipeline(device_, ((VulkanPipeline*)get_pipeline(pipeline))->pipeline_, nullptr);
   }
 
+  for (auto& [hash, entry] : pipeline_layout_cache_) {
+    vkDestroyPipelineLayout(device_, entry.layout, nullptr);
+  }
+  pipeline_layout_cache_.clear();
+
   for (auto& [hash, layout] : set_layout_cache_) {
     vkDestroyDescriptorSetLayout(device_, layout, nullptr);
   }
-  for (auto& [hash, layout] : pipeline_layout_cache_) {
-    vkDestroyPipelineLayout(device_, layout, nullptr);
-  }
+  set_layout_cache_.clear();
+
+  shutdown_bindless_heaps();
 
   for (auto& frame_fence : frame_fences_) {
     for (size_t frame_i = 0; frame_i < info_.frames_in_flight; frame_i++) {
@@ -368,12 +374,26 @@ void VulkanDevice::init(const InitInfo& init_info) {
   phys_device_selector.set_required_features(feat);
 
   VkPhysicalDeviceVulkan12Features feat12{
-      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
-      .descriptorBindingPartiallyBound = true,
-      .descriptorBindingVariableDescriptorCount = true,
-      .runtimeDescriptorArray = true,
-      .scalarBlockLayout = true,
-  };
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+  feat12.descriptorIndexing = VK_TRUE;
+  feat12.shaderUniformTexelBufferArrayDynamicIndexing = VK_TRUE;
+  feat12.shaderStorageTexelBufferArrayDynamicIndexing = VK_TRUE;
+  feat12.shaderUniformBufferArrayNonUniformIndexing = VK_TRUE;
+  feat12.shaderSampledImageArrayNonUniformIndexing = VK_TRUE;
+  feat12.shaderStorageBufferArrayNonUniformIndexing = VK_TRUE;
+  feat12.shaderStorageImageArrayNonUniformIndexing = VK_TRUE;
+  feat12.shaderInputAttachmentArrayNonUniformIndexing = VK_TRUE;
+  feat12.shaderUniformTexelBufferArrayNonUniformIndexing = VK_TRUE;
+  feat12.shaderStorageTexelBufferArrayNonUniformIndexing = VK_TRUE;
+  feat12.descriptorBindingSampledImageUpdateAfterBind = VK_TRUE;
+  feat12.descriptorBindingStorageImageUpdateAfterBind = VK_TRUE;
+  feat12.descriptorBindingStorageBufferUpdateAfterBind = VK_TRUE;
+  feat12.descriptorBindingUniformTexelBufferUpdateAfterBind = VK_TRUE;
+  feat12.descriptorBindingStorageTexelBufferUpdateAfterBind = VK_TRUE;
+  feat12.descriptorBindingPartiallyBound = VK_TRUE;
+  feat12.descriptorBindingVariableDescriptorCount = VK_TRUE;
+  feat12.runtimeDescriptorArray = VK_TRUE;
+  feat12.scalarBlockLayout = VK_TRUE;
   phys_device_selector.set_required_features_12(feat12);
 
   VkPhysicalDeviceVulkan13Features feat13{
@@ -573,10 +593,26 @@ void VulkanDevice::init(const InitInfo& init_info) {
         .compare_op = rhi::CompareOp::GreaterOrEqual,
     });
   }
+
+  init_bindless_heaps();
+}
+
+rhi::SamplerHandle VulkanDevice::create_sampler(const rhi::SamplerDesc& desc) {
+  VkSampler sampler = create_vk_sampler(desc);
+  uint32_t bindless_idx = rhi::k_invalid_bindless_idx;
+  if (!rhi::has_flag(desc.flags, rhi::SamplerDescFlags::NoBindless)) {
+    int idx = alloc_bindless_sampler_idx();
+    ALWAYS_ASSERT(idx >= 0);
+    bindless_idx = static_cast<uint32_t>(idx);
+  }
+  auto handle = sampler_pool_.alloc(desc, sampler, bindless_idx);
+  if (bindless_idx != rhi::k_invalid_bindless_idx) {
+    write_bindless_sampler(bindless_idx, sampler);
+  }
+  return handle;
 }
 
 rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
-  ALWAYS_ASSERT(desc.usage != rhi::BufferUsage::None);
   VkBufferCreateInfo cinfo{
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
       .size = desc.size,
@@ -612,8 +648,10 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
       vma_cinfo.flags |= VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
     }
   } else {
-    cinfo.usage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
+    ASSERT(cinfo.usage != 0);
   }
+
+  cinfo.usage |= VK_BUFFER_USAGE_2_TRANSFER_DST_BIT | VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT;
 
   vma_cinfo.usage = VMA_MEMORY_USAGE_AUTO;
   VkBuffer buffer{};
@@ -622,8 +660,20 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
   VmaAllocationInfo allocation_info{};
   vmaGetAllocationInfo(allocator_, allocation, &allocation_info);
 
-  return buffer_pool_.alloc(desc, rhi::k_invalid_bindless_idx, buffer, allocation, vma_cinfo.flags,
-                            allocation_info.pMappedData);
+  uint32_t bindless_idx = rhi::k_invalid_bindless_idx;
+  if (has_flag(desc.usage, rhi::BufferUsage::Storage) &&
+      !rhi::has_flag(desc.flags, rhi::BufferDescFlags::NoBindless)) {
+    int idx = alloc_bindless_storage_idx();
+    ALWAYS_ASSERT(idx >= 0);
+    bindless_idx = static_cast<uint32_t>(idx);
+  }
+
+  auto handle = buffer_pool_.alloc(desc, bindless_idx, buffer, allocation, vma_cinfo.flags,
+                                   allocation_info.pMappedData);
+  if (bindless_idx != rhi::k_invalid_bindless_idx) {
+    write_bindless_storage_descriptor(bindless_idx, buffer);
+  }
+  return handle;
 }
 
 rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
@@ -672,7 +722,20 @@ rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
     set_vk_debug_name(VK_OBJECT_TYPE_IMAGE, (uint64_t)image, desc.name);
   }
 
-  auto handle = texture_pool_.alloc(desc, rhi::k_invalid_bindless_idx, image, allocation, false);
+  const bool want_bindless = !rhi::has_flag(desc.flags, rhi::TextureDescFlags::NoBindless);
+  const bool use_sampled = want_bindless && rhi::has_flag(desc.usage, rhi::TextureUsage::Sample);
+  const bool use_storage =
+      want_bindless && (rhi::has_flag(desc.usage, rhi::TextureUsage::Storage) ||
+                        rhi::has_flag(desc.usage, rhi::TextureUsage::ShaderWrite));
+
+  uint32_t bindless_idx = rhi::k_invalid_bindless_idx;
+  if (use_sampled || use_storage) {
+    int idx = alloc_bindless_image_slot();
+    ALWAYS_ASSERT(idx >= 0);
+    bindless_idx = static_cast<uint32_t>(idx);
+  }
+
+  auto handle = texture_pool_.alloc(desc, bindless_idx, image, allocation, false);
   auto* tex = (VulkanTexture*)get_tex(handle);
   tex->default_view_ = create_img_view(*tex, view_type,
                                        {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -680,6 +743,21 @@ rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
                                         .levelCount = desc.mip_levels,
                                         .baseArrayLayer = 0,
                                         .layerCount = desc.array_length});
+
+  if (bindless_idx != rhi::k_invalid_bindless_idx) {
+    if (use_sampled) {
+      write_bindless_sampled_image(bindless_idx, tex->default_view_,
+                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    } else {
+      write_bindless_sampled_image(bindless_idx, null_image_view_,
+                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+    if (use_storage) {
+      write_bindless_storage_image(bindless_idx, tex->default_view_, VK_IMAGE_LAYOUT_GENERAL);
+    } else {
+      write_bindless_storage_image(bindless_idx, null_image_view_, VK_IMAGE_LAYOUT_GENERAL);
+    }
+  }
   return handle;
 }
 
@@ -729,7 +807,7 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
   uint32_t module_count = 0;
   std::vector<VkPushConstantRange> push_constant_ranges;
   DescSetCreateInfo set0_info;
-  VkDescriptorSetLayout set_layout;
+  std::vector<BindlessBindingUsage> merged_bindless;
   std::vector<VkDescriptorSetLayoutBinding> merged_bindings;
 
   for (size_t i = 0; i < info.shaders.size(); i++, module_count++) {
@@ -740,7 +818,10 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
 
     auto spirv_code =
         read_file_to_uint_vec(get_spv_path(shader_lib_dir_, shader_info.path, shader_info.type));
-    reflect_shader(spirv_code, push_constant_ranges, set0_info);
+    std::vector<BindlessBindingUsage> shader_bindless;
+    reflect_shader(spirv_code, convert_shader_stage(shader_info.type), push_constant_ranges,
+                   set0_info, shader_bindless);
+    merge_bindless_reflection(merged_bindless, shader_bindless);
 
     VkShaderModule module = create_shader_module(spirv_code);
     stages[i] = {
@@ -751,18 +832,19 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
     };
   }
 
-  // merge PC blocks
-  // not actually handling multiple push constant ranges yet
   VkPushConstantRange merged_push_constant_range{};
   bool has_range = false;
   for (auto& range : push_constant_ranges) {
-    has_range = true;
-    ASSERT(range.stageFlags == VK_SHADER_STAGE_ALL);
-    merged_push_constant_range.stageFlags |= range.stageFlags;
-    merged_push_constant_range.offset = range.offset;
-    merged_push_constant_range.size = std::max(range.size, merged_push_constant_range.size);
+    if (!has_range) {
+      merged_push_constant_range = range;
+      has_range = true;
+    } else {
+      merged_push_constant_range.stageFlags |= range.stageFlags;
+      ASSERT(merged_push_constant_range.offset == range.offset);
+      merged_push_constant_range.size = std::max(merged_push_constant_range.size, range.size);
+    }
   }
-  // merge set layouts
+
   for (const auto& b : set0_info.bindings) {
     bool exists = false;
     for (auto& existing_b : merged_bindings) {
@@ -782,39 +864,13 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
   std::ranges::sort(merged_bindings,
                     [](const VkDescriptorSetLayoutBinding& a,
                        const VkDescriptorSetLayoutBinding& b) { return a.binding < b.binding; });
-  VkDescriptorSetLayoutCreateInfo set_cinfo{
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = static_cast<uint32_t>(merged_bindings.size()),
-      .pBindings = merged_bindings.data(),
-  };
-  auto hash = hash_descriptor_set_layout_cinfo(set_cinfo);
-  auto it = set_layout_cache_.find(hash);
-  if (it != set_layout_cache_.end()) {
-    set_layout = it->second;
-  } else {
-    VK_CHECK(vkCreateDescriptorSetLayout(device_, &set_cinfo, nullptr, &set_layout));
-    set_layout_cache_[hash] = set_layout;
-  }
 
-  VkPipelineLayoutCreateInfo pipeline_layout_cinfo{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = 1,
-      .pSetLayouts = &set_layout,
-      .pushConstantRangeCount = has_range,
-      .pPushConstantRanges = &merged_push_constant_range,
-  };
-
-  VkPipelineLayout pipeline_layout;
-  {
-    auto hash = hash_pipeline_layout_cinfo(pipeline_layout_cinfo);
-    auto it = pipeline_layout_cache_.find(hash);
-    if (it != pipeline_layout_cache_.end()) {
-      pipeline_layout = it->second;
-    } else {
-      VK_CHECK(vkCreatePipelineLayout(device_, &pipeline_layout_cinfo, nullptr, &pipeline_layout));
-      pipeline_layout_cache_[hash] = pipeline_layout;
-    }
-  }
+  VkPushConstantRange* pc_ptr = has_range ? &merged_push_constant_range : nullptr;
+  uint32_t pc_count = has_range ? 1u : 0u;
+  CachedPipelineLayout cached_pl =
+      get_or_create_pipeline_layout(merged_bindings, merged_bindless, pc_ptr, pc_count);
+  VkPipelineLayout pipeline_layout = cached_pl.layout;
+  VkDescriptorSetLayout set_layout = cached_pl.set0_layout;
 
   std::array<VkPipelineColorBlendAttachmentState, 10> attachments{};
 
@@ -930,9 +986,11 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
   for (uint32_t i = 0; i < module_count; i++) {
     vkDestroyShaderModule(device_, stages[i].module, nullptr);
   }
-  return pipeline_pool_.alloc(info, vk_pipeline, pipeline_layout, set_layout,
-                              std::move(merged_bindings),
-                              rhi::compute_render_target_info_hash(info.rendering));
+  VkShaderStageFlags push_stages = has_range ? merged_push_constant_range.stageFlags : 0u;
+  return pipeline_pool_.alloc(
+      info, vk_pipeline, pipeline_layout, set_layout, std::move(merged_bindings),
+      rhi::compute_render_target_info_hash(info.rendering), cached_pl.bindless_first_set,
+      std::move(cached_pl.bindless_sets), push_stages);
 }
 
 void VulkanDevice::submit_frame() {
@@ -1020,6 +1078,10 @@ rhi::SwapchainHandle VulkanDevice::create_swapchain(const rhi::SwapchainDesc& de
 void VulkanDevice::destroy(rhi::BufferHandle handle) {
   auto* buf = (VulkanBuffer*)get_buf(handle);
   if (buf) {
+    uint32_t bi = buf->raw_bindless_idx();
+    if (bi != rhi::k_invalid_bindless_idx && bi != 0u) {
+      free_bindless_storage_idx(bi);
+    }
     del_q_.enqueue({buf->buffer_, buf->allocation_});
     buffer_pool_.destroy(handle);
   }
@@ -1036,6 +1098,11 @@ void VulkanDevice::destroy(rhi::PipelineHandle handle) {
 void VulkanDevice::destroy(rhi::TextureHandle handle) {
   auto* tex = (VulkanTexture*)get_tex(handle);
   if (tex) {
+    uint32_t bi = tex->raw_bindless_idx();
+    if (bi != rhi::k_invalid_bindless_idx && bi != 0u) {
+      clear_bindless_image_slot(bi);
+      free_bindless_image_slot(bi);
+    }
     if (!tex->is_swapchain_image_) {
       del_q_.enqueue({tex->image_, tex->allocation_});
     }
@@ -1048,8 +1115,12 @@ void VulkanDevice::destroy(rhi::TextureHandle handle) {
 void VulkanDevice::destroy(rhi::SamplerHandle handle) {
   auto* sampler = (VulkanSampler*)sampler_pool_.get(handle);
   if (sampler) {
-    ASSERT(0);
-    // vkDestroySampler(device_, sampler->sampler_, nullptr);
+    uint32_t bi = sampler->raw_bindless_idx();
+    if (bi != rhi::k_invalid_bindless_idx && bi != 0u) {
+      write_bindless_sampler(bi, null_bindless_sampler_);
+      free_bindless_sampler_idx(bi);
+    }
+    del_q_.enqueue(sampler->sampler_);
   }
 
   sampler_pool_.destroy(handle);
@@ -1342,45 +1413,16 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
   auto spirv_code =
       read_file_to_uint_vec(get_spv_path(shader_lib_dir_, cinfo.path, rhi::ShaderType::Compute));
 
-  VkPipelineLayout pipeline_layout;
-  VkDescriptorSetLayout layout;
-  // TODO: don't allocate?
   std::vector<VkPushConstantRange> push_constant_ranges;
   DescSetCreateInfo set0_cinfo;
-  reflect_shader(spirv_code, push_constant_ranges, set0_cinfo);
+  std::vector<BindlessBindingUsage> shader_bindless;
+  reflect_shader(spirv_code, VK_SHADER_STAGE_COMPUTE_BIT, push_constant_ranges, set0_cinfo,
+                 shader_bindless);
 
-  VkDescriptorSetLayoutCreateInfo set_cinfo{
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = static_cast<uint32_t>(set0_cinfo.bindings.size()),
-      .pBindings = set0_cinfo.bindings.data(),
-  };
-  auto hash = hash_descriptor_set_layout_cinfo(set_cinfo);
-  auto it = set_layout_cache_.find(hash);
-  if (it != set_layout_cache_.end()) {
-    layout = it->second;
-  } else {
-    VK_CHECK(vkCreateDescriptorSetLayout(device_, &set_cinfo, nullptr, &layout));
-    set_layout_cache_[hash] = layout;
-  }
-
-  {
-    VkPipelineLayoutCreateInfo pipeline_layout_cinfo{
-        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-        .setLayoutCount = 1,
-        .pSetLayouts = &layout,
-        .pushConstantRangeCount = (uint32_t)push_constant_ranges.size(),
-        .pPushConstantRanges = push_constant_ranges.data(),
-    };
-
-    auto pipeline_layout_hash = hash_pipeline_layout_cinfo(pipeline_layout_cinfo);
-    auto it = pipeline_layout_cache_.find(pipeline_layout_hash);
-    if (it != pipeline_layout_cache_.end()) {
-      pipeline_layout = it->second;
-    } else {
-      VK_CHECK(vkCreatePipelineLayout(device_, &pipeline_layout_cinfo, nullptr, &pipeline_layout));
-      pipeline_layout_cache_[pipeline_layout_hash] = pipeline_layout;
-    }
-  }
+  CachedPipelineLayout cached_pl = get_or_create_pipeline_layout(
+      set0_cinfo.bindings, shader_bindless,
+      push_constant_ranges.empty() ? nullptr : push_constant_ranges.data(),
+      static_cast<uint32_t>(push_constant_ranges.size()));
 
   VkShaderModule module = create_shader_module(spirv_code);
 
@@ -1394,7 +1436,7 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
   VkComputePipelineCreateInfo pipeline_cinfo{
       .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
       .stage = stage_info,
-      .layout = pipeline_layout,
+      .layout = cached_pl.layout,
   };
 
   VkPipeline vk_pipeline;
@@ -1402,8 +1444,13 @@ rhi::PipelineHandle VulkanDevice::create_compute_pipeline(const rhi::ShaderCreat
 
   vkDestroyShaderModule(device_, module, nullptr);
 
-  return pipeline_pool_.alloc(cinfo, vk_pipeline, pipeline_layout, layout,
-                              std::move(set0_cinfo.bindings));
+  VkShaderStageFlags push_stages = 0;
+  for (const auto& r : push_constant_ranges) {
+    push_stages |= r.stageFlags;
+  }
+  return pipeline_pool_.alloc(cinfo, vk_pipeline, cached_pl.layout, cached_pl.set0_layout,
+                              std::move(set0_cinfo.bindings), cached_pl.bindless_first_set,
+                              std::move(cached_pl.bindless_sets), push_stages);
 }
 
 VkShaderModule VulkanDevice::create_shader_module(const std::filesystem::path& path) {
@@ -1438,6 +1485,549 @@ uint64_t VulkanDevice::hash_pipeline_layout_cinfo(const VkPipelineLayoutCreateIn
   return hash;
 }
 
+void VulkanDevice::merge_bindless_reflection(std::vector<BindlessBindingUsage>& dst,
+                                             const std::vector<BindlessBindingUsage>& src) {
+  dst.resize(std::max(dst.size(), src.size()));
+  for (size_t i = 0; i < src.size(); ++i) {
+    if (!src[i].used) {
+      continue;
+    }
+    if (!dst[i].used) {
+      dst[i] = src[i];
+      continue;
+    }
+    if (dst[i].binding.descriptorType != src[i].binding.descriptorType) {
+      dst[i] = src[i];
+    } else {
+      dst[i].binding.stageFlags |= src[i].binding.stageFlags;
+    }
+  }
+}
+
+void VulkanDevice::init_uab_heap(BindlessHeap& heap, VkDescriptorType type, uint32_t count) {
+  heap.capacity = count;
+  ALWAYS_ASSERT(count >= 8u);
+  VkDescriptorPoolSize ps{.type = type, .descriptorCount = count};
+  VkDescriptorPoolCreateInfo pc{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                                .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+                                .maxSets = 1,
+                                .poolSizeCount = 1,
+                                .pPoolSizes = &ps};
+  VK_CHECK(vkCreateDescriptorPool(device_, &pc, nullptr, &heap.pool));
+
+  VkDescriptorSetLayoutBinding binding{.binding = 0,
+                                       .descriptorType = type,
+                                       .descriptorCount = count,
+                                       .stageFlags = VK_SHADER_STAGE_ALL,
+                                       .pImmutableSamplers = nullptr};
+  VkDescriptorBindingFlags bf =
+      VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+  VkDescriptorSetLayoutBindingFlagsCreateInfo bfc{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+      .bindingCount = 1,
+      .pBindingFlags = &bf,
+  };
+  VkDescriptorSetLayoutCreateInfo lc{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .pNext = &bfc,
+      .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+      .bindingCount = 1,
+      .pBindings = &binding};
+  VK_CHECK(vkCreateDescriptorSetLayout(device_, &lc, nullptr, &heap.layout));
+
+  VkDescriptorSetAllocateInfo ac{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                                 .descriptorPool = heap.pool,
+                                 .descriptorSetCount = 1,
+                                 .pSetLayouts = &heap.layout};
+  VK_CHECK(vkAllocateDescriptorSets(device_, &ac, &heap.set));
+
+  heap.freelist.reserve(count);
+  for (uint32_t i = 0; i < count; i++) {
+    heap.freelist.push_back(count - 1u - i);
+  }
+}
+
+void VulkanDevice::shutdown_uab_heap(BindlessHeap& heap) {
+  if (heap.pool) {
+    vkDestroyDescriptorPool(device_, heap.pool, nullptr);
+    heap.pool = VK_NULL_HANDLE;
+  }
+  if (heap.layout) {
+    vkDestroyDescriptorSetLayout(device_, heap.layout, nullptr);
+    heap.layout = VK_NULL_HANDLE;
+  }
+  heap.set = VK_NULL_HANDLE;
+  heap.freelist.clear();
+  heap.capacity = 0;
+}
+
+int VulkanDevice::alloc_uab_heap_slot(BindlessHeap& heap) {
+  std::lock_guard lock(heap.mutex);
+  if (heap.freelist.empty()) {
+    return -1;
+  }
+  uint32_t idx = heap.freelist.back();
+  heap.freelist.pop_back();
+  return static_cast<int>(idx);
+}
+
+void VulkanDevice::free_uab_heap_slot(BindlessHeap& heap, uint32_t idx) {
+  std::lock_guard lock(heap.mutex);
+  heap.freelist.push_back(idx);
+}
+
+void VulkanDevice::init_bindless_heaps() {
+  VkPhysicalDeviceDescriptorIndexingProperties indexing_props{
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES,
+  };
+  VkPhysicalDeviceProperties2 props2{.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+                                     .pNext = &indexing_props};
+  vkGetPhysicalDeviceProperties2(physical_device_, &props2);
+
+  VkBufferCreateInfo null_buf_info{.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+                                   .size = 256,
+                                   .usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT};
+  VmaAllocationCreateInfo null_alloc{};
+  null_alloc.usage = VMA_MEMORY_USAGE_AUTO;
+  VK_CHECK(vmaCreateBuffer(allocator_, &null_buf_info, &null_alloc, &null_storage_buffer_,
+                           &null_storage_buffer_alloc_, nullptr));
+
+  uint32_t storage_cap = indexing_props.maxDescriptorSetUpdateAfterBindStorageBuffers / 4u;
+  storage_cap = std::min(storage_cap, 500000u);
+  ALWAYS_ASSERT(storage_cap >= 64u);
+  bindless_storage_capacity_ = storage_cap;
+
+  VkDescriptorPoolSize pool_size{.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                 .descriptorCount = bindless_storage_capacity_};
+  VkDescriptorPoolCreateInfo pool_cinfo{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                                        .flags = VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+                                        .maxSets = 1,
+                                        .poolSizeCount = 1,
+                                        .pPoolSizes = &pool_size};
+  VK_CHECK(vkCreateDescriptorPool(device_, &pool_cinfo, nullptr, &bindless_storage_pool_));
+
+  VkDescriptorSetLayoutBinding storage_binding{.binding = 0,
+                                               .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                               .descriptorCount = bindless_storage_capacity_,
+                                               .stageFlags = VK_SHADER_STAGE_ALL,
+                                               .pImmutableSamplers = nullptr};
+  VkDescriptorBindingFlags bind_flags =
+      VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
+  VkDescriptorSetLayoutBindingFlagsCreateInfo bind_flags_cinfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+      .bindingCount = 1,
+      .pBindingFlags = &bind_flags,
+  };
+  VkDescriptorSetLayoutCreateInfo storage_layout_cinfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .pNext = &bind_flags_cinfo,
+      .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+      .bindingCount = 1,
+      .pBindings = &storage_binding,
+  };
+  VK_CHECK(vkCreateDescriptorSetLayout(device_, &storage_layout_cinfo, nullptr,
+                                       &bindless_storage_layout_));
+
+  VkDescriptorSetAllocateInfo alloc_cinfo{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                                          .descriptorPool = bindless_storage_pool_,
+                                          .descriptorSetCount = 1,
+                                          .pSetLayouts = &bindless_storage_layout_};
+  VK_CHECK(vkAllocateDescriptorSets(device_, &alloc_cinfo, &bindless_storage_set_));
+
+  bindless_storage_freelist_.reserve(bindless_storage_capacity_);
+  for (uint32_t i = 0; i < bindless_storage_capacity_; i++) {
+    bindless_storage_freelist_.push_back(bindless_storage_capacity_ - 1u - i);
+  }
+  int reserved_storage0 = alloc_bindless_storage_idx();
+  ALWAYS_ASSERT(reserved_storage0 == 0);
+  VkDescriptorBufferInfo null_storage_info{
+      .buffer = null_storage_buffer_, .offset = 0, .range = VK_WHOLE_SIZE};
+  VkWriteDescriptorSet null_storage_write{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                                          .dstSet = bindless_storage_set_,
+                                          .dstBinding = 0,
+                                          .dstArrayElement = 0,
+                                          .descriptorCount = 1,
+                                          .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                                          .pBufferInfo = &null_storage_info};
+  vkUpdateDescriptorSets(device_, 1, &null_storage_write, 0, nullptr);
+
+  VkBufferCreateInfo null_texel_buf_info{
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = 4096,
+      .usage = VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT};
+  VK_CHECK(vmaCreateBuffer(allocator_, &null_texel_buf_info, &null_alloc, &null_texel_buffer_,
+                           &null_texel_buffer_alloc_, nullptr));
+
+  VkBufferViewCreateInfo utbv{.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
+                              .buffer = null_texel_buffer_,
+                              .format = VK_FORMAT_R32_UINT,
+                              .offset = 0,
+                              .range = VK_WHOLE_SIZE};
+  VK_CHECK(vkCreateBufferView(device_, &utbv, nullptr, &null_uniform_texel_view_));
+  VkBufferViewCreateInfo stbv{.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
+                              .buffer = null_texel_buffer_,
+                              .format = VK_FORMAT_R32_UINT,
+                              .offset = 0,
+                              .range = VK_WHOLE_SIZE};
+  VK_CHECK(vkCreateBufferView(device_, &stbv, nullptr, &null_storage_texel_view_));
+
+  VkImageCreateInfo null_img{.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+                             .imageType = VK_IMAGE_TYPE_2D,
+                             .format = VK_FORMAT_R8G8B8A8_UNORM,
+                             .extent = {1, 1, 1},
+                             .mipLevels = 1,
+                             .arrayLayers = 1,
+                             .samples = VK_SAMPLE_COUNT_1_BIT,
+                             .tiling = VK_IMAGE_TILING_OPTIMAL,
+                             .usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
+                                      VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+                             .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+  VK_CHECK(vmaCreateImage(allocator_, &null_img, &null_alloc, &null_image_, &null_image_alloc_,
+                          nullptr));
+  VkImageViewCreateInfo null_iv{.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                                .image = null_image_,
+                                .viewType = VK_IMAGE_VIEW_TYPE_2D,
+                                .format = VK_FORMAT_R8G8B8A8_UNORM,
+                                .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                     .baseMipLevel = 0,
+                                                     .levelCount = 1,
+                                                     .baseArrayLayer = 0,
+                                                     .layerCount = 1}};
+  VK_CHECK(vkCreateImageView(device_, &null_iv, nullptr, &null_image_view_));
+
+  null_bindless_sampler_ = create_vk_sampler({
+      .min_filter = rhi::FilterMode::Nearest,
+      .mag_filter = rhi::FilterMode::Nearest,
+      .mipmap_mode = rhi::FilterMode::Nearest,
+      .address_mode = rhi::AddressMode::ClampToEdge,
+      .flags = rhi::SamplerDescFlags::NoBindless,
+  });
+
+  auto cap_texel =
+      std::min(500000u, indexing_props.maxDescriptorSetUpdateAfterBindSampledImages / 4u);
+  cap_texel = std::max(cap_texel, 64u);
+  auto cap_sampled =
+      std::min(500000u, indexing_props.maxDescriptorSetUpdateAfterBindSampledImages / 4u);
+  cap_sampled = std::max(cap_sampled, 64u);
+  auto cap_storage_img =
+      std::min(500000u, indexing_props.maxDescriptorSetUpdateAfterBindStorageImages / 4u);
+  cap_storage_img = std::max(cap_storage_img, 64u);
+  uint32_t cap_sampler = indexing_props.maxDescriptorSetUpdateAfterBindSamplers;
+  cap_sampler = std::min(std::max(cap_sampler, 256u), 4096u);
+
+  init_uab_heap(bindless_uniform_texel_, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, cap_texel);
+  init_uab_heap(bindless_storage_texel_, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, cap_texel);
+  const uint32_t cap_bindless_img = std::min(cap_sampled, cap_storage_img);
+  init_uab_heap(bindless_sampled_image_, VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, cap_bindless_img);
+  init_uab_heap(bindless_storage_image_, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, cap_bindless_img);
+  init_uab_heap(bindless_sampler_, VK_DESCRIPTOR_TYPE_SAMPLER, cap_sampler);
+
+  auto prime_heap_slot0 = [&](BindlessHeap& heap, auto&& write_null) {
+    int z = alloc_uab_heap_slot(heap);
+    ALWAYS_ASSERT(z == 0);
+    write_null();
+  };
+
+  prime_heap_slot0(bindless_uniform_texel_,
+                   [&] { write_bindless_uniform_texel(0, null_uniform_texel_view_); });
+  prime_heap_slot0(bindless_storage_texel_,
+                   [&] { write_bindless_storage_texel(0, null_storage_texel_view_); });
+  prime_heap_slot0(bindless_sampled_image_, [&] {
+    write_bindless_sampled_image(0, null_image_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+  });
+  prime_heap_slot0(bindless_storage_image_, [&] {
+    write_bindless_storage_image(0, null_image_view_, VK_IMAGE_LAYOUT_GENERAL);
+  });
+  prime_heap_slot0(bindless_sampler_, [&] { write_bindless_sampler(0, null_bindless_sampler_); });
+
+  VkDescriptorPoolSize pad_pool_size{.type = VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount = 8};
+  VkDescriptorPoolCreateInfo pad_pool_cinfo{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+                                            .maxSets = 64,
+                                            .poolSizeCount = 1,
+                                            .pPoolSizes = &pad_pool_size};
+  VK_CHECK(vkCreateDescriptorPool(device_, &pad_pool_cinfo, nullptr, &padding_descriptor_pool_));
+
+  VkDescriptorSetLayoutCreateInfo empty_layout_cinfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 0,
+      .pBindings = nullptr,
+  };
+  VK_CHECK(vkCreateDescriptorSetLayout(device_, &empty_layout_cinfo, nullptr,
+                                       &empty_descriptor_set_layout_));
+  VkDescriptorSetAllocateInfo empty_alloc{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+                                          .descriptorPool = padding_descriptor_pool_,
+                                          .descriptorSetCount = 1,
+                                          .pSetLayouts = &empty_descriptor_set_layout_};
+  VK_CHECK(vkAllocateDescriptorSets(device_, &empty_alloc, &empty_descriptor_set_));
+}
+
+void VulkanDevice::shutdown_bindless_heaps() {
+  if (padding_descriptor_pool_) {
+    vkDestroyDescriptorPool(device_, padding_descriptor_pool_, nullptr);
+    padding_descriptor_pool_ = VK_NULL_HANDLE;
+  }
+  if (empty_descriptor_set_layout_) {
+    vkDestroyDescriptorSetLayout(device_, empty_descriptor_set_layout_, nullptr);
+    empty_descriptor_set_layout_ = VK_NULL_HANDLE;
+  }
+  empty_descriptor_set_ = VK_NULL_HANDLE;
+
+  shutdown_uab_heap(bindless_uniform_texel_);
+  shutdown_uab_heap(bindless_storage_texel_);
+  shutdown_uab_heap(bindless_sampled_image_);
+  shutdown_uab_heap(bindless_storage_image_);
+  shutdown_uab_heap(bindless_sampler_);
+
+  if (null_bindless_sampler_) {
+    vkDestroySampler(device_, null_bindless_sampler_, nullptr);
+    null_bindless_sampler_ = VK_NULL_HANDLE;
+  }
+  if (null_image_view_) {
+    vkDestroyImageView(device_, null_image_view_, nullptr);
+    null_image_view_ = VK_NULL_HANDLE;
+  }
+  if (null_image_) {
+    vmaDestroyImage(allocator_, null_image_, null_image_alloc_);
+    null_image_ = VK_NULL_HANDLE;
+    null_image_alloc_ = VK_NULL_HANDLE;
+  }
+  if (null_uniform_texel_view_) {
+    vkDestroyBufferView(device_, null_uniform_texel_view_, nullptr);
+    null_uniform_texel_view_ = VK_NULL_HANDLE;
+  }
+  if (null_storage_texel_view_) {
+    vkDestroyBufferView(device_, null_storage_texel_view_, nullptr);
+    null_storage_texel_view_ = VK_NULL_HANDLE;
+  }
+  if (null_texel_buffer_) {
+    vmaDestroyBuffer(allocator_, null_texel_buffer_, null_texel_buffer_alloc_);
+    null_texel_buffer_ = VK_NULL_HANDLE;
+    null_texel_buffer_alloc_ = VK_NULL_HANDLE;
+  }
+
+  if (bindless_storage_pool_) {
+    vkDestroyDescriptorPool(device_, bindless_storage_pool_, nullptr);
+    bindless_storage_pool_ = VK_NULL_HANDLE;
+  }
+  if (bindless_storage_layout_) {
+    vkDestroyDescriptorSetLayout(device_, bindless_storage_layout_, nullptr);
+    bindless_storage_layout_ = VK_NULL_HANDLE;
+  }
+  bindless_storage_set_ = VK_NULL_HANDLE;
+  bindless_storage_freelist_.clear();
+  bindless_storage_capacity_ = 0;
+
+  if (null_storage_buffer_) {
+    vmaDestroyBuffer(allocator_, null_storage_buffer_, null_storage_buffer_alloc_);
+    null_storage_buffer_ = VK_NULL_HANDLE;
+    null_storage_buffer_alloc_ = VK_NULL_HANDLE;
+  }
+}
+
+int VulkanDevice::alloc_bindless_storage_idx() {
+  std::lock_guard lock(bindless_storage_mutex_);
+  if (bindless_storage_freelist_.empty()) {
+    return -1;
+  }
+  uint32_t idx = bindless_storage_freelist_.back();
+  bindless_storage_freelist_.pop_back();
+  return static_cast<int>(idx);
+}
+
+void VulkanDevice::free_bindless_storage_idx(uint32_t idx) {
+  std::lock_guard lock(bindless_storage_mutex_);
+  bindless_storage_freelist_.push_back(idx);
+}
+
+void VulkanDevice::write_bindless_storage_descriptor(uint32_t idx, VkBuffer buffer) {
+  VkDescriptorBufferInfo buf_info{.buffer = buffer, .offset = 0, .range = VK_WHOLE_SIZE};
+  VkWriteDescriptorSet write{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                             .dstSet = bindless_storage_set_,
+                             .dstBinding = 0,
+                             .dstArrayElement = idx,
+                             .descriptorCount = 1,
+                             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                             .pBufferInfo = &buf_info};
+  vkUpdateDescriptorSets(device_, 1, &write, 0, nullptr);
+}
+
+int VulkanDevice::alloc_bindless_image_slot() {
+  std::scoped_lock lock(bindless_sampled_image_.mutex, bindless_storage_image_.mutex);
+  if (bindless_sampled_image_.freelist.empty() || bindless_storage_image_.freelist.empty()) {
+    return -1;
+  }
+  uint32_t si = bindless_sampled_image_.freelist.back();
+  uint32_t st = bindless_storage_image_.freelist.back();
+  ALWAYS_ASSERT(si == st);
+  bindless_sampled_image_.freelist.pop_back();
+  bindless_storage_image_.freelist.pop_back();
+  return static_cast<int>(si);
+}
+
+void VulkanDevice::free_bindless_image_slot(uint32_t idx) {
+  std::scoped_lock lock(bindless_sampled_image_.mutex, bindless_storage_image_.mutex);
+  bindless_sampled_image_.freelist.push_back(idx);
+  bindless_storage_image_.freelist.push_back(idx);
+}
+
+void VulkanDevice::clear_bindless_image_slot(uint32_t idx) {
+  write_bindless_sampled_image(idx, null_image_view_, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+  write_bindless_storage_image(idx, null_image_view_, VK_IMAGE_LAYOUT_GENERAL);
+}
+
+void VulkanDevice::write_bindless_uniform_texel(uint32_t idx, VkBufferView view) {
+  VkWriteDescriptorSet w{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                         .dstSet = bindless_uniform_texel_.set,
+                         .dstBinding = 0,
+                         .dstArrayElement = idx,
+                         .descriptorCount = 1,
+                         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,
+                         .pTexelBufferView = &view};
+  vkUpdateDescriptorSets(device_, 1, &w, 0, nullptr);
+}
+
+void VulkanDevice::write_bindless_storage_texel(uint32_t idx, VkBufferView view) {
+  VkWriteDescriptorSet w{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                         .dstSet = bindless_storage_texel_.set,
+                         .dstBinding = 0,
+                         .dstArrayElement = idx,
+                         .descriptorCount = 1,
+                         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,
+                         .pTexelBufferView = &view};
+  vkUpdateDescriptorSets(device_, 1, &w, 0, nullptr);
+}
+
+void VulkanDevice::write_bindless_sampled_image(uint32_t idx, VkImageView view,
+                                                VkImageLayout layout) {
+  VkDescriptorImageInfo ii{.sampler = VK_NULL_HANDLE, .imageView = view, .imageLayout = layout};
+  VkWriteDescriptorSet w{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                         .dstSet = bindless_sampled_image_.set,
+                         .dstBinding = 0,
+                         .dstArrayElement = idx,
+                         .descriptorCount = 1,
+                         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
+                         .pImageInfo = &ii};
+  vkUpdateDescriptorSets(device_, 1, &w, 0, nullptr);
+}
+
+void VulkanDevice::write_bindless_storage_image(uint32_t idx, VkImageView view,
+                                                VkImageLayout layout) {
+  VkDescriptorImageInfo ii{.sampler = VK_NULL_HANDLE, .imageView = view, .imageLayout = layout};
+  VkWriteDescriptorSet w{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                         .dstSet = bindless_storage_image_.set,
+                         .dstBinding = 0,
+                         .dstArrayElement = idx,
+                         .descriptorCount = 1,
+                         .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                         .pImageInfo = &ii};
+  vkUpdateDescriptorSets(device_, 1, &w, 0, nullptr);
+}
+
+int VulkanDevice::alloc_bindless_sampler_idx() { return alloc_uab_heap_slot(bindless_sampler_); }
+
+void VulkanDevice::free_bindless_sampler_idx(uint32_t idx) {
+  free_uab_heap_slot(bindless_sampler_, idx);
+}
+
+void VulkanDevice::write_bindless_sampler(uint32_t idx, VkSampler sampler) {
+  VkDescriptorImageInfo ii{
+      .sampler = sampler, .imageView = VK_NULL_HANDLE, .imageLayout = VK_IMAGE_LAYOUT_UNDEFINED};
+  VkWriteDescriptorSet w{.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                         .dstSet = bindless_sampler_.set,
+                         .dstBinding = 0,
+                         .dstArrayElement = idx,
+                         .descriptorCount = 1,
+                         .descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+                         .pImageInfo = &ii};
+  vkUpdateDescriptorSets(device_, 1, &w, 0, nullptr);
+}
+
+VulkanDevice::CachedPipelineLayout VulkanDevice::get_or_create_pipeline_layout(
+    const std::vector<VkDescriptorSetLayoutBinding>& merged_set0,
+    const std::vector<BindlessBindingUsage>& merged_bindless, VkPushConstantRange* pc_ranges,
+    uint32_t pc_range_count) {
+  VkDescriptorSetLayout set0_layout{};
+  VkDescriptorSetLayoutCreateInfo set0_cinfo{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = static_cast<uint32_t>(merged_set0.size()),
+      .pBindings = merged_set0.data()};
+  uint64_t set0_hash = hash_descriptor_set_layout_cinfo(set0_cinfo);
+  auto set0_it = set_layout_cache_.find(set0_hash);
+  if (set0_it != set_layout_cache_.end()) {
+    set0_layout = set0_it->second;
+  } else {
+    VK_CHECK(vkCreateDescriptorSetLayout(device_, &set0_cinfo, nullptr, &set0_layout));
+    set_layout_cache_[set0_hash] = set0_layout;
+  }
+
+  std::vector<VkDescriptorSetLayout> all_layouts;
+  std::vector<VkDescriptorSet> bindless_handles;
+  all_layouts.push_back(set0_layout);
+  uint32_t bindless_first_set = 0;
+  if (!merged_bindless.empty()) {
+    bindless_first_set = 1;
+    for (const auto& slot : merged_bindless) {
+      if (slot.used) {
+        switch (slot.binding.descriptorType) {
+          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            all_layouts.push_back(bindless_storage_layout_);
+            bindless_handles.push_back(bindless_storage_set_);
+            break;
+          case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+            all_layouts.push_back(bindless_uniform_texel_.layout);
+            bindless_handles.push_back(bindless_uniform_texel_.set);
+            break;
+          case VK_DESCRIPTOR_TYPE_SAMPLER:
+            all_layouts.push_back(bindless_sampler_.layout);
+            bindless_handles.push_back(bindless_sampler_.set);
+            break;
+          case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            all_layouts.push_back(bindless_sampled_image_.layout);
+            bindless_handles.push_back(bindless_sampled_image_.set);
+            break;
+          case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            all_layouts.push_back(bindless_storage_image_.layout);
+            bindless_handles.push_back(bindless_storage_image_.set);
+            break;
+          case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            all_layouts.push_back(bindless_storage_texel_.layout);
+            bindless_handles.push_back(bindless_storage_texel_.set);
+            break;
+          case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+            LCRITICAL("Vulkan bindless: acceleration structure heap not implemented");
+            exit(1);
+          default:
+            LCRITICAL("Vulkan bindless: unsupported descriptor type for set > 0 (implement heap)");
+            exit(1);
+        }
+      } else {
+        all_layouts.push_back(empty_descriptor_set_layout_);
+        bindless_handles.push_back(empty_descriptor_set_);
+      }
+    }
+  }
+
+  VkPipelineLayoutCreateInfo pl_cinfo{.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+                                      .setLayoutCount = static_cast<uint32_t>(all_layouts.size()),
+                                      .pSetLayouts = all_layouts.data(),
+                                      .pushConstantRangeCount = pc_range_count,
+                                      .pPushConstantRanges = pc_ranges};
+  uint64_t pl_hash = hash_pipeline_layout_cinfo(pl_cinfo);
+  auto pl_it = pipeline_layout_cache_.find(pl_hash);
+  if (pl_it != pipeline_layout_cache_.end()) {
+    return pl_it->second;
+  }
+
+  VkPipelineLayout pipeline_layout{};
+  VK_CHECK(vkCreatePipelineLayout(device_, &pl_cinfo, nullptr, &pipeline_layout));
+  CachedPipelineLayout entry{.layout = pipeline_layout,
+                             .set0_layout = set0_layout,
+                             .bindless_first_set = bindless_first_set,
+                             .bindless_sets = std::move(bindless_handles)};
+  pipeline_layout_cache_[pl_hash] = entry;
+  return pipeline_layout_cache_[pl_hash];
+}
+
 VkShaderModule VulkanDevice::create_shader_module(std::span<const uint32_t> spirv_code) {
   VkShaderModuleCreateInfo module_cinfo{
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1449,59 +2039,73 @@ VkShaderModule VulkanDevice::create_shader_module(std::span<const uint32_t> spir
   return module;
 }
 
-void VulkanDevice::reflect_shader(std::span<const uint32_t> spirv_code,
+void VulkanDevice::reflect_shader(std::span<const uint32_t> spirv_code, VkShaderStageFlagBits stage,
                                   std::vector<VkPushConstantRange>& out_pc_ranges,
-                                  DescSetCreateInfo& out_set_0_info) {
-  {
-    spv_reflect::ShaderModule refl{spirv_code.size() * sizeof(uint32_t), spirv_code.data(),
-                                   SPV_REFLECT_MODULE_FLAG_NO_COPY};
-    auto result = refl.GetResult();
-    ASSERT(result == SPV_REFLECT_RESULT_SUCCESS);
-    uint32_t set_count;
-    refl.EnumerateDescriptorSets(&set_count, nullptr);
-    std::vector<SpvReflectDescriptorSet*> sets;
-
-    uint32_t pc_count;
-    refl.EnumeratePushConstantBlocks(&pc_count, nullptr);
-    std::vector<SpvReflectBlockVariable*> push_constants(pc_count);
-    refl.EnumeratePushConstantBlocks(&pc_count, push_constants.data());
-
-    for (uint32_t i = 0; i < pc_count; i++) {
-      auto& pc = push_constants[i];
-      VkPushConstantRange range{
-          // TODO: lolllll
-          .stageFlags = VK_SHADER_STAGE_ALL,
-          .offset = pc->offset,
-          .size = pc->size,
-      };
-      out_pc_ranges.emplace_back(range);
-    }
-
-    sets.resize(set_count);
+                                  DescSetCreateInfo& out_set_0_info,
+                                  std::vector<BindlessBindingUsage>& out_shader_bindless) {
+  spv_reflect::ShaderModule refl{spirv_code.size() * sizeof(uint32_t), spirv_code.data(),
+                                 SPV_REFLECT_MODULE_FLAG_NO_COPY};
+  auto result = refl.GetResult();
+  ASSERT(result == SPV_REFLECT_RESULT_SUCCESS);
+  uint32_t set_count = 0;
+  refl.EnumerateDescriptorSets(&set_count, nullptr);
+  std::vector<SpvReflectDescriptorSet*> sets(set_count);
+  if (set_count > 0) {
     refl.EnumerateDescriptorSets(&set_count, sets.data());
-    ASSERT(set_count <= 1);
-    for (uint32_t i = 0; i < set_count; i++) {
-      auto& set = sets[i];
+  }
+
+  uint32_t pc_count = 0;
+  refl.EnumeratePushConstantBlocks(&pc_count, nullptr);
+  std::vector<SpvReflectBlockVariable*> push_constants(pc_count);
+  if (pc_count > 0) {
+    refl.EnumeratePushConstantBlocks(&pc_count, push_constants.data());
+  }
+
+  for (uint32_t i = 0; i < pc_count; i++) {
+    auto& pc = push_constants[i];
+    out_pc_ranges.emplace_back(VkPushConstantRange{
+        .stageFlags = stage,
+        .offset = pc->offset,
+        .size = pc->size,
+    });
+  }
+
+  const auto refl_stage = (VkShaderStageFlagBits)refl.GetShaderStage();
+  for (uint32_t i = 0; i < set_count; i++) {
+    auto* set = sets[i];
+    if (set->set == 0) {
       for (uint32_t j = 0; j < set->binding_count; j++) {
-        auto& binding = set->bindings[j];
-        // auto layout_b = out_set_0_info.bindings.emplace_back(VkDescriptorSetLayoutBinding{});
-        // layout_b.binding = binding->binding;
-        // LINFO("Binding {} type {}", binding->binding,
-        //       string_VkDescriptorType(((VkDescriptorType)binding->descriptor_type)));
-        // layout_b.descriptorType = (VkDescriptorType)binding->descriptor_type;
-        // layout_b.descriptorCount = binding->count;
-        // layout_b.stageFlags = (VkShaderStageFlagBits)refl.GetShaderStage();
-        LINFO("Binding count: {}", binding->count);
+        SpvReflectDescriptorBinding* binding = set->bindings[j];
         auto& layout_b = out_set_0_info.bindings.emplace_back(VkDescriptorSetLayoutBinding{
             .binding = binding->binding,
             .descriptorType = (VkDescriptorType)binding->descriptor_type,
             .descriptorCount = binding->count,
-            .stageFlags = (VkShaderStageFlagBits)refl.GetShaderStage(),
+            .stageFlags = refl_stage,
             .pImmutableSamplers = nullptr,
         });
         if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER &&
             binding->binding >= 100) {
           layout_b.pImmutableSamplers = immutable_samplers_.data();
+        }
+      }
+    } else {
+      for (uint32_t j = 0; j < set->binding_count; j++) {
+        SpvReflectDescriptorBinding* binding = set->bindings[j];
+        out_shader_bindless.resize(
+            std::max(out_shader_bindless.size(), static_cast<size_t>(set->set)));
+        BindlessBindingUsage& slot = out_shader_bindless[set->set - 1];
+        if (!slot.used) {
+          slot.used = true;
+          slot.binding.binding = binding->binding;
+          slot.binding.descriptorType = (VkDescriptorType)binding->descriptor_type;
+          slot.binding.descriptorCount = binding->count;
+          slot.binding.stageFlags = refl_stage;
+          slot.binding.pImmutableSamplers = nullptr;
+        } else {
+          ASSERT(slot.binding.binding == binding->binding);
+          ASSERT(slot.binding.descriptorCount == binding->count);
+          ASSERT(slot.binding.descriptorType == (VkDescriptorType)binding->descriptor_type);
+          slot.binding.stageFlags |= refl_stage;
         }
       }
     }

@@ -16,6 +16,8 @@ class VulkanSampler : public rhi::Sampler {
   VulkanSampler() = default;
   ~VulkanSampler() = default;
 
+  [[nodiscard]] uint32_t raw_bindless_idx() const { return bindless_idx_; }
+
   VkSampler sampler_;
 };
 

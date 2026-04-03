@@ -26,6 +26,7 @@ class VulkanTexture : public rhi::Texture {
   }
   rhi::TextureDesc& desc() { return desc_; }
   uint32_t& bindless_idx() { return bindless_idx_; }
+  [[nodiscard]] uint32_t raw_bindless_idx() const { return bindless_idx_; }
 
   VkImage image_;
   VkImageView default_view_{};

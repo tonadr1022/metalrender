@@ -33,6 +33,8 @@ void DeleteQueue::flush(size_t frame_num) {
   flush_queue(buffers_, [this](BufferEntry buffer) {
     vmaDestroyBuffer(allocator_, buffer.buffer, buffer.allocation);
   });
+  flush_queue(samplers_,
+              [this](VkSampler sampler) { vkDestroySampler(device_, sampler, nullptr); });
 }
 
 }  // namespace gfx::vk

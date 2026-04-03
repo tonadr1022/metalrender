@@ -2,6 +2,9 @@
 
 #include <vulkan/vulkan_core.h>
 
+#include <mutex>
+#include <vector>
+
 #include "VMAWrapper.hpp"
 #include "VkBootstrap.h"
 #include "core/Config.hpp"
@@ -78,10 +81,7 @@ class VulkanDevice : public rhi::Device {
     exit(1);
   }
 
-  rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) override {
-    VkSampler sampler = create_vk_sampler(desc);
-    return sampler_pool_.alloc(desc, sampler, rhi::k_invalid_bindless_idx);
-  }
+  rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) override;
   [[nodiscard]] const Info& get_info() const override { return info_; }
 
   rhi::CmdEncoder* begin_cmd_encoder(rhi::QueueType queue_type) override;
@@ -168,19 +168,99 @@ class VulkanDevice : public rhi::Device {
   VkShaderModule create_shader_module(const std::filesystem::path& path);
   VkShaderModule create_shader_module(std::span<const uint32_t> spirv_code);
   VkSampler create_vk_sampler(const rhi::SamplerDesc& desc);
+  struct CachedPipelineLayout {
+    VkPipelineLayout layout{};
+    VkDescriptorSetLayout set0_layout{};
+    uint32_t bindless_first_set{0};
+    std::vector<VkDescriptorSet> bindless_sets;
+  };
   std::unordered_map<uint64_t, VkDescriptorSetLayout> set_layout_cache_;
-  std::unordered_map<uint64_t, VkPipelineLayout> pipeline_layout_cache_;
+  std::unordered_map<uint64_t, CachedPipelineLayout> pipeline_layout_cache_;
   uint64_t hash_descriptor_set_layout_cinfo(const VkDescriptorSetLayoutCreateInfo& cinfo);
   uint64_t hash_pipeline_layout_cinfo(const VkPipelineLayoutCreateInfo& cinfo);
 
   struct DescSetCreateInfo {
     std::vector<VkDescriptorSetLayoutBinding> bindings;
   };
-  void reflect_shader(std::span<const uint32_t> spirv_code,
+  struct BindlessBindingUsage {
+    bool used = false;
+    VkDescriptorSetLayoutBinding binding{};
+  };
+
+  void reflect_shader(std::span<const uint32_t> spirv_code, VkShaderStageFlagBits stage,
                       std::vector<VkPushConstantRange>& out_pc_ranges,
-                      DescSetCreateInfo& out_set_0_info);
+                      DescSetCreateInfo& out_set_0_info,
+                      std::vector<BindlessBindingUsage>& out_shader_bindless);
+  static void merge_bindless_reflection(std::vector<BindlessBindingUsage>& dst,
+                                        const std::vector<BindlessBindingUsage>& src);
+  CachedPipelineLayout get_or_create_pipeline_layout(
+      const std::vector<VkDescriptorSetLayoutBinding>& merged_set0,
+      const std::vector<BindlessBindingUsage>& merged_bindless, VkPushConstantRange* pc_ranges,
+      uint32_t pc_range_count);
+
+  struct BindlessHeap {
+    VkDescriptorPool pool{};
+    VkDescriptorSetLayout layout{};
+    VkDescriptorSet set{};
+    std::mutex mutex;
+    std::vector<uint32_t> freelist;
+    uint32_t capacity{0};
+  };
+
+  void init_bindless_heaps();
+  void shutdown_bindless_heaps();
+  void init_uab_heap(BindlessHeap& heap, VkDescriptorType type, uint32_t count);
+  void shutdown_uab_heap(BindlessHeap& heap);
+  static int alloc_uab_heap_slot(BindlessHeap& heap);
+  static void free_uab_heap_slot(BindlessHeap& heap, uint32_t idx);
+
+  int alloc_bindless_storage_idx();
+  void free_bindless_storage_idx(uint32_t idx);
+  void write_bindless_storage_descriptor(uint32_t idx, VkBuffer buffer);
+
+  int alloc_bindless_image_slot();
+  void free_bindless_image_slot(uint32_t idx);
+  void write_bindless_sampled_image(uint32_t idx, VkImageView view, VkImageLayout layout);
+  void write_bindless_storage_image(uint32_t idx, VkImageView view, VkImageLayout layout);
+  void clear_bindless_image_slot(uint32_t idx);
+  void write_bindless_uniform_texel(uint32_t idx, VkBufferView view);
+  void write_bindless_storage_texel(uint32_t idx, VkBufferView view);
+
+  int alloc_bindless_sampler_idx();
+  void free_bindless_sampler_idx(uint32_t idx);
+  void write_bindless_sampler(uint32_t idx, VkSampler sampler);
 
   gch::small_vector<VkSampler, 10> immutable_samplers_;
+
+  VkBuffer null_storage_buffer_{};
+  VmaAllocation null_storage_buffer_alloc_{};
+  VkDescriptorPool bindless_storage_pool_{};
+  VkDescriptorSetLayout bindless_storage_layout_{};
+  VkDescriptorSet bindless_storage_set_{};
+  std::mutex bindless_storage_mutex_;
+  std::vector<uint32_t> bindless_storage_freelist_;
+  uint32_t bindless_storage_capacity_{0};
+
+  VkBuffer null_texel_buffer_{};
+  VmaAllocation null_texel_buffer_alloc_{};
+  VkBufferView null_uniform_texel_view_{};
+  VkBufferView null_storage_texel_view_{};
+
+  VkImage null_image_{};
+  VmaAllocation null_image_alloc_{};
+  VkImageView null_image_view_{};
+
+  VkSampler null_bindless_sampler_{};
+
+  BindlessHeap bindless_uniform_texel_{};
+  BindlessHeap bindless_sampler_{};
+  BindlessHeap bindless_sampled_image_{};
+  BindlessHeap bindless_storage_image_{};
+  BindlessHeap bindless_storage_texel_{};
+
+  VkDescriptorPool padding_descriptor_pool_{};
+  VkDescriptorSetLayout empty_descriptor_set_layout_{};
+  VkDescriptorSet empty_descriptor_set_{};
 };
 
 }  // namespace gfx::vk

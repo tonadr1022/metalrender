@@ -281,6 +281,11 @@ void VulkanCmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
   bound_pipeline_ = pipeline;
   ASSERT(pipeline);
   vkCmdBindPipeline(cmd(), bindpoint, pipeline->pipeline_);
+  if (!pipeline->bindless_descriptor_sets_.empty()) {
+    vkCmdBindDescriptorSets(cmd(), bindpoint, pipeline->layout_, pipeline->bindless_first_set_,
+                            static_cast<uint32_t>(pipeline->bindless_descriptor_sets_.size()),
+                            pipeline->bindless_descriptor_sets_.data(), 0, nullptr);
+  }
 }
 
 void VulkanCmdEncoder::bind_pipeline(const rhi::PipelineHandleHolder& handle) {
@@ -320,7 +325,9 @@ void VulkanCmdEncoder::set_cull_mode(rhi::CullMode cull_mode) {
 void VulkanCmdEncoder::push_constants(void* data, size_t size) {
   ASSERT(bound_pipeline_);
   ASSERT(bound_pipeline_->layout_);
-  vkCmdPushConstants(cmd(), bound_pipeline_->layout_, VK_SHADER_STAGE_ALL, 0, (uint32_t)size, data);
+  ASSERT(bound_pipeline_->push_constant_stages_ != 0);
+  vkCmdPushConstants(cmd(), bound_pipeline_->layout_, bound_pipeline_->push_constant_stages_, 0,
+                     (uint32_t)size, data);
 }
 
 void VulkanCmdEncoder::end_encoding() {
