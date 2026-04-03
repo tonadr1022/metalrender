@@ -126,15 +126,9 @@ bool compile_hlsl_file(const fs::path& source_hlsl, const CompileOptions& option
   const std::string path_str = source_hlsl.string();
 
   if (options.emit_dxil) {
-    std::vector<std::string> args = {path_str,
-                                     "-Fo",
-                                     out_filepath.string(),
-                                     "-T",
-                                     shader_model,
-                                     "-E",
-                                     "main",
-                                     "-rootsig-define",
-                                     "ROOT_SIGNATURE"};
+    std::vector<std::string> args = {
+        path_str,          "-Fo",           out_filepath.string(), "-T", shader_model, "-E", "main",
+        "-rootsig-define", "ROOT_SIGNATURE"};
     if (options.debug_enabled) {
       args.insert(args.end(), {"-Zi", "-Qembed_debug", "-Qsource_in_debug_module"});
     }
@@ -150,9 +144,11 @@ bool compile_hlsl_file(const fs::path& source_hlsl, const CompileOptions& option
     std::vector<std::string> args = {
         path_str, "-Fo", spirv_path.string(), "-T", shader_model, "-E", "main", "-spirv",
         "-fspv-target-env=vulkan1.3", "-fspv-extension=SPV_NV_mesh_shader",
-        "-fspv-extension=SPV_EXT_descriptor_indexing", "-fvk-use-dx-layout", "-fvk-u-shift",
-        "1000", "0", "-fvk-t-shift", "2000", "0", "-rootsig-define", "ROOT_SIGNATURE", "-D",
-        "VULKAN"};
+        "-fspv-extension=SPV_EXT_descriptor_indexing", "-fvk-use-dx-layout", "-fvk-u-shift", "1000",
+        "0", "-fvk-t-shift", "2000", "0",
+        //  "-rootsig-define",
+        //  "ROOT_SIGNATURE",
+        "-D", "VULKAN"};
     if (options.debug_enabled) {
       args.insert(args.end(), {"-Zi", "-Qembed_debug", "-Qsource_in_debug_module"});
     }
@@ -163,8 +159,8 @@ bool compile_hlsl_file(const fs::path& source_hlsl, const CompileOptions& option
   }
 
   if (options.emit_depfile) {
-    std::vector<std::string> args = {path_str, "-T", shader_model, "-E", "main", "-MF",
-                                     dep_filepath.string()};
+    std::vector<std::string> args = {path_str, "-T",  shader_model,         "-E",
+                                     "main",   "-MF", dep_filepath.string()};
     if (run_executable("dxc", args) != 0) {
       if (error) *error = std::format("dxc (-MF) failed for {}", path_str);
       return false;

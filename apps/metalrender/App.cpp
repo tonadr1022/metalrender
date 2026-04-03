@@ -76,7 +76,11 @@ App::App() {
   };
   window_->init(win_init_info);
   window_->set_window_position(config_.win_pos);
+#ifdef __APPLE__
   device_ = gfx::rhi::create_device(gfx::rhi::GfxAPI::Metal);
+#else
+  device_ = gfx::rhi::create_device(gfx::rhi::GfxAPI::Vulkan);
+#endif
   device_->init({
       .shader_lib_dir = resource_dir_ / "shader_out",
       .app_name = "lol",

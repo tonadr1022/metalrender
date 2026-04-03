@@ -1,4 +1,5 @@
 // clang-format off
+#define DRAW_COUNT_REQUIRED
 #include "root_sig.hlsl"
 #include "material.h"
 #include "default_vertex.h"
@@ -8,19 +9,12 @@
 #include "math.hlsli"
 // clang-format on
 
-struct DrawID {
-  uint did;
-  uint vert_id;
-};
-
-CONSTANT_BUFFER(DrawID, gDrawID, 999);
-
 VOut main(uint vert_id : SV_VertexID, uint instance_id : SV_InstanceID) {
-  ViewData view_data = bindless_buffers[view_data_buf_idx].Load<ViewData>(view_data_buf_offset);
-  InstanceData instance_data = bindless_buffers[instance_data_buf_idx].Load<InstanceData>(
-      gDrawID.did * sizeof(InstanceData));
-  DefaultVertex v = bindless_buffers[vert_buf_idx].Load<DefaultVertex>((vert_id + gDrawID.vert_id) *
-                                                                       sizeof(DefaultVertex));
+  ViewData view_data = bindless_buffers[pc.view_data_buf_idx].Load<ViewData>(pc.view_data_buf_offset);
+  InstanceData instance_data = bindless_buffers[pc.instance_data_buf_idx].Load<InstanceData>(
+      GetDrawId() * sizeof(InstanceData));
+  DefaultVertex v = bindless_buffers[pc.vert_buf_idx].Load<DefaultVertex>((vert_id + GetVertexIndex()) *
+                                                                          sizeof(DefaultVertex));
   VOut o;
   o.uv = v.uv;
   float3 pos = rotate_quat(instance_data.scale * v.pos.xyz, instance_data.rotation) +

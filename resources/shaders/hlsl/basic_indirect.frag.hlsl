@@ -11,7 +11,7 @@ struct FOut {
 FOut main(VOut input) {
   FOut fout;
   M4Material material =
-      bindless_buffers[mat_buf_idx].Load<M4Material>(input.material_id * sizeof(M4Material));
+      bindless_buffers[pc.mat_buf_idx].Load<M4Material>(input.material_id * sizeof(M4Material));
   SamplerState samp = SamplerDescriptorHeap[LINEAR_SAMPLER_IDX];
   float4 albedo = material.color;
   if (material.albedo_tex_idx != 0) {

@@ -194,9 +194,8 @@ void ShaderManager::init(rhi::Device* device, const Options& options) {
     if (entry.path().extension() != ".hlsl") {
       continue;
     }
-    auto depfile_filepath =
-        (depfile_dir_ / shader_compiler::path_after_word(entry.path(), "hlsl"))
-            .replace_extension(".d");
+    auto depfile_filepath = (depfile_dir_ / shader_compiler::path_after_word(entry.path(), "hlsl"))
+                                .replace_extension(".d");
     if (!std::filesystem::exists(depfile_filepath)) {
       continue;
     }
@@ -241,9 +240,8 @@ void ShaderManager::recompile_shaders_no_lock() {
     if (!entry.is_regular_file() || entry.path().extension() != ".hlsl") {
       continue;
     }
-    auto depfile_filepath =
-        (depfile_dir_ / shader_compiler::path_after_word(entry.path(), "hlsl"))
-            .replace_extension(".d");
+    auto depfile_filepath = (depfile_dir_ / shader_compiler::path_after_word(entry.path(), "hlsl"))
+                                .replace_extension(".d");
     auto deps = get_dep_filepaths(depfile_filepath);
     auto hash = get_hash_for_shader_file(deps.file, deps.deps);
     if (!path_to_existing_hash_.contains(entry.path()) ||
@@ -332,6 +330,8 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
   LINFO("compiling {} {}", path.string(), shader_compiler::shader_model_from_hlsl_path(path));
   shader_compiler::CompileOptions compile_opts;
   compile_opts.debug_enabled = debug_enabled;
+  compile_opts.emit_spirv = has_flag(options_.targets, rhi::ShaderTarget::Spirv);
+  compile_opts.emit_metallib = has_flag(options_.targets, rhi::ShaderTarget::MSL);
   std::string compile_error;
   if (!shader_compiler::compile_hlsl_file(path, compile_opts, &compile_error)) {
     LINFO("{}", compile_error);
@@ -339,8 +339,7 @@ bool ShaderManager::compile_shader(const std::filesystem::path& path, bool debug
   }
 
   const auto relative = shader_compiler::path_after_word(path, "hlsl");
-  auto dep_filepath =
-      (fs::path("resources/shader_out/deps") / relative).replace_extension(".d");
+  auto dep_filepath = (fs::path("resources/shader_out/deps") / relative).replace_extension(".d");
   // update hash
   auto deps = get_dep_filepaths(dep_filepath);
   auto hash = get_hash_for_shader_file(deps.file, deps.deps);
@@ -392,10 +391,9 @@ void teng::gfx::ShaderManager::check_and_recompile(
     auto it = last_write_times_.find(path);
     if (it == last_write_times_.end() || it->second < last_write_time ||
         (path.extension() == ".hlsl" &&
-         !std::filesystem::exists(
-             (fs::path("resources/shader_out/metal") /
-              shader_compiler::path_after_word(path, "hlsl"))
-                 .replace_extension(".dxil")))) {
+         !std::filesystem::exists((fs::path("resources/shader_out/metal") /
+                                   shader_compiler::path_after_word(path, "hlsl"))
+                                      .replace_extension(".dxil")))) {
       // TODO: cursed
       if (!path.string().contains("root_sig")) {
         LINFO("dirty shader detected: {}", path.string());

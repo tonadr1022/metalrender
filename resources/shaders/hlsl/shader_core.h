@@ -73,4 +73,27 @@
 
 #endif  // __cplusplus
 
+// TODO: move
+#ifdef VULKAN
+
+#define DRAW_COUNT_CONSTANT_BUFFER(type, name)
+uint GetDrawId() { return 0; }
+uint GetVertexIndex() { return 0; }
+#else  // VULKAN
+
+#if defined(DRAW_COUNT_REQUIRED)
+
+struct DrawID {
+  uint did;
+  uint vert_id;
+};
+
+CONSTANT_BUFFER(DrawID, gDrawID, 999);
+
+uint GetDrawId() { return gDrawID.did; }
+uint GetVertexIndex() { return gDrawID.vert_id; }
+#endif  // DRAW_COUNT_REQUIRED
+
+#endif
+
 #endif  // SHADER_CORE_H

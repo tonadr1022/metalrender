@@ -3,13 +3,29 @@
 
 #include "shader_core.h"
 
-cbuffer BasicIndirectPC HLSL_PC_REG {
+#if defined(VULKAN)
+
+#define PUSHCONSTANT(type, name) [[vk::push_constant]] type name
+
+#elif defined(__HLSL__)
+
+#define PUSHCONSTANT(type, name) CONSTANT_BUFFER(type, name, 998)
+
+#else
+
+#define PUSHCONSTANT(type, name)
+
+#endif
+
+struct BasicIndirectPC {
   uint view_data_buf_idx;
   uint view_data_buf_offset;
   uint vert_buf_idx;
   uint instance_data_buf_idx;
   uint mat_buf_idx;
 };
+
+PUSHCONSTANT(BasicIndirectPC, pc);
 
 #ifdef __HLSL__
 

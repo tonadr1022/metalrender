@@ -369,6 +369,9 @@ void VulkanDevice::init(const InitInfo& init_info) {
 
   VkPhysicalDeviceVulkan12Features feat12{
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
+      .descriptorBindingPartiallyBound = true,
+      .descriptorBindingVariableDescriptorCount = true,
+      .runtimeDescriptorArray = true,
       .scalarBlockLayout = true,
   };
   phys_device_selector.set_required_features_12(feat12);
@@ -1488,6 +1491,7 @@ void VulkanDevice::reflect_shader(std::span<const uint32_t> spirv_code,
         // layout_b.descriptorType = (VkDescriptorType)binding->descriptor_type;
         // layout_b.descriptorCount = binding->count;
         // layout_b.stageFlags = (VkShaderStageFlagBits)refl.GetShaderStage();
+        LINFO("Binding count: {}", binding->count);
         auto& layout_b = out_set_0_info.bindings.emplace_back(VkDescriptorSetLayoutBinding{
             .binding = binding->binding,
             .descriptorType = (VkDescriptorType)binding->descriptor_type,
