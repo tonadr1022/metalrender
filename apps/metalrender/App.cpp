@@ -29,7 +29,7 @@ using namespace teng::gfx;
 
 namespace {
 
-constexpr const char* sponza_path = "Models/Sponza/glTF_ktx2/Sponza.gltf";
+constexpr const char* sponza_path = "Models/Sponza/glTF/Sponza.gltf";
 constexpr const char* chessboard_path = "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf";
 constexpr const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
 constexpr const char* cube_path = "Models/Cube/glTF/Cube.gltf";

@@ -214,7 +214,7 @@ void VulkanCmdEncoder::begin_rendering(std::initializer_list<rhi::RenderAttInfo>
       extent.x = std::max(extent.x, tex->desc().dims.x);
       extent.y = std::max(extent.y, tex->desc().dims.y);
       vk_att->sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-      vk_att->imageView = tex->default_view_;
+      vk_att->imageView = device_->get_vk_tex_view(att.image, att.subresource);
       vk_att->imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
       vk_att->loadOp = convert_load_op(att.load_op);
       vk_att->storeOp = convert_store_op(att.store_op);
@@ -227,7 +227,7 @@ void VulkanCmdEncoder::begin_rendering(std::initializer_list<rhi::RenderAttInfo>
     } else {
       ds_att.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
       auto* tex = (VulkanTexture*)device_->get_tex(att.image);
-      ds_att.imageView = tex->default_view_;
+      ds_att.imageView = device_->get_vk_tex_view(att.image, att.subresource);
       curr_render_target_info_.depth_format = tex->desc().format;
       extent.x = std::max(extent.x, tex->desc().dims.x);
       extent.y = std::max(extent.y, tex->desc().dims.y);
@@ -539,13 +539,7 @@ void VulkanCmdEncoder::flush_binds() {
         auto subresource_id = binding_table_.UAV_subresources[table_index];
         auto& img_info = binder_.img_infos.emplace_back();
         img_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-        auto* tex = device_->get_vk_tex(tex_handle);
-        if (subresource_id == -1) {
-          img_info.imageView = tex->default_view_;
-        } else {
-          // not handled image views yet
-          ASSERT(subresource_id == -1);
-        }
+        img_info.imageView = device_->get_vk_tex_view(tex_handle, subresource_id);
 
         write.pImageInfo = &img_info;
       } else if (binding.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) {
@@ -555,13 +549,7 @@ void VulkanCmdEncoder::flush_binds() {
         auto subresource_id = binding_table_.SRV_subresources[table_index];
         auto& img_info = binder_.img_infos.emplace_back();
         img_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        auto* tex = device_->get_vk_tex(tex_handle);
-        if (subresource_id == -1) {
-          img_info.imageView = tex->default_view_;
-        } else {
-          // not handled image views yet
-          ASSERT(subresource_id == -1);
-        }
+        img_info.imageView = device_->get_vk_tex_view(tex_handle, subresource_id);
         write.pImageInfo = &img_info;
 
       } else if (binding.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER) {

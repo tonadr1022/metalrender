@@ -41,14 +41,13 @@ class VulkanDevice : public rhi::Device {
 
   rhi::TextureHandle create_tex(const rhi::TextureDesc& desc) override;
   rhi::SwapchainHandle create_swapchain(const rhi::SwapchainDesc& desc) override;
-  rhi::TextureViewHandle create_tex_view(rhi::TextureHandle /*handle*/, uint32_t /*base_mip_level*/,
-                                         uint32_t /*level_count*/, uint32_t /*base_array_layer*/,
-                                         uint32_t /*layer_count*/) override {
-    ASSERT(0);
-  }
+  rhi::TextureViewHandle create_tex_view(rhi::TextureHandle handle, uint32_t base_mip_level,
+                                         uint32_t level_count, uint32_t base_array_layer,
+                                         uint32_t layer_count) override;
 
   rhi::QueryPoolHandle create_query_pool([[maybe_unused]] const rhi::QueryPoolDesc& desc) override {
     LERROR("VulkanDevice::create_query_pool not implemented");
+    return {};
   }
 
   rhi::Texture* get_tex(rhi::TextureHandle handle) override { return texture_pool_.get(handle); }
@@ -67,17 +66,14 @@ class VulkanDevice : public rhi::Device {
     });
   }
 
-  uint32_t get_tex_view_bindless_idx(rhi::TextureHandle /*handle*/,
-                                     int /*subresource_id*/) override {
-    ASSERT(0);
-  }
+  uint32_t get_tex_view_bindless_idx(rhi::TextureHandle handle, int subresource_id) override;
 
   void destroy(rhi::BufferHandle handle) override;
   void destroy(rhi::PipelineHandle handle) override;
   void destroy(rhi::TextureHandle handle) override;
   void destroy(rhi::SamplerHandle handle) override;
   void destroy(rhi::SwapchainHandle handle) override;
-  void destroy(rhi::TextureHandle /*tex_handle*/, int /*tex_view_handle*/) override { ASSERT(0); }
+  void destroy(rhi::TextureHandle tex_handle, int tex_view_handle) override;
   void destroy([[maybe_unused]] rhi::QueryPoolHandle handle) override {
     LERROR("VulkanDevice::destroy(QueryPoolHandle) not implemented");
   }
@@ -122,6 +118,7 @@ class VulkanDevice : public rhi::Device {
   VulkanTexture* get_vk_tex(rhi::TextureHandle handle) {
     return static_cast<VulkanTexture*>(get_tex(handle));
   }
+  [[nodiscard]] VkImageView get_vk_tex_view(rhi::TextureHandle handle, int subresource_id);
   VulkanBuffer* get_vk_buf(rhi::BufferHandle handle) {
     return static_cast<VulkanBuffer*>(get_buf(handle));
   }

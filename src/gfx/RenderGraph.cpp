@@ -645,6 +645,7 @@ const std::string& RenderGraph::debug_name(NameId name) const {
 }
 
 std::string RenderGraph::debug_name(RGResourceId id) const {
+  ASSERT(id.is_valid());
   if (!id.is_valid() || id.idx >= resources_.size()) {
     return "<invalid>";
   }

@@ -705,12 +705,20 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   {
     auto& p = rg_.add_graphics_pass("shade");
     auto depth_tex_id = p.sample_tex(depth_ids[(int)main_render_view_id_]);
+    ASSERT(depth_tex_id.is_valid());
     auto gbuffer_a_id = p.sample_tex(gbuffer_pass_info.gbuffer_a_id);
+    ASSERT(gbuffer_a_id.is_valid());
     auto gbuffer_b_id = p.sample_tex(gbuffer_pass_info.gbuffer_b_id);
+    ASSERT(gbuffer_b_id.is_valid());
     const DebugRenderMode debug_mode = clamped_debug_render_mode();
     bool secondary_view_debug_enabled =
         debug_mode == DebugRenderMode::SecondaryView && csm_depth_id.is_valid();
-    RGResourceId shadow_tex_rg_handle = p.sample_tex(csm_depth_id);
+    RGResourceId shadow_tex_rg_handle;
+    if (get_shadows_enabled()) {
+      ASSERT(csm_depth_id.is_valid());
+      shadow_tex_rg_handle = p.sample_tex(csm_depth_id);
+    }
+
     if (obj_or_meshlet_occlusion_culling_enabled &&
         debug_mode == DebugRenderMode::DepthReduceMips) {
       p.sample_tex(final_depth_pyramid_ids[(int)main_render_view_id_]);
@@ -740,8 +748,9 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       auto [buf, offset, write_ptr] =
           frame_gpu_upload_allocator_.alloc(sizeof(CSMData), (void*)&csm_data);
       enc->bind_srv(buf, 0, offset);
-      auto shadow_tex = rg_.get_att_img(shadow_tex_rg_handle);
-      enc->bind_srv(shadow_tex, 1);
+      if (get_shadows_enabled()) {
+        enc->bind_srv(rg_.get_att_img(shadow_tex_rg_handle), 1);
+      }
 
       uint32_t tex_idx{};
       float mult = 1.f;

@@ -17,6 +17,7 @@
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
+#include "gfx/rhi/Texture.hpp"
 #include "gfx/vulkan/VkUtil.hpp"
 #include "gfx/vulkan/VulkanCommon.hpp"
 #include "spirv_reflect.h"
@@ -190,6 +191,10 @@ constexpr VkFormat convert_format(TextureFormat format) {
       return VK_FORMAT_R32G32B32A32_SFLOAT;
     case TextureFormat::Undefined:
       return VK_FORMAT_UNDEFINED;
+    case TextureFormat::ASTC4x4UnormBlock:
+      return VK_FORMAT_ASTC_4x4_UNORM_BLOCK;
+    case TextureFormat::ASTC4x4SrgbBlock:
+      return VK_FORMAT_ASTC_4x4_SRGB_BLOCK;
     default:
       ASSERT(0);
       return VK_FORMAT_UNDEFINED;
@@ -744,10 +749,17 @@ rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
     bindless_idx = static_cast<uint32_t>(idx);
   }
 
+  VkImageAspectFlags img_aspect;
+  if (rhi::is_depth_format(desc.format)) {
+    img_aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+  } else {
+    img_aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+  }
+
   auto handle = texture_pool_.alloc(desc, bindless_idx, image, allocation, false);
   auto* tex = (VulkanTexture*)get_tex(handle);
   tex->default_view_ = create_img_view(*tex, view_type,
-                                       {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                       {.aspectMask = img_aspect,
                                         .baseMipLevel = 0,
                                         .levelCount = desc.mip_levels,
                                         .baseArrayLayer = 0,
@@ -768,6 +780,134 @@ rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
     }
   }
   return handle;
+}
+
+namespace {
+
+VkImageViewType vk_image_view_type_for_range(const rhi::TextureDesc& desc, uint32_t layer_count) {
+  if (desc.dims.z > 1) {
+    return VK_IMAGE_VIEW_TYPE_3D;
+  }
+  if (desc.dims.y > 1) {
+    return layer_count > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
+  }
+  return layer_count > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
+}
+
+VkImageAspectFlags vk_image_aspect_mask_for_tex(rhi::TextureFormat fmt) {
+  VkImageAspectFlags mask{};
+  if (rhi::is_depth_format(fmt)) {
+    mask |= VK_IMAGE_ASPECT_DEPTH_BIT;
+  }
+  if (rhi::is_stencil_format(fmt)) {
+    mask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+  }
+  if (mask == 0) {
+    mask = VK_IMAGE_ASPECT_COLOR_BIT;
+  }
+  return mask;
+}
+
+}  // namespace
+
+rhi::TextureViewHandle VulkanDevice::create_tex_view(rhi::TextureHandle handle,
+                                                     uint32_t base_mip_level, uint32_t level_count,
+                                                     uint32_t base_array_layer,
+                                                     uint32_t layer_count) {
+  auto* tex = get_vk_tex(handle);
+  ALWAYS_ASSERT(tex);
+  ALWAYS_ASSERT(tex->image_);
+  ALWAYS_ASSERT(!tex->is_swapchain_image_);
+  const rhi::TextureDesc& desc = tex->desc();
+  ALWAYS_ASSERT(desc.dims.z <= 1);
+
+  ALWAYS_ASSERT(level_count > 0);
+  ALWAYS_ASSERT(layer_count > 0);
+  ALWAYS_ASSERT(base_mip_level + level_count <= desc.mip_levels);
+  ALWAYS_ASSERT(base_array_layer + layer_count <= desc.array_length);
+
+  const VkImageViewType view_type = vk_image_view_type_for_range(desc, layer_count);
+  const VkImageSubresourceRange range{
+      .aspectMask = vk_image_aspect_mask_for_tex(desc.format),
+      .baseMipLevel = base_mip_level,
+      .levelCount = level_count,
+      .baseArrayLayer = base_array_layer,
+      .layerCount = layer_count,
+  };
+  VkImageView view = create_img_view(*tex, view_type, range);
+
+  const bool want_bindless = !rhi::has_flag(desc.flags, rhi::TextureDescFlags::NoBindless);
+  const bool use_sampled = want_bindless && rhi::has_flag(desc.usage, rhi::TextureUsage::Sample);
+  const bool use_storage =
+      want_bindless && (rhi::has_flag(desc.usage, rhi::TextureUsage::Storage) ||
+                        rhi::has_flag(desc.usage, rhi::TextureUsage::ShaderWrite));
+
+  uint32_t bindless_idx = rhi::k_invalid_bindless_idx;
+  if (use_sampled || use_storage) {
+    int idx = alloc_bindless_image_slot();
+    ALWAYS_ASSERT(idx >= 0);
+    bindless_idx = static_cast<uint32_t>(idx);
+  }
+  if (bindless_idx != rhi::k_invalid_bindless_idx) {
+    if (use_sampled) {
+      write_bindless_sampled_image(bindless_idx, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    } else {
+      write_bindless_sampled_image(bindless_idx, null_image_view_,
+                                   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+    if (use_storage) {
+      write_bindless_storage_image(bindless_idx, view, VK_IMAGE_LAYOUT_GENERAL);
+    } else {
+      write_bindless_storage_image(bindless_idx, null_image_view_, VK_IMAGE_LAYOUT_GENERAL);
+    }
+  }
+
+  const auto sub_id = static_cast<rhi::TextureViewHandle>(tex->tex_views.size());
+  tex->tex_views.push_back({view, bindless_idx});
+  return sub_id;
+}
+
+uint32_t VulkanDevice::get_tex_view_bindless_idx(rhi::TextureHandle handle, int subresource_id) {
+  auto* tex = get_vk_tex(handle);
+  ALWAYS_ASSERT(tex);
+  ALWAYS_ASSERT(subresource_id >= 0);
+  ALWAYS_ASSERT(subresource_id < static_cast<int>(tex->tex_views.size()));
+  const auto& tv = tex->tex_views[static_cast<size_t>(subresource_id)];
+  ALWAYS_ASSERT(tv.view != VK_NULL_HANDLE);
+  ALWAYS_ASSERT(tv.bindless_idx != rhi::k_invalid_bindless_idx);
+  return tv.bindless_idx;
+}
+
+VkImageView VulkanDevice::get_vk_tex_view(rhi::TextureHandle handle, int subresource_id) {
+  auto* tex = get_vk_tex(handle);
+  ALWAYS_ASSERT(tex);
+  if (subresource_id < 0) {
+    return tex->default_view_;
+  }
+  ALWAYS_ASSERT(subresource_id < static_cast<int>(tex->tex_views.size()));
+  VkImageView v = tex->tex_views[static_cast<size_t>(subresource_id)].view;
+  ALWAYS_ASSERT(v != VK_NULL_HANDLE);
+  return v;
+}
+
+void VulkanDevice::destroy(rhi::TextureHandle tex_handle, int tex_view_handle) {
+  auto* tex = get_vk_tex(tex_handle);
+  if (!tex) {
+    return;
+  }
+  ASSERT(tex_view_handle >= 0);
+  ASSERT(tex_view_handle < static_cast<int>(tex->tex_views.size()));
+  auto& tv = tex->tex_views[static_cast<size_t>(tex_view_handle)];
+  if (tv.view == VK_NULL_HANDLE) {
+    return;
+  }
+  uint32_t bi = tv.bindless_idx;
+  if (bi != rhi::k_invalid_bindless_idx && bi != 0u) {
+    clear_bindless_image_slot(bi);
+    free_bindless_image_slot(bi);
+  }
+  del_q_.enqueue(tv.view);
+  tv = {};
 }
 
 rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder(rhi::QueueType queue_type) {
@@ -1123,6 +1263,21 @@ void VulkanDevice::destroy(rhi::PipelineHandle handle) {
 void VulkanDevice::destroy(rhi::TextureHandle handle) {
   auto* tex = (VulkanTexture*)get_tex(handle);
   if (tex) {
+    // Metal asserts child views are destroyed before the texture; Vulkan cleans them up here.
+    for (auto& tv : tex->tex_views) {
+      if (tv.view == VK_NULL_HANDLE) {
+        continue;
+      }
+      uint32_t vbi = tv.bindless_idx;
+      if (vbi != rhi::k_invalid_bindless_idx && vbi != 0u) {
+        clear_bindless_image_slot(vbi);
+        free_bindless_image_slot(vbi);
+      }
+      del_q_.enqueue(tv.view);
+      tv = {};
+    }
+    tex->tex_views.clear();
+
     uint32_t bi = tex->raw_bindless_idx();
     if (bi != rhi::k_invalid_bindless_idx && bi != 0u) {
       clear_bindless_image_slot(bi);
