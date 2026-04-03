@@ -6,7 +6,8 @@
 
 namespace teng::shader_compiler {
 
-/// Path segments after the directory named `word` (e.g. "hlsl" -> path under resources/shaders/hlsl).
+/// Path segments after the directory named `word` (e.g. "hlsl" -> path under
+/// resources/shaders/hlsl).
 [[nodiscard]] std::string path_after_word(const std::filesystem::path& p, const char* word);
 
 [[nodiscard]] std::string shader_model_from_hlsl_path(const std::filesystem::path& path);
@@ -17,6 +18,7 @@ struct CompileOptions {
   bool emit_spirv = true;
   bool emit_depfile = true;
   bool emit_metallib = true;
+  bool mesh_shader_enabled = true;
 };
 
 /// Invokes dxc and metal-shaderconverter like ShaderManager did (cwd must be project root).

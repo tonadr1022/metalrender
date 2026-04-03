@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "core/Logger.hpp"
+
 #ifndef _WIN32
 #include <spawn.h>
 #include <sys/wait.h>
@@ -130,7 +132,9 @@ bool compile_hlsl_file(const fs::path& source_hlsl, const CompileOptions& option
         path_str,          "-Fo",           out_filepath.string(), "-T", shader_model, "-E", "main",
         "-rootsig-define", "ROOT_SIGNATURE"};
     if (options.debug_enabled) {
-      args.insert(args.end(), {"-Zi", "-Qembed_debug", "-Qsource_in_debug_module"});
+      args.emplace_back("-Zi");
+      args.emplace_back("-Qembed_debug");
+      args.emplace_back("-Qsource_in_debug_module");
     }
     if (run_executable("dxc", args) != 0) {
       if (error) *error = std::format("dxc (dxil) failed for {}", path_str);
@@ -150,7 +154,13 @@ bool compile_hlsl_file(const fs::path& source_hlsl, const CompileOptions& option
         //  "ROOT_SIGNATURE",
         "-D", "VULKAN"};
     if (options.debug_enabled) {
-      args.insert(args.end(), {"-Zi", "-Qembed_debug", "-Qsource_in_debug_module"});
+      args.emplace_back("-Zi");
+      args.emplace_back("-Qembed_debug");
+      args.emplace_back("-Qsource_in_debug_module");
+    }
+    if (options.mesh_shader_enabled) {
+      // TODO: is this needed?
+      args.emplace_back("-fspv-extension=SPV_NV_mesh_shader");
     }
     if (run_executable("dxc", args) != 0) {
       if (error) *error = std::format("dxc (spirv) failed for {}", path_str);

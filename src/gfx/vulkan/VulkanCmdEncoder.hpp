@@ -59,7 +59,7 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
 
   void push_constants(void* data, size_t size) override;
   void end_encoding() override;
-  void set_label(const std::string& /*label*/) override { exit(1); }
+  void set_label(const std::string& /*label*/) override { ASSERT(0); }
   void set_viewport(glm::uvec2 min, glm::uvec2 extent) override;
   void set_scissor(glm::uvec2 min, glm::uvec2 extent) override;
 
@@ -69,7 +69,7 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
                            size_t /*src_bytes_per_row*/, rhi::TextureHandle /*dst_tex*/,
                            glm::uvec3 /*src_size*/, glm::uvec3 /*dst_origin*/,
                            int /*mip_level*/) override {
-    exit(1);
+    ASSERT(0);
   }
 
   void copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice, size_t src_level,
@@ -77,16 +77,16 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   void copy_buffer_to_buffer(rhi::BufferHandle /*src_buf*/, size_t /*src_offset*/,
                              rhi::BufferHandle /*dst_buf*/, size_t /*dst_offset*/,
                              size_t /*size*/) override {
-    exit(1);
+    ASSERT(0);
   }
 
   // Metal-only today: builds ICBs from IndexedIndirectDrawCmd. For non-meshlet GBuffer on Vulkan,
-  // implement vkCmdDrawIndexedIndirect (or multi-draw) instead of exit(1).
+  // implement vkCmdDrawIndexedIndirect (or multi-draw) instead of ASSERT\(0\).
   [[nodiscard]] uint32_t prepare_indexed_indirect_draws(
       rhi::BufferHandle /*indirect_buf*/, size_t /*offset*/, size_t /*tot_draw_cnt*/,
       rhi::BufferHandle /*index_buf*/, size_t /*index_buf_offset*/, void* /*push_constant_data*/,
       size_t /*push_constant_size*/, size_t /*vertex_stride*/) override {
-    exit(1);
+    ASSERT(0);
   }
 
   void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
@@ -107,23 +107,23 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   void draw_mesh_threadgroups(glm::uvec3 /*thread_groups*/,
                               glm::uvec3 /*threads_per_task_thread_group*/,
                               glm::uvec3 /*threads_per_mesh_thread_group*/) override {
-    exit(1);
+    ASSERT(0);
   }
   void draw_mesh_threadgroups_indirect(rhi::BufferHandle /*indirect_buf*/,
                                        size_t /*indirect_buf_offset*/,
                                        glm::uvec3 /*threads_per_task_thread_group*/,
                                        glm::uvec3 /*threads_per_mesh_thread_group*/) override {
-    exit(1);
+    ASSERT(0);
   }
 
   void dispatch_compute(glm::uvec3 thread_groups, glm::uvec3 threads_per_threadgroup) override;
 
   void fill_buffer(rhi::BufferHandle /*handle*/, uint32_t /*offset_bytes*/, uint32_t /*size*/,
                    uint32_t /*value*/) override {
-    exit(1);
+    ASSERT(0);
   }
-  void push_debug_group(const char* /*name*/) override { exit(1); }
-  void pop_debug_group() override { exit(1); }
+  void push_debug_group(const char* /*name*/) override { ASSERT(0); }
+  void pop_debug_group() override { ASSERT(0); }
 
   void bind_srv(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
 
@@ -131,20 +131,20 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
 
   void bind_uav(rhi::TextureHandle texture, uint32_t slot, int subresource_id) override;
   void bind_uav(rhi::BufferHandle /*buffer*/, uint32_t /*slot*/, size_t /*offset_bytes*/) override {
-    exit(1);
+    ASSERT(0);
   }
 
   void bind_cbv(rhi::BufferHandle /*buffer*/, uint32_t /*slot*/, size_t /*offset_bytes*/) override {
-    exit(1);
+    ASSERT(0);
   }
 
   void write_timestamp(rhi::QueryPoolHandle /*query_pool*/, uint32_t /*query_index*/) override {
-    exit(1);
+    ASSERT(0);
   }
   void query_resolve(rhi::QueryPoolHandle /*query_pool*/, uint32_t /*start_query*/,
                      uint32_t /*query_count*/, rhi::BufferHandle /*dst_buffer*/,
                      size_t /*dst_offset*/) override {
-    exit(1);
+    ASSERT(0);
   }
 
  private:

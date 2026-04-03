@@ -1,4 +1,5 @@
 // clang-format off
+#define MESH_SHADER_OUTPUT_MATERIAL 1
 #include "root_sig.hlsl"
 #include "material.h"
 #include "shared_forward_meshlet.h"

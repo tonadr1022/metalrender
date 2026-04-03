@@ -35,7 +35,9 @@ struct VOut {
 #ifdef MESH_SHADER_OUTPUT_COLOR
   nointerpolation float4 color : COLOR;
 #endif
+#ifdef MESH_SHADER_OUTPUT_MATERIAL
   nointerpolation uint material_id : MATERIAL_ID;
+#endif
 };
 
 #endif

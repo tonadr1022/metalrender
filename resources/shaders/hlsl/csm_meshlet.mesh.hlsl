@@ -1,2 +1,4 @@
-#define MESH_SHADER_OUTPUT_UV 1
+#define ALPHA_TEST 1
+// #define MESH_SHADER_OUTPUT_UV 1
+// #define MESH_SHADER_OUTPUT_MATERIAL 1
 #include "forward_meshlet.mesh.hlsl"

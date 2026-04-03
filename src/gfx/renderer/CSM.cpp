@@ -109,14 +109,14 @@ void calc_csm_light_space_vp_matrices(std::span<glm::mat4> matrices,
     matrices[0] = calc_light_space_vp(cam_view, get_proj(cam_near, levels[0]), light_dir,
                                       shadow_map_resolutions[0], proj_matrices[0], light_views[0]);
     for (uint32_t i = 1; i < matrices.size() - 1; i++) {
-      matrices[i] = calc_light_space_vp(cam_view, get_proj(levels[i - 1], levels[i]), light_dir,
-                                        shadow_map_resolutions[i], proj_matrices[i],
-                                        light_views[i]);
+      matrices[i] =
+          calc_light_space_vp(cam_view, get_proj(levels[i - 1], levels[i]), light_dir,
+                              shadow_map_resolutions[i], proj_matrices[i], light_views[i]);
     }
-    matrices[matrices.size() - 1] = calc_light_space_vp(
-        cam_view, get_proj(levels[levels.size() - 1], cam_far), light_dir,
-        shadow_map_resolutions[matrices.size() - 1],
-        proj_matrices[matrices.size() - 1], light_views[matrices.size() - 1]);
+    matrices[matrices.size() - 1] =
+        calc_light_space_vp(cam_view, get_proj(levels[levels.size() - 1], cam_far), light_dir,
+                            shadow_map_resolutions[matrices.size() - 1],
+                            proj_matrices[matrices.size() - 1], light_views[matrices.size() - 1]);
   }
 }
 
@@ -203,7 +203,9 @@ void CSMRenderer::load_pipelines(ShaderManager& shader_mgr) {
   for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
     shadow_meshlet_psos_[alpha_mask_type] = shader_mgr.create_graphics_pipeline({
         .shaders = {{{"forward_meshlet", ShaderType::Task},
-                     {"csm_meshlet", ShaderType::Mesh},
+                     {alpha_mask_type == AlphaMaskType::Mask ? "csm_meshlet_alphatest"
+                                                             : "csm_meshlet",
+                      ShaderType::Mesh},
                      {alpha_mask_type == AlphaMaskType::Mask ? "shadow_depth_meshlet_alphatest"
                                                              : "shadow_depth_meshlet",
                       ShaderType::Fragment}}},

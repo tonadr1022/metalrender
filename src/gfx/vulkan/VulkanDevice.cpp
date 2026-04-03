@@ -368,9 +368,10 @@ void VulkanDevice::init(const InitInfo& init_info) {
 
   vkb::PhysicalDeviceSelector phys_device_selector{vkb_inst_};
 
-  VkPhysicalDeviceFeatures feat{
-      .samplerAnisotropy = true,
-  };
+  VkPhysicalDeviceFeatures feat{};
+  feat.samplerAnisotropy = true;
+  feat.shaderInt64 = true;
+
   phys_device_selector.set_required_features(feat);
 
   VkPhysicalDeviceVulkan12Features feat12{
@@ -410,10 +411,18 @@ void VulkanDevice::init(const InitInfo& init_info) {
   };
   phys_device_selector.add_required_extension_features(ext_state);
 
+  VkPhysicalDeviceMeshShaderFeaturesEXT mesh_shader_features{
+      .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MESH_SHADER_FEATURES_EXT,
+      .taskShader = VK_TRUE,
+      .meshShader = VK_TRUE,
+  };
+  phys_device_selector.add_required_extension_features(mesh_shader_features);
+
   const char* required_extensions[] = {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,           VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
       VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,   VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
-      VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME,
+      VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME, VK_EXT_MESH_SHADER_EXTENSION_NAME,
+      VK_NV_MESH_SHADER_EXTENSION_NAME,
   };
   phys_device_selector.add_required_extensions(ARRAY_SIZE(required_extensions),
                                                required_extensions);
@@ -917,11 +926,27 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
   VkPipelineDynamicStateCreateInfo dynamic_state{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
 
-  VkDynamicState states[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY,
-                             VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_FRONT_FACE,
-                             VK_DYNAMIC_STATE_CULL_MODE};
-  dynamic_state.dynamicStateCount = ARRAY_SIZE(states);
-  dynamic_state.pDynamicStates = states;
+  gch::small_vector<VkDynamicState, 10> states;
+  states.emplace_back(VK_DYNAMIC_STATE_VIEWPORT);
+  states.emplace_back(VK_DYNAMIC_STATE_SCISSOR);
+  states.emplace_back(VK_DYNAMIC_STATE_FRONT_FACE);
+  states.emplace_back(VK_DYNAMIC_STATE_CULL_MODE);
+
+  // check if mesh shader
+  bool is_mesh_shader = false;
+  for (const auto& shader : info.shaders) {
+    if (shader.type == rhi::ShaderType::Task || shader.type == rhi::ShaderType::Mesh) {
+      is_mesh_shader = true;
+      break;
+    }
+  }
+
+  if (!is_mesh_shader) {
+    states.emplace_back(VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY);
+  }
+
+  dynamic_state.dynamicStateCount = static_cast<uint32_t>(states.size());
+  dynamic_state.pDynamicStates = states.data();
 
   VkPipelineVertexInputStateCreateInfo vertex_state{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO};
