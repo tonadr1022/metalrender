@@ -8,6 +8,7 @@
 #include "VMAWrapper.hpp"
 #include "VkBootstrap.h"
 #include "core/Config.hpp"
+#include "core/Logger.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -45,17 +46,27 @@ class VulkanDevice : public rhi::Device {
                                          uint32_t /*layer_count*/) override {
     ASSERT(0);
   }
-  rhi::QueryPoolHandle create_query_pool(const rhi::QueryPoolDesc& /*desc*/) override { ASSERT(0); }
+
+  rhi::QueryPoolHandle create_query_pool([[maybe_unused]] const rhi::QueryPoolDesc& desc) override {
+    LERROR("VulkanDevice::create_query_pool not implemented");
+  }
 
   rhi::Texture* get_tex(rhi::TextureHandle handle) override { return texture_pool_.get(handle); }
   rhi::Buffer* get_buf(rhi::BufferHandle handle) override { return buffer_pool_.get(handle); }
   rhi::Pipeline* get_pipeline(rhi::PipelineHandle handle) override {
     return pipeline_pool_.get(handle);
   }
+
   rhi::Swapchain* get_swapchain(rhi::SwapchainHandle handle) override {
     return swapchain_pool_.get(handle);
   }
-  void get_all_buffers(std::vector<rhi::Buffer*>& /*out_buffers*/) override { ASSERT(0); }
+
+  void get_all_buffers(std::vector<rhi::Buffer*>& out_buffers) override {
+    buffer_pool_.for_each([&out_buffers](const VulkanBuffer& buffer) {
+      out_buffers.emplace_back((rhi::Buffer*)&buffer);
+    });
+  }
+
   uint32_t get_tex_view_bindless_idx(rhi::TextureHandle /*handle*/,
                                      int /*subresource_id*/) override {
     ASSERT(0);
@@ -67,7 +78,9 @@ class VulkanDevice : public rhi::Device {
   void destroy(rhi::SamplerHandle handle) override;
   void destroy(rhi::SwapchainHandle handle) override;
   void destroy(rhi::TextureHandle /*tex_handle*/, int /*tex_view_handle*/) override { ASSERT(0); }
-  void destroy(rhi::QueryPoolHandle /*handle*/) override { ASSERT(0); }
+  void destroy([[maybe_unused]] rhi::QueryPoolHandle handle) override {
+    LERROR("VulkanDevice::destroy(QueryPoolHandle) not implemented");
+  }
 
   rhi::PipelineHandle create_graphics_pipeline(
       const rhi::GraphicsPipelineCreateInfo& cinfo) override;
