@@ -1,9 +1,15 @@
 #pragma once
 
+#include <cstdint>
+
 #include "GFXTypes.hpp"
+
 namespace TENG_NAMESPACE {
 
 namespace gfx::rhi {
+
+inline constexpr uint32_t k_gpu_barrier_mip_all = UINT32_MAX;
+inline constexpr uint32_t k_gpu_barrier_slice_all = UINT32_MAX;
 
 struct GPUBarrier {
   enum class Type : uint8_t { Buffer, Texture } type;
@@ -38,8 +44,9 @@ struct GPUBarrier {
                     .size = size}};
   }
 
-  static GPUBarrier tex_barrier(rhi::TextureHandle handle, ResourceState src_state,
-                                ResourceState dst_state, uint32_t mip = 0, uint32_t slice = 0,
+  static GPUBarrier tex_barrier(TextureHandle handle, ResourceState src_state,
+                                ResourceState dst_state, uint32_t mip = k_gpu_barrier_mip_all,
+                                uint32_t slice = k_gpu_barrier_slice_all,
                                 ImageAspect aspect = ImageAspect_Color) {
     return {.type = Type::Texture,
             .tex = {.texture = handle,

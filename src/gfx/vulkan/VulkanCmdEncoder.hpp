@@ -91,7 +91,8 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
   void barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
-               rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;
+               rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access, int32_t base_mip_level,
+               int32_t base_array_layer) override;
   void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access, size_t offset,
                size_t size) override;

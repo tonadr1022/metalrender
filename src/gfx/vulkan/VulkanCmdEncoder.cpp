@@ -4,6 +4,7 @@
 #include "core/Hash.hpp"
 #include "core/Logger.hpp"
 #include "core/Util.hpp"
+#include "gfx/rhi/Barrier.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/vulkan/VkUtil.hpp"
 #include "gfx/vulkan/VulkanBuffer.hpp"
@@ -137,14 +138,14 @@ VkImageLayout layout_from_vk_access(VkAccessFlags2 access) {
   if (access & VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT) {
     return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
   }
+  if (access & (VK_ACCESS_2_SHADER_WRITE_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)) {
+    return VK_IMAGE_LAYOUT_GENERAL;
+  }
   if (access & VK_ACCESS_2_SHADER_READ_BIT) {
     return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
   }
   if (access & VK_ACCESS_2_SHADER_STORAGE_READ_BIT) {
     return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  }
-  if (access & VK_ACCESS_2_SHADER_WRITE_BIT) {
-    return VK_IMAGE_LAYOUT_GENERAL;
   }
   if (access & VK_ACCESS_2_SHADER_SAMPLED_READ_BIT) {
     return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -437,9 +438,8 @@ void VulkanCmdEncoder::barrier(rhi::BufferHandle buf, rhi::PipelineStage src_sta
 
 void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage,
                                rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
-                               rhi::AccessFlags dst_access) {
-  // get old and new image layouts
-
+                               rhi::AccessFlags dst_access, int32_t base_mip_level,
+                               int32_t base_array_layer) {
   VkImageAspectFlags aspect_mask = 0;
   auto* texture = (VulkanTexture*)device_->get_tex(tex);
 
@@ -461,21 +461,48 @@ void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_st
   VkPipelineStageFlags2 dst_st = convert(dst_stage);
   VkAccessFlags2 dst_acc = convert(dst_access);
   augment_memory_barrier2_stages_for_access(src_st, src_acc, dst_st, dst_acc);
+
+  VkImageLayout old_layout = layout_from_vk_access(src_acc);
+  // Render graph ORs access flags across passes; layout_from_vk_access(src) is not a unique
+  // layout. Prefer mip_layouts_ when known so oldLayout matches validation / GPU reality.
+  if (base_mip_level < 0) {
+    VkImageLayout uniform = texture->uniform_mip_layout_or_undefined();
+    if (uniform != VK_IMAGE_LAYOUT_UNDEFINED) {
+      old_layout = uniform;
+    }
+  } else {
+    VkImageLayout ml = texture->mip_layout(static_cast<uint32_t>(base_mip_level));
+    if (ml != VK_IMAGE_LAYOUT_UNDEFINED) {
+      old_layout = ml;
+    }
+  }
+  const VkImageLayout new_layout = layout_from_vk_access(dst_acc);
+
+  const uint32_t base_mip_u = base_mip_level < 0 ? 0u : static_cast<uint32_t>(base_mip_level);
+  const uint32_t level_count = base_mip_level < 0 ? VK_REMAINING_MIP_LEVELS : 1u;
+  const uint32_t base_layer_u = base_array_layer < 0 ? 0u : static_cast<uint32_t>(base_array_layer);
+  const uint32_t layer_count = base_array_layer < 0 ? VK_REMAINING_ARRAY_LAYERS : 1u;
+
   img_barriers_.emplace_back(VkImageMemoryBarrier2{
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
       .srcStageMask = src_st,
       .srcAccessMask = src_acc,
       .dstStageMask = dst_st,
       .dstAccessMask = dst_acc,
-      .oldLayout = layout_from_vk_access(src_acc),
-      .newLayout = layout_from_vk_access(dst_acc),
-      .image = ((VulkanTexture*)device_->get_tex(tex))->image(),
+      .oldLayout = old_layout,
+      .newLayout = new_layout,
+      .image = texture->image(),
       .subresourceRange = VkImageSubresourceRange{.aspectMask = aspect_mask,
-                                                  .baseMipLevel = 0,
-                                                  .levelCount = VK_REMAINING_MIP_LEVELS,
-                                                  .baseArrayLayer = 0,
-                                                  .layerCount = VK_REMAINING_ARRAY_LAYERS},
+                                                  .baseMipLevel = base_mip_u,
+                                                  .levelCount = level_count,
+                                                  .baseArrayLayer = base_layer_u,
+                                                  .layerCount = layer_count},
   });
+  if (base_mip_level < 0) {
+    texture->set_all_mip_layouts(new_layout);
+  } else {
+    texture->set_mip_layout(static_cast<uint32_t>(base_mip_level), new_layout);
+  }
 }
 
 void VulkanCmdEncoder::flush_barriers() {
@@ -533,6 +560,7 @@ void VulkanCmdEncoder::barrier(rhi::GPUBarrier* gpu_barrier, size_t barrier_coun
       auto [src_stage, src_access] = convert_pipeline_stage_and_access(img_barr.src_layout);
       auto [dst_stage, dst_access] = convert_pipeline_stage_and_access(img_barr.dst_layout);
       augment_memory_barrier2_stages_for_access(src_stage, src_access, dst_stage, dst_access);
+      const VkImageLayout new_layout = convert_layout(img_barr.dst_layout);
       img_barriers_.emplace_back(VkImageMemoryBarrier2{
           .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
           .srcStageMask = src_stage,
@@ -540,14 +568,24 @@ void VulkanCmdEncoder::barrier(rhi::GPUBarrier* gpu_barrier, size_t barrier_coun
           .dstStageMask = dst_stage,
           .dstAccessMask = dst_access,
           .oldLayout = convert_layout(img_barr.src_layout),
-          .newLayout = convert_layout(img_barr.dst_layout),
+          .newLayout = new_layout,
           .image = ((VulkanTexture*)device_->get_tex(img_barr.texture))->image(),
-          .subresourceRange = {.aspectMask = convert(img_barr.aspect),
-                               .baseMipLevel = img_barr.mip < 0 ? 0 : img_barr.mip,
-                               .levelCount = img_barr.mip < 0 ? VK_REMAINING_MIP_LEVELS : 1,
-                               .baseArrayLayer = img_barr.slice < 0 ? 0 : img_barr.slice,
-                               .layerCount = img_barr.slice < 0 ? VK_REMAINING_ARRAY_LAYERS : 1},
+          .subresourceRange =
+              {.aspectMask = convert(img_barr.aspect),
+               .baseMipLevel = img_barr.mip == rhi::k_gpu_barrier_mip_all ? 0 : img_barr.mip,
+               .levelCount =
+                   img_barr.mip == rhi::k_gpu_barrier_mip_all ? VK_REMAINING_MIP_LEVELS : 1u,
+               .baseArrayLayer =
+                   img_barr.slice == rhi::k_gpu_barrier_slice_all ? 0u : img_barr.slice,
+               .layerCount =
+                   img_barr.slice == rhi::k_gpu_barrier_slice_all ? VK_REMAINING_ARRAY_LAYERS : 1u},
       });
+      auto* vk_tex = (VulkanTexture*)device_->get_tex(img_barr.texture);
+      if (img_barr.mip == rhi::k_gpu_barrier_mip_all) {
+        vk_tex->set_all_mip_layouts(new_layout);
+      } else {
+        vk_tex->set_mip_layout(img_barr.mip, new_layout);
+      }
     }
   }
 }
@@ -568,7 +606,6 @@ void VulkanCmdEncoder::bind_uav(rhi::BufferHandle buffer, uint32_t slot, size_t 
 void VulkanCmdEncoder::bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes,
                                 size_t size_bytes) {
   binding_table_.CBV[slot] = buffer;
-  LINFO("binding cbv: {} offset: {}", buffer.to64(), offset_bytes);
   binding_table_.CBV_offsets[slot] = offset_bytes;
   binding_table_.CBV_sizes[slot] = size_bytes;
   descriptors_dirty_ = true;

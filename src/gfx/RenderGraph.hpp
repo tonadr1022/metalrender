@@ -157,12 +157,17 @@ class RenderGraph {
     Pass(NameId name_id, RenderGraph* rg, uint32_t pass_i, RGPassType type);
 
     RGResourceId sample_tex(RGResourceId id);
-    RGResourceId sample_tex(RGResourceId id, rhi::PipelineStage stage);
-    RGResourceId read_tex(RGResourceId id, rhi::PipelineStage stage);
-    RGResourceId write_tex(RGResourceId id, rhi::PipelineStage stage);
+    RGResourceId sample_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip = -1,
+                            int32_t subresource_slice = -1);
+    RGResourceId read_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip = -1,
+                          int32_t subresource_slice = -1);
+    RGResourceId write_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip = -1,
+                           int32_t subresource_slice = -1);
     RGResourceId write_color_output(RGResourceId id);
     RGResourceId write_depth_output(RGResourceId id);
-    RGResourceId rw_tex(RGResourceId input, rhi::PipelineStage stage, rhi::AccessFlags access);
+    RGResourceId rw_tex(RGResourceId input, rhi::PipelineStage stage, rhi::AccessFlags read_access,
+                        rhi::AccessFlags write_access, int32_t read_subresource_mip = -1,
+                        int32_t write_subresource_mip = -1);
     RGResourceId rw_color_output(RGResourceId input);
     RGResourceId rw_depth_output(RGResourceId input);
     void w_swapchain_tex(rhi::Swapchain* swapchain);
@@ -190,6 +195,8 @@ class RenderGraph {
       rhi::AccessFlags acc;
       RGResourceType type;
       bool is_swapchain_write{false};
+      int32_t subresource_mip{-1};
+      int32_t subresource_slice{-1};
     };
 
     [[nodiscard]] const std::vector<NameAndAccess>& get_external_reads() const {
@@ -223,9 +230,11 @@ class RenderGraph {
     [[nodiscard]] RGPassType type() const { return type_; }
 
    private:
-    void add_read_usage(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access);
+    void add_read_usage(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access,
+                        int32_t subresource_mip = -1, int32_t subresource_slice = -1);
     void add_write_usage(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access,
-                         bool is_swapchain_write = false);
+                         bool is_swapchain_write = false, int32_t subresource_mip = -1,
+                         int32_t subresource_slice = -1);
     std::vector<ResourceAndUsage> resource_usages_;
     ExecuteFn execute_fn_;
     RenderGraph* rg_{};
@@ -313,6 +322,8 @@ class RenderGraph {
     rhi::AccessFlags dst_access;
     RGResourceId debug_id{};
     bool is_swapchain_write{false};
+    int32_t subresource_mip{-1};
+    int32_t subresource_slice{-1};
   };
   std::vector<Pass> passes_;
   std::vector<std::vector<BarrierInfo>> pass_barrier_infos_;

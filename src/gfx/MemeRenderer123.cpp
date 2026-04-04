@@ -625,15 +625,15 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
         RGResourceId depth_handle{};
         if (mip == 0) {
           depth_handle = p.read_tex(depth_ids[(int)view_id], rhi::PipelineStage::ComputeShader);
-        } else {
-          p.read_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader);
         }
         if (mip == 0) {
-          p.write_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader);
+          p.write_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader,
+                      static_cast<int32_t>(mip));
         } else {
           depth_pyramid_id =
               p.rw_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader,
-                       rhi::AccessFlags::ShaderStorageRead | rhi::AccessFlags::ShaderWrite);
+                       rhi::AccessFlags::ShaderSampledRead, rhi::AccessFlags::ShaderWrite,
+                       static_cast<int32_t>(mip - 1), static_cast<int32_t>(mip));
         }
         if (mip == final_mip - 1) {
           final_depth_pyramid_ids[(int)view_id] = depth_pyramid_id;
