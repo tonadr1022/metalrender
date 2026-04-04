@@ -15,6 +15,7 @@
 #include "core/Logger.hpp"
 #include "core/MathUtil.hpp"
 #include "core/Util.hpp"
+#include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
@@ -186,6 +187,7 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   frame_num_++;
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
   frame_gpu_upload_allocator_.set_frame_idx(curr_frame_idx_);
+  frame_uniform_gpu_allocator_.set_frame_idx(curr_frame_idx_);
 }
 
 uint32_t MemeRenderer123::get_bindless_idx(const rhi::BufferHandleHolder& buf) const {
@@ -1359,9 +1361,9 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
   };
   {
     auto [buf, offset, write_ptr] =
-        frame_gpu_upload_allocator_.alloc(sizeof(GlobalData), &global_data);
+        frame_uniform_gpu_allocator_.alloc(sizeof(GlobalData), &global_data);
     frame_globals_buf_info_.buf = buf;
-    frame_globals_buf_info_.idx = device_->get_buf(buf)->bindless_idx();
+    frame_globals_buf_info_.idx = UINT32_MAX;
     frame_globals_buf_info_.offset_bytes = offset;
   }
   {
@@ -1375,13 +1377,14 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
         .camera_pos = glm::vec4{args.camera_pos, 0},
     };
     auto& main_view = get_render_view(main_render_view_id_);
-    auto [buf, offset, write_ptr] = frame_gpu_upload_allocator_.alloc(sizeof(ViewData), &view_data);
+    auto [buf, offset, write_ptr] =
+        frame_uniform_gpu_allocator_.alloc(sizeof(ViewData), &view_data);
     main_view.data_buf_info.buf = buf;
-    main_view.data_buf_info.idx = device_->get_buf(buf)->bindless_idx();
+    // main_view.data_buf_info.idx = device_->get_buf(buf)->bindless_idx();
+    main_view.data_buf_info.idx = UINT32_MAX;
     main_view.data_buf_info.offset_bytes = offset;
   }
-  auto set_cull_data = [](GPUFrameAllocator3& frame_gpu_upload_allocator, rhi::Device* device,
-                          RenderView& view, const glm::mat4& proj_mat, bool culling_paused) {
+  auto set_cull_data = [this](RenderView& view, const glm::mat4& proj_mat, bool culling_paused) {
     // set cull data buf
     CullData cull_data{};
     const glm::mat4 projection_transpose = glm::transpose(proj_mat);
@@ -1400,7 +1403,7 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
     cull_data.frustum[3] = frustum_y.z;
     cull_data.z_near = k_z_near;
     cull_data.z_far = k_z_far;
-    const auto& dp_tex_desc = device->get_tex(view.depth_pyramid_tex)->desc();
+    const auto& dp_tex_desc = device_->get_tex(view.depth_pyramid_tex)->desc();
     cull_data.pyramid_width = dp_tex_desc.dims.x;
     cull_data.pyramid_height = dp_tex_desc.dims.y;
     cull_data.pyramid_mip_count = dp_tex_desc.mip_levels;
@@ -1408,15 +1411,17 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
     cull_data.p11 = proj_mat[1][1];
     cull_data.paused = culling_paused;
 
-    auto [buf, offset, write_ptr] = frame_gpu_upload_allocator.alloc(sizeof(CullData), &cull_data);
+    auto [buf, offset, write_ptr] =
+        frame_uniform_gpu_allocator_.alloc(sizeof(CullData), &cull_data);
     // auto& view = get_render_view(main_render_view_id_);
     view.cull_data_buf_info.buf = buf;
-    view.cull_data_buf_info.idx = device->get_buf(buf)->bindless_idx();
+    // view.cull_data_buf_info.idx = device_->get_buf(buf)->bindless_idx();
+    view.cull_data_buf_info.idx = UINT32_MAX;
     view.cull_data_buf_info.offset_bytes = offset;
   };
 
-  set_cull_data(frame_gpu_upload_allocator_, device_, get_render_view(main_render_view_id_),
-                proj_mat, renderer_cv::culling_paused.get() != 0);
+  set_cull_data(get_render_view(main_render_view_id_), proj_mat,
+                renderer_cv::culling_paused.get() != 0);
 
   if (get_shadows_enabled()) {
     for (size_t i = 0; i < csm_renderer_->num_cascades(); i++) {
@@ -1432,14 +1437,14 @@ void MemeRenderer123::set_cull_data_and_globals(const RenderArgs& args) {
           .camera_pos = glm::vec4{args.camera_pos, 0},
       };
       auto [buf, offset, write_ptr] =
-          frame_gpu_upload_allocator_.alloc(sizeof(ViewData), &shadow_view_data);
+          frame_uniform_gpu_allocator_.alloc(sizeof(ViewData), &shadow_view_data);
       auto& view = get_render_view(shadow_map_render_views_[i]);
       view.data_buf_info.buf = buf;
-      view.data_buf_info.idx = device_->get_buf(buf)->bindless_idx();
+      // view.data_buf_info.idx = device_->get_buf(buf)->bindless_idx();
+      view.data_buf_info.idx = UINT32_MAX;
       view.data_buf_info.offset_bytes = offset;
 
-      set_cull_data(frame_gpu_upload_allocator_, device_, view, csm_renderer_->get_light_proj(i),
-                    renderer_cv::culling_paused.get() != 0);
+      set_cull_data(view, csm_renderer_->get_light_proj(i), renderer_cv::culling_paused.get() != 0);
     }
   }
 }
@@ -1512,7 +1517,8 @@ MemeRenderer123::~MemeRenderer123() {
 
 MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
     : device_(cinfo.device),
-      frame_gpu_upload_allocator_(device_),
+      frame_gpu_upload_allocator_(device_, false),
+      frame_uniform_gpu_allocator_(device_, true),
       buffer_copy_mgr_(device_, frame_gpu_upload_allocator_),
       materials_buf_(*device_, buffer_copy_mgr_,
                      {.usage = rhi::BufferUsage::Storage,
@@ -1773,12 +1779,13 @@ void MemeRenderer123::make_depth_pyramid_tex(RenderViewId view_id, glm::uvec2 ma
   }
   depth_pyramid_tex.views.clear();
   uint32_t mip_levels = math::get_mip_levels(size.x, size.y);
-  depth_pyramid_tex = TexAndViewHolder{device_->create_tex_h(
-      rhi::TextureDesc{.format = rhi::TextureFormat::R32float,
-                       .usage = rhi::TextureUsage::Storage | rhi::TextureUsage::ShaderWrite,
-                       .dims = size,
-                       .mip_levels = mip_levels,
-                       .name = "depth_pyramid_tex"})};
+  depth_pyramid_tex = TexAndViewHolder{device_->create_tex_h(rhi::TextureDesc{
+      .format = rhi::TextureFormat::R32float,
+      .usage =
+          rhi::TextureUsage::Storage | rhi::TextureUsage::ShaderWrite | rhi::TextureUsage::Sample,
+      .dims = size,
+      .mip_levels = mip_levels,
+      .name = "depth_pyramid_tex"})};
   depth_pyramid_tex.views.reserve(mip_levels);
   for (size_t i = 0; i < mip_levels; i++) {
     depth_pyramid_tex.views.emplace_back(

@@ -189,6 +189,7 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder csm_no_frag_pso_;
 
   GPUFrameAllocator3 frame_gpu_upload_allocator_;
+  GPUFrameAllocator3 frame_uniform_gpu_allocator_;
   BufferCopyMgr buffer_copy_mgr_;
   BackedGPUAllocator materials_buf_;
 
@@ -247,7 +248,7 @@ class MemeRenderer123 {
   std::unique_ptr<gfx::CSMRenderer> csm_renderer_;
 
   int debug_cascade_level_{0};
-  rhi::TextureHandle csm_debug_depth_tex_{};
+  rhi::TextureHandle csm_debug_depth_tex_;
   std::array<rhi::TextureViewHandle, CSM_MAX_CASCADES> csm_debug_depth_views_{-1, -1, -1, -1};
   bool reverse_z_{true};
 };

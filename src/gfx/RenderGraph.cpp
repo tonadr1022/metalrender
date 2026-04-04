@@ -483,7 +483,8 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       }
       if (!actual_buf_handle.is_valid()) {
         auto buf_handle = device_->create_buf(rhi::BufferDesc{
-            .usage = (rhi::BufferUsage)(rhi::BufferUsage::Storage),
+            // TODO: track usage
+            .usage = (rhi::BufferUsage)(rhi::BufferUsage::Storage | rhi::BufferUsage::Indirect),
             .size = binfo.size,
             .name = "render_graph_buffer",
         });
@@ -543,12 +544,12 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
         // LINFO("Adding external write barrier: {} {} {} {}", to_string(write_use.stage),
         //       to_string(write_use.acc), to_string(resource_state.stage),
         //       to_string(resource_state.access));
-        // LINFO(
-        //     "Adding external write barrier: src_stage={} src_access={} dst_stage={}
-        //     dst_access={}", string_VkPipelineStageFlags2(gfx::vk::convert(resource_state.stage)),
-        //     string_VkAccessFlags2(gfx::vk::convert(resource_state.access)),
-        //     string_VkPipelineStageFlags2(gfx::vk::convert(write_use.stage)),
-        //     string_VkAccessFlags2(gfx::vk::convert(write_use.acc)));
+        LINFO(
+            "Adding external write barrier: src_stage={} src_access={} dst_stage={} dst_access={}",
+            string_VkPipelineStageFlags2(gfx::vk::convert(resource_state.stage)),
+            string_VkAccessFlags2(gfx::vk::convert(resource_state.access)),
+            string_VkPipelineStageFlags2(gfx::vk::convert(write_use.stage)),
+            string_VkAccessFlags2(gfx::vk::convert(write_use.acc)));
 
         barriers.emplace_back(BarrierInfo{
             .resource = rg_resource_handle,
@@ -571,12 +572,13 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
         // LINFO("Adding internal write barrier: {} {} {} {}", to_string(write_use.stage),
         //       to_string(write_use.acc), to_string(resource_state.stage),
         //       to_string(resource_state.access));
-        // LINFO(
-        //     "Adding internal write barrier: src_stage={} src_access={} dst_stage={}
-        //     dst_access={}", string_VkPipelineStageFlags2(gfx::vk::convert(resource_state.stage)),
-        //     string_VkAccessFlags2(gfx::vk::convert(resource_state.access)),
-        //     string_VkPipelineStageFlags2(gfx::vk::convert(write_use.stage)),
-        //     string_VkAccessFlags2(gfx::vk::convert(write_use.acc)));
+        LINFO(
+            "Adding internal write barrier: src_stage={} src_access={} dst_stage={} dst_access = "
+            "{} ",
+            string_VkPipelineStageFlags2(gfx::vk::convert(resource_state.stage)),
+            string_VkAccessFlags2(gfx::vk::convert(resource_state.access)),
+            string_VkPipelineStageFlags2(gfx::vk::convert(write_use.stage)),
+            string_VkAccessFlags2(gfx::vk::convert(write_use.acc)));
 
         barriers.emplace_back(BarrierInfo{
             .resource = rg_resource_handle,
@@ -945,6 +947,11 @@ RGResourceId RGPass::read_buf(RGResourceId id, rhi::PipelineStage stage) {
   const auto access = (id.type == RGResourceType::ExternalBuffer)
                           ? rhi::AccessFlags::ShaderRead
                           : rhi::AccessFlags::ShaderStorageRead;
+  add_read_usage(id, stage, access);
+  return id;
+}
+
+RGResourceId RGPass::read_buf(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access) {
   add_read_usage(id, stage, access);
   return id;
 }

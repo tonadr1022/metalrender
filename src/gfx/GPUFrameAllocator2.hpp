@@ -39,7 +39,7 @@ struct GPUFrameAllocator3 {
     void* write_ptr;
   };
 
-  explicit GPUFrameAllocator3(rhi::Device* device);
+  explicit GPUFrameAllocator3(rhi::Device* device, bool uniform_allocator);
 
   Alloc alloc(uint32_t size);
   Alloc alloc(uint32_t size, void* data);
@@ -65,6 +65,7 @@ struct GPUFrameAllocator3 {
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> buffers;
   uint32_t frame_idx_{};
   rhi::Device* device_;
+  bool uniform_allocator_{};
   constexpr static uint32_t k_alignment = 64;
 };
 

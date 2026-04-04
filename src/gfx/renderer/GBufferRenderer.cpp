@@ -169,78 +169,6 @@ void GBufferRenderer::bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase
       });
 }
 
-// void GBufferRenderer::bake_shadow_depth(std::string_view pass_name, ShadowDepthPassInfo& out,
-//                                         DrawCullPhase cull_phase,
-//                                         const DrawPassSceneBindings& scene,
-//                                         const ViewBindingsMeshlet& view) {
-//   bool late = cull_phase == DrawCullPhase::Late;
-//   auto& p = rg_.add_graphics_pass(pass_name);
-//   RGResourceId out_draw_count_buf_rg_handle{};
-
-//   ASSERT(renderer_cv::pipeline_mesh_shaders.get() != 0);
-//   for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
-//     if (scene.draw_batch.get_stats().vertex_count > 0) {
-//       // TODO: handle early phase necessity when object culling is disabled and only one
-//       draw_cull
-//       // pass is needed.
-//       auto id =
-//           view.task_cmd_buf_rg_ids.phase(cull_phase)[static_cast<AlphaMaskType>(alpha_mask_type)];
-//       ASSERT(id.is_valid());
-//       p.read_buf(id, PipelineStage::MeshShader | PipelineStage::TaskShader);
-//     }
-//   }
-//   out_draw_count_buf_rg_handle = p.read_buf(view.rg_ids.draw_count, PipelineStage::TaskShader);
-//   if (late) {
-//     p.sample_tex(view.rg_ids.final_depth_pyramid, PipelineStage::TaskShader);
-//   }
-//   if (late) {
-//     view.rg_ids.meshlet_vis = p.rw_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
-//   } else {
-//     view.rg_ids.meshlet_vis = p.write_buf(view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
-//   }
-
-//   if (late) {
-//     out.depth_id = p.rw_depth_output(out.depth_id);
-//   } else {
-//     out.depth_id = rg_.create_texture({.format = rhi::TextureFormat::D32float},
-//     "shadow_depth_tex"); p.write_depth_output(out.depth_id);
-//   }
-
-//   view.rg_ids.meshlet_draw_stats =
-//       p.rw_buf(view.rg_ids.meshlet_draw_stats, rhi::PipelineStage::TaskShader);
-//   const RGResourceId meshlet_stats_for_pass = view.rg_ids.meshlet_draw_stats;
-//   const RGResourceId meshlet_vis_for_pass = view.rg_ids.meshlet_vis;
-
-//   p.set_ex([this, late, cull_phase, rg_depth = out.depth_id, rv = &view.render_view,
-//             meshlet_vis_rg = meshlet_vis_for_pass, meshlet_stats_rg = meshlet_stats_for_pass,
-//             batch = &scene.draw_batch, materials = scene.materials_buf,
-//             frame_globals = scene.frame_globals_buf_info,
-//             out_draw_count_rg = out_draw_count_buf_rg_handle,
-//             task_cmd_rg = view.task_cmd_buf_rg_ids.phase(cull_phase)](rhi::CmdEncoder* enc) {
-//     if (!static_instance_mgr_.has_draws()) {
-//       return;
-//     }
-//     auto depth_handle = rg_.get_att_img(rg_depth);
-//     ASSERT(depth_handle.is_valid());
-//     auto load_op = late ? rhi::LoadOp::Load : rhi::LoadOp::Clear;
-//     enc->begin_rendering({
-//         RenderAttInfo::depth_stencil_att(depth_handle, load_op,
-//                                          {.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f}}),
-//     });
-//     enc->bind_srv(materials, 11);
-
-//     const DrawPassSceneBindings mesh_scene{*batch, materials, frame_globals};
-//     const MeshletMeshPassView mesh_pass{*rv, meshlet_vis_rg, meshlet_stats_rg, task_cmd_rg,
-//                                         rg_.get_buf(out_draw_count_rg)};
-//     encode_meshlet_mesh_draw_pass(
-//         reverse_z_, device_, rg_, static_instance_mgr_, enc, cull_phase, false, depth_handle,
-//         mesh_scene, mesh_pass,
-//         std::span<const rhi::PipelineHandleHolder>(shadow_meshlet_psos_,
-//                                                    static_cast<size_t>(AlphaMaskType::Count)));
-//     enc->end_rendering();
-//   });
-// }
-
 void GBufferRenderer::load_pipelines(ShaderManager& shader_mgr) {
   gbuffer_indexed_indirect_pso_ = shader_mgr.create_graphics_pipeline({
       .shaders = {{{"basic_indirect", ShaderType::Vertex},
@@ -253,12 +181,13 @@ void GBufferRenderer::load_pipelines(ShaderManager& shader_mgr) {
 
   for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
     for (size_t late = 0; late < 2; late++) {
-      gbuffer_meshlet_psos_[alpha_mask_type][late] = shader_mgr.create_graphics_pipeline({
+      gbuffer_meshlet_psos_[late][alpha_mask_type] = shader_mgr.create_graphics_pipeline({
           .shaders = {{{late ? "forward_meshlet_late" : "forward_meshlet", ShaderType::Task},
                        {"gbuffer_meshlet", ShaderType::Mesh},
                        {alpha_mask_type == AlphaMaskType::Mask ? "forward_meshlet_alphatest"
                                                                : "forward_meshlet_gbuffer",
                         ShaderType::Fragment}}},
+          .name = late ? "gbuffer_meshlet_late" : "gbuffer_meshlet_early",
       });
     }
   }

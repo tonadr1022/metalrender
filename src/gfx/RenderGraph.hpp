@@ -167,6 +167,7 @@ class RenderGraph {
     RGResourceId rw_depth_output(RGResourceId input);
     void w_swapchain_tex(rhi::Swapchain* swapchain);
     RGResourceId read_buf(RGResourceId id, rhi::PipelineStage stage);
+    RGResourceId read_buf(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access);
     RGResourceId write_buf(RGResourceId id, rhi::PipelineStage stage);
     RGResourceId rw_buf(RGResourceId input, rhi::PipelineStage stage);
 

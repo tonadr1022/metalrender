@@ -1,5 +1,6 @@
 # TODOs
 
+- track buffer usage in render graph. right now indirect buffer usage is added unnecessarily.
 - when drawing the debug CSM texture, use the array/texture views instead of the broke shit that's there.  
 - immediate_submit is jank in MetalDevice.cpp
 - in render graph, track texture usages instead of adding sample/storage automatically

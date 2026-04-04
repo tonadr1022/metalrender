@@ -201,8 +201,8 @@ CSMRenderer::~CSMRenderer() = default;
 
 void CSMRenderer::load_pipelines(ShaderManager& shader_mgr) {
   for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
-    for (size_t late = 0; late < 2; late++) {
-      shadow_meshlet_psos_[alpha_mask_type][late] = shader_mgr.create_graphics_pipeline({
+    for (size_t late = 0; late < 1; late++) {
+      shadow_meshlet_psos_[late][alpha_mask_type] = shader_mgr.create_graphics_pipeline({
           .shaders = {{{late ? "forward_meshlet_late" : "forward_meshlet", ShaderType::Task},
                        {alpha_mask_type == AlphaMaskType::Mask ? "csm_meshlet_alphatest"
                                                                : "csm_meshlet",

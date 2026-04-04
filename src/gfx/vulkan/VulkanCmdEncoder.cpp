@@ -346,6 +346,12 @@ void VulkanCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 extent) {
       .maxDepth = 1.0f,
   };
   vkCmdSetViewport(cmd(), 0, 1, &viewport);
+  // TODO: move this to set_scissor
+  VkRect2D scissor{
+      .offset = {0, 0},
+      .extent = {extent.x, extent.y},
+  };
+  vkCmdSetScissor(cmd(), 0, 1, &scissor);
 }
 
 void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle /*src_buf*/, size_t /*src_offset*/,
@@ -562,7 +568,6 @@ void VulkanCmdEncoder::bind_uav(rhi::BufferHandle buffer, uint32_t slot, size_t 
 void VulkanCmdEncoder::bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes,
                                 size_t size_bytes) {
   binding_table_.CBV[slot] = buffer;
-  ASSERT(offset_bytes != 0);
   LINFO("binding cbv: {} offset: {}", buffer.to64(), offset_bytes);
   binding_table_.CBV_offsets[slot] = offset_bytes;
   binding_table_.CBV_sizes[slot] = size_bytes;
