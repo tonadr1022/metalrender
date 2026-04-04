@@ -156,6 +156,32 @@ VkAccessFlags2 convert(rhi::AccessFlags access) {
   return flags;
 }
 
+VkImageLayout convert(rhi::ResourceLayout layout) {
+  switch (layout) {
+    case rhi::ResourceLayout::ColorAttachment:
+      return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    case rhi::ResourceLayout::DepthStencil:
+      return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+    case rhi::ResourceLayout::ShaderReadOnly:
+    case rhi::ResourceLayout::InputAttachment:
+      return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    case rhi::ResourceLayout::TransferSrc:
+      return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    case rhi::ResourceLayout::TransferDst:
+      return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    case rhi::ResourceLayout::Present:
+      return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    case rhi::ResourceLayout::ComputeRW:
+    case rhi::ResourceLayout::General:
+    case rhi::ResourceLayout::HostRead:
+    case rhi::ResourceLayout::HostWrite:
+      return VK_IMAGE_LAYOUT_GENERAL;
+    case rhi::ResourceLayout::Undefined:
+    default:
+      return VK_IMAGE_LAYOUT_UNDEFINED;
+  }
+}
+
 void augment_memory_barrier2_stages_for_access(VkPipelineStageFlags2& src_stage,
                                                VkAccessFlags2 src_access,
                                                VkPipelineStageFlags2& dst_stage,

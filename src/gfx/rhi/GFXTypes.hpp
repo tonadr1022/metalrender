@@ -376,6 +376,23 @@ enum ImageAspect {
   ImageAspect_Stencil = (1 << 2),
 };
 
+enum class ResourceLayout : uint8_t {
+  Undefined = 0,
+  General,
+  ShaderReadOnly,
+  ColorAttachment,
+  DepthStencil,
+  TransferSrc,
+  TransferDst,
+  Present,
+  ComputeRW,
+  InputAttachment,
+  HostRead,
+  HostWrite,
+};
+
+AUGMENT_ENUM_CLASS(ResourceLayout);
+
 enum class ResourceState : uint32_t {
   None = 0,
   ColorWrite = 1ULL << 1,  // Stage == ColorAttachmentOutput, Access == ColorWrite

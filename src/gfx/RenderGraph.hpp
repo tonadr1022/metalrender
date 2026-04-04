@@ -74,6 +74,12 @@ enum class RGResourceType { Texture, Buffer, ExternalTexture, ExternalBuffer };
 
 const char* to_string(RGResourceType type);
 
+struct RGState {
+  rhi::AccessFlags access{rhi::AccessFlags::None};
+  rhi::PipelineStage stage{rhi::PipelineStage::TopOfPipe};
+  rhi::ResourceLayout layout{rhi::ResourceLayout::Undefined};
+};
+
 struct RGResourceHandle {
   uint32_t idx{UINT32_MAX};
   RGResourceType type{};
@@ -178,11 +184,15 @@ class RenderGraph {
 
     RGResourceId import_external_texture(rhi::TextureHandle tex_handle,
                                          std::string_view debug_name = {});
+    RGResourceId import_external_texture(rhi::TextureHandle tex_handle, const RGState& initial,
+                                         std::string_view debug_name = {});
     RGResourceId import_external_texture(const rhi::TextureHandleHolder& tex_handle,
                                          std::string_view debug_name = {}) {
       return import_external_texture(tex_handle.handle, debug_name);
     }
     RGResourceId import_external_buffer(rhi::BufferHandle buf_handle,
+                                        std::string_view debug_name = {});
+    RGResourceId import_external_buffer(rhi::BufferHandle buf_handle, const RGState& initial,
                                         std::string_view debug_name = {});
     RGResourceId import_external_buffer(const rhi::BufferHandleHolder& buf_handle,
                                         std::string_view debug_name = {}) {
@@ -251,11 +261,15 @@ class RenderGraph {
   RGResourceId create_buffer(const BufferInfo& buf_info, std::string_view debug_name = {});
   RGResourceId import_external_texture(rhi::TextureHandle tex_handle,
                                        std::string_view debug_name = {});
+  RGResourceId import_external_texture(rhi::TextureHandle tex_handle, const RGState& initial,
+                                       std::string_view debug_name = {});
   RGResourceId import_external_texture(const rhi::TextureHandleHolder& tex_handle,
                                        std::string_view debug_name = {}) {
     return import_external_texture(tex_handle.handle, debug_name);
   }
   RGResourceId import_external_buffer(rhi::BufferHandle buf_handle,
+                                      std::string_view debug_name = {});
+  RGResourceId import_external_buffer(rhi::BufferHandle buf_handle, const RGState& initial,
                                       std::string_view debug_name = {});
   RGResourceId import_external_buffer(const rhi::BufferHandleHolder& buf_handle,
                                       std::string_view debug_name = {}) {
@@ -316,10 +330,8 @@ class RenderGraph {
 
   struct BarrierInfo {
     RGResourceHandle resource;
-    rhi::PipelineStage src_stage;
-    rhi::PipelineStage dst_stage;
-    rhi::AccessFlags src_access;
-    rhi::AccessFlags dst_access;
+    RGState src_state;
+    RGState dst_state;
     RGResourceId debug_id{};
     bool is_swapchain_write{false};
     int32_t subresource_mip{-1};
@@ -356,6 +368,7 @@ class RenderGraph {
       rg_id_to_external_texture_;
   std::unordered_map<RGResourceId, rhi::BufferHandle, RGResourceIdStableHash, RGResourceIdStableEq>
       rg_id_to_external_buffer_;
+  std::unordered_map<uint64_t, RGState> external_initial_states_;
 
   struct ResourceRecord {
     RGResourceType type{};

@@ -256,11 +256,17 @@ void ImGuiRenderer::add_dirty_textures_to_pass(gfx::RGPass& pass, bool read_acce
       if (read_access) {
         auto tex_id =
             pass.import_external_texture(rhi::TextureHandle{t->GetTexID()},
+                                         RGState{.stage = rhi::PipelineStage::TopOfPipe,
+                                                 .layout =
+                                                     rhi::ResourceLayout::ShaderReadOnly},
                                          std::to_string(t->GetTexID()));
         pass.sample_tex(tex_id);
       } else {
         auto tex_id =
             pass.import_external_texture(rhi::TextureHandle{t->GetTexID()},
+                                         RGState{.stage = rhi::PipelineStage::TopOfPipe,
+                                                 .layout =
+                                                     rhi::ResourceLayout::ShaderReadOnly},
                                          std::to_string(t->GetTexID()));
         pass.write_tex(tex_id, rhi::PipelineStage::AllTransfer);
       }

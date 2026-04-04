@@ -16,7 +16,6 @@
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
-#include "gfx/vulkan/VkUtil.hpp"
 #include "small_vector/small_vector.hpp"
 
 namespace TENG_NAMESPACE {
@@ -162,6 +161,36 @@ std::string to_string(rhi::AccessFlags access) {
   return result;
 }
 
+std::string to_string(rhi::ResourceLayout layout) {
+  switch (layout) {
+    case rhi::ResourceLayout::Undefined:
+      return "Layout_Undefined";
+    case rhi::ResourceLayout::General:
+      return "Layout_General";
+    case rhi::ResourceLayout::ShaderReadOnly:
+      return "Layout_ShaderReadOnly";
+    case rhi::ResourceLayout::ColorAttachment:
+      return "Layout_ColorAttachment";
+    case rhi::ResourceLayout::DepthStencil:
+      return "Layout_DepthStencil";
+    case rhi::ResourceLayout::TransferSrc:
+      return "Layout_TransferSrc";
+    case rhi::ResourceLayout::TransferDst:
+      return "Layout_TransferDst";
+    case rhi::ResourceLayout::Present:
+      return "Layout_Present";
+    case rhi::ResourceLayout::ComputeRW:
+      return "Layout_ComputeRW";
+    case rhi::ResourceLayout::InputAttachment:
+      return "Layout_InputAttachment";
+    case rhi::ResourceLayout::HostRead:
+      return "Layout_HostRead";
+    case rhi::ResourceLayout::HostWrite:
+      return "Layout_HostWrite";
+  }
+  return "Layout_Unknown";
+}
+
 struct RgSubresourceStateKey {
   RGResourceType type{};
   uint32_t idx{};
@@ -182,6 +211,51 @@ template <typename Flags, typename Bits>
 constexpr Flags flag_or(Flags x, Bits y) noexcept {
   return static_cast<Flags>(static_cast<std::underlying_type_t<Flags>>(x) |
                             static_cast<uint64_t>(y));
+}
+
+bool has_write_access(rhi::AccessFlags access) {
+  return has_flag(access, rhi::AccessFlags::AnyWrite);
+}
+
+rhi::ResourceLayout layout_from_access(rhi::AccessFlags access, RGPassType pass_type,
+                                       bool is_swapchain_write) {
+  if (is_swapchain_write) {
+    return rhi::ResourceLayout::ColorAttachment;
+  }
+  if (has_flag(access, rhi::AccessFlags::ColorAttachmentRead) ||
+      has_flag(access, rhi::AccessFlags::ColorAttachmentWrite)) {
+    return rhi::ResourceLayout::ColorAttachment;
+  }
+  if (has_flag(access, rhi::AccessFlags::DepthStencilRead) ||
+      has_flag(access, rhi::AccessFlags::DepthStencilWrite)) {
+    return rhi::ResourceLayout::DepthStencil;
+  }
+  if (has_flag(access, rhi::AccessFlags::TransferRead)) {
+    return rhi::ResourceLayout::TransferSrc;
+  }
+  if (has_flag(access, rhi::AccessFlags::TransferWrite)) {
+    return rhi::ResourceLayout::TransferDst;
+  }
+  if (has_flag(access, rhi::AccessFlags::InputAttachmentRead)) {
+    return rhi::ResourceLayout::InputAttachment;
+  }
+  if (has_flag(access, rhi::AccessFlags::HostRead)) {
+    return rhi::ResourceLayout::HostRead;
+  }
+  if (has_flag(access, rhi::AccessFlags::HostWrite)) {
+    return rhi::ResourceLayout::HostWrite;
+  }
+  if (has_flag(access, rhi::AccessFlags::ShaderSampledRead) ||
+      has_flag(access, rhi::AccessFlags::ShaderRead)) {
+    return rhi::ResourceLayout::ShaderReadOnly;
+  }
+  if (has_flag(access, rhi::AccessFlags::ShaderStorageRead) ||
+      has_flag(access, rhi::AccessFlags::ShaderStorageWrite) ||
+      has_flag(access, rhi::AccessFlags::ShaderWrite)) {
+    return pass_type == RGPassType::Compute ? rhi::ResourceLayout::ComputeRW
+                                            : rhi::ResourceLayout::General;
+  }
+  return rhi::ResourceLayout::Undefined;
 }
 
 // [[maybe_unused]] rhi::ResourceState convert_resource_state(rhi::AccessFlags access) {
@@ -269,8 +343,8 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
         auto buf_handle = barrier.resource.type == RGResourceType::Buffer
                               ? get_buf(barrier.resource)
                               : get_external_buf(barrier.resource);
-        enc->barrier(buf_handle, barrier.src_stage, barrier.src_access, barrier.dst_stage,
-                     barrier.dst_access);
+        enc->barrier(buf_handle, barrier.src_state.stage, barrier.src_state.access,
+                     barrier.dst_state.stage, barrier.dst_state.access);
       } else {
         auto tex_handle = barrier.resource.type == RGResourceType::Texture
                               ? get_att_img(barrier.resource)
@@ -283,8 +357,9 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
               pass.swapchain_write_->get_current_texture(), rhi::ResourceState::ColorWrite,
               rhi::ResourceState::SwapchainPresent));
         }
-        enc->barrier(tex_handle, barrier.src_stage, barrier.src_access, barrier.dst_stage,
-                     barrier.dst_access, barrier.subresource_mip, barrier.subresource_slice);
+        enc->barrier(tex_handle, barrier.src_state.stage, barrier.src_state.access,
+                     barrier.dst_state.stage, barrier.dst_state.access, barrier.src_state.layout,
+                     barrier.dst_state.layout, barrier.subresource_mip, barrier.subresource_slice);
       }
     }
 
@@ -336,6 +411,7 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
   rg_id_to_external_texture_.clear();
   rg_id_to_external_buffer_.clear();
   curr_submitted_swapchain_textures_.clear();
+  external_initial_states_.clear();
 }
 
 void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
@@ -522,18 +598,25 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   }
   free_bufs_.clear();
 
-  struct ResourceState {
-    rhi::AccessFlags access;
-    rhi::PipelineStage stage;
-  };
-
-  std::unordered_map<RgSubresourceStateKey, ResourceState, RgSubresourceStateKeyHash>
+  std::unordered_map<RgSubresourceStateKey, RGState, RgSubresourceStateKeyHash>
       subresource_states;
 
   auto get_resource_state = [&](RGResourceHandle handle, int32_t mip,
-                                int32_t slice) -> ResourceState& {
+                                int32_t slice) -> RGState& {
     RgSubresourceStateKey key{.type = handle.type, .idx = handle.idx, .mip = mip, .slice = slice};
-    return subresource_states[key];
+    if (auto it = subresource_states.find(key); it != subresource_states.end()) {
+      return it->second;
+    }
+    RGState init{};
+    if (auto init_it = external_initial_states_.find(handle.to64());
+        init_it != external_initial_states_.end()) {
+      init = init_it->second;
+      if (init.stage == rhi::PipelineStage::None) {
+        init.stage = rhi::PipelineStage::TopOfPipe;
+      }
+    }
+    auto [it, inserted] = subresource_states.emplace(key, init);
+    return it->second;
   };
 
   for (auto& b : pass_barrier_infos_) {
@@ -551,101 +634,95 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     LINFO("Pass: {}", pass.get_name());
     auto& barriers = pass_barrier_infos_[pass_i];
 
+    struct PassUse {
+      RGResourceHandle resource;
+      RGResourceId debug_id{};
+      rhi::AccessFlags access{rhi::AccessFlags::None};
+      rhi::PipelineStage stage{rhi::PipelineStage::None};
+      RGResourceType type{};
+      bool is_swapchain_write{false};
+      int32_t mip{-1};
+      int32_t slice{-1};
+    };
+    std::unordered_map<RgSubresourceStateKey, PassUse, RgSubresourceStateKeyHash> pass_uses;
+
+    auto accumulate_use = [&](const RenderGraph::Pass::NameAndAccess& use) {
+      const auto rg_resource_handle = get_physical_handle(use.id);
+      RgSubresourceStateKey key{.type = rg_resource_handle.type,
+                                .idx = rg_resource_handle.idx,
+                                .mip = use.subresource_mip,
+                                .slice = use.subresource_slice};
+      auto it = pass_uses.find(key);
+      if (it == pass_uses.end()) {
+        pass_uses.emplace(key, PassUse{.resource = rg_resource_handle,
+                                       .debug_id = use.id,
+                                       .access = use.acc,
+                                       .stage = use.stage,
+                                       .type = use.type,
+                                       .is_swapchain_write = use.is_swapchain_write,
+                                       .mip = use.subresource_mip,
+                                       .slice = use.subresource_slice});
+        return;
+      }
+      auto& entry = it->second;
+      entry.access = flag_or(entry.access, use.acc);
+      entry.stage = flag_or(entry.stage, use.stage);
+      entry.is_swapchain_write |= use.is_swapchain_write;
+    };
+
     for (const auto& write_use : pass.get_external_writes()) {
-      auto rg_resource_handle = get_physical_handle(write_use.id);
-      auto& resource_state = get_resource_state(rg_resource_handle, write_use.subresource_mip,
-                                                write_use.subresource_slice);
-      if (has_flag(write_use.acc, rhi::AccessFlags::AnyWrite)) {
-        // LINFO("Adding external write barrier: {} {} {} {}", to_string(write_use.stage),
-        //       to_string(write_use.acc), to_string(resource_state.stage),
-        //       to_string(resource_state.access));
-        LINFO(
-            "Adding external write barrier: src_stage={} src_access={} dst_stage={} dst_access={}",
-            string_VkPipelineStageFlags2(gfx::vk::convert(resource_state.stage)),
-            string_VkAccessFlags2(gfx::vk::convert(resource_state.access)),
-            string_VkPipelineStageFlags2(gfx::vk::convert(write_use.stage)),
-            string_VkAccessFlags2(gfx::vk::convert(write_use.acc)));
-
-        barriers.emplace_back(BarrierInfo{
-            .resource = rg_resource_handle,
-            .src_stage = resource_state.stage,
-            .dst_stage = write_use.stage,
-            .src_access = resource_state.access,
-            .dst_access = write_use.acc,
-            .debug_id = write_use.id,
-            .is_swapchain_write = write_use.is_swapchain_write,
-            .subresource_mip = write_use.subresource_mip,
-            .subresource_slice = write_use.subresource_slice,
-        });
-      }
-      resource_state.access = flag_or(resource_state.access, write_use.acc);
-      resource_state.stage = flag_or(resource_state.stage, write_use.stage);
+      accumulate_use(write_use);
     }
-
     for (const auto& write_use : pass.get_internal_writes()) {
-      auto rg_resource_handle = get_physical_handle(write_use.id);
-      auto& resource_state = get_resource_state(rg_resource_handle, write_use.subresource_mip,
-                                                write_use.subresource_slice);
-      if (has_flag(write_use.acc, rhi::AccessFlags::AnyWrite)) {
-        // LINFO("Adding internal write barrier: {} {} {} {}", to_string(write_use.stage),
-        //       to_string(write_use.acc), to_string(resource_state.stage),
-        //       to_string(resource_state.access));
-        LINFO(
-            "Adding internal write barrier: src_stage={} src_access={} dst_stage={} dst_access = "
-            "{} ",
-            string_VkPipelineStageFlags2(gfx::vk::convert(resource_state.stage)),
-            string_VkAccessFlags2(gfx::vk::convert(resource_state.access)),
-            string_VkPipelineStageFlags2(gfx::vk::convert(write_use.stage)),
-            string_VkAccessFlags2(gfx::vk::convert(write_use.acc)));
-
-        barriers.emplace_back(BarrierInfo{
-            .resource = rg_resource_handle,
-            .src_stage = resource_state.stage,
-            .dst_stage = write_use.stage,
-            .src_access = resource_state.access,
-            .dst_access = write_use.acc,
-            .debug_id = write_use.id,
-            .subresource_mip = write_use.subresource_mip,
-            .subresource_slice = write_use.subresource_slice,
-        });
-      }
-      resource_state.access = flag_or(resource_state.access, write_use.acc);
-      resource_state.stage = flag_or(resource_state.stage, write_use.stage);
+      accumulate_use(write_use);
     }
-
     for (const auto& read_use : pass.get_external_reads()) {
-      auto rg_resource_handle = get_physical_handle(read_use.id);
-      auto& resource_state = get_resource_state(rg_resource_handle, read_use.subresource_mip,
-                                                read_use.subresource_slice);
-      barriers.emplace_back(BarrierInfo{
-          .resource = rg_resource_handle,
-          .src_stage = resource_state.stage,
-          .dst_stage = read_use.stage,
-          .src_access = resource_state.access,
-          .dst_access = read_use.acc,
-          .debug_id = read_use.id,
-          .subresource_mip = read_use.subresource_mip,
-          .subresource_slice = read_use.subresource_slice,
-      });
-      if (has_flag(read_use.acc, rhi::AccessFlags::AnyWrite)) {
-        resource_state.access = flag_or(resource_state.access, read_use.acc);
-        resource_state.stage = flag_or(resource_state.stage, read_use.stage);
-      }
+      accumulate_use(read_use);
     }
     for (const auto& read_use : pass.get_internal_reads()) {
-      auto rg_resource_handle = get_physical_handle(read_use.id);
-      const auto& state = get_resource_state(rg_resource_handle, read_use.subresource_mip,
-                                             read_use.subresource_slice);
-      barriers.emplace_back(BarrierInfo{
-          .resource = rg_resource_handle,
-          .src_stage = state.stage,
-          .dst_stage = read_use.stage,
-          .src_access = state.access,
-          .dst_access = read_use.acc,
-          .debug_id = read_use.id,
-          .subresource_mip = read_use.subresource_mip,
-          .subresource_slice = read_use.subresource_slice,
-      });
+      accumulate_use(read_use);
+    }
+
+    for (const auto& [key, use] : pass_uses) {
+      (void)key;
+      auto& resource_state = get_resource_state(use.resource, use.mip, use.slice);
+      RGState desired{};
+      desired.access = use.access;
+      desired.stage = use.stage == rhi::PipelineStage::None ? rhi::PipelineStage::TopOfPipe
+                                                            : use.stage;
+      if (use.type == RGResourceType::Buffer || use.type == RGResourceType::ExternalBuffer) {
+        desired.layout = rhi::ResourceLayout::Undefined;
+      } else {
+        desired.layout = layout_from_access(use.access, pass.type(), use.is_swapchain_write);
+      }
+
+      const bool needs_barrier = (resource_state.layout != desired.layout) ||
+                                 has_write_access(resource_state.access) ||
+                                 has_write_access(desired.access);
+      if (needs_barrier) {
+        barriers.emplace_back(BarrierInfo{
+            .resource = use.resource,
+            .src_state = resource_state,
+            .dst_state = desired,
+            .debug_id = use.debug_id,
+            .is_swapchain_write = use.is_swapchain_write,
+            .subresource_mip = use.mip,
+            .subresource_slice = use.slice,
+        });
+      }
+
+      if (has_write_access(desired.access)) {
+        resource_state = desired;
+      } else {
+        resource_state.layout = desired.layout;
+        if (has_write_access(resource_state.access)) {
+          resource_state.access = desired.access;
+          resource_state.stage = desired.stage;
+        } else {
+          resource_state.access = flag_or(resource_state.access, desired.access);
+          resource_state.stage = flag_or(resource_state.stage, desired.stage);
+        }
+      }
     }
 
 #define CLR_CYAN "\033[36m"
@@ -659,13 +736,17 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
         const auto dbg_name = debug_name(barrier.debug_id);
         LINFO(CLR_PURPLE "RESOURCE: {}" CLR_RESET "", dbg_name.size() ? dbg_name : "no name lol");
         LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "SRC_ACCESS:"),
-              to_string(barrier.src_access));
+              to_string(barrier.src_state.access));
         LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "DST_ACCESS:"),
-              to_string(barrier.dst_access));
+              to_string(barrier.dst_state.access));
         LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "SRC_STAGE:"),
-              to_string(barrier.src_stage));
+              to_string(barrier.src_state.stage));
         LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "DST_STAGE:"),
-              to_string(barrier.dst_stage));
+              to_string(barrier.dst_state.stage));
+        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "SRC_LAYOUT:"),
+              to_string(barrier.src_state.layout));
+        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "DST_LAYOUT:"),
+              to_string(barrier.dst_state.layout));
       }
       LINFO("");
     }
@@ -741,6 +822,12 @@ RGResourceId RenderGraph::create_buffer(const BufferInfo& buf_info, std::string_
 
 RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
                                                   std::string_view debug_name) {
+  return import_external_texture(tex_handle, RGState{}, debug_name);
+}
+
+RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
+                                                  const RGState& initial,
+                                                  std::string_view debug_name) {
   const auto key = tex_handle.to64();
   if (auto it = external_tex_handle_to_id_.find(key); it != external_tex_handle_to_id_.end()) {
     if (!debug_name.empty()) {
@@ -753,6 +840,7 @@ RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
     RGResourceId id{.idx = it->second.idx,
                     .type = RGResourceType::ExternalTexture,
                     .version = rec.latest_version};
+    external_initial_states_[get_physical_handle(id).to64()] = initial;
     rg_id_to_external_texture_[id] = tex_handle;
     return id;
   }
@@ -763,12 +851,21 @@ RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
   RGResourceId id{.idx = static_cast<uint32_t>(resources_.size() - 1),
                   .type = RGResourceType::ExternalTexture,
                   .version = 0};
+  external_initial_states_[RGResourceHandle{.idx = static_cast<uint32_t>(idx),
+                                            .type = RGResourceType::ExternalTexture}
+                               .to64()] = initial;
   external_tex_handle_to_id_.emplace(key, id);
   rg_id_to_external_texture_[id] = tex_handle;
   return id;
 }
 
 RGResourceId RenderGraph::import_external_buffer(rhi::BufferHandle buf_handle,
+                                                 std::string_view debug_name) {
+  return import_external_buffer(buf_handle, RGState{}, debug_name);
+}
+
+RGResourceId RenderGraph::import_external_buffer(rhi::BufferHandle buf_handle,
+                                                 const RGState& initial,
                                                  std::string_view debug_name) {
   const auto key = buf_handle.to64();
   if (auto it = external_buf_handle_to_id_.find(key); it != external_buf_handle_to_id_.end()) {
@@ -782,6 +879,7 @@ RGResourceId RenderGraph::import_external_buffer(rhi::BufferHandle buf_handle,
     RGResourceId id{.idx = it->second.idx,
                     .type = RGResourceType::ExternalBuffer,
                     .version = rec.latest_version};
+    external_initial_states_[get_physical_handle(id).to64()] = initial;
     rg_id_to_external_buffer_[id] = buf_handle;
     return id;
   }
@@ -792,6 +890,9 @@ RGResourceId RenderGraph::import_external_buffer(rhi::BufferHandle buf_handle,
   RGResourceId id{.idx = static_cast<uint32_t>(resources_.size() - 1),
                   .type = RGResourceType::ExternalBuffer,
                   .version = 0};
+  external_initial_states_[RGResourceHandle{.idx = static_cast<uint32_t>(idx),
+                                            .type = RGResourceType::ExternalBuffer}
+                               .to64()] = initial;
   external_buf_handle_to_id_.emplace(key, id);
   rg_id_to_external_buffer_[id] = buf_handle;
   return id;
@@ -1025,9 +1126,20 @@ RGResourceId RGPass::import_external_texture(rhi::TextureHandle tex_handle,
   return rg_->import_external_texture(tex_handle, debug_name);
 }
 
+RGResourceId RGPass::import_external_texture(rhi::TextureHandle tex_handle,
+                                             const RGState& initial,
+                                             std::string_view debug_name) {
+  return rg_->import_external_texture(tex_handle, initial, debug_name);
+}
+
 RGResourceId RGPass::import_external_buffer(rhi::BufferHandle buf_handle,
                                             std::string_view debug_name) {
   return rg_->import_external_buffer(buf_handle, debug_name);
+}
+
+RGResourceId RGPass::import_external_buffer(rhi::BufferHandle buf_handle, const RGState& initial,
+                                            std::string_view debug_name) {
+  return rg_->import_external_buffer(buf_handle, initial, debug_name);
 }
 
 void RenderGraph::dfs(const std::vector<std::unordered_set<uint32_t>>& pass_dependencies,
@@ -1113,7 +1225,11 @@ void RenderGraph::Pass::w_swapchain_tex(rhi::Swapchain* swapchain) {
   swapchain_write_ = swapchain;
   auto curr_tex = swapchain->get_current_texture();
   ASSERT(type_ == RGPassType::Graphics);
-  auto swapchain_id = rg_->import_external_texture(curr_tex, "swapchain");
+  auto swapchain_id =
+      rg_->import_external_texture(curr_tex,
+                                   RGState{.stage = rhi::PipelineStage::BottomOfPipe,
+                                           .layout = rhi::ResourceLayout::Present},
+                                   "swapchain");
   add_write_usage(swapchain_id, rhi::PipelineStage::ColorAttachmentOutput,
                   rhi::AccessFlags::ColorAttachmentWrite, true);
 }

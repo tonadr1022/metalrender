@@ -196,10 +196,14 @@ uint32_t MemeRenderer123::get_bindless_idx(const rhi::BufferHandleHolder& buf) c
 
 void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   ZoneScoped;
-  auto instance_data_id =
-      rg_.import_external_buffer(static_instance_mgr_.get_instance_data_buf(), "instance_data_buf");
-  auto indirect_buffer_id =
-      rg_.import_external_buffer(static_instance_mgr_.get_draw_cmd_buf(), "indirect_buffer");
+  auto instance_data_id = rg_.import_external_buffer(
+      static_instance_mgr_.get_instance_data_buf(),
+      RGState{.stage = rhi::PipelineStage::TopOfPipe, .layout = rhi::ResourceLayout::General},
+      "instance_data_buf");
+  auto indirect_buffer_id = rg_.import_external_buffer(
+      static_instance_mgr_.get_draw_cmd_buf(),
+      RGState{.stage = rhi::PipelineStage::TopOfPipe, .layout = rhi::ResourceLayout::General},
+      "indirect_buffer");
   {
     if (static_instance_mgr_.has_pending_frees(curr_frame_idx_)) {
       auto& p = rg_.add_transfer_pass("free_instance_data");
@@ -275,8 +279,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
           created_or_resized = true;
           vis_buf = device_->get_buf(render_view.instance_vis_buf);
         }
-        RGResourceId vis_rg_id =
-            rg_.import_external_buffer(render_view.instance_vis_buf, "instance_vis_buf");
+        RGResourceId vis_rg_id = rg_.import_external_buffer(
+            render_view.instance_vis_buf.handle,
+            RGState{.stage = rhi::PipelineStage::TopOfPipe, .layout = rhi::ResourceLayout::General},
+            "instance_vis_buf");
         instance_vis_rg_ids.push_back(vis_rg_id);
         if (created_or_resized) {
           instance_vis_clear_ids.push_back({.id = vis_rg_id,
@@ -494,8 +500,11 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
   std::vector<RGResourceId> meshlet_vis_ids(render_views_.size());
 
   for (size_t view_id = 0; view_id < render_views_.size(); view_id++) {
-    depth_pyramid_ids[view_id] = rg_.import_external_texture(
-        render_views_[view_id].depth_pyramid_tex.handle, "depth_pyramid_tex");
+    depth_pyramid_ids[view_id] =
+        rg_.import_external_texture(render_views_[view_id].depth_pyramid_tex.handle,
+                                    RGState{.stage = rhi::PipelineStage::TopOfPipe,
+                                            .layout = rhi::ResourceLayout::ShaderReadOnly},
+                                    "depth_pyramid_tex");
   }
 
   if (mesh_shaders_enabled()) {
@@ -519,8 +528,10 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
                                                              .name = "meshlet_vis_buf"});
         created_or_resized = true;
       }
-      meshlet_vis_ids[view_id] =
-          rg_.import_external_buffer(render_view.meshlet_vis_buf, "meshlet_vis_buf");
+      meshlet_vis_ids[view_id] = rg_.import_external_buffer(
+          render_view.meshlet_vis_buf.handle,
+          RGState{.stage = rhi::PipelineStage::TopOfPipe, .layout = rhi::ResourceLayout::General},
+          "meshlet_vis_buf");
       if (created_or_resized) {
         meshlet_vis_clear_ids.push_back({.id = meshlet_vis_ids[view_id],
                                          .buf = render_view.meshlet_vis_buf.handle,
@@ -697,14 +708,19 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       if (view_id > 0) break;
       RGResourceId meshlet_stats_read_src = meshlet_draw_stats_buf_ids[view_id];
       rhi::BufferHandle meshlet_dst = meshlet_draw_stats_readback_[view_id][fif_i].handle;
-      RGResourceId meshlet_dst_rg =
-          rg_.import_external_buffer(meshlet_dst, "meshlet_stats_readback_curr");
+      RGResourceId meshlet_dst_rg = rg_.import_external_buffer(
+          meshlet_dst,
+          RGState{.stage = rhi::PipelineStage::TopOfPipe, .layout = rhi::ResourceLayout::General},
+          "meshlet_stats_readback_curr");
       add_buffer_readback_copy(rg_, "readback_meshlet_draw_stats", meshlet_stats_read_src,
                                meshlet_dst, meshlet_dst_rg, 0, 0, sizeof(MeshletDrawStats));
     }
     for (size_t rb_view = 0; rb_view < render_views_.size(); rb_view++) {
       rhi::BufferHandle counts_dst = draw_cmd_counts_readback_[rb_view][fif_i].handle;
-      RGResourceId counts_dst_rg = rg_.import_external_buffer(counts_dst, "draw_cmd_readback");
+      RGResourceId counts_dst_rg = rg_.import_external_buffer(
+          counts_dst,
+          RGState{.stage = rhi::PipelineStage::TopOfPipe, .layout = rhi::ResourceLayout::General},
+          "draw_cmd_readback");
       add_buffer_readback_copy(rg_, "readback_draw_cmd_counts", draw_cmd_count_buf_ids[rb_view],
                                counts_dst, counts_dst_rg, 0, 0,
                                sizeof(uint32_t) * static_cast<size_t>(DrawCullPhase::Count));

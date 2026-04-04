@@ -440,6 +440,15 @@ void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_st
                                rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
                                rhi::AccessFlags dst_access, int32_t base_mip_level,
                                int32_t base_array_layer) {
+  barrier(tex, src_stage, src_access, dst_stage, dst_access, rhi::ResourceLayout::Undefined,
+          rhi::ResourceLayout::Undefined, base_mip_level, base_array_layer);
+}
+
+void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage,
+                               rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
+                               rhi::AccessFlags dst_access, rhi::ResourceLayout src_layout,
+                               rhi::ResourceLayout dst_layout, int32_t base_mip_level,
+                               int32_t base_array_layer) {
   VkImageAspectFlags aspect_mask = 0;
   auto* texture = (VulkanTexture*)device_->get_tex(tex);
 
@@ -462,21 +471,28 @@ void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_st
   VkAccessFlags2 dst_acc = convert(dst_access);
   augment_memory_barrier2_stages_for_access(src_st, src_acc, dst_st, dst_acc);
 
-  VkImageLayout old_layout = layout_from_vk_access(src_acc);
-  // Render graph ORs access flags across passes; layout_from_vk_access(src) is not a unique
-  // layout. Prefer mip_layouts_ when known so oldLayout matches validation / GPU reality.
-  if (base_mip_level < 0) {
-    VkImageLayout uniform = texture->uniform_mip_layout_or_undefined();
-    if (uniform != VK_IMAGE_LAYOUT_UNDEFINED) {
-      old_layout = uniform;
-    }
-  } else {
-    VkImageLayout ml = texture->mip_layout(static_cast<uint32_t>(base_mip_level));
-    if (ml != VK_IMAGE_LAYOUT_UNDEFINED) {
-      old_layout = ml;
+  VkImageLayout old_layout = convert(src_layout);
+  VkImageLayout new_layout = convert(dst_layout);
+  if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
+    old_layout = layout_from_vk_access(src_acc);
+  }
+  if (new_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
+    new_layout = layout_from_vk_access(dst_acc);
+  }
+  // Prefer tracked layouts when known so oldLayout matches validation / GPU reality.
+  if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
+    if (base_mip_level < 0) {
+      VkImageLayout uniform = texture->uniform_mip_layout_or_undefined();
+      if (uniform != VK_IMAGE_LAYOUT_UNDEFINED) {
+        old_layout = uniform;
+      }
+    } else {
+      VkImageLayout ml = texture->mip_layout(static_cast<uint32_t>(base_mip_level));
+      if (ml != VK_IMAGE_LAYOUT_UNDEFINED) {
+        old_layout = ml;
+      }
     }
   }
-  const VkImageLayout new_layout = layout_from_vk_access(dst_acc);
 
   const uint32_t base_mip_u = base_mip_level < 0 ? 0u : static_cast<uint32_t>(base_mip_level);
   const uint32_t level_count = base_mip_level < 0 ? VK_REMAINING_MIP_LEVELS : 1u;
@@ -498,10 +514,12 @@ void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_st
                                                   .baseArrayLayer = base_layer_u,
                                                   .layerCount = layer_count},
   });
-  if (base_mip_level < 0) {
-    texture->set_all_mip_layouts(new_layout);
-  } else {
-    texture->set_mip_layout(static_cast<uint32_t>(base_mip_level), new_layout);
+  if (new_layout != VK_IMAGE_LAYOUT_UNDEFINED) {
+    if (base_mip_level < 0) {
+      texture->set_all_mip_layouts(new_layout);
+    } else {
+      texture->set_mip_layout(static_cast<uint32_t>(base_mip_level), new_layout);
+    }
   }
 }
 
