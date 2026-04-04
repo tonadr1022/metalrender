@@ -45,14 +45,6 @@ class ComputePlusVertexScene final : public ITestScene {
     on_swapchain_resize(ctx);
   }
 
-  void shutdown() override {
-    clear_color_cmp_pso_ = {};
-    test_gfx_pso_ = {};
-    test_geo_pso_ = {};
-    test_full_screen_tex_ = {};
-    test_vert_buf_ = {};
-  }
-
   void on_swapchain_resize(const TestSceneContext& ctx) override {
     auto dims = glm::uvec2{ctx.swapchain->desc_.width, ctx.swapchain->desc_.height};
     test_full_screen_tex_ = ctx.device->create_tex_h({
@@ -117,15 +109,30 @@ class ComputePlusVertexScene final : public ITestScene {
   BufferHandleHolder test_vert_buf_;
 };
 
+struct MeshHelloVertex {
+  glm::vec4 pos;
+  glm::vec4 color;
+};
+
 class MeshHelloTriangleScene final : public ITestScene {
  public:
   void init(const TestSceneContext& ctx) override {
     mesh_pso_ = ctx.device->create_graphics_pipeline_h({
-        .shaders = {{"test_mesh", ShaderType::Mesh}, {"test_mesh", ShaderType::Fragment}},
+        .shaders = {{"test_mesh_buf", ShaderType::Mesh}, {"test_mesh_buf", ShaderType::Fragment}},
     });
+    mesh_vert_buf_ = ctx.device->create_buf_h({
+        .usage = BufferUsage::Storage,
+        .size = 1024ul * 1024,
+        .flags = BufferDescFlags::CPUAccessible,
+    });
+    std::vector<MeshHelloVertex> tri;
+    tri.push_back({glm::vec4{-0.5f, -0.5f, 0.0f, 1.f}, glm::vec4{1.f, 0.f, 0.f, 1.f}});
+    tri.push_back({glm::vec4{0.5f, -0.5f, 0.0f, 1.f}, glm::vec4{0.f, 0.f, 1.f, 1.f}});
+    tri.push_back({glm::vec4{0.0f, 0.5f, 0.0f, 1.f}, glm::vec4{0.f, 1.f, 0.f, 1.f}});
+    ctx.buffer_copy->copy_to_buffer(tri.data(), tri.size() * sizeof(MeshHelloVertex),
+                                    mesh_vert_buf_.handle, 0, PipelineStage::MeshShader,
+                                    AccessFlags::ShaderRead);
   }
-
-  void shutdown() override { mesh_pso_ = {}; }
 
   void on_swapchain_resize(const TestSceneContext&) override {}
 
@@ -140,6 +147,7 @@ class MeshHelloTriangleScene final : public ITestScene {
       enc->set_viewport({0, 0}, {ctx.swapchain->desc_.width, ctx.swapchain->desc_.height});
       enc->set_scissor({0, 0}, {ctx.swapchain->desc_.width, ctx.swapchain->desc_.height});
       enc->bind_pipeline(mesh_pso_);
+      enc->bind_srv(mesh_vert_buf_.handle, 0);
       enc->draw_mesh_threadgroups({1, 1, 1}, {1, 1, 1}, {128, 1, 1});
       enc->end_rendering();
     });
@@ -147,6 +155,7 @@ class MeshHelloTriangleScene final : public ITestScene {
 
  private:
   PipelineHandleHolder mesh_pso_;
+  BufferHandleHolder mesh_vert_buf_;
 };
 
 }  // namespace

@@ -40,7 +40,7 @@ class ITestScene {
  public:
   virtual ~ITestScene() = default;
   virtual void init(const TestSceneContext&) = 0;
-  virtual void shutdown() = 0;
+  virtual void shutdown() {}
   virtual void on_swapchain_resize(const TestSceneContext&) = 0;
   virtual void add_render_graph_passes(const TestSceneContext&) = 0;
 };
