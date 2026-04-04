@@ -60,7 +60,7 @@ void TestApp::run() {
   }
 
   renderer_.reset();
-  window_->shutdown();
   swapchain_ = {};
+  window_->shutdown();
   device_->shutdown();
 }
