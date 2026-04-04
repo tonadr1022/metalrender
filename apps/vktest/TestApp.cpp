@@ -1,5 +1,7 @@
 #include "TestApp.hpp"
 
+#include <GLFW/glfw3.h>
+
 #include "TestRenderer.hpp"
 #include "Util.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -14,7 +16,7 @@ TestApp::TestApp() {
 
   window_ = create_platform_window();
 
-  Window::InitInfo win_init_info{
+  ::teng::Window::InitInfo win_init_info{
       .win_dims_x = 1000,
       .win_dims_y = 1000,
       .floating_window = false,
@@ -41,6 +43,11 @@ TestApp::TestApp() {
       .swapchain = device_->get_swapchain(swapchain_),
       .window = window_.get(),
       .resource_dir = resource_dir_,
+  });
+  window_->set_key_callback([this](int key, int action, int /*mods*/) {
+    if (action == GLFW_PRESS && key == GLFW_KEY_TAB) {
+      renderer_->cycle_debug_scene();
+    }
   });
 }
 

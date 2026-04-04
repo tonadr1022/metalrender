@@ -3,12 +3,15 @@
 #include <filesystem>
 #include <memory>
 
+#include "TestDebugScenes.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/BufferResize.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
 namespace teng {
+class Window;
+
 namespace gfx {
 class ShaderManager;
 
@@ -21,7 +24,6 @@ class Swapchain;
 }  // namespace rhi
 
 }  // namespace gfx
-class Window;
 
 namespace gfx {
 
@@ -32,27 +34,29 @@ class TestRenderer {
     rhi::Swapchain* swapchain;
     Window* window;
     std::filesystem::path resource_dir;
+    TestDebugScene initial_scene{TestDebugScene::ComputePlusVertexOverlay};
   };
   explicit TestRenderer(const CreateInfo& cinfo);
   void render();
+  void recreate_resources_on_swapchain_resize();
+  void cycle_debug_scene();
+  void set_scene(TestDebugScene id);
   ~TestRenderer();
 
  private:
-  void recreate_resources_on_swapchain_resize();
   void add_render_graph_passes();
+  [[nodiscard]] TestSceneContext make_ctx();
+
+  std::unique_ptr<ITestScene> scene_;
+  TestDebugScene active_scene_{TestDebugScene::ComputePlusVertexOverlay};
 
   std::unique_ptr<gfx::ShaderManager> shader_mgr_;
   rhi::Device* device_;
   rhi::Swapchain* swapchain_;
-  rhi::PipelineHandleHolder clear_color_cmp_pso_;
-  rhi::PipelineHandleHolder test_gfx_pso_;
-  rhi::PipelineHandleHolder test_geo_pso_;
-  rhi::TextureHandleHolder test_full_screen_tex_;
   GPUFrameAllocator3 frame_gpu_upload_allocator_;
   BufferCopyMgr buffer_copy_mgr_;
-  rhi::BufferHandleHolder test_vert_buf_;
   RenderGraph rg_;
-  Window* window_;
+  Window* window_{};
 };
 
 }  // namespace gfx

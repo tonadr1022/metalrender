@@ -1,0 +1,53 @@
+#pragma once
+
+#include <memory>
+
+#include "gfx/GPUFrameAllocator2.hpp"
+#include "gfx/RenderGraph.hpp"
+#include "gfx/renderer/BufferResize.hpp"
+
+namespace teng {
+
+class Window;
+
+namespace gfx {
+
+class ShaderManager;
+
+namespace rhi {
+
+class Device;
+class Swapchain;
+
+}  // namespace rhi
+
+struct TestSceneContext {
+  rhi::Device* device{};
+  rhi::Swapchain* swapchain{};
+  teng::Window* window{};
+  ShaderManager* shader_mgr{};
+  RenderGraph* rg{};
+  BufferCopyMgr* buffer_copy{};
+};
+
+enum class TestDebugScene : uint8_t {
+  ComputePlusVertexOverlay,
+  MeshHelloTriangle,
+  Count,
+};
+
+class ITestScene {
+ public:
+  virtual ~ITestScene() = default;
+  virtual void init(const TestSceneContext&) = 0;
+  virtual void shutdown() = 0;
+  virtual void on_swapchain_resize(const TestSceneContext&) = 0;
+  virtual void add_render_graph_passes(const TestSceneContext&) = 0;
+};
+
+[[nodiscard]] const char* to_string(TestDebugScene s);
+[[nodiscard]] std::unique_ptr<ITestScene> create_test_scene(TestDebugScene s);
+
+}  // namespace gfx
+
+}  // namespace teng

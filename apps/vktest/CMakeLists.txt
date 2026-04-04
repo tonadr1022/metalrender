@@ -5,6 +5,7 @@ set(COMMON_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../common)
 add_executable(${target_name}
     main.cpp
     ${COMMON_SOURCE_DIR}/Util.cpp
+    TestDebugScenes.cpp
     TestRenderer.cpp
     TestApp.cpp
 )

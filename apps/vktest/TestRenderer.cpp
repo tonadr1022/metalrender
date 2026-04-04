@@ -2,14 +2,9 @@
 
 #include "Window.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
-#include "core/Util.hpp"
 #include "gfx/ShaderManager.hpp"
-#include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
-#include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Swapchain.hpp"
-#include "gfx/rhi/Texture.hpp"
-#include "hlsl/default_vertex.h"
 
 using namespace teng;
 using namespace teng::gfx;
@@ -18,7 +13,8 @@ using namespace teng::gfx::rhi;
 namespace teng::gfx {
 
 TestRenderer::TestRenderer(const CreateInfo& cinfo)
-    : device_(cinfo.device),
+    : active_scene_(cinfo.initial_scene),
+      device_(cinfo.device),
       swapchain_(cinfo.swapchain),
       frame_gpu_upload_allocator_(device_, false),
       buffer_copy_mgr_(device_, frame_gpu_upload_allocator_),
@@ -26,30 +22,35 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
   shader_mgr_->init(
       device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
-  clear_color_cmp_pso_ = device_->create_compute_pipeline_h({"vulkan_exp/clear_tex_to_color"});
-  test_gfx_pso_ = device_->create_graphics_pipeline_h({
-      .shaders = {{"fullscreen_quad", rhi::ShaderType::Vertex},
-                  {"vulkan_exp/single_tex", rhi::ShaderType::Fragment}},
-  });
-  test_geo_pso_ = device_->create_graphics_pipeline_h({
-      .shaders = {{"vulkan_exp/basic_geo", rhi::ShaderType::Vertex},
-                  {"vulkan_exp/single_color", rhi::ShaderType::Fragment}},
-  });
-  test_vert_buf_ = device_->create_buf_h({
-      .usage = rhi::BufferUsage::Storage,
-      .size = 1024ul * 1024,
-      .flags = rhi::BufferDescFlags::CPUAccessible,
-  });
-  recreate_resources_on_swapchain_resize();
-
-  std::vector<DefaultVertex> tri_verts;
-  tri_verts.emplace_back(glm::vec4{-.5f, -0.5f, 0.0f, 1.f}, glm::vec2{0.f, 0.f});
-  tri_verts.emplace_back(glm::vec4{.5f, -0.5f, 0.0f, 1.f}, glm::vec2{1.f, 0.f});
-  tri_verts.emplace_back(glm::vec4{0.0f, .5f, 0.0f, 1.f}, glm::vec2{0.5f, 1.f});
-  buffer_copy_mgr_.copy_to_buffer(tri_verts.data(), tri_verts.size() * sizeof(DefaultVertex),
-                                  test_vert_buf_.handle, 0, PipelineStage::VertexShader,
-                                  AccessFlags::ShaderRead);
   rg_.init(device_);
+  scene_ = create_test_scene(active_scene_);
+  scene_->init(make_ctx());
+}
+
+TestSceneContext TestRenderer::make_ctx() {
+  return {.device = device_,
+          .swapchain = swapchain_,
+          .window = window_,
+          .shader_mgr = shader_mgr_.get(),
+          .rg = &rg_,
+          .buffer_copy = &buffer_copy_mgr_};
+}
+
+void TestRenderer::set_scene(TestDebugScene id) {
+  if (scene_) {
+    scene_->shutdown();
+    scene_.reset();
+  }
+  active_scene_ = id;
+  scene_ = create_test_scene(id);
+  scene_->init(make_ctx());
+  LINFO("vktest scene: {}", to_string(id));
+}
+
+void TestRenderer::cycle_debug_scene() {
+  auto next = static_cast<uint8_t>(static_cast<uint8_t>(active_scene_) + 1u) %
+              static_cast<uint8_t>(TestDebugScene::Count);
+  set_scene(static_cast<TestDebugScene>(next));
 }
 
 void TestRenderer::render() {
@@ -57,71 +58,26 @@ void TestRenderer::render() {
   add_render_graph_passes();
   static int i = 0;
   bool verbose = i++ == 0;
-  LINFO("Frame {}", i);
   device_->acquire_next_swapchain_image(swapchain_);
   rg_.bake(window_->get_window_size(), verbose);
   rg_.execute();
   device_->submit_frame();
 }
 
-TestRenderer::~TestRenderer() { shader_mgr_->shutdown(); }
+TestRenderer::~TestRenderer() {
+  if (scene_) {
+    scene_->shutdown();
+    scene_.reset();
+  }
+  shader_mgr_->shutdown();
+}
 
 void TestRenderer::recreate_resources_on_swapchain_resize() {
-  auto dims = glm::uvec2{swapchain_->desc_.width, swapchain_->desc_.height};
-  test_full_screen_tex_ = device_->create_tex_h({
-      .format = rhi::TextureFormat::R32G32B32A32Sfloat,
-      .usage =
-          rhi::TextureUsage::Sample | rhi::TextureUsage::Storage | rhi::TextureUsage::ShaderWrite,
-      .dims = {dims.x, dims.y, 1},
-      .mip_levels = 1,
-      .array_length = 1,
-      .name = "test full screen texture",
-  });
-}
-
-void TestRenderer::add_render_graph_passes() {
-  auto test_full_screen_tex_id =
-      rg_.import_external_texture(test_full_screen_tex_.handle, "test_full_screen_tex");
-  {
-    auto& p = rg_.add_compute_pass("compute_clear_pass");
-    p.write_tex(test_full_screen_tex_id, rhi::PipelineStage::ComputeShader);
-    p.set_ex([this](rhi::CmdEncoder* enc) {
-      auto tex_handle = test_full_screen_tex_.handle;
-
-      auto* tex = device_->get_tex(tex_handle);
-      enc->bind_pipeline(clear_color_cmp_pso_);
-      struct {
-        glm::uvec2 dims;
-      } pc;
-      pc.dims = tex->desc().dims;
-      enc->push_constants(&pc, sizeof(pc));
-      enc->bind_uav(tex_handle, 0);
-      enc->dispatch_compute(
-          glm::uvec3{align_divide_up(pc.dims.x, 8), align_divide_up(pc.dims.y, 8), 1},
-          glm::uvec3{8, 8, 1});
-    });
-  }
-  {
-    auto& p = rg_.add_graphics_pass("fullscreen");
-    p.sample_tex(test_full_screen_tex_id);
-    p.w_swapchain_tex(swapchain_);
-    p.set_ex([this](rhi::CmdEncoder* enc) {
-      glm::vec4 clear_color{0.5, 0.5, 0, 1};
-      device_->begin_swapchain_rendering(swapchain_, enc, &clear_color);
-      enc->set_cull_mode(rhi::CullMode::None);
-      enc->set_wind_order(rhi::WindOrder::CounterClockwise);
-      enc->set_viewport({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
-      enc->set_scissor({0, 0}, {swapchain_->desc_.width, swapchain_->desc_.height});
-      enc->bind_pipeline(test_gfx_pso_);
-      enc->bind_srv(test_full_screen_tex_.handle, 0);
-      enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
-
-      enc->bind_pipeline(test_geo_pso_);
-      enc->bind_srv(test_vert_buf_.handle, 0);
-      enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 0, 3);
-      enc->end_rendering();
-    });
+  if (scene_) {
+    scene_->on_swapchain_resize(make_ctx());
   }
 }
+
+void TestRenderer::add_render_graph_passes() { scene_->add_render_graph_passes(make_ctx()); }
 
 }  // namespace teng::gfx

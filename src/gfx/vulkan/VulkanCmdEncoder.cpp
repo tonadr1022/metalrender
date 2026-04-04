@@ -1,5 +1,7 @@
 #include "VulkanCmdEncoder.hpp"
 
+#include <volk.h>
+
 #include "core/Config.hpp"
 #include "core/Hash.hpp"
 #include "core/Logger.hpp"
@@ -387,6 +389,13 @@ void VulkanCmdEncoder::barrier(rhi::PipelineStage /*src_stage*/, rhi::AccessFlag
 void VulkanCmdEncoder::draw_indexed_indirect(rhi::BufferHandle /*indirect_buf*/,
                                              uint32_t /* indirect_buf_id */, size_t /*draw_cnt*/,
                                              size_t /*offset_i*/) {}
+
+void VulkanCmdEncoder::draw_mesh_threadgroups(glm::uvec3 thread_groups,
+                                              glm::uvec3 /*threads_per_task_thread_group*/,
+                                              glm::uvec3 /*threads_per_mesh_thread_group*/) {
+  flush_binds();
+  vkCmdDrawMeshTasksEXT(cmd(), thread_groups.x, thread_groups.y, thread_groups.z);
+}
 
 void VulkanCmdEncoder::draw_mesh_threadgroups_indirect(
     rhi::BufferHandle indirect_buf, size_t indirect_buf_offset,

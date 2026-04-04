@@ -1327,7 +1327,7 @@ void RenderGraph::Pass::w_swapchain_tex(rhi::Swapchain* swapchain) {
   [[maybe_unused]] auto* vulkan_swapchain = static_cast<gfx::vk::VulkanSwapchain*>(swapchain);
   auto swapchain_id = rg_->import_external_texture(
       curr_tex,
-      RGState{.stage = rhi::PipelineStage::BottomOfPipe, .layout = rhi::ResourceLayout::Present},
+      RGState{.stage = rhi::PipelineStage::BottomOfPipe, .layout = rhi::ResourceLayout::Undefined},
       "swapchain");
   add_write_usage(swapchain_id, rhi::PipelineStage::ColorAttachmentOutput,
                   rhi::AccessFlags::ColorAttachmentWrite, true);
