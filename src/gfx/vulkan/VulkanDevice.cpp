@@ -928,6 +928,11 @@ rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder(rhi::QueueType queue_type) {
   auto& enc = *cmd_encoders_[curr_cmd_encoder_i_];
   enc.curr_frame_i_ = frame_idx();
   enc.submit_swapchains_.clear();
+  static int i = 0;
+  if (i++ == 0) {
+    LWARN("Copy queue not supported yet, defaulting to graphics queue");
+    queue_type = rhi::QueueType::Graphics;
+  }
   enc.queue_type_ = queue_type;
 
   if (!enc.binder_pools_[enc.curr_frame_i_].pool) {
@@ -1162,6 +1167,7 @@ void VulkanDevice::submit_frame() {
   // submit queues
   for (size_t cmd_enc_i = 0; cmd_enc_i < curr_cmd_encoder_i_; cmd_enc_i++) {
     auto& enc = *cmd_encoders_[cmd_enc_i];
+    ASSERT(enc.queue_type_ != rhi::QueueType::Copy);
     auto& queue = queues_[(int)enc.queue_type_];
     ASSERT(queue.is_valid());
 
@@ -1330,27 +1336,28 @@ void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::Cmd
                                              glm::vec4* clear_color) {
   auto* vk_enc = (VulkanCmdEncoder*)cmd_enc;
   vk_enc->submit_swapchains_.emplace_back(swapchain);
-  VkImage curr_image = ((VulkanTexture*)get_tex(swapchain->get_current_texture()))->image();
-  VkImageMemoryBarrier2 img_barriers[] = {
-      VkImageMemoryBarrier2{
-          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-          .srcStageMask =
-              VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,  // from vkAcquireNextImageKHR
-          .srcAccessMask = 0,
-          .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-          .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-          .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-          .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-          .image = curr_image,
-          .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-                               .levelCount = 1,
-                               .layerCount = 1},
-      },
-  };
-  VkDependencyInfo info{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-                        .imageMemoryBarrierCount = ARRAY_SIZE(img_barriers),
-                        .pImageMemoryBarriers = img_barriers};
-  vkCmdPipelineBarrier2KHR(vk_enc->cmd(), &info);
+  [[maybe_unused]] VkImage curr_image =
+      ((VulkanTexture*)get_tex(swapchain->get_current_texture()))->image();
+  // VkImageMemoryBarrier2 img_barriers[] = {
+  //     VkImageMemoryBarrier2{
+  //         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
+  //         .srcStageMask =
+  //             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,  // from vkAcquireNextImageKHR
+  //         .srcAccessMask = 0,
+  //         .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+  //         .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
+  //         .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  //         .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+  //         .image = curr_image,
+  //         .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+  //                              .levelCount = 1,
+  //                              .layerCount = 1},
+  //     },
+  // };
+  // VkDependencyInfo info{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
+  //                       .imageMemoryBarrierCount = ARRAY_SIZE(img_barriers),
+  //                       .pImageMemoryBarriers = img_barriers};
+  // vkCmdPipelineBarrier2KHR(vk_enc->cmd(), &info);
 
   cmd_enc->begin_rendering({
       rhi::RenderAttInfo{

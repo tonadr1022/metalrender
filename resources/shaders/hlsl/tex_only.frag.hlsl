@@ -17,6 +17,7 @@ CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
 CONSTANT_BUFFER(ViewData, view_data, VIEW_DATA_SLOT);
 
 StructuredBuffer<CSMData> csm_data_buf : register(t0);
+#ifdef CSM_ENABLED
 Texture2DArray shadow_tex_array : register(t1);
 
 uint select_cascade(in CSMData csm_data, float view_depth) {
@@ -69,6 +70,8 @@ float calculate_shadow_factor(float3 world_pos, in CSMData csm_data, SamplerStat
   return 1.0f;
 }
 
+#endif
+
 float4 main(VOut input) : SV_Target {
   uint render_mode = globals.render_mode;
   Texture2D tex = bindless_textures[pc.tex_idx];
@@ -87,8 +90,10 @@ float4 main(VOut input) : SV_Target {
       float4 clip_pos = float4(clip_xy, depth, 1.0);
       float4 wpos_pre_divide = mul(view_data.inv_vp, clip_pos);
       float3 world_pos = wpos_pre_divide.xyz / wpos_pre_divide.w;
+#ifdef CSM_ENABLED
       float shadow_factor = calculate_shadow_factor(world_pos, csm_data_buf[0], samp);
       NdotL *= shadow_factor;
+#endif
     }
     float4 albedo = tex.SampleLevel(samp, input.uv, 0);
     float ambient_intensity = 0.2;
@@ -97,6 +102,7 @@ float4 main(VOut input) : SV_Target {
     light_out = float4(tonemap(light_out.xyz), light_out.a);
     return light_out;
   } else if (render_mode == DEBUG_RENDER_MODE_CSM_CASCADE_COLORS) {
+#ifdef CSM_ENABLED
     const CSMData csm_data = csm_data_buf[0];
     uint cascade_count = min(csm_data.num_cascades, CSM_MAX_CASCADES);
     if (cascade_count == 0) {
@@ -129,6 +135,9 @@ float4 main(VOut input) : SV_Target {
     };
     // return float4(float3(view_depth, view_depth, view_depth), 1.0);
     return colors[cascade_idx];
+#else
+    return float4(1.0, 0.0, 0.0, 1.0);
+#endif
   } else if (render_mode == DEBUG_RENDER_MODE_SECONDARY_VIEW) {
     float4 color_out = pc.color_mult * tex.SampleLevel(samp, input.uv, 0);
     return color_out;

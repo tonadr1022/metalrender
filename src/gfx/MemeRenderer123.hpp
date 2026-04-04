@@ -186,6 +186,7 @@ class MemeRenderer123 {
   rhi::PipelineHandleHolder depth_reduce_pso_;
   rhi::PipelineHandleHolder shade_pso_;
   rhi::PipelineHandleHolder tex_only_pso_;
+  rhi::PipelineHandleHolder tex_only_shadow_pso_;
   rhi::PipelineHandleHolder csm_no_frag_pso_;
 
   GPUFrameAllocator3 frame_gpu_upload_allocator_;

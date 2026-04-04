@@ -16,6 +16,7 @@
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
+#include "gfx/vulkan/VulkanSwapchain.hpp"
 #include "small_vector/small_vector.hpp"
 
 namespace TENG_NAMESPACE {
@@ -598,11 +599,9 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   }
   free_bufs_.clear();
 
-  std::unordered_map<RgSubresourceStateKey, RGState, RgSubresourceStateKeyHash>
-      subresource_states;
+  std::unordered_map<RgSubresourceStateKey, RGState, RgSubresourceStateKeyHash> subresource_states;
 
-  auto get_resource_state = [&](RGResourceHandle handle, int32_t mip,
-                                int32_t slice) -> RGState& {
+  auto get_resource_state = [&](RGResourceHandle handle, int32_t mip, int32_t slice) -> RGState& {
     RgSubresourceStateKey key{.type = handle.type, .idx = handle.idx, .mip = mip, .slice = slice};
     if (auto it = subresource_states.find(key); it != subresource_states.end()) {
       return it->second;
@@ -628,10 +627,11 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   if (verbose) {
     LINFO("//////////////// Barriers ////////////////");
   }
+  uint32_t barrier_pass_exec_ord = 0;
+  size_t barrier_total_count = 0;
   for (auto pass_i : pass_stack_) {
     ASSERT(pass_i < passes_.size());
     const auto& pass = passes_[pass_i];
-    LINFO("Pass: {}", pass.get_name());
     auto& barriers = pass_barrier_infos_[pass_i];
 
     struct PassUse {
@@ -683,13 +683,65 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       accumulate_use(read_use);
     }
 
+    // Whole-texture uses (mip=-1) do not share subresource state with per-mip passes (e.g.
+    // depth_reduce). Expand to explicit mips so barriers match what shaders actually access.
+    {
+      std::vector<std::pair<RgSubresourceStateKey, PassUse>> to_expand;
+      to_expand.reserve(pass_uses.size());
+      for (const auto& [key, use] : pass_uses) {
+        if (use.mip != -1 || use.slice != -1) {
+          continue;
+        }
+        if (use.type != RGResourceType::Texture && use.type != RGResourceType::ExternalTexture) {
+          continue;
+        }
+        to_expand.emplace_back(key, use);
+      }
+      for (const auto& [old_key, use] : to_expand) {
+        pass_uses.erase(old_key);
+        uint32_t mip_levels = 1;
+        if (use.resource.type == RGResourceType::ExternalTexture) {
+          rhi::Texture* tex = device_->get_tex(get_external_tex(use.resource));
+          ALWAYS_ASSERT(tex != nullptr);
+          mip_levels = std::max(1u, tex->desc().mip_levels);
+        } else if (use.resource.type == RGResourceType::Texture) {
+          ALWAYS_ASSERT(use.resource.idx < tex_att_infos_.size());
+          mip_levels = std::max(1u, tex_att_infos_[use.resource.idx].mip_levels);
+        } else {
+          continue;
+        }
+        for (uint32_t m = 0; m < mip_levels; ++m) {
+          const RgSubresourceStateKey new_key{.type = use.resource.type,
+                                              .idx = use.resource.idx,
+                                              .mip = static_cast<int32_t>(m),
+                                              .slice = -1};
+          auto it = pass_uses.find(new_key);
+          if (it == pass_uses.end()) {
+            pass_uses.emplace(new_key, PassUse{.resource = use.resource,
+                                               .debug_id = use.debug_id,
+                                               .access = use.access,
+                                               .stage = use.stage,
+                                               .type = use.type,
+                                               .is_swapchain_write = use.is_swapchain_write,
+                                               .mip = static_cast<int32_t>(m),
+                                               .slice = -1});
+          } else {
+            auto& entry = it->second;
+            entry.access = flag_or(entry.access, use.access);
+            entry.stage = flag_or(entry.stage, use.stage);
+            entry.is_swapchain_write |= use.is_swapchain_write;
+          }
+        }
+      }
+    }
+
     for (const auto& [key, use] : pass_uses) {
       (void)key;
       auto& resource_state = get_resource_state(use.resource, use.mip, use.slice);
       RGState desired{};
       desired.access = use.access;
-      desired.stage = use.stage == rhi::PipelineStage::None ? rhi::PipelineStage::TopOfPipe
-                                                            : use.stage;
+      desired.stage =
+          use.stage == rhi::PipelineStage::None ? rhi::PipelineStage::TopOfPipe : use.stage;
       if (use.type == RGResourceType::Buffer || use.type == RGResourceType::ExternalBuffer) {
         desired.layout = rhi::ResourceLayout::Undefined;
       } else {
@@ -725,31 +777,73 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       }
     }
 
-#define CLR_CYAN "\033[36m"
-#define CLR_PURPLE "\033[35m"
-#define CLR_GREEN "\033[32m"
-#define CLR_RESET "\033[0m"
-
     if (verbose) {
-      LINFO(CLR_GREEN "{} Pass" CLR_RESET ": {}", to_string(pass.type()), pass.get_name());
-      for (auto& barrier : barriers) {
+      static constexpr const char* kCyan = "\033[36m";
+      static constexpr const char* kPurple = "\033[35m";
+      static constexpr const char* kGreen = "\033[32m";
+      static constexpr const char* kYellow = "\033[33m";
+      static constexpr const char* kDim = "\033[2m";
+      static constexpr const char* kReset = "\033[0m";
+
+      barrier_total_count += barriers.size();
+      LINFO("{}[exec {:>3} | pass_i {:>3}]{} {} {} — {}{} barrier(s){}", kGreen,
+            barrier_pass_exec_ord, pass_i, kReset, to_string(pass.type()), pass.get_name(), kYellow,
+            barriers.size(), kReset);
+
+      for (size_t bi = 0; bi < barriers.size(); ++bi) {
+        const auto& barrier = barriers[bi];
         const auto dbg_name = debug_name(barrier.debug_id);
-        LINFO(CLR_PURPLE "RESOURCE: {}" CLR_RESET "", dbg_name.size() ? dbg_name : "no name lol");
-        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "SRC_ACCESS:"),
+        const bool layout_mismatch = barrier.src_state.layout != barrier.dst_state.layout;
+        const bool src_write = has_write_access(barrier.src_state.access);
+        const bool dst_write = has_write_access(barrier.dst_state.access);
+        std::string why;
+        if (layout_mismatch) {
+          why += "layout_mismatch ";
+        }
+        if (src_write) {
+          why += "src_write ";
+        }
+        if (dst_write) {
+          why += "dst_write ";
+        }
+        while (!why.empty() && why.back() == ' ') {
+          why.pop_back();
+        }
+
+        LINFO("{}  [{}/{}] {}{}{}{}", kDim, bi + 1, barriers.size(), kReset, kPurple,
+              dbg_name.size() ? dbg_name : "<unnamed>", kReset);
+        LINFO("\t{}physical: {} idx={}", kDim, to_string(barrier.resource.type),
+              barrier.resource.idx);
+        if (barrier.debug_id.is_valid()) {
+          LINFO("\t{}debug_id: idx={} type={} ver={}", kDim, barrier.debug_id.idx,
+                to_string(barrier.debug_id.type), barrier.debug_id.version);
+        }
+        LINFO("\t{}subresource: mip={} slice={} swapchain_write={}", kDim, barrier.subresource_mip,
+              barrier.subresource_slice, barrier.is_swapchain_write);
+        LINFO("\t{}why_barrier: [{}]", kDim, why.empty() ? "?" : why);
+        LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "SRC_ACCESS:", kReset),
               to_string(barrier.src_state.access));
-        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "DST_ACCESS:"),
+        LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "DST_ACCESS:", kReset),
               to_string(barrier.dst_state.access));
-        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "SRC_STAGE:"),
+        LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "SRC_STAGE:", kReset),
               to_string(barrier.src_state.stage));
-        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "DST_STAGE:"),
+        LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "DST_STAGE:", kReset),
               to_string(barrier.dst_state.stage));
-        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "SRC_LAYOUT:"),
+        LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "SRC_LAYOUT:", kReset),
               to_string(barrier.src_state.layout));
-        LINFO("\t{} {}", std::format(CLR_CYAN "{:<14}" CLR_RESET, "DST_LAYOUT:"),
+        LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "DST_LAYOUT:", kReset),
               to_string(barrier.dst_state.layout));
       }
-      LINFO("");
+      if (!barriers.empty()) {
+        LINFO("");
+      }
     }
+    ++barrier_pass_exec_ord;
+  }
+
+  if (verbose) {
+    LINFO("Barrier summary: {} barrier record(s) in {} pass(es) (execution order).",
+          barrier_total_count, barrier_pass_exec_ord);
   }
 
   if (verbose) {
@@ -1085,6 +1179,11 @@ RGResourceId RGPass::read_buf(RGResourceId id, rhi::PipelineStage stage) {
   return id;
 }
 
+RGResourceId RGPass::copy_from_buf(RGResourceId id) {
+  add_read_usage(id, rhi::PipelineStage::AllTransfer, rhi::AccessFlags::TransferRead);
+  return id;
+}
+
 RGResourceId RGPass::read_buf(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access) {
   add_read_usage(id, stage, access);
   return id;
@@ -1126,8 +1225,7 @@ RGResourceId RGPass::import_external_texture(rhi::TextureHandle tex_handle,
   return rg_->import_external_texture(tex_handle, debug_name);
 }
 
-RGResourceId RGPass::import_external_texture(rhi::TextureHandle tex_handle,
-                                             const RGState& initial,
+RGResourceId RGPass::import_external_texture(rhi::TextureHandle tex_handle, const RGState& initial,
                                              std::string_view debug_name) {
   return rg_->import_external_texture(tex_handle, initial, debug_name);
 }
@@ -1225,11 +1323,12 @@ void RenderGraph::Pass::w_swapchain_tex(rhi::Swapchain* swapchain) {
   swapchain_write_ = swapchain;
   auto curr_tex = swapchain->get_current_texture();
   ASSERT(type_ == RGPassType::Graphics);
-  auto swapchain_id =
-      rg_->import_external_texture(curr_tex,
-                                   RGState{.stage = rhi::PipelineStage::BottomOfPipe,
-                                           .layout = rhi::ResourceLayout::Present},
-                                   "swapchain");
+  // TODO: remove
+  [[maybe_unused]] auto* vulkan_swapchain = static_cast<gfx::vk::VulkanSwapchain*>(swapchain);
+  auto swapchain_id = rg_->import_external_texture(
+      curr_tex,
+      RGState{.stage = rhi::PipelineStage::BottomOfPipe, .layout = rhi::ResourceLayout::Present},
+      "swapchain");
   add_write_usage(swapchain_id, rhi::PipelineStage::ColorAttachmentOutput,
                   rhi::AccessFlags::ColorAttachmentWrite, true);
 }
@@ -1247,7 +1346,7 @@ void add_buffer_readback_copy(RenderGraph& rg, std::string_view pass_name, RGRes
                               rhi::BufferHandle dst_buf, RGResourceId dst_rg_id, size_t src_offset,
                               size_t dst_offset, size_t size_bytes) {
   auto& p = rg.add_transfer_pass(pass_name);
-  p.read_buf(src_buf, rhi::PipelineStage::AllTransfer);
+  p.copy_from_buf(src_buf);
   p.write_buf(dst_rg_id, rhi::PipelineStage::AllTransfer);
   p.set_ex([&rg, src_buf, dst_buf, dst_offset, src_offset, size_bytes](rhi::CmdEncoder* enc) {
     enc->copy_buffer_to_buffer(rg.get_buf(src_buf), src_offset, dst_buf, dst_offset, size_bytes);

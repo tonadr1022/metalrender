@@ -3,6 +3,7 @@
 #include <vulkan/vulkan_core.h>
 
 #include "core/Config.hpp"
+#include "core/Logger.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Pipeline.hpp"
@@ -69,7 +70,8 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
                            size_t /*src_bytes_per_row*/, rhi::TextureHandle /*dst_tex*/,
                            glm::uvec3 /*src_size*/, glm::uvec3 /*dst_origin*/,
                            int /*mip_level*/) override {
-    ASSERT(0);
+    // ASSERT(0);
+    LWARN("");
   }
 
   void copy_tex_to_buf(rhi::TextureHandle src_tex, size_t src_slice, size_t src_level,

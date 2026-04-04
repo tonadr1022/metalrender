@@ -88,8 +88,8 @@ class CmdEncoder {
                        int32_t base_array_layer) = 0;
   virtual void barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage,
                        rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
-                       rhi::AccessFlags dst_access, rhi::ResourceLayout src_layout,
-                       rhi::ResourceLayout dst_layout, int32_t base_mip_level,
+                       rhi::AccessFlags dst_access, rhi::ResourceLayout /*src_layout*/,
+                       rhi::ResourceLayout /*dst_layout*/, int32_t base_mip_level,
                        int32_t base_array_layer) {
     barrier(tex, src_stage, src_access, dst_stage, dst_access, base_mip_level, base_array_layer);
   }

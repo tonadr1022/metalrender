@@ -132,18 +132,22 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   }
   add_render_graph_passes(args);
   device_->acquire_next_swapchain_image(swapchain_);
-  // static size_t i = 0;
-  // if (i++ == 0) {
-  //   renderer_cv::developer_render_graph_verbose.set(1);
-  // } else {
-  //   renderer_cv::developer_render_graph_verbose.set(0);
-  // }
+  static size_t i = 0;
+  if (i++ == 0) {
+    renderer_cv::developer_render_graph_verbose.set(1);
+  } else {
+    renderer_cv::developer_render_graph_verbose.set(0);
+  }
 
   rg_.bake(window_->get_window_size(), renderer_cv::developer_render_graph_verbose.get() != 0);
   static std::vector<rhi::CmdEncoder*> wait_for_encoders;
   wait_for_encoders.clear();
   {
-    auto* enc = device_->begin_cmd_encoder(rhi::QueueType::Copy);
+    static int i = 0;
+    if (i++ == 0) {
+      LWARN("Copy queue not supported yet, defaulting to graphics queue");
+    }
+    auto* enc = device_->begin_cmd_encoder(rhi::QueueType::Graphics);
     if (!buffer_copy_mgr_.get_copies().empty()) {
       for (const auto& copy : buffer_copy_mgr_.get_copies()) {
         if (!copy.src_buf.is_valid() || !device_->get_buf(copy.src_buf)) {
@@ -304,8 +308,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
             renderer_cv::culling_enabled.get() != 0 &&
             renderer_cv::pipeline_mesh_shaders.get() != 0 && view_id == main_render_view_id_;
         if (depth_pyramid_read_by_draw_cull) {
-          prep_meshlets_pass.read_tex(final_depth_pyramid_ids[(int)view_id],
-                                      rhi::PipelineStage::ComputeShader);
+          prep_meshlets_pass.sample_tex(final_depth_pyramid_ids[(int)view_id],
+                                        rhi::PipelineStage::ComputeShader);
         }
       }
       if (!instance_vis_rg_ids.empty()) {
@@ -635,7 +639,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
                                        "_view:" + std::to_string((int)view_id));
         RGResourceId depth_handle{};
         if (mip == 0) {
-          depth_handle = p.read_tex(depth_ids[(int)view_id], rhi::PipelineStage::ComputeShader);
+          depth_handle = p.sample_tex(depth_ids[(int)view_id], rhi::PipelineStage::ComputeShader);
         }
         if (mip == 0) {
           p.write_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader,
@@ -759,7 +763,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       auto dims = gbuffer_a_tex->desc().dims;
       ASSERT(depth_tex->desc().dims == dims);
       device_->begin_swapchain_rendering(swapchain_, enc);
-      enc->bind_pipeline(tex_only_pso_);
+      enc->bind_pipeline(get_shadows_enabled() ? tex_only_shadow_pso_ : tex_only_pso_);
       enc->set_wind_order(rhi::WindOrder::Clockwise);
       enc->set_cull_mode(rhi::CullMode::Back);
       enc->set_viewport({0, 0}, dims);
@@ -1590,6 +1594,10 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
 
     tex_only_pso_ = shader_mgr_->create_graphics_pipeline({
         .shaders = {{{"fullscreen_quad", ShaderType::Vertex}, {"tex_only", ShaderType::Fragment}}},
+    });
+    tex_only_shadow_pso_ = shader_mgr_->create_graphics_pipeline({
+        .shaders = {{{"fullscreen_quad", ShaderType::Vertex},
+                     {"tex_only_shadow", ShaderType::Fragment}}},
     });
 
     draw_cull_pso_ = shader_mgr_->create_compute_pipeline({"draw_cull"});

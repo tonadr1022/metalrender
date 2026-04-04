@@ -20,7 +20,7 @@ namespace teng::gfx {
 TestRenderer::TestRenderer(const CreateInfo& cinfo)
     : device_(cinfo.device),
       swapchain_(cinfo.swapchain),
-      frame_gpu_upload_allocator_(device_),
+      frame_gpu_upload_allocator_(device_, false),
       buffer_copy_mgr_(device_, frame_gpu_upload_allocator_),
       window_(cinfo.window) {
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
@@ -57,6 +57,7 @@ void TestRenderer::render() {
   add_render_graph_passes();
   static int i = 0;
   bool verbose = i++ == 0;
+  LINFO("Frame {}", i);
   device_->acquire_next_swapchain_image(swapchain_);
   rg_.bake(window_->get_window_size(), verbose);
   rg_.execute();

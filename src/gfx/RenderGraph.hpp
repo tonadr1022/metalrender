@@ -162,9 +162,13 @@ class RenderGraph {
     Pass() = default;
     Pass(NameId name_id, RenderGraph* rg, uint32_t pass_i, RGPassType type);
 
+    // Sampled image (HLSL Texture* with .Sample / .SampleLevel / .Load -> SPIR-V OpImageFetch).
+    // Barriers use ShaderReadOnly / SHADER_READ_ONLY_OPTIMAL; bind with bind_srv (SAMPLED_IMAGE).
     RGResourceId sample_tex(RGResourceId id);
     RGResourceId sample_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip = -1,
                             int32_t subresource_slice = -1);
+    // Storage read (ShaderStorageRead -> compute GENERAL). Use for RWTexture2D[] / storage buffers,
+    // not for Texture2D + bind_srv; that layout must match storage descriptors (e.g. bind_uav).
     RGResourceId read_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip = -1,
                           int32_t subresource_slice = -1);
     RGResourceId write_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip = -1,
@@ -178,6 +182,7 @@ class RenderGraph {
     RGResourceId rw_depth_output(RGResourceId input);
     void w_swapchain_tex(rhi::Swapchain* swapchain);
     RGResourceId read_buf(RGResourceId id, rhi::PipelineStage stage);
+    RGResourceId copy_from_buf(RGResourceId id);
     RGResourceId read_buf(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access);
     RGResourceId write_buf(RGResourceId id, rhi::PipelineStage stage);
     RGResourceId rw_buf(RGResourceId input, rhi::PipelineStage stage);
