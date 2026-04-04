@@ -17,11 +17,15 @@ struct CompileOptions {
   bool emit_dxil = true;
   bool emit_spirv = true;
   bool emit_depfile = true;
+#if defined(__APPLE__)
   bool emit_metallib = true;
+#else
+  bool emit_metallib = false;
+#endif
   bool mesh_shader_enabled = true;
 };
 
-/// Invokes dxc and metal-shaderconverter like ShaderManager did (cwd must be project root).
+/// Invokes dxc (and on macOS, metal-shaderconverter when emit_metallib); cwd must be project root.
 /// On failure, fills `error` with a short message if non-null.
 [[nodiscard]] bool compile_hlsl_file(const std::filesystem::path& source_hlsl,
                                      const CompileOptions& options = {},

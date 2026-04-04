@@ -34,7 +34,7 @@ class TestRenderer {
     rhi::Swapchain* swapchain;
     Window* window;
     std::filesystem::path resource_dir;
-    TestDebugScene initial_scene{TestDebugScene::ComputePlusVertexOverlay};
+    TestDebugScene initial_scene{TestDebugScene::TexturedCubeProcedural};
   };
   explicit TestRenderer(const CreateInfo& cinfo);
   void render();
@@ -48,7 +48,7 @@ class TestRenderer {
   [[nodiscard]] TestSceneContext make_ctx();
 
   std::unique_ptr<ITestScene> scene_;
-  TestDebugScene active_scene_{TestDebugScene::ComputePlusVertexOverlay};
+  TestDebugScene active_scene_{TestDebugScene::TexturedCubeProcedural};
 
   std::unique_ptr<gfx::ShaderManager> shader_mgr_;
   rhi::Device* device_;

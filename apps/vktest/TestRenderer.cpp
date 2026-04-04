@@ -1,5 +1,7 @@
 #include "TestRenderer.hpp"
 
+#include <GLFW/glfw3.h>
+
 #include "Window.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
 #include "gfx/ShaderManager.hpp"
@@ -33,7 +35,9 @@ TestSceneContext TestRenderer::make_ctx() {
           .window = window_,
           .shader_mgr = shader_mgr_.get(),
           .rg = &rg_,
-          .buffer_copy = &buffer_copy_mgr_};
+          .buffer_copy = &buffer_copy_mgr_,
+          .frame_staging = &frame_gpu_upload_allocator_,
+          .time_sec = static_cast<float>(glfwGetTime())};
 }
 
 void TestRenderer::set_scene(TestDebugScene id) {

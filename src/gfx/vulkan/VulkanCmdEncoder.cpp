@@ -161,6 +161,28 @@ VkImageLayout layout_from_vk_access(VkAccessFlags2 access) {
   return VK_IMAGE_LAYOUT_UNDEFINED;
 }
 
+[[nodiscard]] uint32_t uncompressed_texel_bytes(rhi::TextureFormat fmt) {
+  using enum rhi::TextureFormat;
+  switch (fmt) {
+    case R8G8B8A8Srgb:
+    case R8G8B8A8Unorm:
+    case B8G8R8A8Unorm:
+    case B8G8R8A8Srgb:
+    case R32float:
+    case D32float:
+      return 4;
+    case R16G16B16A16Sfloat:
+      return 8;
+    case R32G32B32A32Sfloat:
+      return 16;
+    case Undefined:
+    case ASTC4x4UnormBlock:
+    case ASTC4x4SrgbBlock:
+    default:
+      return 0;
+  }
+}
+
 VkImageAspectFlags convert(rhi::ImageAspect aspect) {
   VkImageAspectFlags flags{};
   if (aspect & rhi::ImageAspect_Color) {
@@ -357,9 +379,58 @@ void VulkanCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 extent) {
   vkCmdSetScissor(cmd(), 0, 1, &scissor);
 }
 
-void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle /*src_buf*/, size_t /*src_offset*/,
-                                           size_t /*src_bytes_per_row*/,
-                                           rhi::TextureHandle /*dst_tex*/) {}
+void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
+                                           size_t src_bytes_per_row, rhi::TextureHandle dst_tex) {
+  upload_texture_data(src_buf, src_offset, src_bytes_per_row, dst_tex, glm::uvec3{0, 0, 0},
+                      glm::uvec3{0, 0, 0}, -1);
+}
+
+void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,
+                                           size_t src_bytes_per_row, rhi::TextureHandle dst_tex,
+                                           glm::uvec3 src_size, glm::uvec3 dst_origin,
+                                           int mip_level) {
+  auto* tex = (VulkanTexture*)device_->get_tex(dst_tex);
+  ASSERT(tex);
+  auto* buf = static_cast<VulkanBuffer*>(device_->get_buf(src_buf));
+  ASSERT(buf);
+  if (src_size.x == 0 && src_size.y == 0 && src_size.z == 0) {
+    src_size = {tex->desc().dims.x, tex->desc().dims.y, std::max(1u, tex->desc().dims.z)};
+  }
+  const uint32_t bpp = uncompressed_texel_bytes(tex->desc().format);
+  ASSERT(bpp > 0);
+  ASSERT(src_bytes_per_row % bpp == 0);
+  const uint32_t row_texels = static_cast<uint32_t>(src_bytes_per_row / bpp);
+  ASSERT(row_texels >= static_cast<uint32_t>(src_size.x));
+  VkBufferImageCopy region{
+      .bufferOffset = static_cast<VkDeviceSize>(src_offset),
+      .bufferRowLength = (row_texels == static_cast<uint32_t>(src_size.x)) ? 0u : row_texels,
+      .bufferImageHeight = 0,
+  };
+  region.imageSubresource.mipLevel = mip_level < 0 ? 0 : static_cast<uint32_t>(mip_level);
+  region.imageSubresource.baseArrayLayer = 0;
+  region.imageSubresource.layerCount = 1;
+  // TODO: don't hard code this
+  region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  region.imageOffset.x = static_cast<int32_t>(dst_origin.x);
+  region.imageOffset.y = static_cast<int32_t>(dst_origin.y);
+  region.imageOffset.z = static_cast<int32_t>(dst_origin.z);
+  region.imageExtent.width = static_cast<uint32_t>(src_size.x);
+  region.imageExtent.height = static_cast<uint32_t>(src_size.y);
+  region.imageExtent.depth = static_cast<uint32_t>(src_size.z);
+
+  flush_barriers();
+  barrier(dst_tex, rhi::PipelineStage::TopOfPipe, rhi::AccessFlags::None,
+          rhi::PipelineStage::AllTransfer, rhi::AccessFlags::TransferWrite,
+          rhi::ResourceLayout::Undefined, rhi::ResourceLayout::TransferDst, -1, -1);
+  flush_barriers();
+  vkCmdCopyBufferToImage(cmd(), buf->buffer(), tex->image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                         1, &region);
+  flush_barriers();
+  barrier(dst_tex, rhi::PipelineStage::AllTransfer, rhi::AccessFlags::TransferWrite,
+          rhi::PipelineStage::FragmentShader, rhi::AccessFlags::ShaderSampledRead,
+          rhi::ResourceLayout::TransferDst, rhi::ResourceLayout::ShaderReadOnly, -1, -1);
+}
+
 void VulkanCmdEncoder::copy_tex_to_buf(rhi::TextureHandle /*src_tex*/, size_t /*src_slice*/,
                                        size_t /*src_level*/, rhi::BufferHandle /*dst_buf*/,
                                        size_t /*dst_offset*/) {}
@@ -534,23 +605,23 @@ void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_st
 
 void VulkanCmdEncoder::flush_barriers() {
   if (!buf_barriers_.empty() || !img_barriers_.empty()) {
-    for (const auto& buf_barrier : buf_barriers_) {
-      // LINFO("buf_barrier: src_stage={} src_access={} dst_stage={} dst_access={}",
-      //       string_VkPipelineStageFlags2(buf_barrier.srcStageMask),
-      //       string_VkAccessFlags2(buf_barrier.srcAccessMask),
-      //       string_VkPipelineStageFlags2(buf_barrier.dstStageMask),
-      //       string_VkAccessFlags2(buf_barrier.dstAccessMask));
-    }
-    for (const auto& img_barrier : img_barriers_) {
-      // std::println(
-      //     "img_barrier: {} {} {} {} {} {}",
-      //     string_VkPipelineStageFlags2(img_barrier.srcStageMask),
-      //     string_VkAccessFlags2(img_barrier.srcAccessMask),
-      //     string_VkPipelineStageFlags2(img_barrier.dstStageMask),
-      //     string_VkAccessFlags2(img_barrier.dstAccessMask),
-      //     string_VkImageLayout(img_barrier.oldLayout),
-      //     string_VkImageLayout(img_barrier.newLayout));
-    }
+    // for (const auto& buf_barrier : buf_barriers_) {
+    // LINFO("buf_barrier: src_stage={} src_access={} dst_stage={} dst_access={}",
+    //       string_VkPipelineStageFlags2(buf_barrier.srcStageMask),
+    //       string_VkAccessFlags2(buf_barrier.srcAccessMask),
+    //       string_VkPipelineStageFlags2(buf_barrier.dstStageMask),
+    //       string_VkAccessFlags2(buf_barrier.dstAccessMask));
+    // }
+    // for (const auto& img_barrier : img_barriers_) {
+    // std::println(
+    //     "img_barrier: {} {} {} {} {} {}",
+    //     string_VkPipelineStageFlags2(img_barrier.srcStageMask),
+    //     string_VkAccessFlags2(img_barrier.srcAccessMask),
+    //     string_VkPipelineStageFlags2(img_barrier.dstStageMask),
+    //     string_VkAccessFlags2(img_barrier.dstAccessMask),
+    //     string_VkImageLayout(img_barrier.oldLayout),
+    //     string_VkImageLayout(img_barrier.newLayout));
+    // }
     VkDependencyInfo info{
         .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
         .bufferMemoryBarrierCount = (uint32_t)buf_barriers_.size(),

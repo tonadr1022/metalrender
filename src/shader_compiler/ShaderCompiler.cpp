@@ -177,6 +177,7 @@ bool compile_hlsl_file(const fs::path& source_hlsl, const CompileOptions& option
     }
   }
 
+#if defined(__APPLE__)
   if (options.emit_metallib) {
     auto metallib_path =
         (fs::path("resources/shader_out/metal") / relative).replace_extension(".metallib");
@@ -193,6 +194,7 @@ bool compile_hlsl_file(const fs::path& source_hlsl, const CompileOptions& option
       return false;
     }
   }
+#endif
 
   return true;
 }

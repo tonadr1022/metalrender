@@ -13,6 +13,7 @@ class Window;
 namespace gfx {
 
 class ShaderManager;
+struct GPUFrameAllocator3;
 
 namespace rhi {
 
@@ -28,9 +29,12 @@ struct TestSceneContext {
   ShaderManager* shader_mgr{};
   RenderGraph* rg{};
   BufferCopyMgr* buffer_copy{};
+  GPUFrameAllocator3* frame_staging{};
+  float time_sec{};
 };
 
 enum class TestDebugScene : uint8_t {
+  TexturedCubeProcedural,
   ComputePlusVertexOverlay,
   MeshHelloTriangle,
   Count,
