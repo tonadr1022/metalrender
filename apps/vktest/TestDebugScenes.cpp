@@ -334,6 +334,23 @@ class TexturedCubeProceduralScene final : public ITestScene {
   bool checker_upload_done_{};
 };
 
+class MeshletRendererScene final : public ITestScene {
+ public:
+  void on_swapchain_resize(const TestSceneContext&) override {}
+
+  void add_render_graph_passes(const TestSceneContext&) override {}
+
+  void init(const TestSceneContext& ctx) override {
+    meshlet_pso_ = ctx.device->create_graphics_pipeline_h({
+        .shaders = {{"test_meshlet_renderer", ShaderType::Mesh},
+                    {"test_meshlet_renderer", ShaderType::Fragment}},
+    });
+  }
+
+ private:
+  PipelineHandleHolder meshlet_pso_;
+};
+
 }  // namespace
 
 const char* to_string(TestDebugScene s) {
@@ -344,6 +361,8 @@ const char* to_string(TestDebugScene s) {
       return "MeshHelloTriangle";
     case TestDebugScene::TexturedCubeProcedural:
       return "TexturedCubeProcedural";
+    case TestDebugScene::MeshletRenderer:
+      return "MeshletRenderer";
     case TestDebugScene::Count:
     default:
       return "Invalid";

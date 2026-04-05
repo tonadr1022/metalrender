@@ -37,6 +37,7 @@ enum class TestDebugScene : uint8_t {
   TexturedCubeProcedural,
   ComputePlusVertexOverlay,
   MeshHelloTriangle,
+  MeshletRenderer,
   Count,
 };
 
