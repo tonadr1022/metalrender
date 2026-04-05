@@ -6,7 +6,7 @@ namespace renderer_cv {
 
 AutoCVarInt pipeline_mesh_shaders{
     "renderer.pipeline.mesh_shaders",
-    "Use mesh-shader path when supported (requires restart if toggled).", 1,
+    "Use mesh-shader path when supported (requires restart if toggled).", 0,
     CVarFlags::EditCheckbox};
 AutoCVarInt culling_paused{"renderer.culling.paused", "Freeze culling updates.", 0,
                            CVarFlags::EditCheckbox};
@@ -26,7 +26,7 @@ AutoCVarInt shadows_enabled{"renderer.shadows.enabled", "Enable shadow mapping."
 AutoCVarInt debug_render_mode{"renderer.debug.render_mode",
                               "Debug visualization mode (see DebugRenderMode).", 0,
                               CVarFlags::Advanced};
-AutoCVarInt ui_imgui_enabled{"renderer.ui.imgui", "Draw ImGui overlay.", 1,
+AutoCVarInt ui_imgui_enabled{"renderer.ui.imgui", "Draw ImGui overlay.", 0,
                              CVarFlags::EditCheckbox};
 AutoCVarInt developer_render_graph_verbose{
     "renderer.developer.render_graph_verbose", "Verbose RenderGraph bake logging.", 0,

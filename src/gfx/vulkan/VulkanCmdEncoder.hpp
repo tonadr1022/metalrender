@@ -75,14 +75,10 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   void copy_buffer_to_buffer(rhi::BufferHandle src_buf, size_t src_offset,
                              rhi::BufferHandle dst_buf, size_t dst_offset, size_t size) override;
 
-  // Metal-only today: builds ICBs from IndexedIndirectDrawCmd. For non-meshlet GBuffer on Vulkan,
-  // implement vkCmdDrawIndexedIndirect (or multi-draw) instead of ASSERT\(0\).
   [[nodiscard]] uint32_t prepare_indexed_indirect_draws(
-      rhi::BufferHandle /*indirect_buf*/, size_t /*offset*/, size_t /*tot_draw_cnt*/,
-      rhi::BufferHandle /*index_buf*/, size_t /*index_buf_offset*/, void* /*push_constant_data*/,
-      size_t /*push_constant_size*/, size_t /*vertex_stride*/) override {
-    ASSERT(0);
-  }
+      rhi::BufferHandle indirect_buf, size_t offset, size_t tot_draw_cnt,
+      rhi::BufferHandle index_buf, size_t index_buf_offset, void* push_constant_data,
+      size_t push_constant_size, size_t vertex_stride) override;
 
   void barrier(rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access) override;

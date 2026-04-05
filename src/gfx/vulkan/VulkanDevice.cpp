@@ -927,6 +927,9 @@ rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder(rhi::QueueType queue_type) {
   auto& enc = *cmd_encoders_[curr_cmd_encoder_i_];
   enc.curr_frame_i_ = frame_idx();
   enc.submit_swapchains_.clear();
+  if (curr_cmd_encoder_i_ == 0) {
+    indexed_indirect_pc_cache_[frame_idx()].slots.clear();
+  }
   static int i = 0;
   if (i++ == 0) {
     LWARN("Copy queue not supported yet, defaulting to graphics queue");
@@ -1521,8 +1524,8 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
     uint32_t swapchain_image_count{};
     VK_CHECK(
         vkGetSwapchainImagesKHR(device_, swapchain->swapchain_, &swapchain_image_count, nullptr));
-    VkImage swapchain_images[16];
-    ASSERT(swapchain_image_count <= 16);
+    VkImage swapchain_images[k_max_swapchain_images];
+    ASSERT(swapchain_image_count <= k_max_swapchain_images);
     VK_CHECK(vkGetSwapchainImagesKHR(device_, swapchain->swapchain_, &swapchain_image_count,
                                      swapchain_images));
     rhi::TextureDesc tex_desc{
@@ -1536,6 +1539,7 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
     swapchain->desc_.width = swap_info.imageExtent.width;
     swapchain->desc_.height = swap_info.imageExtent.height;
     for (uint32_t i = 0; i < swapchain_image_count; i++) {
+      ASSERT(i < (uint32_t)ARRAY_SIZE(swapchain->textures_));
       if (swapchain->textures_[i].is_valid()) {
         destroy(swapchain->textures_[i]);
       }
@@ -1557,6 +1561,7 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
       if (sem) del_q_.enqueue(sem);
     }
     for (uint32_t i = 0; i < swapchain_image_count; i++) {
+      ASSERT(i < (uint32_t)ARRAY_SIZE(swapchain->acquire_semaphores_));
       swapchain->acquire_semaphores_[i] =
           create_semaphore(("swapchain_acquire_semaphore_" + std::to_string(i)).c_str());
     }
@@ -1564,6 +1569,7 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
       if (sem) del_q_.enqueue(sem);
     }
     for (uint32_t i = 0; i < swapchain_image_count; i++) {
+      ASSERT(i < (uint32_t)ARRAY_SIZE(swapchain->ready_to_present_semaphores_));
       swapchain->ready_to_present_semaphores_[i] =
           create_semaphore(("swapchain_present_semaphore_" + std::to_string(i)).c_str());
     }

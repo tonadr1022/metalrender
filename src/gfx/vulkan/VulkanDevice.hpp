@@ -2,6 +2,7 @@
 
 #include <vulkan/vulkan_core.h>
 
+#include <cstdint>
 #include <mutex>
 #include <vector>
 
@@ -84,10 +85,13 @@ class VulkanDevice : public rhi::Device {
   bool replace_pipeline(rhi::PipelineHandle /*handle*/,
                         const rhi::GraphicsPipelineCreateInfo& /*cinfo*/) override {
     ASSERT(0);
+    return false;
   }
+
   bool replace_compute_pipeline(rhi::PipelineHandle /*handle*/,
                                 const rhi::ShaderCreateInfo& /*cinfo*/) override {
     ASSERT(0);
+    return false;
   }
 
   rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) override;
@@ -109,7 +113,7 @@ class VulkanDevice : public rhi::Device {
   void resolve_query_data(rhi::QueryPoolHandle /*query_pool*/, uint32_t /*start_query*/,
                           uint32_t /*query_count*/,
                           std::span<uint64_t> /*out_timestamps*/) override {
-    ASSERT(0);
+    // ASSERT(0);
   }
 
   [[nodiscard]] void* get_native_device() const override { return device_; }
@@ -124,6 +128,7 @@ class VulkanDevice : public rhi::Device {
   }
 
  private:
+  friend class VulkanCmdEncoder;
   size_t frame_idx() const { return frame_num_ % info_.frames_in_flight; }
   // TODO: doesn't handle arrays.
   VkImageView create_img_view(VulkanTexture& img, VkImageViewType type,
@@ -166,6 +171,19 @@ class VulkanDevice : public rhi::Device {
 
   std::vector<std::unique_ptr<VulkanCmdEncoder>> cmd_encoders_;
   size_t curr_cmd_encoder_i_{};
+  // Per in-flight frame slot: push constant blobs from prepare_indexed_indirect_draws, keyed by
+  // returned id. Cleared when the first encoder of a submission batch begins (see
+  // begin_cmd_encoder).
+  struct IndexedIndirectPCSlots {
+    struct Slot {
+      std::vector<uint8_t> pc;
+      rhi::BufferHandle index_buf;
+      size_t index_buf_offset;
+    };
+    std::vector<Slot> slots;
+  };
+
+  IndexedIndirectPCSlots indexed_indirect_pc_cache_[k_max_frames_in_flight]{};
   VmaAllocator allocator_;
   size_t frame_num_{};
   std::filesystem::path shader_lib_dir_;

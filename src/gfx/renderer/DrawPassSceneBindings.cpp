@@ -30,7 +30,6 @@ void encode_meshlet_mesh_draw_pass(
   if (enable_meshlet_occlusion_cull) {
     enc->bind_uav(rg.get_external_buffer(mesh_pass.meshlet_vis), 1);
     if (cull_phase == DrawCullPhase::Late) {
-      LINFO("bind depth pyramid tex");
       enc->bind_srv(mesh_pass.render_view.depth_pyramid_tex.handle, 3);
     }
   }

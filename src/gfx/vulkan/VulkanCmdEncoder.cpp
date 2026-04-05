@@ -456,10 +456,54 @@ void VulkanCmdEncoder::barrier(rhi::PipelineStage /*src_stage*/, rhi::AccessFlag
                                rhi::PipelineStage /*dst_stage*/, rhi::AccessFlags /*dst_access*/) {
   ASSERT(0 && "TODO");
 }
-// Stub: pair with prepare_indexed_indirect_draws for a future Vulkan non-meshlet path.
-void VulkanCmdEncoder::draw_indexed_indirect(rhi::BufferHandle /*indirect_buf*/,
-                                             uint32_t /* indirect_buf_id */, size_t /*draw_cnt*/,
-                                             size_t /*offset_i*/) {}
+
+uint32_t VulkanCmdEncoder::prepare_indexed_indirect_draws(
+    [[maybe_unused]] rhi::BufferHandle indirect_buf, [[maybe_unused]] size_t offset,
+    [[maybe_unused]] size_t tot_draw_cnt, [[maybe_unused]] rhi::BufferHandle index_buf,
+    [[maybe_unused]] size_t index_buf_offset, void* push_constant_data, size_t push_constant_size,
+    [[maybe_unused]] size_t vertex_stride) {
+  ASSERT(push_constant_size <= 256u);
+  if (push_constant_size > 0) {
+    ASSERT(push_constant_data);
+  }
+  auto& slot = device_->indexed_indirect_pc_cache_[curr_frame_i_];
+  slot.slots.emplace_back(VulkanDevice::IndexedIndirectPCSlots::Slot{
+      .pc = std::vector<uint8_t>(push_constant_size),
+      .index_buf = index_buf,
+      .index_buf_offset = index_buf_offset,
+  });
+  if (push_constant_size > 0) {
+    std::memcpy(slot.slots.back().pc.data(), push_constant_data, push_constant_size);
+  }
+  return static_cast<uint32_t>(slot.slots.size() - 1);
+}
+
+void VulkanCmdEncoder::draw_indexed_indirect(rhi::BufferHandle indirect_buf,
+                                             uint32_t indirect_buf_id, size_t draw_cnt,
+                                             size_t offset_i) {
+  flush_binds();
+  auto& slot = device_->indexed_indirect_pc_cache_[curr_frame_i_];
+  ASSERT(indirect_buf_id < slot.slots.size());
+  const std::vector<uint8_t>& pc = slot.slots[indirect_buf_id].pc;
+  if (!pc.empty()) {
+    ASSERT(bound_pipeline_);
+    ASSERT(bound_pipeline_->layout_);
+    ASSERT(bound_pipeline_->push_constant_stages_ != 0);
+    vkCmdPushConstants(cmd(), bound_pipeline_->layout_, bound_pipeline_->push_constant_stages_, 0,
+                       static_cast<uint32_t>(pc.size()), pc.data());
+  }
+  auto* buf = static_cast<VulkanBuffer*>(device_->get_buf(indirect_buf));
+  ASSERT(buf);
+  auto* index_buf =
+      static_cast<VulkanBuffer*>(device_->get_buf(slot.slots[indirect_buf_id].index_buf));
+  ASSERT(index_buf);
+  vkCmdBindIndexBuffer(cmd(), index_buf->buffer(), slot.slots[indirect_buf_id].index_buf_offset,
+                       // TODO: don't hard code u32
+                       VK_INDEX_TYPE_UINT32);
+  vkCmdSetPrimitiveTopologyEXT(cmd(), VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST);
+  vkCmdDrawIndexedIndirect(cmd(), buf->buffer(), offset_i, draw_cnt,
+                           sizeof(VkDrawIndexedIndirectCommand));
+}
 
 void VulkanCmdEncoder::draw_mesh_threadgroups(glm::uvec3 thread_groups,
                                               glm::uvec3 /*threads_per_task_thread_group*/,

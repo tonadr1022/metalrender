@@ -14,7 +14,7 @@ using namespace rhi;
 
 void GBufferRenderer::declare_indexed_indirect_gbuffer_barriers(RenderGraph::Pass& p,
                                                                 RGResourceId indirect_cmds_rg) {
-  p.read_buf(indirect_cmds_rg, PipelineStage::DrawIndirect);
+  p.read_buf(indirect_cmds_rg, PipelineStage::DrawIndirect, AccessFlags::IndirectCommandRead);
 }
 
 void GBufferRenderer::encode_indexed_indirect_gbuffer_pass(rhi::CmdEncoder* enc,
