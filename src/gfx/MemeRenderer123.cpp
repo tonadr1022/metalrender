@@ -1549,12 +1549,12 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
       static_instance_mgr_(*device_, buffer_copy_mgr_, device_->get_info().frames_in_flight, *this),
       static_draw_batch_(GeometryBatchType::Static, *device_, buffer_copy_mgr_,
                          GeometryBatch::CreateInfo{
-                             .initial_vertex_capacity = 1'000,
-                             .initial_index_capacity = 1'000,
-                             .initial_meshlet_capacity = 1'000,
-                             .initial_mesh_capacity = 100'0,
-                             .initial_meshlet_triangle_capacity = 1'000,
-                             .initial_meshlet_vertex_capacity = 1'000,
+                             .initial_vertex_capacity = 1'000'000,
+                             .initial_index_capacity = 1'000'000,
+                             .initial_meshlet_capacity = 1'000'000,
+                             .initial_mesh_capacity = 100'000,
+                             .initial_meshlet_triangle_capacity = 1'000'000,
+                             .initial_meshlet_vertex_capacity = 1'000'000,
                          }) {
   ZoneScoped;
   window_ = cinfo.window;

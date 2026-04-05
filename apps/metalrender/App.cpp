@@ -592,6 +592,8 @@ void App::clear_all_models() {
 void App::load_scene_presets() {
   scene_presets_.clear();
   scene_presets_.reserve(10);
+  scene_presets_.emplace_back([&, this]() { load_model(suzanne_path); }, "suzanne",
+                              Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});
   scene_presets_.emplace_back([&, this]() { load_model(sponza_path); }, "sponza",
                               Camera{.pos = {-6, 2.5, 0}, .move_speed = 2.0f});
   scene_presets_.emplace_back(
@@ -603,8 +605,6 @@ void App::load_scene_presets() {
   scene_presets_.emplace_back(
       [&, this]() { load_grid(glm::ivec3{4, 0, 4}, 1.0, chessboard_path, 10.0); },
       "chessboard grid", Camera{.pos = {-30, 10, -20}, .pitch = -25, .yaw = 40, .move_speed = 2.f});
-  scene_presets_.emplace_back([&, this]() { load_model(suzanne_path); }, "suzanne",
-                              Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});
   scene_presets_.emplace_back([&, this]() { load_random_of_model(3000, 30.f, 1000, suzanne_path); },
                               "random suzannes",
                               Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});

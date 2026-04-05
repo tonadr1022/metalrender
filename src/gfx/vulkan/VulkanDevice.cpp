@@ -427,7 +427,6 @@ void VulkanDevice::init(const InitInfo& init_info) {
       VK_KHR_SWAPCHAIN_EXTENSION_NAME,           VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,
       VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME,   VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME,
       VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME, VK_EXT_MESH_SHADER_EXTENSION_NAME,
-      VK_NV_MESH_SHADER_EXTENSION_NAME,
   };
   phys_device_selector.add_required_extensions(ARRAY_SIZE(required_extensions),
                                                required_extensions);

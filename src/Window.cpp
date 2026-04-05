@@ -16,6 +16,11 @@ void Window::init(InitInfo& init_info) {
   this->key_callback_fn_ = std::move(init_info.key_callback_fn);
   this->cursor_pos_callback_fn_ = std::move(init_info.cursor_pos_callback_fn);
   this->framebuffer_resize_callback_fn_ = std::move(init_info.framebuffer_resize_callback_fn);
+  // Force X11 / XWayland when running under RenderDoc
+  if (getenv("RENDERDOC_CAPTURE") || getenv("RENDERDOC_LAYER")) {
+    setenv("GLFW_PLATFORM", "x11", 1);  // if using GLFW (newer GLFW)
+    setenv("WAYLAND_DISPLAY", "", 1);   // unset Wayland to fall back to X11
+  }
   if (!glfwInit()) {
     LCRITICAL("Failed to initialize glfw");
     exit(1);
