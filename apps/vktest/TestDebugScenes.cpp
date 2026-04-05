@@ -7,7 +7,10 @@
 
 #include "Camera.hpp"
 #include "core/EAssert.hpp"
+#include "core/Logger.hpp"
 #include "core/Util.hpp"
+#include "gfx/GPUFrameAllocator2.hpp"
+#include "gfx/ImGuiRenderer.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -172,7 +175,7 @@ static_assert(sizeof(CubePush) == 72);
 }
 
 [[nodiscard]] std::vector<uint32_t> make_checker_rgba(uint32_t dim, uint32_t cell_px) {
-  std::vector<uint32_t> px(dim * dim);
+  std::vector<uint32_t> px((size_t)dim * dim);
   for (uint32_t y = 0; y < dim; y++) {
     for (uint32_t x = 0; x < dim; x++) {
       bool white = (((x / cell_px) + (y / cell_px)) & 1u) == 0;
@@ -281,7 +284,7 @@ class TexturedCubeProceduralScene final : public ITestScene {
         const uint32_t w = checker_dim_;
         const uint32_t h = checker_dim_;
         const size_t src_bpr = static_cast<size_t>(w) * 4u;
-        const size_t dst_bpr = static_cast<size_t>(align_up(static_cast<uint64_t>(src_bpr), 256));
+        const auto dst_bpr = static_cast<size_t>(align_up(static_cast<uint64_t>(src_bpr), 256));
         auto upload = ctx.frame_staging->alloc(static_cast<uint32_t>(dst_bpr * h));
         for (uint32_t row = 0; row < h; row++) {
           std::memcpy(static_cast<std::byte*>(upload.write_ptr) + row * dst_bpr,
@@ -318,6 +321,10 @@ class TexturedCubeProceduralScene final : public ITestScene {
       enc->push_constants(&pc, sizeof(pc));
 
       enc->draw_mesh_threadgroups({1, 1, 1}, {1, 1, 1}, {128, 1, 1});
+
+      ctx.imgui_renderer->render(enc, {ctx.swapchain->desc_.width, ctx.swapchain->desc_.height},
+                                 ctx.curr_frame_idx);
+
       enc->end_rendering();
     });
   }
@@ -377,6 +384,8 @@ std::unique_ptr<ITestScene> create_test_scene(TestDebugScene s) {
       return std::make_unique<MeshHelloTriangleScene>();
     case TestDebugScene::TexturedCubeProcedural:
       return std::make_unique<TexturedCubeProceduralScene>();
+    case TestDebugScene::MeshletRenderer:
+      return std::make_unique<MeshletRendererScene>();
     case TestDebugScene::Count:
     default:
       ASSERT(0);

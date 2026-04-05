@@ -2,11 +2,15 @@
 
 #include <GLFW/glfw3.h>
 
+#include "UI.hpp"
 #include "Window.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
 #include "gfx/ShaderManager.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "implot.h"
 
 using namespace teng;
 using namespace teng::gfx;
@@ -19,14 +23,17 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
       device_(cinfo.device),
       swapchain_(cinfo.swapchain),
       frame_gpu_upload_allocator_(device_, false),
+      resource_dir_(cinfo.resource_dir),
       buffer_copy_mgr_(device_, frame_gpu_upload_allocator_),
       window_(cinfo.window) {
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
   shader_mgr_->init(
       device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
+  imgui_renderer_ = std::make_unique<ImGuiRenderer>(*shader_mgr_, device_);
   rg_.init(device_);
   scene_ = create_test_scene(active_scene_);
   scene_->init(make_ctx());
+  init_imgui();
 }
 
 TestSceneContext TestRenderer::make_ctx() {
@@ -37,6 +44,7 @@ TestSceneContext TestRenderer::make_ctx() {
           .rg = &rg_,
           .buffer_copy = &buffer_copy_mgr_,
           .frame_staging = &frame_gpu_upload_allocator_,
+          .imgui_renderer = imgui_renderer_.get(),
           .time_sec = static_cast<float>(glfwGetTime())};
 }
 
@@ -47,7 +55,10 @@ void TestRenderer::set_scene(TestDebugScene id) {
   }
   active_scene_ = id;
   scene_ = create_test_scene(id);
-  scene_->init(make_ctx());
+  auto frame_idx = ctx_.curr_frame_idx;
+  ctx_ = make_ctx();
+  ctx_.curr_frame_idx = frame_idx;
+  scene_->init(ctx_);
   LINFO("vktest scene: {}", to_string(id));
 }
 
@@ -64,11 +75,21 @@ void TestRenderer::render() {
   bool verbose = i++ == 0;
   device_->acquire_next_swapchain_image(swapchain_);
   rg_.bake(window_->get_window_size(), verbose);
-  rg_.execute();
+
+  {
+    auto* enc = device_->begin_cmd_encoder();
+    imgui_renderer_->flush_pending_texture_uploads(enc, frame_gpu_upload_allocator_);
+    rg_.execute(enc);
+    enc->end_encoding();
+  }
+
   device_->submit_frame();
+
+  ctx_.curr_frame_idx = (ctx_.curr_frame_idx + 1) % k_max_frames_in_flight;
 }
 
 TestRenderer::~TestRenderer() {
+  imgui_renderer_->shutdown();
   if (scene_) {
     scene_->shutdown();
     scene_.reset();
@@ -83,5 +104,25 @@ void TestRenderer::recreate_resources_on_swapchain_resize() {
 }
 
 void TestRenderer::add_render_graph_passes() { scene_->add_render_graph_passes(make_ctx()); }
+
+void TestRenderer::init_imgui() {
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImPlot::CreateContext();
+
+  ImGuiIO& io = ImGui::GetIO();
+  for (const auto& entry : std::filesystem::directory_iterator(resource_dir_ / "fonts")) {
+    if (entry.path().extension() == ".ttf") {
+      auto* font = io.Fonts->AddFontFromFileTTF(entry.path().string().c_str(), 16, nullptr,
+                                                io.Fonts->GetGlyphRangesDefault());
+      add_font(entry.path().stem().string(), font);
+    }
+  }
+
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+  io.BackendRendererName = "imgui_impl_memes";
+  io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_RendererHasTextures;
+  ImGui_ImplGlfw_InitForOther(window_->get_handle(), true);
+}
 
 }  // namespace teng::gfx

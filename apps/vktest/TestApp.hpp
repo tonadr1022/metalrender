@@ -13,9 +13,11 @@ class TestApp {
   void run();
 
  private:
+  void on_imgui();
   std::filesystem::path resource_dir_;
   std::unique_ptr<teng::Window> window_;
   std::unique_ptr<teng::gfx::rhi::Device> device_;
   teng::gfx::rhi::SwapchainHandleHolder swapchain_;
   std::unique_ptr<teng::gfx::TestRenderer> renderer_;
+  bool imgui_enabled_{true};
 };

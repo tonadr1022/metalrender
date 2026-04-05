@@ -6,6 +6,8 @@
 #include "Util.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
 
 using namespace teng;
 using namespace teng::gfx;
@@ -44,9 +46,12 @@ TestApp::TestApp() {
       .window = window_.get(),
       .resource_dir = resource_dir_,
   });
-  window_->set_key_callback([this](int key, int action, int /*mods*/) {
+  window_->set_key_callback([this](int key, int action, int mods) {
     if (action == GLFW_PRESS && key == GLFW_KEY_TAB) {
       renderer_->cycle_debug_scene();
+    }
+    if (key == GLFW_KEY_G && mods & GLFW_MOD_ALT) {
+      imgui_enabled_ = !imgui_enabled_;
     }
   });
 }
@@ -56,11 +61,35 @@ TestApp::~TestApp() = default;
 void TestApp::run() {
   while (!window_->should_close()) {
     window_->poll_events();
+
+    if (imgui_enabled_) {
+      ImGui_ImplGlfw_NewFrame();
+      ImGui::NewFrame();
+    }
+
+    if (imgui_enabled_) {
+      on_imgui();
+    }
+
+    if (imgui_enabled_) {
+      ImGui::Render();
+    }
+
     renderer_->render();
+
+    if (imgui_enabled_) {
+      ImGui::EndFrame();
+    }
   }
 
   renderer_.reset();
   swapchain_ = {};
   window_->shutdown();
   device_->shutdown();
+}
+
+void TestApp::on_imgui() {
+  ImGui::Begin("TestApp");
+  ImGui::Text("ImGui enabled: %d", imgui_enabled_);
+  ImGui::End();
 }

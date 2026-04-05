@@ -14,6 +14,7 @@ namespace gfx {
 
 class ShaderManager;
 struct GPUFrameAllocator3;
+class ImGuiRenderer;
 
 namespace rhi {
 
@@ -30,6 +31,8 @@ struct TestSceneContext {
   RenderGraph* rg{};
   BufferCopyMgr* buffer_copy{};
   GPUFrameAllocator3* frame_staging{};
+  ImGuiRenderer* imgui_renderer{};
+  uint32_t curr_frame_idx{};
   float time_sec{};
 };
 

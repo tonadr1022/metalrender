@@ -5,6 +5,7 @@
 
 #include "TestDebugScenes.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
+#include "gfx/ImGuiRenderer.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/BufferResize.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -45,15 +46,19 @@ class TestRenderer {
 
  private:
   void add_render_graph_passes();
+  void init_imgui();
   [[nodiscard]] TestSceneContext make_ctx();
 
   std::unique_ptr<ITestScene> scene_;
   TestDebugScene active_scene_{TestDebugScene::TexturedCubeProcedural};
 
+  TestSceneContext ctx_;
   std::unique_ptr<gfx::ShaderManager> shader_mgr_;
   rhi::Device* device_;
   rhi::Swapchain* swapchain_;
   GPUFrameAllocator3 frame_gpu_upload_allocator_;
+  std::unique_ptr<ImGuiRenderer> imgui_renderer_;
+  std::filesystem::path resource_dir_;
   BufferCopyMgr buffer_copy_mgr_;
   RenderGraph rg_;
   Window* window_{};

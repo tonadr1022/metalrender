@@ -163,6 +163,9 @@ void ImGuiRenderer::return_buffer(rhi::BufferHandleHolder&& handle, size_t frame
 
 void ImGuiRenderer::flush_pending_texture_uploads(rhi::CmdEncoder* enc,
                                                   GPUFrameAllocator3& staging_buffer_allocator) {
+  if (!has_dirty_textures()) {
+    return;
+  }
   auto* draw_data = ImGui::GetDrawData();
   ASSERT(draw_data);
   if (draw_data->Textures) {
@@ -257,16 +260,14 @@ void ImGuiRenderer::add_dirty_textures_to_pass(gfx::RGPass& pass, bool read_acce
         auto tex_id =
             pass.import_external_texture(rhi::TextureHandle{t->GetTexID()},
                                          RGState{.stage = rhi::PipelineStage::TopOfPipe,
-                                                 .layout =
-                                                     rhi::ResourceLayout::ShaderReadOnly},
+                                                 .layout = rhi::ResourceLayout::ShaderReadOnly},
                                          std::to_string(t->GetTexID()));
         pass.sample_tex(tex_id);
       } else {
         auto tex_id =
             pass.import_external_texture(rhi::TextureHandle{t->GetTexID()},
                                          RGState{.stage = rhi::PipelineStage::TopOfPipe,
-                                                 .layout =
-                                                     rhi::ResourceLayout::ShaderReadOnly},
+                                                 .layout = rhi::ResourceLayout::ShaderReadOnly},
                                          std::to_string(t->GetTexID()));
         pass.write_tex(tex_id, rhi::PipelineStage::AllTransfer);
       }
