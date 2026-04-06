@@ -328,12 +328,21 @@ void VulkanCmdEncoder::draw_primitives(rhi::PrimitiveTopology topologyg, size_t 
             static_cast<uint32_t>(vertex_start), 0);
 }
 
-void VulkanCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology /*topology*/,
-                                               rhi::BufferHandle /*index_buf*/,
-                                               size_t /*index_start*/, size_t /*count*/,
-                                               size_t /*instance_count*/, size_t /*base_vertex*/,
-                                               size_t /*base_instance*/,
-                                               rhi::IndexType /*index_type*/) {}
+void VulkanCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
+                                               rhi::BufferHandle index_buf, size_t index_start,
+                                               size_t count, size_t instance_count,
+                                               size_t base_vertex, size_t base_instance,
+                                               rhi::IndexType index_type) {
+  flush_binds();
+  auto* ib = static_cast<VulkanBuffer*>(device_->get_buf(index_buf));
+  ASSERT(ib);
+  const VkIndexType vk_index_type =
+      index_type == rhi::IndexType::Uint16 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+  vkCmdBindIndexBuffer(cmd(), ib->buffer(), static_cast<VkDeviceSize>(index_start), vk_index_type);
+  vkCmdSetPrimitiveTopologyEXT(cmd(), convert_prim_topology(topology));
+  vkCmdDrawIndexed(cmd(), static_cast<uint32_t>(count), static_cast<uint32_t>(instance_count), 0,
+                   static_cast<int32_t>(base_vertex), static_cast<uint32_t>(base_instance));
+}
 
 void VulkanCmdEncoder::set_depth_stencil_state(rhi::CompareOp /*depth_compare_op*/,
                                                bool /*depth_write_enabled*/) {}
