@@ -2,6 +2,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include <tracy/Tracy.hpp>
+
 #include "TestRenderer.hpp"
 #include "Util.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -13,6 +15,7 @@ using namespace teng;
 using namespace teng::gfx;
 
 TestApp::TestApp() {
+  ZoneScoped;
   resource_dir_ = get_resource_dir();
   std::filesystem::current_path(resource_dir_.parent_path());
 
@@ -60,9 +63,14 @@ TestApp::~TestApp() = default;
 
 void TestApp::run() {
   while (!window_->should_close()) {
-    window_->poll_events();
+    ZoneScopedN("main loop");
+    {
+      ZoneScopedN("poll_events");
+      window_->poll_events();
+    }
 
     if (imgui_enabled_) {
+      ZoneScopedN("imgui_new_frame");
       ImGui_ImplGlfw_NewFrame();
       ImGui::NewFrame();
     }
@@ -88,7 +96,8 @@ void TestApp::run() {
   device_->shutdown();
 }
 
-void TestApp::on_imgui() {
+void TestApp::on_imgui() const {
+  ZoneScoped;
   ImGui::Begin("TestApp");
   ImGui::Text("ImGui enabled: %d", imgui_enabled_);
   ImGui::End();

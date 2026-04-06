@@ -63,7 +63,12 @@ void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t fram
   float B = draw_data->DisplayPos.y + draw_data->DisplaySize.y;
   float N = 0.0;
   float F = 1.0;
-  auto proj = glm::orthoZO(L, R, B, T, N, F);
+  auto proj = glm::orthoRH_ZO(L, R, B, T, N, F);
+  if (device_->get_supported_shader_targets() == rhi::ShaderTarget::Spirv) {
+    glm::mat4 ndc_flip_y(1.f);
+    ndc_flip_y[1][1] = -1.f;
+    proj = ndc_flip_y * proj;
+  }
   [[maybe_unused]] ImGuiPC pc{
       .proj = proj,
       .vert_buf_idx = vert_buf->bindless_idx(),

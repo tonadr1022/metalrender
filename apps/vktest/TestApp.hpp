@@ -13,7 +13,7 @@ class TestApp {
   void run();
 
  private:
-  void on_imgui();
+  void on_imgui() const;
   std::filesystem::path resource_dir_;
   std::unique_ptr<teng::Window> window_;
   std::unique_ptr<teng::gfx::rhi::Device> device_;

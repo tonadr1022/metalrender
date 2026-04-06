@@ -2,6 +2,8 @@
 
 #include <GLFW/glfw3.h>
 
+#include <tracy/Tracy.hpp>
+
 #include "UI.hpp"
 #include "Window.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
@@ -69,14 +71,23 @@ void TestRenderer::cycle_debug_scene() {
 }
 
 void TestRenderer::render() {
+  ZoneScoped;
   shader_mgr_->replace_dirty_pipelines();
   add_render_graph_passes();
   static int i = 0;
   bool verbose = i++ == 0;
-  device_->acquire_next_swapchain_image(swapchain_);
-  rg_.bake(window_->get_window_size(), verbose);
+  {
+    ZoneScopedN("acquire_next_swapchain_image");
+    device_->acquire_next_swapchain_image(swapchain_);
+  }
 
   {
+    ZoneScopedN("bake");
+    rg_.bake(window_->get_window_size(), verbose);
+  }
+
+  {
+    ZoneScopedN("execute");
     auto* enc = device_->begin_cmd_encoder();
     imgui_renderer_->flush_pending_texture_uploads(enc, frame_gpu_upload_allocator_);
     rg_.execute(enc);
@@ -103,7 +114,10 @@ void TestRenderer::recreate_resources_on_swapchain_resize() {
   }
 }
 
-void TestRenderer::add_render_graph_passes() { scene_->add_render_graph_passes(make_ctx()); }
+void TestRenderer::add_render_graph_passes() {
+  ZoneScoped;
+  scene_->add_render_graph_passes(make_ctx());
+}
 
 void TestRenderer::init_imgui() {
   IMGUI_CHECKVERSION();

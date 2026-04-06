@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <fstream>
 #include <mutex>
+#include <tracy/Tracy.hpp>
 // clang-format on
 
 #include "VMAWrapper.hpp"  // IWYU pragma: keep
@@ -1166,6 +1167,7 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
 }
 
 void VulkanDevice::submit_frame() {
+  ZoneScoped;
   // submit queues
   for (size_t cmd_enc_i = 0; cmd_enc_i < curr_cmd_encoder_i_; cmd_enc_i++) {
     auto& enc = *cmd_encoders_[cmd_enc_i];
@@ -1227,6 +1229,7 @@ void VulkanDevice::submit_frame() {
       }
     }
     if (wait_fence_count > 0) {
+      ZoneScopedN("vkWaitForFences");
       VK_CHECK(vkWaitForFences(device_, wait_fence_count, wait_fences, VK_TRUE, UINT64_MAX));
     }
     VK_CHECK(vkResetFences(device_, reset_fence_count, reset_fences));
