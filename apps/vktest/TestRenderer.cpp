@@ -33,21 +33,24 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
       device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
   imgui_renderer_ = std::make_unique<ImGuiRenderer>(*shader_mgr_, device_);
   rg_.init(device_);
-  scene_ = create_test_scene(active_scene_);
-  scene_->init(make_ctx());
+  ctx_ = {
+      .device = device_,
+      .swapchain = swapchain_,
+      .window = window_,
+      .shader_mgr = shader_mgr_.get(),
+      .rg = &rg_,
+      .buffer_copy = &buffer_copy_mgr_,
+      .frame_staging = &frame_gpu_upload_allocator_,
+      .imgui_renderer = imgui_renderer_.get(),
+  };
+  update_ctx();
+  scene_ = create_test_scene(active_scene_, ctx_);
   init_imgui();
 }
 
-TestSceneContext TestRenderer::make_ctx() {
-  return {.device = device_,
-          .swapchain = swapchain_,
-          .window = window_,
-          .shader_mgr = shader_mgr_.get(),
-          .rg = &rg_,
-          .buffer_copy = &buffer_copy_mgr_,
-          .frame_staging = &frame_gpu_upload_allocator_,
-          .imgui_renderer = imgui_renderer_.get(),
-          .time_sec = static_cast<float>(glfwGetTime())};
+void TestRenderer::update_ctx() {
+  ctx_.time_sec = static_cast<float>(glfwGetTime());
+  ctx_.curr_frame_idx = (ctx_.curr_frame_idx + 1) % k_max_frames_in_flight;
 }
 
 void TestRenderer::set_scene(TestDebugScene id) {
@@ -56,11 +59,7 @@ void TestRenderer::set_scene(TestDebugScene id) {
     scene_.reset();
   }
   active_scene_ = id;
-  scene_ = create_test_scene(id);
-  auto frame_idx = ctx_.curr_frame_idx;
-  ctx_ = make_ctx();
-  ctx_.curr_frame_idx = frame_idx;
-  scene_->init(ctx_);
+  scene_ = create_test_scene(id, ctx_);
   LINFO("vktest scene: {}", to_string(id));
 }
 
@@ -72,6 +71,7 @@ void TestRenderer::cycle_debug_scene() {
 
 void TestRenderer::render() {
   ZoneScoped;
+  update_ctx();
   shader_mgr_->replace_dirty_pipelines();
   add_render_graph_passes();
   static int i = 0;
@@ -110,13 +110,13 @@ TestRenderer::~TestRenderer() {
 
 void TestRenderer::recreate_resources_on_swapchain_resize() {
   if (scene_) {
-    scene_->on_swapchain_resize(make_ctx());
+    scene_->on_swapchain_resize();
   }
 }
 
 void TestRenderer::add_render_graph_passes() {
   ZoneScoped;
-  scene_->add_render_graph_passes(make_ctx());
+  scene_->add_render_graph_passes();
 }
 
 void TestRenderer::init_imgui() {

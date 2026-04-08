@@ -16,8 +16,6 @@ class CmdEncoder;
 
 }  // namespace rhi
 
-class MemeRenderer123;
-
 class InstanceMgr {
  public:
   InstanceMgr(const InstanceMgr&) = delete;
@@ -30,7 +28,7 @@ class InstanceMgr {
   };
 
   InstanceMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr, uint32_t frames_in_flight,
-              MemeRenderer123& renderer);
+              bool mesh_shaders_enabled);
   [[nodiscard]] bool has_draws() const { return curr_element_count_ > 0; }
   Alloc allocate(uint32_t element_count, uint32_t meshlet_instance_count);
 
@@ -77,7 +75,7 @@ class InstanceMgr {
   uint32_t curr_element_count_{};
   uint32_t frames_in_flight_{};
   rhi::Device& device_;
-  MemeRenderer123& renderer_;
+  bool mesh_shaders_enabled_{};
 };
 }  // namespace gfx
 

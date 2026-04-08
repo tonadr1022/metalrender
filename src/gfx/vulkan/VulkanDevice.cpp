@@ -1341,29 +1341,6 @@ void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::Cmd
                                              glm::vec4* clear_color) {
   auto* vk_enc = (VulkanCmdEncoder*)cmd_enc;
   vk_enc->submit_swapchains_.emplace_back(swapchain);
-  [[maybe_unused]] VkImage curr_image =
-      ((VulkanTexture*)get_tex(swapchain->get_current_texture()))->image();
-  // VkImageMemoryBarrier2 img_barriers[] = {
-  //     VkImageMemoryBarrier2{
-  //         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-  //         .srcStageMask =
-  //             VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,  // from vkAcquireNextImageKHR
-  //         .srcAccessMask = 0,
-  //         .dstStageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-  //         .dstAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT,
-  //         .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-  //         .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-  //         .image = curr_image,
-  //         .subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-  //                              .levelCount = 1,
-  //                              .layerCount = 1},
-  //     },
-  // };
-  // VkDependencyInfo info{.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-  //                       .imageMemoryBarrierCount = ARRAY_SIZE(img_barriers),
-  //                       .pImageMemoryBarriers = img_barriers};
-  // vkCmdPipelineBarrier2KHR(vk_enc->cmd(), &info);
-
   cmd_enc->begin_rendering({
       rhi::RenderAttInfo{
           .image = swapchain->get_current_texture(),
@@ -1393,6 +1370,7 @@ void VulkanDevice::destroy(rhi::SwapchainHandle handle) {
 }
 
 void VulkanDevice::Queue::submit(VkFence fence) {
+  ZoneScoped;
   VkSubmitInfo2KHR sub_info{
       .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
       .flags = 0,
@@ -1426,6 +1404,30 @@ void VulkanDevice::Queue::submit(VkFence fence) {
     present_swapchain_img_indices.clear();
   }
 }
+
+namespace {
+
+std::string to_string(VkPresentModeKHR present_mode) {
+  switch (present_mode) {
+    case VK_PRESENT_MODE_IMMEDIATE_KHR:
+      return "IMMEDIATE";
+    case VK_PRESENT_MODE_MAILBOX_KHR:
+      return "MAILBOX";
+    case VK_PRESENT_MODE_FIFO_KHR:
+      return "FIFO";
+    case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+      return "FIFO_RELAXED";
+    case VK_PRESENT_MODE_SHARED_DEMAND_REFRESH_KHR:
+      return "SHARED_DEMAND_REFRESH";
+    case VK_PRESENT_MODE_SHARED_CONTINUOUS_REFRESH_KHR:
+      return "SHARED_CONTINUOUS_REFRESH";
+    default:
+      return "UNKNOWN";
+  }
+  return "UNKNOWN";
+}
+
+}  // namespace
 
 bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapchain* swap) {
   auto* swapchain = (VulkanSwapchain*)swap;
@@ -1464,14 +1466,17 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
   // TODO: look at KHR_present_mode_fifo_latest_ready
   VkPresentModeKHR selected_present_mode{VK_PRESENT_MODE_FIFO_KHR};
   // prefer mailbox for vsync on
-  VkPresentModeKHR preferred_present_mode{desc.vsync ? VK_PRESENT_MODE_MAILBOX_KHR
-                                                     : VK_PRESENT_MODE_IMMEDIATE_KHR};
+  auto vsync = desc.vsync;
+  vsync = false;
+  VkPresentModeKHR preferred_present_mode{vsync ? VK_PRESENT_MODE_MAILBOX_KHR
+                                                : VK_PRESENT_MODE_IMMEDIATE_KHR};
   for (uint32_t i = 0; i < present_mode_count; i++) {
     if (present_modes[i] == preferred_present_mode) {
       selected_present_mode = preferred_present_mode;
       break;
     }
   }
+  LINFO("selected_present_mode: {}", to_string(selected_present_mode));
 
   uint32_t create_w{}, create_h{};
   if (surface_properties.currentExtent.width == UINT32_MAX ||

@@ -27,11 +27,13 @@ add_library(${target_name} SHARED
     gfx/DrawBatch.cpp
     gfx/RenderGraph.cpp
     gfx/BackedGPUAllocator.cpp
+    gfx/ModelGPUManager.cpp
     gfx/renderer/BufferResize.cpp
     gfx/renderer/InstanceMgr.cpp
     gfx/renderer/GBufferRenderer.cpp
     gfx/renderer/RendererCVars.cpp
     gfx/renderer/CSM.cpp
+    gfx/renderer/ModelGPUUploader.cpp
     gfx/renderer/DrawPassSceneBindings.cpp
 
     gfx/texture/KtxLoad.cpp

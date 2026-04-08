@@ -13,13 +13,13 @@
 namespace TENG_NAMESPACE {
 
 namespace gfx {
-class MemeRenderer123;
+class ModelGPUMgr;
 }
 
 class ResourceManager {
  public:
   struct CreateInfo {
-    gfx::MemeRenderer123 *renderer;
+    gfx::ModelGPUMgr *model_gpu_mgr;
   };
 
  private:
@@ -82,7 +82,7 @@ class ResourceManager {
   BlockPool<ModelHandle, ModelInstancePoolEntry> model_instance_pool_{128, 16, true};
   // std::vector<size_t> model_to_resource_cache_key_;
 
-  gfx::MemeRenderer123 *renderer_{};
+  gfx::ModelGPUMgr *model_gpu_mgr_{};
   inline static ResourceManager *instance_{};
   size_t tot_models_loaded_{0};
   size_t tot_instances_loaded_{0};

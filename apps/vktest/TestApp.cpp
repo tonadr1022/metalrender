@@ -4,6 +4,7 @@
 
 #include <tracy/Tracy.hpp>
 
+#include "ResourceManager.hpp"
 #include "TestRenderer.hpp"
 #include "Util.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -57,6 +58,8 @@ TestApp::TestApp() {
       imgui_enabled_ = !imgui_enabled_;
     }
   });
+
+  //  ResourceManager::init(ResourceManager::CreateInfo{.renderer = renderer_});
 }
 
 TestApp::~TestApp() = default;

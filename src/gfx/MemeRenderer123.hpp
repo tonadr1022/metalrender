@@ -2,7 +2,6 @@
 
 #include <array>
 #include <filesystem>
-#include <span>
 #include <vector>
 
 #include "ImGuiRenderer.hpp"
@@ -11,21 +10,20 @@
 #include "gfx/BackedGPUAllocator.hpp"
 #include "gfx/DrawBatch.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
+#include "gfx/ModelGPUManager.hpp"
 #include "gfx/ModelInstance.hpp"
-#include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/ShaderManager.hpp"
 #include "gfx/renderer/BufferResize.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
+#include "gfx/renderer/ModelGPUUploader.hpp"
 #include "gfx/renderer/RenderView.hpp"
 #include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "hlsl/shared_csm.h"
-#include "hlsl/shared_instance_data.h"
-#include "offsetAllocator.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -40,30 +38,6 @@ class CmdEncoder;
 
 class GBufferRenderer;
 class CSMRenderer;
-
-struct ModelGPUResources {
-  OffsetAllocator::Allocation material_alloc;
-  GeometryBatch::Alloc static_draw_batch_alloc;
-  std::vector<rhi::TextureHandleHolder> textures;
-  std::vector<InstanceData> base_instance_datas;
-  std::vector<Mesh> meshes;
-  std::vector<uint32_t> instance_id_to_node;
-  struct Totals {
-    uint32_t meshlets;
-    uint32_t vertices;
-    uint32_t instance_vertices;
-    uint32_t instance_meshlets;
-    uint32_t task_cmd_count;
-  };
-  Totals totals{};
-};
-
-class MemeRenderer123;
-
-struct ModelInstanceGPUResources {
-  InstanceMgr::Alloc instance_data_gpu_alloc;
-  ModelGPUHandle model_resources_handle;
-};
 
 class MemeRenderer123 {
  public:
@@ -91,16 +65,12 @@ class MemeRenderer123 {
   void draw_minimal_triangle();
   void on_imgui();
   bool on_key_event(int key, int action, int mods);
-  bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
-                  ModelInstance& model, ModelGPUHandle& out_handle);
-  void reserve_space_for(std::span<std::pair<ModelGPUHandle, uint32_t>> models);
-  [[nodiscard]] ModelInstanceGPUHandle add_model_instance(ModelInstance& model,
-                                                          ModelGPUHandle model_gpu_handle);
   void update_model_instance_transforms(const ModelInstance& model);
-  void free_instance(ModelInstanceGPUHandle handle);
-  void free_model(ModelGPUHandle handle);
   bool mesh_shaders_enabled() const { return renderer_cv::pipeline_mesh_shaders.get() != 0; }
   void set_imgui_enabled(bool enabled) { renderer_cv::ui_imgui_enabled.set(enabled ? 1 : 0); }
+
+  ModelGPUMgr* get_model_gpu_mgr() { return model_gpu_mgr_.get(); }
+  const ModelGPUMgr* get_model_gpu_mgr() const { return model_gpu_mgr_.get(); }
 
   struct FinalDrawResults {
     uint32_t drawn_meshlets;
@@ -158,11 +128,6 @@ class MemeRenderer123 {
 
   // TODO: needs work
   void set_cull_data_and_globals(const RenderArgs& args);
-  GeometryBatch::Alloc upload_geometry(GeometryBatchType type,
-                                       const std::vector<DefaultVertex>& vertices,
-                                       const std::vector<rhi::DefaultIndexT>& indices,
-                                       const MeshletProcessResult& meshlets,
-                                       std::span<Mesh> meshes);
   void recreate_swapchain_sized_textures();
   size_t prev_frame_idx() const {
     return curr_frame_idx_ == 0 ? device_->get_info().frames_in_flight - 1 : curr_frame_idx_ - 1;
@@ -210,12 +175,8 @@ class MemeRenderer123 {
 
   std::optional<ImGuiRenderer> imgui_renderer_;
 
-  struct GPUTexUpload {
-    TextureUpload upload;
-    rhi::TextureHandle tex;
-    std::string name;
-  };
   std::vector<GPUTexUpload> pending_texture_uploads_;
+  // TODO: remove
   size_t tex_upload_i_{};
   std::string get_next_tex_upload_name();
 
@@ -252,6 +213,8 @@ class MemeRenderer123 {
   rhi::TextureHandle csm_debug_depth_tex_;
   std::array<rhi::TextureViewHandle, CSM_MAX_CASCADES> csm_debug_depth_views_{-1, -1, -1, -1};
   bool reverse_z_{true};
+
+  std::unique_ptr<ModelGPUMgr> model_gpu_mgr_;
 };
 
 }  // namespace gfx

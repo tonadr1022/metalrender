@@ -6,11 +6,15 @@
 #include <vector>
 
 #include "Camera.hpp"
+#include "ResourceManager.hpp"
 #include "core/EAssert.hpp"
-#include "core/Logger.hpp"
 #include "core/Util.hpp"
+#include "gfx/DrawBatch.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/ImGuiRenderer.hpp"
+#include "gfx/ModelLoader.hpp"
+#include "gfx/renderer/InstanceMgr.hpp"
+#include "gfx/renderer/ModelGPUUploader.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -18,6 +22,8 @@
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
 #include "hlsl/default_vertex.h"
+#include "hlsl/material.h"
+#include "hlsl/shader_constants.h"
 
 using namespace teng;
 using namespace teng::gfx;
@@ -29,7 +35,7 @@ namespace {
 
 class ComputePlusVertexScene final : public ITestScene {
  public:
-  void init(const TestSceneContext& ctx) override {
+  explicit ComputePlusVertexScene(const TestSceneContext& ctx) : ITestScene(ctx) {
     auto* device = ctx.device;
     clear_color_cmp_pso_ = device->create_compute_pipeline_h({"vulkan_exp/clear_tex_to_color"});
     test_gfx_pso_ = device->create_graphics_pipeline_h({
@@ -49,15 +55,15 @@ class ComputePlusVertexScene final : public ITestScene {
     tri_verts.emplace_back(glm::vec4{-.5f, -0.5f, 0.0f, 1.f}, glm::vec2{0.f, 0.f});
     tri_verts.emplace_back(glm::vec4{.5f, -0.5f, 0.0f, 1.f}, glm::vec2{1.f, 0.f});
     tri_verts.emplace_back(glm::vec4{0.0f, .5f, 0.0f, 1.f}, glm::vec2{0.5f, 1.f});
-    ctx.buffer_copy->copy_to_buffer(tri_verts.data(), tri_verts.size() * sizeof(DefaultVertex),
-                                    test_vert_buf_.handle, 0, PipelineStage::VertexShader,
-                                    AccessFlags::ShaderRead);
-    on_swapchain_resize(ctx);
+    ctx_.buffer_copy->copy_to_buffer(tri_verts.data(), tri_verts.size() * sizeof(DefaultVertex),
+                                     test_vert_buf_.handle, 0, PipelineStage::VertexShader,
+                                     AccessFlags::ShaderRead);
+    on_swapchain_resize();
   }
 
-  void on_swapchain_resize(const TestSceneContext& ctx) override {
-    auto dims = glm::uvec2{ctx.swapchain->desc_.width, ctx.swapchain->desc_.height};
-    test_full_screen_tex_ = ctx.device->create_tex_h({
+  void on_swapchain_resize() override {
+    auto dims = glm::uvec2{ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
+    test_full_screen_tex_ = ctx_.device->create_tex_h({
         .format = TextureFormat::R32G32B32A32Sfloat,
         .usage = TextureUsage::Sample | TextureUsage::Storage | TextureUsage::ShaderWrite,
         .dims = {dims.x, dims.y, 1},
@@ -67,15 +73,15 @@ class ComputePlusVertexScene final : public ITestScene {
     });
   }
 
-  void add_render_graph_passes(const TestSceneContext& ctx) override {
+  void add_render_graph_passes() override {
     auto test_full_screen_tex_id =
-        ctx.rg->import_external_texture(test_full_screen_tex_.handle, "test_full_screen_tex");
+        ctx_.rg->import_external_texture(test_full_screen_tex_.handle, "test_full_screen_tex");
     {
-      auto& p = ctx.rg->add_compute_pass("compute_clear_pass");
+      auto& p = ctx_.rg->add_compute_pass("compute_clear_pass");
       p.write_tex(test_full_screen_tex_id, PipelineStage::ComputeShader);
-      p.set_ex([this, ctx](CmdEncoder* enc) {
+      p.set_ex([this](CmdEncoder* enc) {
         auto tex_handle = test_full_screen_tex_.handle;
-        auto* tex = ctx.device->get_tex(tex_handle);
+        auto* tex = ctx_.device->get_tex(tex_handle);
         enc->bind_pipeline(clear_color_cmp_pso_);
         struct {
           glm::uvec2 dims;
@@ -89,16 +95,16 @@ class ComputePlusVertexScene final : public ITestScene {
       });
     }
     {
-      auto& p = ctx.rg->add_graphics_pass("fullscreen");
+      auto& p = ctx_.rg->add_graphics_pass("fullscreen");
       p.sample_tex(test_full_screen_tex_id);
-      p.w_swapchain_tex(ctx.swapchain);
-      p.set_ex([this, ctx](CmdEncoder* enc) {
+      p.w_swapchain_tex(ctx_.swapchain);
+      p.set_ex([this](CmdEncoder* enc) {
         glm::vec4 clear_color{0.5, 0.5, 0, 1};
-        ctx.device->begin_swapchain_rendering(ctx.swapchain, enc, &clear_color);
+        ctx_.device->begin_swapchain_rendering(ctx_.swapchain, enc, &clear_color);
         enc->set_cull_mode(CullMode::None);
         enc->set_wind_order(WindOrder::CounterClockwise);
-        enc->set_viewport({0, 0}, {ctx.swapchain->desc_.width, ctx.swapchain->desc_.height});
-        enc->set_scissor({0, 0}, {ctx.swapchain->desc_.width, ctx.swapchain->desc_.height});
+        enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
+        enc->set_scissor({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
         enc->bind_pipeline(test_gfx_pso_);
         enc->bind_srv(test_full_screen_tex_.handle, 0);
         enc->draw_primitives(PrimitiveTopology::TriangleList, 0, 3);
@@ -187,7 +193,7 @@ static_assert(sizeof(CubePush) == 72);
 
 class MeshHelloTriangleScene final : public ITestScene {
  public:
-  void init(const TestSceneContext& ctx) override {
+  explicit MeshHelloTriangleScene(const TestSceneContext& ctx) : ITestScene(ctx) {
     mesh_pso_ = ctx.device->create_graphics_pipeline_h({
         .shaders = {{"test_mesh_buf", ShaderType::Mesh}, {"test_mesh_buf", ShaderType::Fragment}},
     });
@@ -200,23 +206,23 @@ class MeshHelloTriangleScene final : public ITestScene {
     tri.push_back({glm::vec4{-0.5f, -0.5f, 0.0f, 1.f}, glm::vec4{1.f, 0.f, 0.f, 1.f}});
     tri.push_back({glm::vec4{0.5f, -0.5f, 0.0f, 1.f}, glm::vec4{0.f, 0.f, 1.f, 1.f}});
     tri.push_back({glm::vec4{0.0f, 0.5f, 0.0f, 1.f}, glm::vec4{0.f, 1.f, 0.f, 1.f}});
-    ctx.buffer_copy->copy_to_buffer(tri.data(), tri.size() * sizeof(MeshHelloVertex),
-                                    mesh_vert_buf_.handle, 0, PipelineStage::MeshShader,
-                                    AccessFlags::ShaderRead);
+    ctx_.buffer_copy->copy_to_buffer(tri.data(), tri.size() * sizeof(MeshHelloVertex),
+                                     mesh_vert_buf_.handle, 0, PipelineStage::MeshShader,
+                                     AccessFlags::ShaderRead);
   }
 
-  void on_swapchain_resize(const TestSceneContext&) override {}
+  void on_swapchain_resize() override {}
 
-  void add_render_graph_passes(const TestSceneContext& ctx) override {
-    auto& p = ctx.rg->add_graphics_pass("mesh_hello");
-    p.w_swapchain_tex(ctx.swapchain);
-    p.set_ex([this, ctx](CmdEncoder* enc) {
+  void add_render_graph_passes() override {
+    auto& p = ctx_.rg->add_graphics_pass("mesh_hello");
+    p.w_swapchain_tex(ctx_.swapchain);
+    p.set_ex([this](CmdEncoder* enc) {
       glm::vec4 clear_color{0.1f, 0.1f, 0.15f, 1.f};
-      ctx.device->begin_swapchain_rendering(ctx.swapchain, enc, &clear_color);
+      ctx_.device->begin_swapchain_rendering(ctx_.swapchain, enc, &clear_color);
       enc->set_cull_mode(CullMode::None);
       enc->set_wind_order(WindOrder::CounterClockwise);
-      enc->set_viewport({0, 0}, {ctx.swapchain->desc_.width, ctx.swapchain->desc_.height});
-      enc->set_scissor({0, 0}, {ctx.swapchain->desc_.width, ctx.swapchain->desc_.height});
+      enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
+      enc->set_scissor({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
       enc->bind_pipeline(mesh_pso_);
       enc->bind_srv(mesh_vert_buf_.handle, 0);
       enc->draw_mesh_threadgroups({1, 1, 1}, {1, 1, 1}, {128, 1, 1});
@@ -231,7 +237,7 @@ class MeshHelloTriangleScene final : public ITestScene {
 
 class TexturedCubeProceduralScene final : public ITestScene {
  public:
-  void init(const TestSceneContext& ctx) override {
+  explicit TexturedCubeProceduralScene(const TestSceneContext& ctx) : ITestScene(ctx) {
     auto* device = ctx.device;
     mesh_pso_ = device->create_graphics_pipeline_h({
         .shaders = {{"test_cube_bindless", ShaderType::Mesh},
@@ -244,9 +250,9 @@ class TexturedCubeProceduralScene final : public ITestScene {
         .flags = BufferDescFlags::CPUAccessible,
         .name = "textured_cube_verts",
     });
-    ctx.buffer_copy->copy_to_buffer(verts.data(), verts.size() * sizeof(CubeVertex),
-                                    cube_vert_buf_.handle, 0, PipelineStage::MeshShader,
-                                    AccessFlags::ShaderRead);
+    ctx_.buffer_copy->copy_to_buffer(verts.data(), verts.size() * sizeof(CubeVertex),
+                                     cube_vert_buf_.handle, 0, PipelineStage::MeshShader,
+                                     AccessFlags::ShaderRead);
 
     constexpr uint32_t k_checker_dim = 256;
     constexpr uint32_t k_cell = 32;
@@ -270,22 +276,22 @@ class TexturedCubeProceduralScene final : public ITestScene {
     checker_upload_done_ = false;
   }
 
-  void on_swapchain_resize(const TestSceneContext&) override {}
+  void on_swapchain_resize() override {}
 
-  void add_render_graph_passes(const TestSceneContext& ctx) override {
+  void add_render_graph_passes() override {
     // Bindless mesh + texture are not declared as RG external reads: the graph requires every
     // external read to have a producer pass, while these resources are filled outside the graph
     // (buffer upload in init, texture via upload_texture_data here). Same idea as MeshHelloTriangle
     // (no import/read_buf for the mesh vertex buffer).
-    auto& p = ctx.rg->add_graphics_pass("textured_cube_mesh");
-    p.w_swapchain_tex(ctx.swapchain);
-    p.set_ex([this, ctx](CmdEncoder* enc) {
-      if (!checker_upload_done_ && ctx.frame_staging != nullptr) {
+    auto& p = ctx_.rg->add_graphics_pass("textured_cube_mesh");
+    p.w_swapchain_tex(ctx_.swapchain);
+    p.set_ex([this](CmdEncoder* enc) {
+      if (!checker_upload_done_ && ctx_.frame_staging != nullptr) {
         const uint32_t w = checker_dim_;
         const uint32_t h = checker_dim_;
         const size_t src_bpr = static_cast<size_t>(w) * 4u;
         const auto dst_bpr = static_cast<size_t>(align_up(static_cast<uint64_t>(src_bpr), 256));
-        auto upload = ctx.frame_staging->alloc(static_cast<uint32_t>(dst_bpr * h));
+        auto upload = ctx_.frame_staging->alloc(static_cast<uint32_t>(dst_bpr * h));
         for (uint32_t row = 0; row < h; row++) {
           std::memcpy(static_cast<std::byte*>(upload.write_ptr) + row * dst_bpr,
                       reinterpret_cast<const std::byte*>(checker_tex_data_.data()) + row * src_bpr,
@@ -297,19 +303,19 @@ class TexturedCubeProceduralScene final : public ITestScene {
       }
 
       glm::vec4 clear_color{0.08f, 0.08f, 0.1f, 1.f};
-      ctx.device->begin_swapchain_rendering(ctx.swapchain, enc, &clear_color);
+      ctx_.device->begin_swapchain_rendering(ctx_.swapchain, enc, &clear_color);
       enc->bind_pipeline(mesh_pso_);
       enc->set_cull_mode(CullMode::Back);
       enc->set_wind_order(WindOrder::CounterClockwise);
-      enc->set_viewport({0, 0}, {ctx.swapchain->desc_.width, ctx.swapchain->desc_.height});
-      enc->set_scissor({0, 0}, {ctx.swapchain->desc_.width, ctx.swapchain->desc_.height});
+      enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
+      enc->set_scissor({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
 
-      const float aspect = static_cast<float>(ctx.swapchain->desc_.width) /
-                           std::max(1.f, static_cast<float>(ctx.swapchain->desc_.height));
+      const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
+                           std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height));
       const glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.f), aspect, 0.1f, 100.f);
       camera_.calc_vectors();
       const glm::mat4 view = camera_.get_view_mat();
-      const float t = ctx.time_sec;
+      const float t = ctx_.time_sec;
       const glm::mat4 model = glm::rotate(glm::mat4(1.f), t, glm::vec3(0.f, 1.f, 0.f)) *
                               glm::rotate(glm::mat4(1.f), t * 0.73f, glm::vec3(1.f, 0.f, 0.f));
       const glm::mat4 mvp = proj * view * model;
@@ -322,8 +328,8 @@ class TexturedCubeProceduralScene final : public ITestScene {
 
       enc->draw_mesh_threadgroups({1, 1, 1}, {1, 1, 1}, {128, 1, 1});
 
-      ctx.imgui_renderer->render(enc, {ctx.swapchain->desc_.width, ctx.swapchain->desc_.height},
-                                 ctx.curr_frame_idx);
+      ctx_.imgui_renderer->render(enc, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height},
+                                  ctx_.curr_frame_idx);
 
       enc->end_rendering();
     });
@@ -343,19 +349,58 @@ class TexturedCubeProceduralScene final : public ITestScene {
 
 class MeshletRendererScene final : public ITestScene {
  public:
-  void on_swapchain_resize(const TestSceneContext&) override {}
-
-  void add_render_graph_passes(const TestSceneContext&) override {}
-
-  void init(const TestSceneContext& ctx) override {
-    meshlet_pso_ = ctx.device->create_graphics_pipeline_h({
-        .shaders = {{"test_meshlet_renderer", ShaderType::Mesh},
-                    {"test_meshlet_renderer", ShaderType::Fragment}},
-    });
+  explicit MeshletRendererScene(const TestSceneContext& ctx)
+      : ITestScene(ctx),
+        static_instance_mgr_(*ctx.device, *ctx.buffer_copy, ctx.device->get_info().frames_in_flight,
+                             true),
+        static_draw_batch_(GeometryBatchType::Static, *ctx.device, *ctx.buffer_copy,
+                           GeometryBatch::CreateInfo{
+                               .initial_vertex_capacity = 1'000'000,
+                               .initial_index_capacity = 1'000'000,
+                               .initial_meshlet_capacity = 1'000'000,
+                               .initial_mesh_capacity = 100'000,
+                               .initial_meshlet_triangle_capacity = 1'000'000,
+                               .initial_meshlet_vertex_capacity = 1'000'000,
+                           }),
+        buffer_copy_mgr_(*ctx_.buffer_copy),
+        device_(*ctx_.device),
+        materials_buf_(*ctx.device, *ctx.buffer_copy,
+                       {.usage = rhi::BufferUsage::Storage,
+                        .size = k_max_materials * sizeof(M4Material),
+                        // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
+                        .name = "all materials buf"},
+                       sizeof(M4Material)) {
+    const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
+    test_model_handle_ = ResourceManager::get().load_model(suzanne_path, glm::mat4{1.f});
   }
 
+  void on_swapchain_resize() override {}
+
+  void add_render_graph_passes() override {}
+
  private:
+  void load_and_upload_model(const std::filesystem::path& path, const glm::mat4& root_transform,
+                             ModelInstance& model, ModelGPUHandle& out_handle) {
+    ModelLoadResult result;
+    if (!load_model(path, root_transform, model, result)) {
+      return;
+    }
+    upload_model(result, model, *ctx_.device, pending_texture_uploads_, materials_buf_,
+                 buffer_copy_mgr_, static_draw_batch_, out_handle, model_gpu_resource_pool_);
+  }
+
+  InstanceMgr static_instance_mgr_;
+  GeometryBatch static_draw_batch_;
+  [[maybe_unused]] BufferCopyMgr& buffer_copy_mgr_;
+  [[maybe_unused]] rhi::Device& device_;
+
+  std::vector<GPUTexUpload> pending_texture_uploads_;
+  BackedGPUAllocator materials_buf_;
+  BlockPool<ModelGPUHandle, ModelGPUResources> model_gpu_resource_pool_{20, 1, true};
+
   PipelineHandleHolder meshlet_pso_;
+
+  ModelHandle test_model_handle_;
 };
 
 }  // namespace
@@ -376,16 +421,16 @@ const char* to_string(TestDebugScene s) {
   }
 }
 
-std::unique_ptr<ITestScene> create_test_scene(TestDebugScene s) {
+std::unique_ptr<ITestScene> create_test_scene(TestDebugScene s, const TestSceneContext& ctx) {
   switch (s) {
     case TestDebugScene::ComputePlusVertexOverlay:
-      return std::make_unique<ComputePlusVertexScene>();
+      return std::make_unique<ComputePlusVertexScene>(ctx);
     case TestDebugScene::MeshHelloTriangle:
-      return std::make_unique<MeshHelloTriangleScene>();
+      return std::make_unique<MeshHelloTriangleScene>(ctx);
     case TestDebugScene::TexturedCubeProcedural:
-      return std::make_unique<TexturedCubeProceduralScene>();
+      return std::make_unique<TexturedCubeProceduralScene>(ctx);
     case TestDebugScene::MeshletRenderer:
-      return std::make_unique<MeshletRendererScene>();
+      return std::make_unique<MeshletRendererScene>(ctx);
     case TestDebugScene::Count:
     default:
       ASSERT(0);

@@ -105,7 +105,8 @@ App::App() {
       .window = window_.get(),
       .resource_dir = resource_dir_,
   });
-  ResourceManager::init(ResourceManager::CreateInfo{.renderer = renderer_.get()});
+  ResourceManager::init(
+      ResourceManager::CreateInfo{.model_gpu_mgr = renderer_->get_model_gpu_mgr()});
   camera_.pos.x = -5;
   init_camera();
 
@@ -373,7 +374,7 @@ void App::on_imgui(float dt) {
       float variance = diff * diff;
       variance_sum += variance;
     }
-    return sqrt(variance_sum / data.size());
+    return std::sqrt(variance_sum / data.size());
   };
 
   float total = 0.f;

@@ -47,14 +47,18 @@ enum class TestDebugScene : uint8_t {
 class ITestScene {
  public:
   virtual ~ITestScene() = default;
-  virtual void init(const TestSceneContext&) = 0;
+  explicit ITestScene(const TestSceneContext& ctx) : ctx_(ctx) {}
   virtual void shutdown() {}
-  virtual void on_swapchain_resize(const TestSceneContext&) = 0;
-  virtual void add_render_graph_passes(const TestSceneContext&) = 0;
+  virtual void on_swapchain_resize() = 0;
+  virtual void add_render_graph_passes() = 0;
+
+ protected:
+  [[maybe_unused]] const TestSceneContext& ctx_;
 };
 
 [[nodiscard]] const char* to_string(TestDebugScene s);
-[[nodiscard]] std::unique_ptr<ITestScene> create_test_scene(TestDebugScene s);
+[[nodiscard]] std::unique_ptr<ITestScene> create_test_scene(TestDebugScene s,
+                                                            const TestSceneContext& ctx);
 
 }  // namespace gfx
 

@@ -47,7 +47,7 @@ class TestRenderer {
  private:
   void add_render_graph_passes();
   void init_imgui();
-  [[nodiscard]] TestSceneContext make_ctx();
+  void update_ctx();
 
   std::unique_ptr<ITestScene> scene_;
   TestDebugScene active_scene_{TestDebugScene::TexturedCubeProcedural};

@@ -41,8 +41,6 @@
 #include "hlsl/shared_cull_data.h"
 #include "hlsl/shared_draw_cull.h"
 #include "hlsl/shared_globals.h"
-#include "hlsl/shared_indirect.h"
-#include "hlsl/shared_mesh_data.h"
 #include "hlsl/shared_meshlet_draw_stats.hlsli"
 #include "hlsl/shared_task_cmd.h"
 #include "hlsl/shared_test_clear_buf.h"
@@ -96,6 +94,7 @@ DebugRenderMode clamped_debug_render_mode() {
 
 void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   ZoneScoped;
+  model_gpu_mgr_->set_curr_frame_idx(curr_frame_idx_);
   {
     if (frame_num_ >= device_->get_info().frames_in_flight) {
       // 3 frames in flight ago is ready to be read back to the cpu, since we waited on fence for
@@ -923,331 +922,6 @@ uint32_t MemeRenderer123::get_csm_debug_tex_idx(rhi::TextureHandle depth_tex,
   return device_->get_tex_view_bindless_idx(depth_tex, view);
 }
 
-bool MemeRenderer123::load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
-                                 ModelInstance& model, ModelGPUHandle& out_handle) {
-  ZoneScoped;
-  ModelLoadResult result;
-  if (!::teng::gfx::load_model(path, root_transform, model, result)) {
-    return false;
-  }
-
-  pending_texture_uploads_.reserve(pending_texture_uploads_.size() + result.texture_uploads.size());
-
-  size_t i = 0;
-  // TODO: save elsewhere
-  std::vector<uint32_t> img_upload_bindless_indices;
-  std::vector<rhi::TextureHandleHolder> out_tex_handles;
-  img_upload_bindless_indices.resize(result.texture_uploads.size());
-  for (auto& upload : result.texture_uploads) {
-    if (upload.data) {
-      auto tex = device_->create_tex_h(upload.desc);
-      img_upload_bindless_indices[i] = device_->get_tex(tex)->bindless_idx();
-      pending_texture_uploads_.push_back(GPUTexUpload{
-          .upload = std::move(upload), .tex = tex.handle, .name = get_next_tex_upload_name()});
-      out_tex_handles.emplace_back(std::move(tex));
-    }
-    i++;
-  }
-  bool resized{};
-  assert(!result.materials.empty());
-  auto material_alloc = materials_buf_.allocate(result.materials.size(), resized);
-  {
-    std::vector<M4Material> mats;
-    mats.reserve(result.materials.size());
-    for (const auto& m : result.materials) {
-      auto& mat = mats.emplace_back();
-      if (m.albedo_tex != INVALID_TEX_ID) {
-        mat.albedo_tex_idx = img_upload_bindless_indices[m.albedo_tex];
-      } else {
-        mat.albedo_tex_idx = INVALID_TEX_ID;
-      }
-      if (m.normal_tex != INVALID_TEX_ID) {
-        mat.normal_tex_idx = img_upload_bindless_indices[m.normal_tex];
-      } else {
-        mat.normal_tex_idx = INVALID_TEX_ID;
-      }
-      mat.color = m.albedo_factors;
-      mat.flags = m.flags;
-    }
-    buffer_copy_mgr_.copy_to_buffer(
-        mats.data(), mats.size() * sizeof(M4Material), materials_buf_.get_buffer_handle(),
-        material_alloc.offset * sizeof(M4Material), rhi::PipelineStage::FragmentShader,
-        rhi::AccessFlags::ShaderRead);
-    if (resized) {
-      ASSERT(0);
-    }
-  }
-
-  auto draw_batch_alloc =
-      upload_geometry(GeometryBatchType::Static, result.vertices, result.indices,
-                      result.meshlet_process_result, result.meshes);
-
-  std::vector<InstanceData> base_instance_datas;
-  std::vector<uint32_t> instance_id_to_node;
-  base_instance_datas.reserve(model.tot_mesh_nodes);
-  instance_id_to_node.reserve(model.tot_mesh_nodes);
-
-  uint32_t total_instance_vertices{};
-  uint32_t total_instance_meshlets{};
-  uint32_t task_cmd_count{};
-  {
-    uint32_t curr_meshlet_vis_buf_i{};
-    for (size_t node = 0; node < model.nodes.size(); node++) {
-      auto mesh_id = model.mesh_ids[node];
-      if (model.mesh_ids[node] == Mesh::k_invalid_mesh_id) {
-        continue;
-      }
-      base_instance_datas.emplace_back(InstanceData{
-          .mat_id = result.meshes[mesh_id].material_id + material_alloc.offset,
-          .mesh_id = draw_batch_alloc.mesh_alloc.offset + mesh_id,
-          .meshlet_vis_base = curr_meshlet_vis_buf_i,
-      });
-      instance_id_to_node.push_back(node);
-      curr_meshlet_vis_buf_i +=
-          result.meshlet_process_result.meshlet_datas[mesh_id].meshlets.size();
-      total_instance_vertices +=
-          result.meshlet_process_result.meshlet_datas[mesh_id].meshlet_vertices.size();
-      total_instance_meshlets += result.meshes[mesh_id].meshlet_count;
-      task_cmd_count += align_divide_up(result.meshes[mesh_id].meshlet_count, K_TASK_TG_SIZE);
-    }
-  }
-
-  out_handle = model_gpu_resource_pool_.alloc(ModelGPUResources{
-      .material_alloc = material_alloc,
-      .static_draw_batch_alloc = draw_batch_alloc,
-      .textures = std::move(out_tex_handles),
-      .base_instance_datas = std::move(base_instance_datas),
-      .meshes = std::move(result.meshes),
-      .instance_id_to_node = instance_id_to_node,
-      .totals =
-          ModelGPUResources::Totals{
-              .meshlets = static_cast<uint32_t>(result.meshlet_process_result.tot_meshlet_count),
-              .vertices = static_cast<uint32_t>(result.vertices.size()),
-              .instance_vertices = total_instance_vertices,
-              .instance_meshlets = total_instance_meshlets,
-              .task_cmd_count = task_cmd_count,
-          },
-  });
-  return true;
-}
-
-GeometryBatch::Alloc MemeRenderer123::upload_geometry(
-    [[maybe_unused]] GeometryBatchType type, const std::vector<DefaultVertex>& vertices,
-    const std::vector<rhi::DefaultIndexT>& indices, const MeshletProcessResult& meshlets,
-    std::span<Mesh> meshes) {
-  ZoneScoped;
-  auto& draw_batch = static_draw_batch_;
-  ASSERT(!vertices.empty());
-  ASSERT(!meshlets.meshlet_datas.empty());
-
-  bool resized{};
-  const auto vertex_alloc = draw_batch.vertex_buf.allocate(vertices.size(), resized);
-  buffer_copy_mgr_.copy_to_buffer(vertices.data(), vertices.size() * sizeof(DefaultVertex),
-                                  draw_batch.vertex_buf.get_buffer_handle(),
-                                  vertex_alloc.offset * sizeof(DefaultVertex),
-                                  rhi::PipelineStage::VertexShader | rhi::PipelineStage::MeshShader,
-                                  rhi::AccessFlags::ShaderRead);
-
-  OffsetAllocator::Allocation index_alloc{};
-  if (!indices.empty()) {
-    index_alloc = draw_batch.index_buf.allocate(indices.size(), resized);
-    buffer_copy_mgr_.copy_to_buffer(indices.data(), indices.size() * sizeof(rhi::DefaultIndexT),
-                                    draw_batch.index_buf.get_buffer_handle(),
-                                    index_alloc.offset * sizeof(rhi::DefaultIndexT),
-                                    rhi::PipelineStage::IndexInput, rhi::AccessFlags::IndexRead);
-  }
-
-  const auto meshlet_alloc = draw_batch.meshlet_buf.allocate(meshlets.tot_meshlet_count, resized);
-  const auto meshlet_vertices_alloc =
-      draw_batch.meshlet_vertices_buf.allocate(meshlets.tot_meshlet_verts_count, resized);
-  const auto meshlet_triangles_alloc =
-      draw_batch.meshlet_triangles_buf.allocate(meshlets.tot_meshlet_tri_count, resized);
-  const auto mesh_alloc = draw_batch.mesh_buf.allocate(meshlets.meshlet_datas.size(), resized);
-
-  size_t meshlet_offset{};
-  size_t meshlet_triangles_offset{};
-  size_t meshlet_vertices_offset{};
-  size_t mesh_i{};
-  std::vector<MeshData> mesh_datas;
-  mesh_datas.reserve(meshlets.meshlet_datas.size());
-  for (const auto& meshlet_data : meshlets.meshlet_datas) {
-    ASSERT(!meshlet_data.meshlets.empty());
-    buffer_copy_mgr_.copy_to_buffer(meshlet_data.meshlets.data(),
-                                    meshlet_data.meshlets.size() * sizeof(Meshlet),
-                                    draw_batch.meshlet_buf.get_buffer_handle(),
-                                    (meshlet_alloc.offset + meshlet_offset) * sizeof(Meshlet),
-                                    rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader,
-                                    rhi::AccessFlags::ShaderRead);
-    meshlet_offset += meshlet_data.meshlets.size();
-
-    ASSERT(!meshlet_data.meshlet_vertices.empty());
-    buffer_copy_mgr_.copy_to_buffer(
-        meshlet_data.meshlet_vertices.data(),
-        meshlet_data.meshlet_vertices.size() * sizeof(uint32_t),
-        draw_batch.meshlet_vertices_buf.get_buffer_handle(),
-        (meshlet_vertices_alloc.offset + meshlet_vertices_offset) * sizeof(uint32_t),
-        rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader,
-        rhi::AccessFlags::ShaderRead);
-
-    meshlet_vertices_offset += meshlet_data.meshlet_vertices.size();
-
-    ASSERT(!meshlet_data.meshlet_triangles.empty());
-    buffer_copy_mgr_.copy_to_buffer(
-        meshlet_data.meshlet_triangles.data(),
-        meshlet_data.meshlet_triangles.size() * sizeof(uint8_t),
-        draw_batch.meshlet_triangles_buf.get_buffer_handle(),
-        (meshlet_triangles_alloc.offset + meshlet_triangles_offset) * sizeof(uint8_t),
-        rhi::PipelineStage::MeshShader | rhi::PipelineStage::TaskShader,
-        rhi::AccessFlags::ShaderRead);
-
-    meshlet_triangles_offset += meshlet_data.meshlet_triangles.size();
-
-    ASSERT(mesh_i < meshes.size());
-    MeshData d{
-        .meshlet_base = meshlet_data.meshlet_base + meshlet_alloc.offset,
-        .meshlet_count = static_cast<uint32_t>(meshlet_data.meshlets.size()),
-        .meshlet_vertices_offset =
-            meshlet_data.meshlet_vertices_offset + meshlet_vertices_alloc.offset,
-        .meshlet_triangles_offset =
-            meshlet_data.meshlet_triangles_offset + meshlet_triangles_alloc.offset,
-        .vertex_base = vertex_alloc.offset,
-        .center = meshes[mesh_i].center,
-        .radius = meshes[mesh_i].radius,
-    };
-    mesh_i++;
-    mesh_datas.push_back(d);
-  }
-  buffer_copy_mgr_.copy_to_buffer(
-      mesh_datas.data(), mesh_datas.size() * sizeof(MeshData),
-      draw_batch.mesh_buf.get_buffer_handle(), mesh_alloc.offset * sizeof(MeshData),
-      rhi::PipelineStage::ComputeShader | rhi::PipelineStage::MeshShader |
-          rhi::PipelineStage::TaskShader,
-      rhi::AccessFlags::ShaderRead);
-
-  return GeometryBatch::Alloc{.vertex_alloc = vertex_alloc,
-                              .index_alloc = index_alloc,
-                              .meshlet_alloc = meshlet_alloc,
-                              .mesh_alloc = mesh_alloc,
-                              .meshlet_triangles_alloc = meshlet_triangles_alloc,
-                              .meshlet_vertices_alloc = meshlet_vertices_alloc};
-}
-
-void MemeRenderer123::reserve_space_for(std::span<std::pair<ModelGPUHandle, uint32_t>> models) {
-  size_t total_instance_datas{};
-  for (auto& [model_handle, instance_count] : models) {
-    auto* model_resources = model_gpu_resource_pool_.get(model_handle);
-    ASSERT(model_resources);
-    total_instance_datas += model_resources->base_instance_datas.size() * instance_count;
-  }
-  static_instance_mgr_.reserve_space(total_instance_datas);
-}
-
-ModelInstanceGPUHandle MemeRenderer123::add_model_instance(ModelInstance& model,
-                                                           ModelGPUHandle model_gpu_handle) {
-  ZoneScoped;
-  auto* model_resources = model_gpu_resource_pool_.get(model_gpu_handle);
-  ASSERT(model_resources);
-  auto& model_instance_datas = model_resources->base_instance_datas;
-  auto& instance_id_to_node = model_resources->instance_id_to_node;
-  std::vector<InstanceData> instance_datas = {model_instance_datas.begin(),
-                                              model_instance_datas.end()};
-  std::vector<IndexedIndirectDrawCmd> cmds;
-  if (renderer_cv::pipeline_mesh_shaders.get() == 0) cmds.reserve(instance_datas.size());
-
-  ASSERT(instance_datas.size() == instance_id_to_node.size());
-
-  const InstanceMgr::Alloc instance_data_gpu_alloc = static_instance_mgr_.allocate(
-      model_instance_datas.size(), model_resources->totals.instance_meshlets);
-  stats_.total_instance_meshlets += model_resources->totals.instance_meshlets;
-  stats_.total_instance_vertices += model_resources->totals.instance_vertices;
-
-  if (static_instance_mgr_.need_draw_cmds_on_cpu() &&
-      static_instance_mgr_.cpu_draw_cmds().size() <
-          instance_data_gpu_alloc.instance_data_alloc.offset + instance_datas.size()) {
-    static_instance_mgr_.cpu_draw_cmds().resize(instance_data_gpu_alloc.instance_data_alloc.offset +
-                                                instance_datas.size());
-  }
-  for (size_t i = 0; i < instance_datas.size(); i++) {
-    auto node_i = instance_id_to_node[i];
-    const auto& transform = model.global_transforms[node_i];
-    instance_datas[i].translation = transform.translation;
-    instance_datas[i].rotation = transform.rotation;
-    instance_datas[i].scale = transform.scale;
-    instance_datas[i].meshlet_vis_base += instance_data_gpu_alloc.meshlet_vis_alloc.offset;
-    size_t mesh_id = model.mesh_ids[node_i];
-    auto& mesh = model_resources->meshes[mesh_id];
-    IndexedIndirectDrawCmd cmd{
-        .index_count = mesh.index_count,
-        .instance_count = 1,
-        .first_index = static_cast<uint32_t>(
-            (mesh.index_offset + model_resources->static_draw_batch_alloc.index_alloc.offset *
-                                     sizeof(rhi::DefaultIndexT)) /
-            sizeof(rhi::DefaultIndexT)),
-        .vertex_offset = static_cast<int32_t>(
-            mesh.vertex_offset_bytes +
-            model_resources->static_draw_batch_alloc.vertex_alloc.offset * sizeof(DefaultVertex)),
-        .first_instance =
-            static_cast<uint32_t>(i + instance_data_gpu_alloc.instance_data_alloc.offset),
-    };
-    if (static_instance_mgr_.need_draw_cmds_on_cpu()) {
-      auto final_instance_i = instance_data_gpu_alloc.instance_data_alloc.offset + i;
-      ASSERT(final_instance_i < static_instance_mgr_.cpu_draw_cmds().size());
-      static_instance_mgr_.cpu_draw_cmds()[final_instance_i] = cmd;
-    }
-    if (renderer_cv::pipeline_mesh_shaders.get() == 0) {
-      cmds.push_back(cmd);
-    }
-  }
-  static_draw_batch_.task_cmd_count += model_resources->totals.task_cmd_count;
-
-  stats_.total_instances += instance_datas.size();
-  buffer_copy_mgr_.copy_to_buffer(
-      instance_datas.data(), instance_datas.size() * sizeof(InstanceData),
-      static_instance_mgr_.get_instance_data_buf(),
-      instance_data_gpu_alloc.instance_data_alloc.offset * sizeof(InstanceData),
-      rhi::PipelineStage::AllCommands, rhi::AccessFlags::ShaderRead);
-  if (renderer_cv::pipeline_mesh_shaders.get() == 0) {
-    buffer_copy_mgr_.copy_to_buffer(
-        cmds.data(), cmds.size() * sizeof(IndexedIndirectDrawCmd),
-        static_instance_mgr_.get_draw_cmd_buf(),
-        instance_data_gpu_alloc.instance_data_alloc.offset * sizeof(IndexedIndirectDrawCmd),
-        rhi::PipelineStage::ComputeShader | rhi::PipelineStage::DrawIndirect,
-        rhi::AccessFlags::IndirectCommandRead);
-  }
-  ASSERT(model_gpu_handle.is_valid());
-  return model_instance_gpu_resource_pool_.alloc(ModelInstanceGPUResources{
-      .instance_data_gpu_alloc = instance_data_gpu_alloc,
-      .model_resources_handle = model_gpu_handle,
-  });
-}
-
-void MemeRenderer123::free_instance(ModelInstanceGPUHandle handle) {
-  auto* gpu_resources = model_instance_gpu_resource_pool_.get(handle);
-  ASSERT(gpu_resources);
-  if (!gpu_resources) {
-    return;
-  }
-  static_instance_mgr_.free(gpu_resources->instance_data_gpu_alloc, curr_frame_idx_);
-  auto* model_resources = model_gpu_resource_pool_.get(gpu_resources->model_resources_handle);
-  static_draw_batch_.task_cmd_count -= model_resources->totals.task_cmd_count;
-  stats_.total_instances -= model_resources->base_instance_datas.size();
-  stats_.total_instance_meshlets -= model_resources->totals.instance_meshlets;
-  stats_.total_instance_vertices -= model_resources->totals.instance_vertices;
-  model_instance_gpu_resource_pool_.destroy(handle);
-}
-
-void MemeRenderer123::free_model(ModelGPUHandle handle) {
-  auto* gpu_resources = model_gpu_resource_pool_.get(handle);
-  ASSERT(gpu_resources);
-  if (!gpu_resources) {
-    return;
-  }
-  gpu_resources->textures.clear();
-  materials_buf_.free(gpu_resources->material_alloc);
-  static_draw_batch_.free(gpu_resources->static_draw_batch_alloc);
-  model_gpu_resource_pool_.destroy(handle);
-}
-
 void MemeRenderer123::init_imgui() {
   ZoneScoped;
   IMGUI_CHECKVERSION();
@@ -1546,7 +1220,8 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
                       // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
                       .name = "all materials buf"},
                      sizeof(M4Material)),
-      static_instance_mgr_(*device_, buffer_copy_mgr_, device_->get_info().frames_in_flight, *this),
+      static_instance_mgr_(*device_, buffer_copy_mgr_, device_->get_info().frames_in_flight,
+                           mesh_shaders_enabled()),
       static_draw_batch_(GeometryBatchType::Static, *device_, buffer_copy_mgr_,
                          GeometryBatch::CreateInfo{
                              .initial_vertex_capacity = 1'000'000,
@@ -1555,7 +1230,9 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
                              .initial_mesh_capacity = 100'000,
                              .initial_meshlet_triangle_capacity = 1'000'000,
                              .initial_meshlet_vertex_capacity = 1'000'000,
-                         }) {
+                         }),
+      model_gpu_mgr_(std::make_unique<ModelGPUMgr>(
+          *device_, static_instance_mgr_, static_draw_batch_, buffer_copy_mgr_, materials_buf_)) {
   ZoneScoped;
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;
