@@ -4,12 +4,16 @@
 
 #include <tracy/Tracy.hpp>
 
+#include "ResourceManager.hpp"
 #include "UI.hpp"
 #include "Window.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
+#include "gfx/ModelGPUManager.hpp"
 #include "gfx/ShaderManager.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
+#include "hlsl/material.h"
+#include "hlsl/shader_constants.h"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "implot.h"
@@ -27,12 +31,30 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
       frame_gpu_upload_allocator_(device_, false),
       resource_dir_(cinfo.resource_dir),
       buffer_copy_mgr_(device_, frame_gpu_upload_allocator_),
-      window_(cinfo.window) {
+      window_(cinfo.window),
+      static_instance_mgr_(*device_, buffer_copy_mgr_, device_->get_info().frames_in_flight, true),
+      static_draw_batch_(GeometryBatchType::Static, *device_, buffer_copy_mgr_,
+                         GeometryBatch::CreateInfo{
+                             .initial_vertex_capacity = 1'000'000,
+                             .initial_index_capacity = 1'000'000,
+                             .initial_meshlet_capacity = 1'000'000,
+                             .initial_mesh_capacity = 100'000,
+                             .initial_meshlet_triangle_capacity = 1'000'000,
+                             .initial_meshlet_vertex_capacity = 1'000'000,
+                         }),
+      materials_buf_(*device_, buffer_copy_mgr_,
+                     {.usage = rhi::BufferUsage::Storage,
+                      .size = k_max_materials * sizeof(M4Material),
+                      // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
+                      .name = "all materials buf"},
+                     sizeof(M4Material)) {
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
   shader_mgr_->init(
       device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
   imgui_renderer_ = std::make_unique<ImGuiRenderer>(*shader_mgr_, device_);
   rg_.init(device_);
+  model_gpu_mgr_ = std::make_unique<ModelGPUMgr>(*device_, static_instance_mgr_, static_draw_batch_,
+                                                 buffer_copy_mgr_, materials_buf_);
   ctx_ = {
       .device = device_,
       .swapchain = swapchain_,
@@ -42,6 +64,7 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
       .buffer_copy = &buffer_copy_mgr_,
       .frame_staging = &frame_gpu_upload_allocator_,
       .imgui_renderer = imgui_renderer_.get(),
+      .model_gpu_mgr = model_gpu_mgr_.get(),
   };
   update_ctx();
   scene_ = create_test_scene(active_scene_, ctx_);

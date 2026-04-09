@@ -50,6 +50,9 @@ TestApp::TestApp() {
       .window = window_.get(),
       .resource_dir = resource_dir_,
   });
+  ResourceManager::init(
+      ResourceManager::CreateInfo{.model_gpu_mgr = renderer_->get_model_gpu_mgr()});
+
   window_->set_key_callback([this](int key, int action, int mods) {
     if (action == GLFW_PRESS && key == GLFW_KEY_TAB) {
       renderer_->cycle_debug_scene();
@@ -93,6 +96,7 @@ void TestApp::run() {
     }
   }
 
+  ResourceManager::shutdown();
   renderer_.reset();
   swapchain_ = {};
   window_->shutdown();

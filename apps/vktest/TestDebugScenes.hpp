@@ -15,6 +15,7 @@ namespace gfx {
 class ShaderManager;
 struct GPUFrameAllocator3;
 class ImGuiRenderer;
+class ModelGPUMgr;
 
 namespace rhi {
 
@@ -32,6 +33,7 @@ struct TestSceneContext {
   BufferCopyMgr* buffer_copy{};
   GPUFrameAllocator3* frame_staging{};
   ImGuiRenderer* imgui_renderer{};
+  ModelGPUMgr* model_gpu_mgr{};
   uint32_t curr_frame_idx{};
   float time_sec{};
 };
