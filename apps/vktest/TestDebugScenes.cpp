@@ -1,5 +1,6 @@
 #include "TestDebugScenes.hpp"
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <glm/gtc/matrix_transform.hpp>
@@ -9,10 +10,11 @@
 #include "ResourceManager.hpp"
 #include "core/EAssert.hpp"
 #include "core/Util.hpp"
-#include "gfx/DrawBatch.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/ImGuiRenderer.hpp"
+#include "gfx/ModelGPUManager.hpp"
 #include "gfx/ModelLoader.hpp"
+#include "gfx/ShaderManager.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/renderer/ModelGPUUploader.hpp"
 #include "gfx/rhi/Buffer.hpp"
@@ -22,8 +24,10 @@
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
 #include "hlsl/default_vertex.h"
-#include "hlsl/material.h"
 #include "hlsl/shader_constants.h"
+#include "hlsl/shared_globals.h"
+#include "hlsl/shared_task_cmd.h"
+#include "ktx.h"
 
 using namespace teng;
 using namespace teng::gfx;
@@ -32,6 +36,14 @@ using namespace teng::gfx::rhi;
 namespace teng::gfx {
 
 namespace {
+
+std::filesystem::path resolve_model_path(const std::filesystem::path& resource_dir,
+                                         const std::string& path) {
+  if (path.starts_with("Models")) {
+    return resource_dir / "models" / "gltf" / path;
+  }
+  return path;
+}
 
 class ComputePlusVertexScene final : public ITestScene {
  public:
@@ -347,60 +359,209 @@ class TexturedCubeProceduralScene final : public ITestScene {
   bool checker_upload_done_{};
 };
 
+void flush_pending_model_textures(ModelGPUMgr& mgr, rhi::Device& device,
+                                  GPUFrameAllocator3& staging, rhi::CmdEncoder* enc) {
+  const auto& pending = mgr.get_pending_texture_uploads();
+  if (pending.empty()) {
+    return;
+  }
+  for (const auto& upload : pending) {
+    const auto& tex_upload = upload.upload;
+    auto* tex = device.get_tex(upload.tex);
+    ASSERT(tex);
+    ASSERT(tex_upload.data);
+    if (tex_upload.load_type == CPUTextureLoadType::Ktx2) {
+      auto* ktx_tex = (ktxTexture2*)tex_upload.data.get();
+      const auto& desc = upload.upload.desc;
+      size_t block_width = get_block_width_bytes(desc.format);
+      size_t bytes_per_block = get_bytes_per_block(desc.format);
+      size_t total_img_size = 0;
+      for (uint32_t mip_level = 0; mip_level < desc.mip_levels; mip_level++) {
+        total_img_size += ktxTexture_GetImageSize(ktxTexture(ktx_tex), mip_level);
+      }
+      auto upload_buf = staging.alloc(static_cast<uint32_t>(total_img_size));
+      ASSERT(upload_buf.buf.is_valid());
+      size_t curr_dst_offset = 0;
+      for (uint32_t mip_level = 0; mip_level < desc.mip_levels; mip_level++) {
+        size_t offset = 0;
+        auto result = ktxTexture_GetImageOffset(ktxTexture(ktx_tex), mip_level, 0, 0, &offset);
+        ASSERT(result == KTX_SUCCESS);
+        auto img_mip_level_size_bytes = ktxTexture_GetImageSize(ktxTexture(ktx_tex), mip_level);
+        uint32_t mip_width = std::max(1u, desc.dims.x >> mip_level);
+        uint32_t mip_height = std::max(1u, desc.dims.y >> mip_level);
+        uint32_t blocks_wide = align_divide_up(mip_width, static_cast<uint32_t>(block_width));
+        auto bpr = static_cast<size_t>(blocks_wide) * bytes_per_block;
+        std::memcpy(static_cast<std::byte*>(upload_buf.write_ptr) + curr_dst_offset,
+                    reinterpret_cast<const std::byte*>(ktx_tex->pData) + offset,
+                    img_mip_level_size_bytes);
+        enc->upload_texture_data(
+            upload_buf.buf, upload_buf.offset + static_cast<uint32_t>(curr_dst_offset), bpr,
+            upload.tex, glm::uvec3{mip_width, mip_height, 1}, glm::uvec3{0, 0, 0}, mip_level);
+        curr_dst_offset += img_mip_level_size_bytes;
+      }
+    } else {
+      size_t src_bytes_per_row = tex_upload.bytes_per_row;
+      size_t bytes_per_row = align_up(src_bytes_per_row, 256);
+      size_t total_size = bytes_per_row * tex->desc().dims.y;
+      auto upload_buf = staging.alloc(static_cast<uint32_t>(total_size));
+      size_t dst_offset = 0;
+      size_t src_offset = 0;
+      for (size_t row = 0; row < tex->desc().dims.y; row++) {
+        std::memcpy(static_cast<std::byte*>(upload_buf.write_ptr) + dst_offset,
+                    static_cast<const std::byte*>(tex_upload.data.get()) + src_offset,
+                    src_bytes_per_row);
+        dst_offset += bytes_per_row;
+        src_offset += src_bytes_per_row;
+      }
+      enc->upload_texture_data(upload_buf.buf, upload_buf.offset, bytes_per_row, upload.tex,
+                               glm::uvec3{tex->desc().dims.x, tex->desc().dims.y, 1},
+                               glm::uvec3{0, 0, 0}, 0);
+    }
+  }
+  mgr.clear_pending_texture_uploads();
+}
+
 class MeshletRendererScene final : public ITestScene {
  public:
-  explicit MeshletRendererScene(const TestSceneContext& ctx)
-      : ITestScene(ctx),
-        static_instance_mgr_(*ctx.device, *ctx.buffer_copy, ctx.device->get_info().frames_in_flight,
-                             true),
-        static_draw_batch_(GeometryBatchType::Static, *ctx.device, *ctx.buffer_copy,
-                           GeometryBatch::CreateInfo{
-                               .initial_vertex_capacity = 1'000'000,
-                               .initial_index_capacity = 1'000'000,
-                               .initial_meshlet_capacity = 1'000'000,
-                               .initial_mesh_capacity = 100'000,
-                               .initial_meshlet_triangle_capacity = 1'000'000,
-                               .initial_meshlet_vertex_capacity = 1'000'000,
-                           }),
-        buffer_copy_mgr_(*ctx_.buffer_copy),
-        device_(*ctx_.device),
-        materials_buf_(*ctx.device, *ctx.buffer_copy,
-                       {.usage = rhi::BufferUsage::Storage,
-                        .size = k_max_materials * sizeof(M4Material),
-                        // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
-                        .name = "all materials buf"},
-                       sizeof(M4Material)) {
+  explicit MeshletRendererScene(const TestSceneContext& ctx) : ITestScene(ctx) {
+    ASSERT(ctx_.model_gpu_mgr != nullptr);
+    ASSERT(ctx_.shader_mgr != nullptr);
+    ASSERT(ctx_.buffer_copy != nullptr);
+    ASSERT(ctx_.frame_staging != nullptr);
+
     const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
-    test_model_handle_ = ResourceManager::get().load_model(suzanne_path, glm::mat4{1.f});
+    test_model_handle_ = ResourceManager::get().load_model(
+        resolve_model_path(ctx_.resource_dir, suzanne_path), glm::mat4{1.f});
+    ModelInstance* inst = ResourceManager::get().get_model(test_model_handle_);
+    ASSERT(inst);
+    auto alloc_opt = ctx_.model_gpu_mgr->instance_alloc(inst->instance_gpu_handle);
+    ASSERT(alloc_opt.has_value());
+    instance_alloc_ = *alloc_opt;
+    const ModelGPUResources* res = ctx_.model_gpu_mgr->model_resources(inst->model_gpu_handle);
+    ASSERT(res);
+
+    std::vector<TaskCmd> cmds;
+    append_meshlet_task_cmds(*res, instance_alloc_.instance_data_alloc.offset, cmds);
+    task_cmd_count_ = static_cast<uint32_t>(cmds.size());
+    ASSERT(task_cmd_count_ == res->totals.task_cmd_count);
+
+    task_cmd_buf_ = ctx_.device->create_buf_h({
+        .usage = BufferUsage::Storage,
+        .size = std::max(cmds.size() * sizeof(TaskCmd), size_t{256}),
+        .flags = BufferDescFlags::CPUAccessible,
+        .name = "meshlet_hello_task_cmds",
+    });
+    std::memcpy(ctx_.device->get_buf(task_cmd_buf_.handle)->contents(), cmds.data(),
+                cmds.size() * sizeof(TaskCmd));
+
+    constexpr size_t k_ubo_align = 256;
+    view_cb_buf_ = ctx_.device->create_buf_h({
+        .usage = BufferUsage::Uniform,
+        .size = align_up(sizeof(ViewData), k_ubo_align),
+        .flags = BufferDescFlags::CPUAccessible,
+        .name = "meshlet_hello_view",
+    });
+    globals_cb_buf_ = ctx_.device->create_buf_h({
+        .usage = BufferUsage::Uniform,
+        .size = align_up(sizeof(GlobalData), k_ubo_align),
+        .flags = BufferDescFlags::CPUAccessible,
+        .name = "meshlet_hello_globals",
+    });
+
+    camera_.pos = {0.f, 0.f, 3.f};
+    camera_.pitch = 0.f;
+    camera_.yaw = -90.f;
+    camera_.calc_vectors();
+
+    recreate_meshlet_pso();
   }
 
-  void on_swapchain_resize() override {}
+  void on_swapchain_resize() override { recreate_meshlet_pso(); }
 
-  void add_render_graph_passes() override {}
+  void add_render_graph_passes() override {
+    auto& p = ctx_.rg->add_graphics_pass("meshlet_hello");
+    p.w_swapchain_tex(ctx_.swapchain);
+    p.set_ex([this](CmdEncoder* enc) {
+      flush_pending_model_textures(*ctx_.model_gpu_mgr, *ctx_.device, *ctx_.frame_staging, enc);
+
+      const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
+                           std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height));
+      const glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.f), aspect, 0.1f, 100.f);
+      camera_.calc_vectors();
+      glm::mat4 view = camera_.get_view_mat();
+      view = glm::lookAt(glm::vec3(5, 5, 5), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+      const float t = ctx_.time_sec;
+      const glm::mat4 model = glm::rotate(glm::mat4(1.f), t * 0.5f, glm::vec3(0.f, 1.f, 0.f));
+      const glm::mat4 vp = proj * view * model;
+
+      ViewData vd{};
+      vd.vp = vp;
+      vd.inv_vp = glm::inverse(vp);
+      vd.view = view * model;
+      vd.proj = proj;
+      vd.inv_proj = glm::inverse(proj);
+      vd.camera_pos = glm::vec4(camera_.pos, 1.f);
+      std::memcpy(ctx_.device->get_buf(view_cb_buf_.handle)->contents(), &vd, sizeof(vd));
+
+      GlobalData gd{};
+      gd.render_mode = DEBUG_RENDER_MODE_NONE;
+      gd.frame_num = 0;
+      gd.meshlet_stats_enabled = 0;
+      gd._padding = 0;
+      std::memcpy(ctx_.device->get_buf(globals_cb_buf_.handle)->contents(), &gd, sizeof(gd));
+
+      glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
+      ctx_.device->begin_swapchain_rendering(ctx_.swapchain, enc, &clear_color);
+      enc->bind_pipeline(meshlet_pso_);
+      enc->set_cull_mode(CullMode::None);
+      enc->set_wind_order(WindOrder::CounterClockwise);
+      enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
+      enc->set_scissor({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
+
+      auto& batch = ctx_.model_gpu_mgr->geometry_batch();
+      enc->bind_srv(batch.mesh_buf.get_buffer_handle(), 5);
+      enc->bind_srv(batch.meshlet_buf.get_buffer_handle(), 6);
+      enc->bind_srv(batch.meshlet_triangles_buf.get_buffer_handle(), 7);
+      enc->bind_srv(batch.meshlet_vertices_buf.get_buffer_handle(), 8);
+      enc->bind_srv(batch.vertex_buf.get_buffer_handle(), 9);
+      enc->bind_srv(ctx_.model_gpu_mgr->instance_mgr().get_instance_data_buf(), 10);
+      enc->bind_srv(task_cmd_buf_.handle, 4);
+      enc->bind_srv(ctx_.model_gpu_mgr->materials_allocator().get_buffer_handle(), 11);
+
+      enc->bind_cbv(globals_cb_buf_.handle, GLOBALS_SLOT, 0, sizeof(GlobalData));
+      enc->bind_cbv(view_cb_buf_.handle, VIEW_DATA_SLOT, 0, sizeof(ViewData));
+
+      enc->draw_mesh_threadgroups({task_cmd_count_, 1, 1}, {K_TASK_TG_SIZE, 1, 1},
+                                  {K_MESH_TG_SIZE, 1, 1});
+      enc->end_rendering();
+    });
+  }
 
  private:
-  void load_and_upload_model(const std::filesystem::path& path, const glm::mat4& root_transform,
-                             ModelInstance& model, ModelGPUHandle& out_handle) {
-    ModelLoadResult result;
-    if (!load_model(path, root_transform, model, result)) {
+  void recreate_meshlet_pso() {
+    auto tex_h = ctx_.swapchain->get_texture(0);
+    if (!tex_h.is_valid()) {
       return;
     }
-    upload_model(result, model, *ctx_.device, pending_texture_uploads_, materials_buf_,
-                 buffer_copy_mgr_, static_draw_batch_, out_handle, model_gpu_resource_pool_);
+    const auto fmt = ctx_.device->get_tex(tex_h)->desc().format;
+    meshlet_pso_ = ctx_.shader_mgr->create_graphics_pipeline({
+        .shaders = {{"debug_meshlet_hello", ShaderType::Task},
+                    {"debug_meshlet_hello", ShaderType::Mesh},
+                    {"debug_meshlet_hello", ShaderType::Fragment}},
+        .rendering = {.color_formats = {fmt}},
+        .depth_stencil = GraphicsPipelineCreateInfo::depth_disable(),
+        .name = "debug_meshlet_hello",
+    });
   }
 
-  InstanceMgr static_instance_mgr_;
-  GeometryBatch static_draw_batch_;
-  [[maybe_unused]] BufferCopyMgr& buffer_copy_mgr_;
-  [[maybe_unused]] rhi::Device& device_;
-
-  std::vector<GPUTexUpload> pending_texture_uploads_;
-  BackedGPUAllocator materials_buf_;
-  BlockPool<ModelGPUHandle, ModelGPUResources> model_gpu_resource_pool_{20, 1, true};
-
   PipelineHandleHolder meshlet_pso_;
-
+  BufferHandleHolder task_cmd_buf_;
+  BufferHandleHolder view_cb_buf_;
+  BufferHandleHolder globals_cb_buf_;
+  Camera camera_;
   ModelHandle test_model_handle_;
+  uint32_t task_cmd_count_{};
+  InstanceMgr::Alloc instance_alloc_{};
 };
 
 }  // namespace

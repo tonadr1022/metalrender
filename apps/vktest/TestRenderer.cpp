@@ -10,6 +10,7 @@
 #include "core/Logger.hpp"  // IWYU pragma: keep
 #include "gfx/ModelGPUManager.hpp"
 #include "gfx/ShaderManager.hpp"
+#include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "hlsl/material.h"
@@ -51,6 +52,7 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
   shader_mgr_->init(
       device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
+  renderer_cv::pipeline_mesh_shaders.set(1);
   imgui_renderer_ = std::make_unique<ImGuiRenderer>(*shader_mgr_, device_);
   rg_.init(device_);
   model_gpu_mgr_ = std::make_unique<ModelGPUMgr>(*device_, static_instance_mgr_, static_draw_batch_,
@@ -65,6 +67,7 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
       .frame_staging = &frame_gpu_upload_allocator_,
       .imgui_renderer = imgui_renderer_.get(),
       .model_gpu_mgr = model_gpu_mgr_.get(),
+      .resource_dir = resource_dir_,
   };
   update_ctx();
   scene_ = create_test_scene(active_scene_, ctx_);
@@ -95,6 +98,7 @@ void TestRenderer::cycle_debug_scene() {
 void TestRenderer::render() {
   ZoneScoped;
   update_ctx();
+  model_gpu_mgr_->set_curr_frame_idx(ctx_.curr_frame_idx);
   shader_mgr_->replace_dirty_pipelines();
   add_render_graph_passes();
   static int i = 0;

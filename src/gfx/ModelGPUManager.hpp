@@ -1,9 +1,11 @@
 #pragma once
 
+#include <optional>
 #include <span>
 
 #include "core/Config.hpp"
 #include "core/Pool.hpp"
+#include "gfx/BackedGPUAllocator.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/renderer/ModelGPUUploader.hpp"
@@ -52,6 +54,25 @@ class ModelGPUMgr {
     return pending_texture_uploads_;
   }
   void clear_pending_texture_uploads() { pending_texture_uploads_.clear(); }
+
+  GeometryBatch& geometry_batch() { return static_draw_batch_; }
+  const GeometryBatch& geometry_batch() const { return static_draw_batch_; }
+  InstanceMgr& instance_mgr() { return static_instance_mgr_; }
+  const InstanceMgr& instance_mgr() const { return static_instance_mgr_; }
+  BackedGPUAllocator& materials_allocator() { return materials_buf_; }
+  const BackedGPUAllocator& materials_allocator() const { return materials_buf_; }
+
+  [[nodiscard]] const ModelGPUResources* model_resources(ModelGPUHandle h) const {
+    return model_gpu_resource_pool_.get(h);
+  }
+
+  [[nodiscard]] std::optional<InstanceMgr::Alloc> instance_alloc(ModelInstanceGPUHandle h) const {
+    const auto* p = model_instance_gpu_resource_pool_.get(h);
+    if (!p) {
+      return std::nullopt;
+    }
+    return p->instance_data_gpu_alloc;
+  }
 
  private:
   Stats stats_{};

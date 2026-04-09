@@ -1,5 +1,6 @@
 #include "ModelGPUUploader.hpp"
 
+#include <algorithm>
 #include <tracy/Tracy.hpp>
 
 #include "core/Util.hpp"
@@ -12,10 +13,32 @@
 #include "hlsl/shader_constants.h"
 #include "hlsl/shared_instance_data.h"
 #include "hlsl/shared_mesh_data.h"
+#include "hlsl/shared_task_cmd.h"
 
 namespace TENG_NAMESPACE {
 
 namespace gfx {
+
+void append_meshlet_task_cmds(const ModelGPUResources& res, uint32_t instance_data_base,
+                              std::vector<TaskCmd>& out_cmds) {
+  const uint32_t mesh_alloc_off = res.static_draw_batch_alloc.mesh_alloc.offset;
+  for (size_t i = 0; i < res.base_instance_datas.size(); ++i) {
+    const uint32_t mesh_idx = res.base_instance_datas[i].mesh_id - mesh_alloc_off;
+    const uint32_t meshlet_base = res.gpu_meshlet_base[mesh_idx];
+    const uint32_t meshlet_count = res.meshes[mesh_idx].meshlet_count;
+    const uint32_t task_groups = align_divide_up(meshlet_count, K_TASK_TG_SIZE);
+    const uint32_t instance_id = instance_data_base + static_cast<uint32_t>(i);
+    for (uint32_t g = 0; g < task_groups; ++g) {
+      TaskCmd cmd{};
+      cmd.instance_id = instance_id;
+      cmd.task_offset = meshlet_base + g * K_TASK_TG_SIZE;
+      cmd.group_base = g * K_TASK_TG_SIZE;
+      cmd.task_count = std::min<uint32_t>(K_TASK_TG_SIZE, meshlet_count - g * K_TASK_TG_SIZE);
+      cmd.late_draw_visibility = 1u;
+      out_cmds.push_back(cmd);
+    }
+  }
+}
 
 namespace {
 
@@ -127,19 +150,18 @@ void upload_model(ModelLoadResult& result, ModelInstance& model, rhi::Device& de
                   GeometryBatch& draw_batch, ModelGPUHandle& out_handle,
                   BlockPool<ModelGPUHandle, ModelGPUResources>& model_gpu_resource_pool) {
   pending_texture_uploads.reserve(pending_texture_uploads.size() + result.texture_uploads.size());
-  size_t i = 0;
 
-  std::vector<uint32_t> img_upload_bindless_indices;
+  std::vector<uint32_t> img_upload_bindless_indices(result.texture_uploads.size(), 0);
   std::vector<rhi::TextureHandleHolder> out_tex_handles;
-  for (auto& upload : result.texture_uploads) {
+  for (size_t ti = 0; ti < result.texture_uploads.size(); ++ti) {
+    auto& upload = result.texture_uploads[ti];
     if (upload.data) {
       auto tex = device.create_tex_h(upload.desc);
-      img_upload_bindless_indices[i] = device.get_tex(tex)->bindless_idx();
+      img_upload_bindless_indices[ti] = device.get_tex(tex)->bindless_idx();
       pending_texture_uploads.push_back(
           GPUTexUpload{.upload = std::move(upload), .tex = tex.handle});
       out_tex_handles.emplace_back(std::move(tex));
     }
-    i++;
   }
 
   bool resized{};
@@ -176,6 +198,12 @@ void upload_model(ModelLoadResult& result, ModelInstance& model, rhi::Device& de
       upload_geometry(draw_batch, buffer_copy_mgr, result.vertices, result.indices,
                       result.meshlet_process_result, result.meshes);
 
+  std::vector<uint32_t> gpu_meshlet_base;
+  gpu_meshlet_base.reserve(result.meshlet_process_result.meshlet_datas.size());
+  for (const auto& meshlet_data : result.meshlet_process_result.meshlet_datas) {
+    gpu_meshlet_base.push_back(meshlet_data.meshlet_base + draw_batch_alloc.meshlet_alloc.offset);
+  }
+
   std::vector<InstanceData> base_instance_datas;
   std::vector<uint32_t> instance_id_to_node;
   base_instance_datas.reserve(model.tot_mesh_nodes);
@@ -206,16 +234,13 @@ void upload_model(ModelLoadResult& result, ModelInstance& model, rhi::Device& de
     }
   }
 
-  GeometryBatch::Alloc upload_geometry(
-      GeometryBatchType type, const std::vector<DefaultVertex>& vertices,
-      const std::vector<rhi::DefaultIndexT>& indices, const MeshletProcessResult& meshlets,
-      std::span<Mesh> meshes);
   out_handle = model_gpu_resource_pool.alloc(ModelGPUResources{
       .material_alloc = material_alloc,
       .static_draw_batch_alloc = draw_batch_alloc,
       .textures = std::move(out_tex_handles),
       .base_instance_datas = std::move(base_instance_datas),
       .meshes = std::move(result.meshes),
+      .gpu_meshlet_base = std::move(gpu_meshlet_base),
       .instance_id_to_node = instance_id_to_node,
       .totals =
           ModelGPUResources::Totals{

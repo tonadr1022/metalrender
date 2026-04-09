@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <memory>
 
 #include "gfx/GPUFrameAllocator2.hpp"
@@ -35,6 +36,7 @@ struct TestSceneContext {
   ImGuiRenderer* imgui_renderer{};
   ModelGPUMgr* model_gpu_mgr{};
   uint32_t curr_frame_idx{};
+  std::filesystem::path resource_dir{};
   float time_sec{};
 };
 

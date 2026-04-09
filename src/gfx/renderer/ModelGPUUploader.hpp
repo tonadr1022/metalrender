@@ -1,9 +1,12 @@
 #pragma once
 
+#include <vector>
+
 #include "core/Config.hpp"
 #include "gfx/DrawBatch.hpp"
 #include "gfx/ModelLoader.hpp"
 #include "hlsl/shared_instance_data.h"
+#include "hlsl/shared_task_cmd.h"
 #include "offsetAllocator.hpp"
 
 namespace TENG_NAMESPACE {
@@ -18,6 +21,8 @@ struct ModelGPUResources {
   std::vector<rhi::TextureHandleHolder> textures;
   std::vector<InstanceData> base_instance_datas;
   std::vector<Mesh> meshes;
+  /// Global meshlet buffer index base per mesh (same order as `meshes`).
+  std::vector<uint32_t> gpu_meshlet_base;
   std::vector<uint32_t> instance_id_to_node;
   struct Totals {
     uint32_t meshlets;
@@ -39,6 +44,12 @@ void upload_model(ModelLoadResult& result, ModelInstance& model, rhi::Device& de
                   BackedGPUAllocator& materials_buf, BufferCopyMgr& buffer_copy_mgr,
                   GeometryBatch& draw_batch, ModelGPUHandle& out_handle,
                   BlockPool<ModelGPUHandle, ModelGPUResources>& model_gpu_resource_pool);
+
+/// Appends draw_cull-compatible task commands for every instance row in `res` (CPU path for
+/// uncullable debug draws). `instance_data_base` is
+/// `InstanceMgr::Alloc::instance_data_alloc.offset`.
+void append_meshlet_task_cmds(const ModelGPUResources& res, uint32_t instance_data_base,
+                              std::vector<TaskCmd>& out_cmds);
 
 }  // namespace gfx
 
