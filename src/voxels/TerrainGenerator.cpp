@@ -2,9 +2,8 @@
 
 #include <FastNoise/FastNoise.h>
 
-#include "voxels/Chunk.hpp"
-
 #include "core/Config.hpp"
+#include "voxels/Chunk.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -76,4 +75,4 @@ void TerrainGenerator::generate_world_chunk(const glm::ivec3& chunk_key, Chunk& 
 
 }  // namespace vox
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

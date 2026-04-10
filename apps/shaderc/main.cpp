@@ -20,12 +20,11 @@ void usage(const char* argv0) {
 }
 
 bool is_entry_point_hlsl(const fs::path& path) {
-  static constexpr std::string_view kSuffixes[] = {".vert.hlsl", ".frag.hlsl", ".comp.hlsl", ".mesh.hlsl",
-                                                     ".task.hlsl"};
+  static constexpr std::string_view kSuffixes[] = {".vert.hlsl", ".frag.hlsl", ".comp.hlsl",
+                                                   ".mesh.hlsl", ".task.hlsl"};
   const std::string filename = path.filename().string();
   const std::string_view n = filename;
-  return std::ranges::any_of(kSuffixes,
-                             [&](std::string_view suf) { return n.ends_with(suf); });
+  return std::ranges::any_of(kSuffixes, [&](std::string_view suf) { return n.ends_with(suf); });
 }
 
 bool set_project_root(const fs::path& root) {

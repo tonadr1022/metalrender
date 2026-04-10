@@ -198,4 +198,4 @@ void mesh(const uint8_t* voxels, MeshData& meshData, int lod) {
 }
 }  // namespace greedy_mesher
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

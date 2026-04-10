@@ -3,10 +3,9 @@
 #include <ktx.h>
 
 #include "VkFormatEnum.hpp"
+#include "core/Config.hpp"
 #include "core/Logger.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -84,4 +83,4 @@ cleanup_failed_load:
 
 }  // namespace gfx
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

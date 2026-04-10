@@ -13,4 +13,4 @@ float RollingAvgCtr::avg() const {
 
 }  // namespace util
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

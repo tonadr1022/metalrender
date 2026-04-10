@@ -1,18 +1,32 @@
 # Agent Instructions
 
-### Target Names
-always use target_name: metalrender unless told otherwise.
+## Verify (single command)
 
-### Configure
-cmake --preset Debug
-### Build
-cmake --build build/Debug --target <target_name>
+From root:
+
+```bash
+./scripts/agent_verify.sh
+```
+
+Configures CMake, builds app, runs `teng-shaderc --all`.
+Add `--format` to format.
+
+### Target names
+
+vktest
+metalrender
+
 ### Run
+
+```bash
 ./build/Debug/bin/<target_name>
-### Compile shaders (standalone)
-target_name: `teng-shaderc`  
-`./build/Debug/bin/teng-shaderc [--project-root <repo>] (--all | <path/to/file.comp.hlsl> [...])`  
-If omitted, `--project-root` is inferred by walking up until `resources/shaders/hlsl` exists.  
-`--all` compiles every entry-point `*.vert|frag|comp|mesh|task.hlsl` under `resources/shaders/hlsl` (use after shared header edits).
-### Validating HLSL Shader Changes
-Always run teng-shaderc on HLSL shaders you change; after editing a shared `.hlsli` / header include, use `--all` so dependents stay in sync.
+```
+
+### Shader compiler (single files or ad hoc)
+
+`./build/Debug/bin/teng-shaderc (--all | <path/to/file.comp.hlsl> [...])`  
+`--all` compiles every entry-point `*.vert|frag|comp|mesh|task.hlsl` under `resources/shaders/hlsl`.
+
+### Validating HLSL changes
+
+Run `teng-shaderc` on shaders you change; after editing a shared `.hlsli` / header include, use `--all` (as `agent_verify.sh` does) so dependents stay in sync.

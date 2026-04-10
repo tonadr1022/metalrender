@@ -2,9 +2,8 @@
 
 #include <vulkan/vk_enum_string_helper.h>
 
-#include "core/Logger.hpp"
-
 #include "core/Config.hpp"
+#include "core/Logger.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -22,4 +21,4 @@ void print_vk_error(size_t x, bool exit_prog) {
 
 }  // namespace gfx::vk
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

@@ -8,6 +8,7 @@
 #include <unordered_set>
 
 #include "chunk_shaders_shared.h"
+#include "core/Config.hpp"
 #include "core/MathUtil.hpp"
 #include "core/ThreadPool.hpp"
 #include "gfx/GFXTypes.hpp"
@@ -17,8 +18,6 @@
 #include "shader_global_uniforms.h"
 #include "voxels/Types.hpp"
 #include "voxels/VoxelDB.hpp"
-
-#include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -246,4 +245,4 @@ void Renderer::on_imgui() {
 
 }  // namespace vox
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE

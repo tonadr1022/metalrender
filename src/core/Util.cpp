@@ -19,4 +19,4 @@ std::string binary_rep(size_t val) {
   return res;
 }
 
-} // namespace TENG_NAMESPACE
+}  // namespace TENG_NAMESPACE
