@@ -71,7 +71,6 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
       .resource_dir = resource_dir_,
   };
   update_ctx();
-  scene_ = create_test_scene(active_scene_, ctx_);
   init_imgui();
 }
 
@@ -159,14 +158,17 @@ void TestRenderer::render() {
   ctx_.curr_frame_idx = (ctx_.curr_frame_idx + 1) % k_max_frames_in_flight;
 }
 
-TestRenderer::~TestRenderer() {
-  imgui_renderer_->shutdown();
+void TestRenderer::shutdown() {
   if (scene_) {
     scene_->shutdown();
     scene_.reset();
   }
+  rg_.shutdown();
+  imgui_renderer_->shutdown();
   shader_mgr_->shutdown();
 }
+
+TestRenderer::~TestRenderer() = default;
 
 void TestRenderer::recreate_resources_on_swapchain_resize() {
   if (scene_) {

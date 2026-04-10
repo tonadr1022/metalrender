@@ -38,10 +38,11 @@ class TestRenderer {
     rhi::Swapchain* swapchain;
     Window* window;
     std::filesystem::path resource_dir;
-    TestDebugScene initial_scene{TestDebugScene::TexturedCubeProcedural};
+    TestDebugScene initial_scene{TestDebugScene::MeshletRenderer};
   };
   explicit TestRenderer(const CreateInfo& cinfo);
   void render();
+  void shutdown();
   void recreate_resources_on_swapchain_resize();
   void cycle_debug_scene();
   void set_scene(TestDebugScene id);

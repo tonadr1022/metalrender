@@ -53,6 +53,8 @@ TestApp::TestApp() {
   ResourceManager::init(
       ResourceManager::CreateInfo{.model_gpu_mgr = renderer_->get_model_gpu_mgr()});
 
+  renderer_->set_scene(TestDebugScene::MeshletRenderer);
+
   window_->set_key_callback([this](int key, int action, int mods) {
     if (action == GLFW_PRESS && key == GLFW_KEY_TAB) {
       renderer_->cycle_debug_scene();
@@ -61,8 +63,6 @@ TestApp::TestApp() {
       imgui_enabled_ = !imgui_enabled_;
     }
   });
-
-  //  ResourceManager::init(ResourceManager::CreateInfo{.renderer = renderer_});
 }
 
 TestApp::~TestApp() = default;
@@ -96,6 +96,7 @@ void TestApp::run() {
     }
   }
 
+  renderer_->shutdown();
   ResourceManager::shutdown();
   renderer_.reset();
   swapchain_ = {};

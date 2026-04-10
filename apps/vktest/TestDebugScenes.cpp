@@ -14,6 +14,7 @@
 #include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
 #include "gfx/ModelLoader.hpp"
+#include "gfx/RenderGraph.hpp"
 #include "gfx/ShaderManager.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/renderer/ModelGPUUploader.hpp"
@@ -426,7 +427,6 @@ class MeshletRendererScene final : public ITestScene {
   explicit MeshletRendererScene(const TestSceneContext& ctx) : ITestScene(ctx) {
     ASSERT(ctx_.model_gpu_mgr != nullptr);
     ASSERT(ctx_.shader_mgr != nullptr);
-    ASSERT(ctx_.buffer_copy != nullptr);
     ASSERT(ctx_.frame_staging != nullptr);
 
     const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
@@ -439,20 +439,7 @@ class MeshletRendererScene final : public ITestScene {
     instance_alloc_ = *alloc_opt;
     const ModelGPUResources* res = ctx_.model_gpu_mgr->model_resources(inst->model_gpu_handle);
     ASSERT(res);
-
-    std::vector<TaskCmd> cmds;
-    append_meshlet_task_cmds(*res, instance_alloc_.instance_data_alloc.offset, cmds);
-    task_cmd_count_ = static_cast<uint32_t>(cmds.size());
-    ASSERT(task_cmd_count_ == res->totals.task_cmd_count);
-
-    task_cmd_buf_ = ctx_.device->create_buf_h({
-        .usage = BufferUsage::Storage,
-        .size = std::max(cmds.size() * sizeof(TaskCmd), size_t{256}),
-        .flags = BufferDescFlags::CPUAccessible,
-        .name = "meshlet_hello_task_cmds",
-    });
-    std::memcpy(ctx_.device->get_buf(task_cmd_buf_.handle)->contents(), cmds.data(),
-                cmds.size() * sizeof(TaskCmd));
+    ASSERT(res->totals.task_cmd_count == ctx_.model_gpu_mgr->geometry_batch().task_cmd_count);
 
     constexpr size_t k_ubo_align = 256;
     view_cb_buf_ = ctx_.device->create_buf_h({
@@ -476,12 +463,43 @@ class MeshletRendererScene final : public ITestScene {
     recreate_meshlet_pso();
   }
 
+  void shutdown() override { ResourceManager::get().free_model(test_model_handle_); }
+
   void on_swapchain_resize() override { recreate_meshlet_pso(); }
 
   void add_render_graph_passes() override {
+    auto& batch = ctx_.model_gpu_mgr->geometry_batch();
+    const uint32_t tc = batch.task_cmd_count;
+    if (tc == 0 || batch.get_stats().vertex_count == 0) {
+      return;
+    }
+
+    RGResourceId task_cmd_rg = ctx_.rg->create_buffer(
+        {.size = std::max(static_cast<size_t>(tc) * sizeof(TaskCmd), size_t{256}),
+         .defer_reuse = true},
+        "meshlet_hello_task_cmds");
+
+    auto& upload_pass = ctx_.rg->add_transfer_pass("meshlet_hello_task_cmd_upload");
+    upload_pass.write_buf(task_cmd_rg, PipelineStage::AllTransfer);
+    upload_pass.set_ex([this, task_cmd_rg, tc](CmdEncoder* enc) {
+      std::vector<TaskCmd> cmds;
+      ModelInstance* inst = ResourceManager::get().get_model(test_model_handle_);
+      ASSERT(inst);
+      const ModelGPUResources* res = ctx_.model_gpu_mgr->model_resources(inst->model_gpu_handle);
+      ASSERT(res);
+      append_meshlet_task_cmds(*res, instance_alloc_.instance_data_alloc.offset, cmds);
+      ASSERT(static_cast<uint32_t>(cmds.size()) == tc);
+      auto bytes = static_cast<uint32_t>(cmds.size() * sizeof(TaskCmd));
+      auto upload = ctx_.frame_staging->alloc(bytes);
+      std::memcpy(upload.write_ptr, cmds.data(), bytes);
+      enc->copy_buffer_to_buffer(upload.buf, upload.offset, ctx_.rg->get_buf(task_cmd_rg), 0,
+                                 bytes);
+    });
+
     auto& p = ctx_.rg->add_graphics_pass("meshlet_hello");
+    p.read_buf(task_cmd_rg, PipelineStage::MeshShader | PipelineStage::TaskShader);
     p.w_swapchain_tex(ctx_.swapchain);
-    p.set_ex([this](CmdEncoder* enc) {
+    p.set_ex([this, task_cmd_rg, tc](CmdEncoder* enc) {
       flush_pending_model_textures(*ctx_.model_gpu_mgr, *ctx_.device, *ctx_.frame_staging, enc);
 
       const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
@@ -519,21 +537,20 @@ class MeshletRendererScene final : public ITestScene {
       enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
       enc->set_scissor({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
 
-      auto& batch = ctx_.model_gpu_mgr->geometry_batch();
-      enc->bind_srv(batch.mesh_buf.get_buffer_handle(), 5);
-      enc->bind_srv(batch.meshlet_buf.get_buffer_handle(), 6);
-      enc->bind_srv(batch.meshlet_triangles_buf.get_buffer_handle(), 7);
-      enc->bind_srv(batch.meshlet_vertices_buf.get_buffer_handle(), 8);
-      enc->bind_srv(batch.vertex_buf.get_buffer_handle(), 9);
+      auto& geo_batch = ctx_.model_gpu_mgr->geometry_batch();
+      enc->bind_srv(geo_batch.mesh_buf.get_buffer_handle(), 5);
+      enc->bind_srv(geo_batch.meshlet_buf.get_buffer_handle(), 6);
+      enc->bind_srv(geo_batch.meshlet_triangles_buf.get_buffer_handle(), 7);
+      enc->bind_srv(geo_batch.meshlet_vertices_buf.get_buffer_handle(), 8);
+      enc->bind_srv(geo_batch.vertex_buf.get_buffer_handle(), 9);
       enc->bind_srv(ctx_.model_gpu_mgr->instance_mgr().get_instance_data_buf(), 10);
-      enc->bind_srv(task_cmd_buf_.handle, 4);
+      enc->bind_srv(ctx_.rg->get_buf(task_cmd_rg), 4);
       enc->bind_srv(ctx_.model_gpu_mgr->materials_allocator().get_buffer_handle(), 11);
 
       enc->bind_cbv(globals_cb_buf_.handle, GLOBALS_SLOT, 0, sizeof(GlobalData));
       enc->bind_cbv(view_cb_buf_.handle, VIEW_DATA_SLOT, 0, sizeof(ViewData));
 
-      enc->draw_mesh_threadgroups({task_cmd_count_, 1, 1}, {K_TASK_TG_SIZE, 1, 1},
-                                  {K_MESH_TG_SIZE, 1, 1});
+      enc->draw_mesh_threadgroups({tc, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
       enc->end_rendering();
     });
   }
@@ -556,12 +573,10 @@ class MeshletRendererScene final : public ITestScene {
   }
 
   PipelineHandleHolder meshlet_pso_;
-  BufferHandleHolder task_cmd_buf_;
   BufferHandleHolder view_cb_buf_;
   BufferHandleHolder globals_cb_buf_;
   Camera camera_;
   ModelHandle test_model_handle_;
-  uint32_t task_cmd_count_{};
   InstanceMgr::Alloc instance_alloc_{};
 };
 
