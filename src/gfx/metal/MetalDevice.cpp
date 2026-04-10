@@ -1010,10 +1010,8 @@ rhi::TextureViewHandle Device::create_tex_view(rhi::TextureHandle handle, uint32
   ALWAYS_ASSERT(tex);
   auto* mtl_tex = tex->texture();
   auto* view = mtl_tex->newTextureView(
-      mtl::util::convert(tex->desc().format),
-      get_texture_type(tex->desc().dims, layer_count),
-                                       NS::Range::Make(base_mip_level, level_count),
-                                       NS::Range::Make(base_array_layer, layer_count));
+      mtl::util::convert(tex->desc().format), get_texture_type(tex->desc().dims, layer_count),
+      NS::Range::Make(base_mip_level, level_count), NS::Range::Make(base_array_layer, layer_count));
   auto bindless_idx = resource_desc_heap_allocator_.alloc_idx();
   auto subresource_id = static_cast<rhi::TextureViewHandle>(tex->tex_views.size());
   tex->tex_views.emplace_back(view, bindless_idx);
@@ -1350,15 +1348,22 @@ void Device::acquire_next_swapchain_image(rhi::Swapchain* swapchain) {
   }
 }
 
+void Device::enqueue_swapchain_for_present(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc) {
+  auto* swap = (Swapchain*)swapchain;
+  if (mtl4_enabled_) {
+    static_cast<Metal4CmdEncoder*>(cmd_enc)->presents_.emplace_back(swap->drawable_);
+  } else {
+    static_cast<Metal3CmdEncoder*>(cmd_enc)->presents_.emplace_back(swap->drawable_);
+  }
+}
+
 void Device::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
                                        glm::vec4* clear_color) {
   ZoneScoped;
+  enqueue_swapchain_for_present(swapchain, cmd_enc);
   auto* swap = (Swapchain*)swapchain;
   if (mtl4_enabled_) {
     auto* enc = (Metal4CmdEncoder*)cmd_enc;
-    enc->presents_.emplace_back(swap->drawable_);
-
-    // auto tex_handle = texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true);
     if (clear_color) {
       enc->begin_rendering({rhi::RenderAttInfo::color_att(
           swap->textures_[0].handle, rhi::LoadOp::Clear, rhi::ClearValue{.color = *clear_color})});
@@ -1368,10 +1373,6 @@ void Device::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncode
     }
   } else {
     auto* enc = (Metal3CmdEncoder*)cmd_enc;
-    enc->presents_.emplace_back(swap->drawable_);
-
-    // TODO: remove dup
-    // auto tex_handle = texture_pool_.alloc(swap_img_desc, rhi::k_invalid_bindless_idx, tex, true);
     if (clear_color) {
       enc->begin_rendering({rhi::RenderAttInfo::color_att(
           swap->textures_[0].handle, rhi::LoadOp::Clear, rhi::ClearValue{.color = *clear_color})});

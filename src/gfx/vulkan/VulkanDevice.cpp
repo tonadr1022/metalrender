@@ -1337,10 +1337,15 @@ VkImageView VulkanDevice::create_img_view(VulkanTexture& img, VkImageViewType ty
   return view;
 }
 
-void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
-                                             glm::vec4* clear_color) {
+void VulkanDevice::enqueue_swapchain_for_present(rhi::Swapchain* swapchain,
+                                                 rhi::CmdEncoder* cmd_enc) {
   auto* vk_enc = (VulkanCmdEncoder*)cmd_enc;
   vk_enc->submit_swapchains_.emplace_back(swapchain);
+}
+
+void VulkanDevice::begin_swapchain_rendering(rhi::Swapchain* swapchain, rhi::CmdEncoder* cmd_enc,
+                                             glm::vec4* clear_color) {
+  enqueue_swapchain_for_present(swapchain, cmd_enc);
   cmd_enc->begin_rendering({
       rhi::RenderAttInfo{
           .image = swapchain->get_current_texture(),

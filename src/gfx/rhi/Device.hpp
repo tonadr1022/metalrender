@@ -122,6 +122,11 @@ class Device {
   // needs to change.
   virtual bool recreate_swapchain(const SwapchainDesc &desc, Swapchain *swapchain) = 0;
 
+  // Records that `swapchain` must be presented after this command buffer is submitted (Vulkan
+  // semaphores / Metal drawable). Call when using begin_rendering with the swapchain color image
+  // yourself instead of begin_swapchain_rendering.
+  virtual void enqueue_swapchain_for_present(Swapchain *swapchain, CmdEncoder *cmd_enc) = 0;
+
   // calls CmdEncoder::begin_rendering on the given cmd encoder with the
   // swapchain's current draw image
   // TODO: move this to the encoder?

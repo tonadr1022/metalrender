@@ -25,6 +25,7 @@
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Pipeline.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
@@ -470,6 +471,7 @@ class MeshletRendererScene final : public ITestScene {
     fps_camera_.camera().yaw = -90.f;
     fps_camera_.camera().calc_vectors();
 
+    recreate_meshlet_depth_tex();
     recreate_meshlet_pso();
   }
 
@@ -497,7 +499,10 @@ class MeshletRendererScene final : public ITestScene {
     }
   }
 
-  void on_swapchain_resize() override { recreate_meshlet_pso(); }
+  void on_swapchain_resize() override {
+    recreate_meshlet_depth_tex();
+    recreate_meshlet_pso();
+  }
 
   void add_render_graph_passes() override {
     auto& batch = ctx_.model_gpu_mgr->geometry_batch();
@@ -531,7 +536,15 @@ class MeshletRendererScene final : public ITestScene {
     auto& p = ctx_.rg->add_graphics_pass("meshlet_hello");
     p.read_buf(task_cmd_rg, PipelineStage::MeshShader | PipelineStage::TaskShader);
     p.w_swapchain_tex(ctx_.swapchain);
-    p.set_ex([this, task_cmd_rg, tc](CmdEncoder* enc) {
+    auto depth_att = ctx_.rg->create_texture(
+        {
+            .format = TextureFormat::D32float,
+            .size_class = SizeClass::Swapchain,
+        },
+        "meshlet_hello_depth_att");
+
+    auto depth_att_id = p.write_depth_output(depth_att);
+    p.set_ex([this, task_cmd_rg, tc, depth_att_id](CmdEncoder* enc) {
       flush_pending_model_textures(*ctx_.model_gpu_mgr, *ctx_.device, *ctx_.frame_staging, enc);
 
       const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
@@ -561,7 +574,14 @@ class MeshletRendererScene final : public ITestScene {
       std::memcpy(ctx_.device->get_buf(globals_cb_buf_.handle)->contents(), &gd, sizeof(gd));
 
       glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
-      ctx_.device->begin_swapchain_rendering(ctx_.swapchain, enc, &clear_color);
+      ctx_.device->enqueue_swapchain_for_present(ctx_.swapchain, enc);
+      enc->begin_rendering({
+          RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::Clear,
+                                   ClearValue{.color = clear_color}),
+          RenderAttInfo::depth_stencil_att(
+              ctx_.rg->get_att_img(depth_att_id), LoadOp::Clear,
+              ClearValue{.depth_stencil = {.depth = 1.f, .stencil = 0}}),
+      });
       enc->bind_pipeline(meshlet_pso_);
       enc->set_cull_mode(CullMode::Back);
       enc->set_wind_order(WindOrder::CounterClockwise);
@@ -587,6 +607,23 @@ class MeshletRendererScene final : public ITestScene {
   }
 
  private:
+  void recreate_meshlet_depth_tex() {
+    const uint32_t w = ctx_.swapchain->desc_.width;
+    const uint32_t h = ctx_.swapchain->desc_.height;
+    if (w == 0 || h == 0) {
+      // meshlet_depth_tex_ = {};
+      return;
+    }
+    // meshlet_depth_tex_ = ctx_.device->create_tex_h({
+    //     .format = TextureFormat::D32float,
+    //     .usage = TextureUsage::DepthStencilAttachment,
+    //     .dims = {w, h, 1},
+    //     .mip_levels = 1,
+    //     .array_length = 1,
+    //     .name = "meshlet_hello_depth",
+    // });
+  }
+
   void recreate_meshlet_pso() {
     auto tex_h = ctx_.swapchain->get_texture(0);
     if (!tex_h.is_valid()) {
@@ -597,13 +634,14 @@ class MeshletRendererScene final : public ITestScene {
         .shaders = {{"debug_meshlet_hello", ShaderType::Task},
                     {"debug_meshlet_hello", ShaderType::Mesh},
                     {"debug_meshlet_hello", ShaderType::Fragment}},
-        .rendering = {.color_formats = {fmt}},
-        .depth_stencil = GraphicsPipelineCreateInfo::depth_disable(),
+        .rendering = {.color_formats = {fmt}, .depth_format = TextureFormat::D32float},
+        .depth_stencil = GraphicsPipelineCreateInfo::depth_enable(true, CompareOp::Less),
         .name = "debug_meshlet_hello",
     });
   }
 
   PipelineHandleHolder meshlet_pso_;
+  // TextureHandleHolder meshlet_depth_tex_;
   BufferHandleHolder view_cb_buf_;
   BufferHandleHolder globals_cb_buf_;
   FpsCameraController fps_camera_;
