@@ -486,7 +486,8 @@ class MeshletRendererScene final : public ITestScene {
 
       const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
                            std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height));
-      const glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.f), aspect, 0.1f, 100.f);
+      glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.f), aspect, 0.1f, 100.f);
+      proj[1][1] = -proj[1][1];
       camera_.calc_vectors();
       glm::mat4 view = camera_.get_view_mat();
       view = glm::lookAt(glm::vec3(5, 5, 5), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
@@ -513,7 +514,7 @@ class MeshletRendererScene final : public ITestScene {
       glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
       ctx_.device->begin_swapchain_rendering(ctx_.swapchain, enc, &clear_color);
       enc->bind_pipeline(meshlet_pso_);
-      enc->set_cull_mode(CullMode::None);
+      enc->set_cull_mode(CullMode::Back);
       enc->set_wind_order(WindOrder::CounterClockwise);
       enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
       enc->set_scissor({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});

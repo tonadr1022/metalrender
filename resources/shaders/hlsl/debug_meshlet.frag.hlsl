@@ -1,0 +1,59 @@
+// clang-format off
+#define MESH_SHADER_OUTPUT_MATERIAL 1
+#include "root_sig.hlsl"
+#include "material.h"
+#include "shared_forward_meshlet.h"
+#include "shared_globals.h"
+// clang-format on
+
+CONSTANT_BUFFER(GlobalData, globals, GLOBALS_SLOT);
+StructuredBuffer<M4Material> material_buf : register(t11);
+
+struct FOut {
+  float4 gbuffer_a : SV_Target0;
+  float4 gbuffer_b : SV_Target1;
+};
+
+FOut main(VOut input) {
+  FOut fout;
+#ifdef DEBUG_MODE
+  // GlobalData globals = load_globals();
+  uint render_mode = globals.render_mode;
+  if (render_mode == DEBUG_RENDER_MODE_TRIANGLE_COLORS ||
+      render_mode == DEBUG_RENDER_MODE_MESHLET_COLORS ||
+      render_mode == DEBUG_RENDER_MODE_INSTANCE_COLORS) {
+#ifdef MESH_SHADER_OUTPUT_COLOR
+    fout.gbuffer_a = input.color;
+#endif
+    fout.gbuffer_b = float4(0, 0, 0, 0);
+    return fout;
+  }
+#endif
+  M4Material material = material_buf[input.material_id];
+  SamplerState samp = bindless_samplers[LINEAR_SAMPLER_IDX];
+/*
+  float4 normal_tex_normal = float4(1, 1, 1, 1);
+  if (material.normal_tex_idx != INVALID_TEX_ID) {
+    normal_tex_normal = bindless_textures[material.normal_tex_idx].Sample(samp, input.uv);
+  }
+*/
+#ifdef MESH_SHADER_OUTPUT_NORMAL
+  float4 normal = float4(input.normal, 1);
+  fout.gbuffer_b = normal;
+#endif
+  float4 albedo = material.color;
+
+#ifdef MESH_SHADER_OUTPUT_UV
+  if (material.albedo_tex_idx != INVALID_TEX_ID) {
+    albedo *= (bindless_textures[material.albedo_tex_idx]).Sample(samp, input.uv);
+  }
+#endif
+
+#ifdef ALPHA_TEST
+  if (albedo.a < 0.5) {
+    discard;
+  }
+#endif
+  fout.gbuffer_a = float4(albedo.xyz, 1.0);
+  return fout;
+}

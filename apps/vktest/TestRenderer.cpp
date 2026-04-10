@@ -3,6 +3,7 @@
 #include <GLFW/glfw3.h>
 
 #include <tracy/Tracy.hpp>
+#include <vector>
 
 #include "ResourceManager.hpp"
 #include "UI.hpp"
@@ -113,9 +114,41 @@ void TestRenderer::render() {
     rg_.bake(window_->get_window_size(), verbose);
   }
 
+  // ModelGPUMgr uploads use BufferCopyMgr::copy_to_buffer. On discrete GPUs, geometry buffers are
+  // not host-mapped, so that enqueues vkCmdCopyBuffer work. MemeRenderer drains these before the
+  // graph; vktest must do the same or mesh/task draws read empty buffers (blank meshlet scene).
+  std::vector<CmdEncoder*> wait_for_encoders;
+  if (!buffer_copy_mgr_.get_copies().empty()) {
+    ZoneScopedN("buffer_upload_copies");
+    auto* copy_enc = device_->begin_cmd_encoder(QueueType::Graphics);
+    for (const auto& copy : buffer_copy_mgr_.get_copies()) {
+      if (!copy.src_buf.is_valid() || !device_->get_buf(copy.src_buf)) {
+        continue;
+      }
+      if (!copy.dst_buf.is_valid() || !device_->get_buf(copy.dst_buf)) {
+        continue;
+      }
+      copy_enc->barrier(copy.src_buf, PipelineStage::AllCommands, AccessFlags::AnyWrite,
+                        PipelineStage::AllTransfer, AccessFlags::TransferRead);
+      copy_enc->barrier(copy.dst_buf, PipelineStage::AllCommands,
+                        AccessFlags::AnyRead | AccessFlags::AnyWrite, PipelineStage::AllTransfer,
+                        AccessFlags::TransferWrite);
+      copy_enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
+                                      copy.size);
+      copy_enc->barrier(copy.dst_buf, PipelineStage::AllTransfer, AccessFlags::TransferWrite,
+                        copy.dst_stage, copy.dst_access);
+    }
+    buffer_copy_mgr_.clear_copies();
+    copy_enc->end_encoding();
+    wait_for_encoders.push_back(copy_enc);
+  }
+
   {
     ZoneScopedN("execute");
     auto* enc = device_->begin_cmd_encoder();
+    for (auto* wait_enc : wait_for_encoders) {
+      device_->cmd_encoder_wait_for(wait_enc, enc);
+    }
     imgui_renderer_->flush_pending_texture_uploads(enc, frame_gpu_upload_allocator_);
     rg_.execute(enc);
     enc->end_encoding();
