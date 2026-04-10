@@ -7,6 +7,7 @@ add_executable(${target_name}
     main.cpp
     ${COMMON_SOURCE_DIR}/Util.cpp
     ${METALRENDER_APP_DIR}/Camera.cpp
+    ${METALRENDER_APP_DIR}/FpsCameraController.cpp
     TestDebugScenes.cpp
     TestRenderer.cpp
     TestApp.cpp

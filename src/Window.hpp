@@ -32,6 +32,7 @@ class Window {
 
   virtual void init(InitInfo& init_info);
   void set_key_callback(KeyCallbackFn fn) { key_callback_fn_ = std::move(fn); }
+  void set_cursor_pos_callback(CursorPosCallbackFn fn) { cursor_pos_callback_fn_ = std::move(fn); }
   void shutdown();
   virtual ~Window() = default;
 

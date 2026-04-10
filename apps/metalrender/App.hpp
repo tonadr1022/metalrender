@@ -3,6 +3,7 @@
 #include <span>
 
 #include "Camera.hpp"
+#include "FpsCameraController.hpp"
 #include "core/Console.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -39,7 +40,6 @@ struct App {
   void on_curse_pos_event(double xpos, double ypos);
   void on_key_event(int key, int action, int mods);
   void shutdown();
-  void on_hide_mouse_change();
   void load_config();
   void write_config();
   void on_imgui(float dt);
@@ -82,15 +82,11 @@ struct App {
   std::unique_ptr<teng::Window> window_;
   std::unique_ptr<teng::gfx::MemeRenderer123> renderer_;
   static constexpr int k_camera_config_version{1};
-  Camera camera_;
+  FpsCameraController fps_camera_;
   std::vector<teng::ModelHandle> models_;
-  bool first_mouse_{true};
-  bool hide_mouse_{false};
   bool imgui_enabled_{true};
   bool console_forced_imgui_{false};
   teng::Console console_;
-
-  glm::vec2 last_pos_{};
   // TODO: ptr for impl/RHI
   // std::unique_ptr<vox::Renderer> voxel_renderer_;
   // std::unique_ptr<vox::World> voxel_world_;

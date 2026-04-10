@@ -38,6 +38,8 @@ struct TestSceneContext {
   uint32_t curr_frame_idx{};
   std::filesystem::path resource_dir{};
   float time_sec{};
+  float delta_time_sec{};
+  bool imgui_ui_active{};
 };
 
 enum class TestDebugScene : uint8_t {
@@ -55,6 +57,9 @@ class ITestScene {
   virtual void shutdown() {}
   virtual void on_swapchain_resize() = 0;
   virtual void add_render_graph_passes() = 0;
+  virtual void on_frame(const TestSceneContext&) {}
+  virtual void on_cursor_pos(double, double) {}
+  virtual void on_key_event(int, int, int) {}
 
  protected:
   [[maybe_unused]] const TestSceneContext& ctx_;

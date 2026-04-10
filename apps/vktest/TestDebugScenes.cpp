@@ -1,5 +1,7 @@
 #include "TestDebugScenes.hpp"
 
+#include <GLFW/glfw3.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
@@ -7,7 +9,9 @@
 #include <vector>
 
 #include "Camera.hpp"
+#include "FpsCameraController.hpp"
 #include "ResourceManager.hpp"
+#include "Window.hpp"
 #include "core/EAssert.hpp"
 #include "core/Util.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
@@ -28,6 +32,7 @@
 #include "hlsl/shader_constants.h"
 #include "hlsl/shared_globals.h"
 #include "hlsl/shared_task_cmd.h"
+#include "imgui.h"
 #include "ktx.h"
 
 using namespace teng;
@@ -37,6 +42,12 @@ using namespace teng::gfx::rhi;
 namespace teng::gfx {
 
 namespace {
+
+[[maybe_unused]] constexpr const char* sponza_path = "Models/Sponza/glTF/Sponza.gltf";
+[[maybe_unused]] constexpr const char* chessboard_path =
+    "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf";
+[[maybe_unused]] constexpr const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
+[[maybe_unused]] constexpr const char* cube_path = "Models/Cube/glTF/Cube.gltf";
 
 std::filesystem::path resolve_model_path(const std::filesystem::path& resource_dir,
                                          const std::string& path) {
@@ -429,9 +440,8 @@ class MeshletRendererScene final : public ITestScene {
     ASSERT(ctx_.shader_mgr != nullptr);
     ASSERT(ctx_.frame_staging != nullptr);
 
-    const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
     test_model_handle_ = ResourceManager::get().load_model(
-        resolve_model_path(ctx_.resource_dir, suzanne_path), glm::mat4{1.f});
+        resolve_model_path(ctx_.resource_dir, sponza_path), glm::mat4{1.f});
     ModelInstance* inst = ResourceManager::get().get_model(test_model_handle_);
     ASSERT(inst);
     auto alloc_opt = ctx_.model_gpu_mgr->instance_alloc(inst->instance_gpu_handle);
@@ -455,15 +465,37 @@ class MeshletRendererScene final : public ITestScene {
         .name = "meshlet_hello_globals",
     });
 
-    camera_.pos = {0.f, 0.f, 3.f};
-    camera_.pitch = 0.f;
-    camera_.yaw = -90.f;
-    camera_.calc_vectors();
+    fps_camera_.camera().pos = {0.f, 0.f, 3.f};
+    fps_camera_.camera().pitch = 0.f;
+    fps_camera_.camera().yaw = -90.f;
+    fps_camera_.camera().calc_vectors();
 
     recreate_meshlet_pso();
   }
 
-  void shutdown() override { ResourceManager::get().free_model(test_model_handle_); }
+  void shutdown() override {
+    if (ctx_.window) {
+      fps_camera_.set_mouse_captured(ctx_.window->get_handle(), false);
+    }
+    ResourceManager::get().free_model(test_model_handle_);
+  }
+
+  void on_frame(const TestSceneContext& ctx) override {
+    const bool imgui_blocks =
+        ctx.imgui_ui_active && (ImGui::GetIO().WantTextInput || ImGui::GetIO().WantCaptureKeyboard);
+    if (ctx.window) {
+      fps_camera_.update(ctx.window->get_handle(), ctx.delta_time_sec, imgui_blocks);
+    }
+  }
+
+  void on_cursor_pos(double x, double y) override { fps_camera_.on_cursor_pos(x, y); }
+
+  void on_key_event(int key, int action, int mods) override {
+    (void)mods;
+    if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE && ctx_.window) {
+      fps_camera_.toggle_mouse_capture(ctx_.window->get_handle());
+    }
+  }
 
   void on_swapchain_resize() override { recreate_meshlet_pso(); }
 
@@ -506,9 +538,8 @@ class MeshletRendererScene final : public ITestScene {
                            std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height));
       glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.f), aspect, 0.1f, 100.f);
       proj[1][1] = -proj[1][1];
-      camera_.calc_vectors();
-      glm::mat4 view = camera_.get_view_mat();
-      view = glm::lookAt(glm::vec3(5, 5, 5), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+      fps_camera_.camera().calc_vectors();
+      const glm::mat4 view = fps_camera_.camera().get_view_mat();
       const float t = ctx_.time_sec;
       const glm::mat4 model = glm::rotate(glm::mat4(1.f), t * 0.5f, glm::vec3(0.f, 1.f, 0.f));
       const glm::mat4 vp = proj * view * model;
@@ -519,7 +550,7 @@ class MeshletRendererScene final : public ITestScene {
       vd.view = view * model;
       vd.proj = proj;
       vd.inv_proj = glm::inverse(proj);
-      vd.camera_pos = glm::vec4(camera_.pos, 1.f);
+      vd.camera_pos = glm::vec4(fps_camera_.camera().pos, 1.f);
       std::memcpy(ctx_.device->get_buf(view_cb_buf_.handle)->contents(), &vd, sizeof(vd));
 
       GlobalData gd{};
@@ -575,7 +606,7 @@ class MeshletRendererScene final : public ITestScene {
   PipelineHandleHolder meshlet_pso_;
   BufferHandleHolder view_cb_buf_;
   BufferHandleHolder globals_cb_buf_;
-  Camera camera_;
+  FpsCameraController fps_camera_;
   ModelHandle test_model_handle_;
   InstanceMgr::Alloc instance_alloc_{};
 };

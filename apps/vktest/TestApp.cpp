@@ -55,6 +55,7 @@ TestApp::TestApp() {
 
   renderer_->set_scene(TestDebugScene::MeshletRenderer);
 
+  window_->set_cursor_pos_callback([this](double x, double y) { renderer_->on_cursor_pos(x, y); });
   window_->set_key_callback([this](int key, int action, int mods) {
     if (action == GLFW_PRESS && key == GLFW_KEY_TAB) {
       renderer_->cycle_debug_scene();
@@ -62,6 +63,7 @@ TestApp::TestApp() {
     if (key == GLFW_KEY_G && mods & GLFW_MOD_ALT) {
       imgui_enabled_ = !imgui_enabled_;
     }
+    renderer_->on_key_event(key, action, mods);
   });
 }
 
@@ -89,7 +91,7 @@ void TestApp::run() {
       ImGui::Render();
     }
 
-    renderer_->render();
+    renderer_->render(imgui_enabled_);
 
     if (imgui_enabled_) {
       ImGui::EndFrame();

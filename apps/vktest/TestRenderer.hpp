@@ -41,7 +41,9 @@ class TestRenderer {
     TestDebugScene initial_scene{TestDebugScene::MeshletRenderer};
   };
   explicit TestRenderer(const CreateInfo& cinfo);
-  void render();
+  void render(bool imgui_ui_active);
+  void on_cursor_pos(double x, double y);
+  void on_key_event(int key, int action, int mods);
   void shutdown();
   void recreate_resources_on_swapchain_resize();
   void cycle_debug_scene();
@@ -71,6 +73,8 @@ class TestRenderer {
   InstanceMgr static_instance_mgr_;
   GeometryBatch static_draw_batch_;
   BackedGPUAllocator materials_buf_;
+  float prev_time_sec_{};
+  bool have_prev_time_{};
 };
 
 }  // namespace gfx

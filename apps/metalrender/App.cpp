@@ -93,7 +93,7 @@ App::App() {
       .height = win_dims.y,
       .vsync = true,
   });
-  on_hide_mouse_change();
+  fps_camera_.set_mouse_captured(window_->get_handle(), false);
 
   // TODO: lol
   constexpr bool mesh_shaders_capable = true;
@@ -107,7 +107,7 @@ App::App() {
   });
   ResourceManager::init(
       ResourceManager::CreateInfo{.model_gpu_mgr = renderer_->get_model_gpu_mgr()});
-  camera_.pos.x = -5;
+  fps_camera_.camera().pos.x = -5;
   init_camera();
 
   load_scene_presets();
@@ -148,9 +148,9 @@ void App::run() {
     const double curr_time = glfwGetTime();
     auto dt = static_cast<float>(curr_time - last_time);
     last_time = curr_time;
-    if (!imgui_enabled_ || (!ImGui::GetIO().WantTextInput && !ImGui::GetIO().WantCaptureKeyboard)) {
-      camera_.update_pos(window_->get_handle(), dt);
-    }
+    const bool imgui_blocks_keyboard =
+        imgui_enabled_ && (ImGui::GetIO().WantTextInput || ImGui::GetIO().WantCaptureKeyboard);
+    fps_camera_.update(window_->get_handle(), dt, imgui_blocks_keyboard);
 
     // if (voxel_world_) {
     //   voxel_world_->update(dt, camera_);
@@ -172,8 +172,8 @@ void App::run() {
     }
 
     renderer_->render({
-        .view_mat = camera_.get_view_mat(),
-        .camera_pos = camera_.pos,
+        .view_mat = fps_camera_.camera().get_view_mat(),
+        .camera_pos = fps_camera_.camera().pos,
         .clear_color = config_.clear_color,
     });
     if (imgui_enabled_) {
@@ -183,20 +183,7 @@ void App::run() {
   shutdown();
 }
 
-void App::on_curse_pos_event(double xpos, double ypos) {
-  const glm::vec2 pos = {xpos, ypos};
-  if (first_mouse_) {
-    first_mouse_ = false;
-    last_pos_ = pos;
-    return;
-  }
-
-  const glm::vec2 offset = {pos.x - last_pos_.x, last_pos_.y - pos.y};
-  last_pos_ = pos;
-  if (hide_mouse_) {
-    camera_.process_mouse(offset);
-  }
-}
+void App::on_curse_pos_event(double xpos, double ypos) { fps_camera_.on_cursor_pos(xpos, ypos); }
 
 void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
   const auto is_press = action == GLFW_PRESS;
@@ -219,22 +206,22 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
       int idx = key - GLFW_KEY_0;
       if (idx < (int)scene_presets_.size()) {
         clear_all_models();
-        camera_ = scene_presets_[idx].cam;
+        fps_camera_.camera() = scene_presets_[idx].cam;
+        fps_camera_.camera().calc_vectors();
         scene_presets_[idx].load_fn();
       }
     }
 
     if (key == GLFW_KEY_ESCAPE) {
-      hide_mouse_ = !hide_mouse_;
-      on_hide_mouse_change();
+      fps_camera_.toggle_mouse_capture(window_->get_handle());
     }
     if (key == GLFW_KEY_G && mods & GLFW_MOD_ALT) {
       imgui_enabled_ = !imgui_enabled_;
       renderer_->set_imgui_enabled(imgui_enabled_);
     }
     if (key == GLFW_KEY_C && mods & GLFW_MOD_CONTROL && mods & GLFW_MOD_SHIFT) {
-      camera_ = {};
-      camera_.calc_vectors();
+      fps_camera_.camera() = {};
+      fps_camera_.camera().calc_vectors();
     } else if (key == GLFW_KEY_C) {
       if (!models_.empty()) {
         ResourceManager::get().free_model(models_[0]);
@@ -254,11 +241,6 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
     }
   }
   renderer_->on_key_event(key, action, mods);
-}
-
-void App::on_hide_mouse_change() {
-  glfwSetInputMode(window_->get_handle(), GLFW_CURSOR,
-                   hide_mouse_ ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
 }
 
 void App::load_config() {
@@ -441,10 +423,11 @@ void App::on_imgui(float dt) {
     }
 
     if (ImGui::BeginTabItem("Camera")) {
-      ImGui::DragFloat3("Position", &camera_.pos.x, 0.1f);
-      ImGui::DragFloat("Move Speed", &camera_.move_speed, 0.1f, 0.1f, 1000.f);
-      ImGui::Text("Pitch: %.1f Yaw: %.1f", camera_.pitch, camera_.yaw);
-      ImGui::DragFloat("Mouse Sensitivity", &camera_.mouse_sensitivity, 0.01f, 0.01f, 1.f);
+      ImGui::DragFloat3("Position", &fps_camera_.camera().pos.x, 0.1f);
+      ImGui::DragFloat("Move Speed", &fps_camera_.camera().move_speed, 0.1f, 0.1f, 1000.f);
+      ImGui::Text("Pitch: %.1f Yaw: %.1f", fps_camera_.camera().pitch, fps_camera_.camera().yaw);
+      ImGui::DragFloat("Mouse Sensitivity", &fps_camera_.camera().mouse_sensitivity, 0.01f, 0.01f,
+                       1.f);
       ImGui::EndTabItem();
     }
 
@@ -476,7 +459,8 @@ void App::on_imgui(float dt) {
                                   ImGuiSelectableFlags_AllowDoubleClick)) {
               scene_preset_selection = i;
               if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-                camera_ = scene_presets_[i].cam;
+                fps_camera_.camera() = scene_presets_[i].cam;
+                fps_camera_.camera().calc_vectors();
                 clear_all_models();
                 scene_presets_[i].load_fn();
               }
@@ -486,7 +470,8 @@ void App::on_imgui(float dt) {
           ImGui::EndListBox();
         }
         if (ImGui::Button("Load preset", ImVec2(-FLT_MIN, 0))) {
-          camera_ = scene_presets_[scene_preset_selection].cam;
+          fps_camera_.camera() = scene_presets_[scene_preset_selection].cam;
+          fps_camera_.camera().calc_vectors();
           clear_all_models();
           scene_presets_[scene_preset_selection].load_fn();
         }
@@ -516,28 +501,29 @@ void App::init_camera() {
   int version;
   f >> version;
   if (version != k_camera_config_version) {
-    camera_ = {};
+    fps_camera_.camera() = {};
   } else {
     std::string token;
     while (f >> token) {
       if (token == "pos") {
-        f >> camera_.pos.x >> camera_.pos.y >> camera_.pos.z;
+        f >> fps_camera_.camera().pos.x >> fps_camera_.camera().pos.y >> fps_camera_.camera().pos.z;
       } else if (token == "pitch_yaw") {
-        f >> camera_.pitch >> camera_.yaw;
+        f >> fps_camera_.camera().pitch >> fps_camera_.camera().yaw;
       } else if (token == "move_speed") {
-        f >> camera_.move_speed;
+        f >> fps_camera_.camera().move_speed;
       }
     }
   }
-  camera_.calc_vectors();
+  fps_camera_.camera().calc_vectors();
 }
 
 void App::write_camera() {
   std::ofstream f(camera_path_);
   f << k_camera_config_version << '\n';
-  f << "pos " << camera_.pos.x << ' ' << camera_.pos.y << ' ' << camera_.pos.z << '\n';
-  f << "pitch_yaw " << camera_.pitch << ' ' << camera_.yaw << '\n';
-  f << "move_speed " << camera_.move_speed << '\n';
+  f << "pos " << fps_camera_.camera().pos.x << ' ' << fps_camera_.camera().pos.y << ' '
+    << fps_camera_.camera().pos.z << '\n';
+  f << "pitch_yaw " << fps_camera_.camera().pitch << ' ' << fps_camera_.camera().yaw << '\n';
+  f << "move_speed " << fps_camera_.camera().move_speed << '\n';
 }
 
 void App::shutdown() {
@@ -632,7 +618,8 @@ void App::run_preset_scene(int idx) {
   auto& preset = scene_presets_[idx];
   auto old_models = std::move(models_);
   models_ = {};
-  camera_ = preset.cam;
+  fps_camera_.camera() = preset.cam;
+  fps_camera_.camera().calc_vectors();
 
   preset.load_fn();
 

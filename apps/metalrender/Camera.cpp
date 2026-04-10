@@ -1,9 +1,7 @@
 #include "Camera.hpp"
 
-#include <GLFW/glfw3.h>
-
-#include <glm/gtc/quaternion.hpp>
-#include <glm/gtc/random.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/trigonometric.hpp>
 
 void Camera::calc_vectors() {
@@ -16,66 +14,3 @@ void Camera::calc_vectors() {
 }
 
 glm::mat4 Camera::get_view_mat() const { return glm::lookAt(pos, pos + front, glm::vec3{0, 1, 0}); }
-
-bool Camera::update_pos(GLFWwindow* window, float dt) {
-  calc_vectors();
-  auto get_key = [&](int key) { return glfwGetKey(window, key) == GLFW_PRESS; };
-  glm::vec3 acceleration{};
-  bool accelerating{};
-
-  if (get_key(GLFW_KEY_W) || get_key(GLFW_KEY_I)) {
-    acceleration += front;
-    accelerating = true;
-  }
-  if (get_key(GLFW_KEY_S) || get_key(GLFW_KEY_K)) {
-    acceleration -= front;
-    accelerating = true;
-  }
-  if (get_key(GLFW_KEY_A) || get_key(GLFW_KEY_J)) {
-    acceleration -= right;
-    accelerating = true;
-  }
-  if (get_key(GLFW_KEY_D) || get_key(GLFW_KEY_L)) {
-    acceleration += right;
-    accelerating = true;
-  }
-
-  if (get_key(GLFW_KEY_Y) || get_key(GLFW_KEY_R)) {
-    acceleration += glm::vec3(0, 1, 0);
-    accelerating = true;
-  }
-  if (get_key(GLFW_KEY_H) || get_key(GLFW_KEY_F)) {
-    acceleration += glm::vec3(0, -1, 0);
-    accelerating = true;
-  }
-
-  if (get_key(GLFW_KEY_B)) {
-    move_speed *= 1.1f;
-    max_velocity *= 1.1f;
-  }
-  if (get_key(GLFW_KEY_V)) {
-    move_speed /= 1.1f;
-    max_velocity /= 1.1f;
-  }
-
-  if (accelerating) {
-    if (glm::length(acceleration) > 0.0001f) {
-      acceleration = glm::normalize(acceleration) * move_speed;
-    } else {
-      acceleration = glm::vec3(0.0f);
-    }
-  }
-
-  pos += acceleration * max_velocity * dt;
-
-  return accelerating;
-}
-
-bool Camera::process_mouse(glm::vec2 offset) {
-  offset *= mouse_sensitivity;
-  yaw += offset.x;
-  pitch += offset.y;
-  pitch = glm::clamp(pitch, -89.f, 89.f);
-  calc_vectors();
-  return !glm::all(glm::equal(offset, glm::vec2{0}, glm::epsilon<float>()));
-}

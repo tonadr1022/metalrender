@@ -95,9 +95,34 @@ void TestRenderer::cycle_debug_scene() {
   set_scene(static_cast<TestDebugScene>(next));
 }
 
-void TestRenderer::render() {
+void TestRenderer::on_cursor_pos(double x, double y) {
+  if (scene_) {
+    scene_->on_cursor_pos(x, y);
+  }
+}
+
+void TestRenderer::on_key_event(int key, int action, int mods) {
+  if (scene_) {
+    scene_->on_key_event(key, action, mods);
+  }
+}
+
+void TestRenderer::render(bool imgui_ui_active) {
   ZoneScoped;
   update_ctx();
+  if (!have_prev_time_) {
+    ctx_.delta_time_sec = 0.f;
+    have_prev_time_ = true;
+  } else {
+    ctx_.delta_time_sec = ctx_.time_sec - prev_time_sec_;
+  }
+  prev_time_sec_ = ctx_.time_sec;
+  ctx_.imgui_ui_active = imgui_ui_active;
+
+  if (scene_) {
+    scene_->on_frame(ctx_);
+  }
+
   model_gpu_mgr_->set_curr_frame_idx(ctx_.curr_frame_idx);
   shader_mgr_->replace_dirty_pipelines();
   add_render_graph_passes();

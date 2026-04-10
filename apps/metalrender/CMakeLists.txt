@@ -6,6 +6,7 @@ add_executable(${target_name}
     main.cpp
     App.cpp
     Camera.cpp
+    FpsCameraController.cpp
     ${COMMON_SOURCE_DIR}/Util.cpp
 )
 
