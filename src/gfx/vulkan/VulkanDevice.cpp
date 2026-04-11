@@ -438,6 +438,39 @@ void VulkanDevice::init(const InitInfo& init_info) {
   check_vkb_result("Failed to select physical device", phys_ret);
   physical_device_ = phys_ret.value().physical_device;
 
+  {
+    VkPhysicalDeviceProperties props{};
+    vkGetPhysicalDeviceProperties(physical_device_, &props);
+
+    LINFO("Selected GPU: {}", props.deviceName);
+    LINFO("  API Version: {}.{}.{}", VK_VERSION_MAJOR(props.apiVersion),
+          VK_VERSION_MINOR(props.apiVersion), VK_VERSION_PATCH(props.apiVersion));
+    LINFO("  Driver Version: {}.{}.{}", VK_VERSION_MAJOR(props.driverVersion),
+          VK_VERSION_MINOR(props.driverVersion), VK_VERSION_PATCH(props.driverVersion));
+    LINFO("  Vendor ID: {:#x}", props.vendorID);
+    LINFO("  Device ID: {:#x}", props.deviceID);
+
+    const char* deviceTypeStr = nullptr;
+    switch (props.deviceType) {
+      case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+        deviceTypeStr = "Integrated";
+        break;
+      case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+        deviceTypeStr = "Discrete";
+        break;
+      case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+        deviceTypeStr = "Virtual";
+        break;
+      case VK_PHYSICAL_DEVICE_TYPE_CPU:
+        deviceTypeStr = "CPU";
+        break;
+      default:
+        deviceTypeStr = "Other";
+        break;
+    }
+    LINFO("  Device Type: {}", deviceTypeStr);
+  }
+
   vkb::DeviceBuilder device_builder{phys_ret.value()};
   auto device_ret = device_builder.build();
   check_vkb_result("Failed to create vulkan device", device_ret);
