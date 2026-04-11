@@ -1,14 +1,18 @@
 #include "MeshletRendererTestScene.hpp"
 
+#include <algorithm>
+
 #include "ResourceManager.hpp"
 #include "Window.hpp"
-#include "core/Logger.hpp"
+#include "core/MathUtil.hpp"
 #include "core/Util.hpp"
 #include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
 #include "gfx/ShaderManager.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
+#include "hlsl/depth_reduce/shared_depth_reduce.h"
+#include "hlsl/meshlet_test/shared_meshlet_test_shade.h"
 #include "hlsl/shader_constants.h"
 #include "hlsl/shared_debug_meshlet_prepare.h"
 #include "hlsl/shared_forward_meshlet.h"
@@ -34,6 +38,14 @@ std::filesystem::path resolve_model_path(const std::filesystem::path& resource_d
     return resource_dir / "models" / "gltf" / path;
   }
   return path;
+}
+
+uint32_t prev_pow2(uint32_t val) {
+  uint32_t v = 1;
+  while (v * 2 < val) {
+    v *= 2;
+  }
+  return v;
 }
 
 void add_buffer_readback_copy2(RenderGraph& rg, std::string_view pass_name, RGResourceId& src_buf,
@@ -77,6 +89,8 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
       {.path = "test_clear_cnt_buf", .type = rhi::ShaderType::Compute});
   prepare_meshlets_pso_ = ctx_.shader_mgr->create_compute_pipeline(
       {.path = "debug_meshlet_prepare_meshlets", .type = rhi::ShaderType::Compute});
+  depth_reduce_pso_ = ctx_.shader_mgr->create_compute_pipeline(
+      {.path = "depth_reduce/depth_reduce", .type = rhi::ShaderType::Compute});
 
   for (int i = 0; i < k_max_frames_in_flight; i++) {
     task_cmd_group_count_readback_[static_cast<size_t>(i)] = ctx_.device->create_buf_h({
@@ -97,6 +111,48 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
   fps_camera_.camera().calc_vectors();
 
   recreate_meshlet_pso();
+  make_depth_pyramid_tex();
+}
+
+void MeshletRendererScene::on_swapchain_resize() {
+  recreate_meshlet_pso();
+  make_depth_pyramid_tex();
+}
+
+void MeshletRendererScene::make_depth_pyramid_tex() {
+  if (!ctx_.swapchain || ctx_.swapchain->desc_.width == 0 || ctx_.swapchain->desc_.height == 0) {
+    return;
+  }
+  const glm::uvec2 main_size{ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
+  const glm::uvec3 size{prev_pow2(main_size.x), prev_pow2(main_size.y), 1u};
+
+  if (depth_pyramid_tex_.is_valid()) {
+    if (auto* existing = ctx_.device->get_tex(depth_pyramid_tex_);
+        existing && existing->desc().dims == size) {
+      return;
+    }
+  }
+
+  for (auto v : depth_pyramid_tex_.views) {
+    ctx_.device->destroy(depth_pyramid_tex_.handle, v);
+  }
+  depth_pyramid_tex_.views.clear();
+  const auto mip_levels = static_cast<uint32_t>(math::get_mip_levels(size.x, size.y));
+  depth_pyramid_tex_ = rhi::TexAndViewHolder{ctx_.device->create_tex_h(rhi::TextureDesc{
+      .format = rhi::TextureFormat::R32float,
+      .usage =
+          rhi::TextureUsage::Storage | rhi::TextureUsage::ShaderWrite | rhi::TextureUsage::Sample,
+      .dims = size,
+      .mip_levels = mip_levels,
+      .name = "meshlet_test_depth_pyramid",
+  })};
+  depth_pyramid_tex_.views.reserve(mip_levels);
+  for (uint32_t i = 0; i < mip_levels; i++) {
+    depth_pyramid_tex_.views.push_back(
+        ctx_.device->create_tex_view(depth_pyramid_tex_.handle, i, 1, 0, 1));
+  }
+  debug_depth_pyramid_mip_ =
+      std::clamp(debug_depth_pyramid_mip_, 0, std::max(0, static_cast<int>(mip_levels) - 1));
 }
 
 void MeshletRendererScene::shutdown() {
@@ -137,6 +193,30 @@ void MeshletRendererScene::on_imgui() {
   }
   ImGui::Text("Visible mesh task groups (GPU): %u", visible_meshlet_task_groups);
   ImGui::Text("Visible objects (GPU): %u", visible_objects);
+
+  if (depth_pyramid_tex_.is_valid()) {
+    auto* dp_tex = ctx_.device->get_tex(depth_pyramid_tex_);
+    const glm::uvec2 dp_dims{dp_tex->desc().dims};
+    const int mip_levels = static_cast<int>(
+        math::get_mip_levels(static_cast<size_t>(dp_dims.x), static_cast<size_t>(dp_dims.y)));
+    ImGui::Separator();
+    if (mip_levels > 1) {
+      ImGui::SliderInt("Depth pyramid mip", &debug_depth_pyramid_mip_, 0,
+                       std::max(0, mip_levels - 1));
+      const int mip = std::clamp(debug_depth_pyramid_mip_, 0, std::max(0, mip_levels - 1));
+      const auto mip_u = static_cast<uint32_t>(mip);
+      const uint32_t mv_w = std::max(1u, dp_dims.x >> mip_u);
+      const uint32_t mv_h = std::max(1u, dp_dims.y >> mip_u);
+      const uint32_t view_bindless = ctx_.device->get_tex_view_bindless_idx(
+          depth_pyramid_tex_.handle, depth_pyramid_tex_.views[static_cast<size_t>(mip)]);
+      const float disp_w = 240.f;
+      const float disp_h = disp_w * static_cast<float>(mv_h) / static_cast<float>(mv_w);
+      ImGui::Image(MakeImGuiTexRefBindlessFloatView(view_bindless), ImVec2(disp_w, disp_h));
+    } else {
+      ImGui::TextUnformatted("Depth pyramid (single mip; reduce skipped)");
+    }
+  }
+
   ImGui::End();
 }
 
@@ -275,6 +355,10 @@ void MeshletRendererScene::add_render_graph_passes() {
 
   RGResourceId gbuffer_a_id =
       ctx_.rg->create_texture({.format = rhi::TextureFormat::R16G16B16A16Sfloat}, "gbuffer_a");
+  RGResourceId depth_att = ctx_.rg->create_texture(
+      {.format = TextureFormat::D32float, .size_class = SizeClass::Swapchain},
+      "meshlet_hello_depth_att");
+  RGResourceId depth_att_id{};
 
   {
     auto& p = ctx_.rg->add_graphics_pass("meshlet_hello");
@@ -285,11 +369,8 @@ void MeshletRendererScene::add_render_graph_passes() {
                    AccessFlags::IndirectCommandRead);
     visible_object_count_rg = p.copy_from_buf(visible_object_count_rg);
     gbuffer_a_id = p.write_color_output(gbuffer_a_id);
-    auto depth_att = ctx_.rg->create_texture(
-        {.format = TextureFormat::D32float, .size_class = SizeClass::Swapchain},
-        "meshlet_hello_depth_att");
 
-    auto depth_att_id = p.write_depth_output(depth_att);
+    depth_att_id = p.write_depth_output(depth_att);
     p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, depth_att_id, view_cb_suballoc,
               globals_cb_buf, gbuffer_a_id](CmdEncoder* enc) {
       glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
@@ -337,6 +418,65 @@ void MeshletRendererScene::add_render_graph_passes() {
     });
   }
 
+  RGResourceId final_depth_pyramid_rg{};
+  if (depth_pyramid_tex_.is_valid()) {
+    RGResourceId depth_pyramid_rg =
+        ctx_.rg->import_external_texture(depth_pyramid_tex_.handle, "meshlet_depth_pyramid");
+
+    auto* dp_tex = ctx_.device->get_tex(depth_pyramid_tex_);
+    const glm::uvec2 dp_dims{dp_tex->desc().dims};
+    const auto mip_levels = static_cast<uint32_t>(math::get_mip_levels(dp_dims.x, dp_dims.y));
+    uint32_t final_mip = mip_levels - 1;
+    RGResourceId depth_pyramid_id = depth_pyramid_rg;
+    const RGResourceId depth_src_rg = depth_att_id;
+
+    for (uint32_t mip = 0; mip < final_mip; mip++) {
+      auto& p = ctx_.rg->add_compute_pass("meshlet_depth_reduce_" + std::to_string(mip));
+      RGResourceId depth_handle{};
+      if (mip == 0) {
+        depth_handle = p.sample_tex(depth_src_rg, rhi::PipelineStage::ComputeShader);
+      }
+      if (mip == 0) {
+        p.write_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader, static_cast<int32_t>(mip));
+      } else {
+        depth_pyramid_id =
+            p.rw_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader,
+                     rhi::AccessFlags::ShaderSampledRead, rhi::AccessFlags::ShaderWrite,
+                     static_cast<int32_t>(mip - 1), static_cast<int32_t>(mip));
+      }
+      if (mip == final_mip - 1) {
+        final_depth_pyramid_rg = depth_pyramid_id;
+      }
+
+      p.set_ex([this, mip, depth_handle, dp_dims](CmdEncoder* enc) {
+        enc->bind_pipeline(depth_reduce_pso_);
+        glm::uvec2 in_dims =
+            (mip == 0) ? ctx_.device->get_tex(ctx_.rg->get_att_img(depth_handle))->desc().dims
+                       : glm::uvec2{std::max(1u, dp_dims.x >> (mip - 1)),
+                                    std::max(1u, dp_dims.y >> (mip - 1))};
+        DepthReducePC pc{.in_tex_dim_x = in_dims.x,
+                         .in_tex_dim_y = in_dims.y,
+                         .out_tex_dim_x = dp_dims.x >> mip,
+                         .out_tex_dim_y = dp_dims.y >> mip};
+        enc->push_constants(&pc, sizeof(pc));
+
+        if (mip == 0) {
+          enc->bind_srv(ctx_.rg->get_att_img(depth_handle), 0);
+        } else {
+          enc->bind_srv(depth_pyramid_tex_.handle, 0,
+                        depth_pyramid_tex_.views[static_cast<size_t>(mip - 1)]);
+        }
+        enc->bind_uav(depth_pyramid_tex_.handle, 0,
+                      depth_pyramid_tex_.views[static_cast<size_t>(mip)]);
+
+        constexpr size_t k_tg_size = 8;
+        enc->dispatch_compute(glm::uvec3{align_divide_up(pc.out_tex_dim_x, k_tg_size),
+                                         align_divide_up(pc.out_tex_dim_y, k_tg_size), 1},
+                              glm::uvec3{k_tg_size, k_tg_size, 1});
+      });
+    }
+  }
+
   add_buffer_readback_copy2(
       *ctx_.rg, "readback_task_cmd_group_count", indirect_args_rg,
       ctx_.rg->import_external_buffer(
@@ -350,21 +490,46 @@ void MeshletRendererScene::add_render_graph_passes() {
           "visible_object_count_readback"),
       0, 0, sizeof(uint32_t));
 
+  const bool depth_reduce_ran = final_depth_pyramid_rg.is_valid();
+
   {
     auto& p = ctx_.rg->add_graphics_pass("shade");
     gbuffer_a_id = p.sample_tex(gbuffer_a_id);
+    if (depth_reduce_ran) {
+      p.sample_tex(final_depth_pyramid_rg);
+    }
     p.w_swapchain_tex(ctx_.swapchain);
-    p.set_ex([this, gbuffer_a_id](CmdEncoder* enc) {
+    p.set_ex([this, gbuffer_a_id, depth_reduce_ran](CmdEncoder* enc) {
       enc->begin_rendering({
           RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::DontCare),
       });
       enc->bind_pipeline(shade_pso_);
-      enc->bind_srv(ctx_.rg->get_att_img(gbuffer_a_id), 0);
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
       enc->set_cull_mode(rhi::CullMode::None);
       glm::uvec2 dims = {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
       enc->set_viewport({0, 0}, dims);
       enc->set_scissor({0, 0}, dims);
+
+      const uint32_t gbuffer_bindless =
+          ctx_.device->get_tex(ctx_.rg->get_att_img(gbuffer_a_id))->bindless_idx();
+      uint32_t pyramid_view_bindless = UINT32_MAX;
+      glm::uvec2 pyramid_base{0, 0};
+      if (depth_pyramid_tex_.is_valid() && depth_reduce_ran) {
+        const int mip = std::clamp(debug_depth_pyramid_mip_, 0,
+                                   static_cast<int>(depth_pyramid_tex_.views.size()) - 1);
+        pyramid_view_bindless = ctx_.device->get_tex_view_bindless_idx(
+            depth_pyramid_tex_.handle, depth_pyramid_tex_.views[static_cast<size_t>(mip)]);
+        pyramid_base = glm::uvec2{ctx_.device->get_tex(depth_pyramid_tex_)->desc().dims};
+      }
+      MeshletShadePC shade_pc{
+          .gbuffer_a_idx = gbuffer_bindless,
+          .depth_pyramid_view_idx = pyramid_view_bindless,
+          .swap_w = dims.x,
+          .swap_h = dims.y,
+          .pyramid_base_w = pyramid_base.x,
+          .pyramid_base_h = pyramid_base.y,
+      };
+      enc->push_constants(&shade_pc, sizeof(shade_pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
 
       if (ctx_.imgui_ui_active && ctx_.imgui_renderer != nullptr) {

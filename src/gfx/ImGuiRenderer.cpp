@@ -73,6 +73,7 @@ void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t fram
       .proj = proj,
       .vert_buf_idx = vert_buf->bindless_idx(),
       .tex_idx = 0,
+      .flags = 0,
   };
   enc->push_constants(&pc, sizeof(pc));
 
@@ -111,8 +112,15 @@ void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t fram
         enc->set_scissor(glm::uvec2{clip_min.x, clip_min.y},
                          glm::uvec2{clip_max.x - clip_min.x, clip_max.y - clip_min.y});
 
+        pc.flags = 0;
         if (ImTextureID tex_id = pcmd->GetTexID()) {
-          pc.tex_idx = device_->get_tex(rhi::TextureHandle{tex_id})->bindless_idx();
+          const auto tid = static_cast<uint64_t>(tex_id);
+          if ((tid & 0xFFFFFFFF00000000ull) == kImGuiTexRefBindlessFloatViewMagic) {
+            pc.tex_idx = static_cast<uint32_t>(tid & 0xFFFFFFFFull);
+            pc.flags = IMGUI_TEX_FLAG_FLOAT_BINDLESS;
+          } else {
+            pc.tex_idx = device_->get_tex(rhi::TextureHandle{tex_id})->bindless_idx();
+          }
         }
         pc.vert_buf_idx = vert_buf->bindless_idx();
         enc->push_constants(&pc, sizeof(pc));

@@ -4,12 +4,23 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
+#include "imgui.h"
 
 struct ImTextureData;
 
 namespace TENG_NAMESPACE {
 
 namespace gfx {
+
+// Packed ImTextureRef / ImTextureID for ImGui::Image: bindless index of a single-mip
+// Texture2D<float> view (see Device::get_tex_view_bindless_idx). Decoded in ImGuiRenderer::render.
+constexpr uint64_t kImGuiTexRefBindlessFloatViewMagic = 0xA11CE000000000ull;
+
+[[nodiscard]] inline ImTextureRef MakeImGuiTexRefBindlessFloatView(uint32_t bindless_view_idx) {
+  const uint64_t packed =
+      kImGuiTexRefBindlessFloatViewMagic | static_cast<uint64_t>(bindless_view_idx);
+  return ImTextureRef{static_cast<ImTextureID>(packed)};
+}
 
 struct GPUFrameAllocator3;
 class ShaderManager;

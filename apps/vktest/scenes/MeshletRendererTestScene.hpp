@@ -4,6 +4,7 @@
 #include "FpsCameraController.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
+#include "gfx/rhi/Texture.hpp"
 #include "hlsl/shared_cull_data.h"
 #include "hlsl/shared_globals.h"
 
@@ -23,7 +24,7 @@ class MeshletRendererScene final : public ITestScene {
 
   void on_imgui() override;
 
-  void on_swapchain_resize() override { recreate_meshlet_pso(); }
+  void on_swapchain_resize() override;
 
   ViewData prepare_view_data();
   CullData prepare_cull_data(const ViewData& vd);
@@ -33,11 +34,15 @@ class MeshletRendererScene final : public ITestScene {
 
  private:
   void recreate_meshlet_pso();
+  void make_depth_pyramid_tex();
 
   rhi::PipelineHandleHolder shade_pso_;
   rhi::PipelineHandleHolder meshlet_pso_;
   rhi::PipelineHandleHolder clear_indirect_pso_;
   rhi::PipelineHandleHolder prepare_meshlets_pso_;
+  rhi::PipelineHandleHolder depth_reduce_pso_;
+  rhi::TexAndViewHolder depth_pyramid_tex_;
+  int debug_depth_pyramid_mip_{0};
   FpsCameraController fps_camera_;
   ModelHandle test_model_handle_;
   InstanceMgr::Alloc instance_alloc_{};
