@@ -3,6 +3,7 @@
 #include <vulkan/vk_enum_string_helper.h>
 
 #include <algorithm>
+#include <array>
 #include <ranges>
 #include <string>
 #include <tracy/Tracy.hpp>
@@ -204,6 +205,21 @@ constexpr Flags flag_or(Flags x, Bits y) noexcept {
                             static_cast<uint64_t>(y));
 }
 
+constexpr uint32_t kStageBitCount = 64;
+
+inline void for_each_stage_bit(rhi::PipelineStage stage, const auto& fn) {
+  auto mask = static_cast<uint64_t>(stage);
+  for (uint32_t i = 0; i < kStageBitCount; ++i) {
+    if ((mask & (1ull << i)) != 0) {
+      fn(i);
+    }
+  }
+}
+
+inline rhi::PipelineStage stage_from_bit(uint32_t bit) {
+  return static_cast<rhi::PipelineStage>(1ull << bit);
+}
+
 bool has_write_access(rhi::AccessFlags access) {
   return has_flag(access, rhi::AccessFlags::AnyWrite);
 }
@@ -241,6 +257,43 @@ rhi::ResourceLayout layout_from_access(rhi::AccessFlags access, RGPassType pass_
                                             : rhi::ResourceLayout::General;
   }
   return rhi::ResourceLayout::Undefined;
+}
+
+struct SubresourceState {
+  rhi::PipelineStage last_write_stage{rhi::PipelineStage::None};
+  rhi::AccessFlags to_flush_access{rhi::AccessFlags::None};
+  rhi::ResourceLayout layout{rhi::ResourceLayout::Undefined};
+  bool has_write{false};
+  std::array<rhi::AccessFlags, kStageBitCount> invalidated_in_stage{};
+};
+
+inline void clear_invalidated(SubresourceState& state) {
+  for (auto& entry : state.invalidated_in_stage) {
+    entry = rhi::AccessFlags::None;
+  }
+}
+
+inline rhi::PipelineStage read_stage_mask(const SubresourceState& state) {
+  rhi::PipelineStage mask = rhi::PipelineStage::None;
+  for (uint32_t i = 0; i < kStageBitCount; ++i) {
+    if (state.invalidated_in_stage[i] != rhi::AccessFlags::None) {
+      mask = flag_or(mask, stage_from_bit(i));
+    }
+  }
+  return mask;
+}
+
+inline bool need_invalidate_read(const SubresourceState& state, rhi::PipelineStage stages,
+                                 rhi::AccessFlags access) {
+  bool need_invalidate = false;
+  for_each_stage_bit(stages, [&](uint32_t bit) {
+    const auto inv = state.invalidated_in_stage[bit];
+    const uint64_t missing = static_cast<uint64_t>(access) & ~static_cast<uint64_t>(inv);
+    if (missing != 0) {
+      need_invalidate = true;
+    }
+  });
+  return need_invalidate;
 }
 
 // [[maybe_unused]] rhi::ResourceState convert_resource_state(rhi::AccessFlags access) {
@@ -583,20 +636,25 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   }
   free_bufs_.clear();
 
-  std::unordered_map<RgSubresourceStateKey, RGState, RgSubresourceStateKeyHash> subresource_states;
+  std::unordered_map<RgSubresourceStateKey, SubresourceState, RgSubresourceStateKeyHash>
+      subresource_states;
 
-  auto get_resource_state = [&](RGResourceHandle handle, int32_t mip, int32_t slice) -> RGState& {
+  auto get_resource_state = [&](RGResourceHandle handle, int32_t mip,
+                                int32_t slice) -> SubresourceState& {
     RgSubresourceStateKey key{.type = handle.type, .idx = handle.idx, .mip = mip, .slice = slice};
     if (auto it = subresource_states.find(key); it != subresource_states.end()) {
       return it->second;
     }
-    RGState init{};
+    SubresourceState init{};
     if (auto init_it = external_initial_states_.find(handle.to64());
         init_it != external_initial_states_.end()) {
-      init = init_it->second;
-      if (init.stage == rhi::PipelineStage::None) {
-        init.stage = rhi::PipelineStage::TopOfPipe;
-      }
+      const RGState external = init_it->second;
+      init.layout = external.layout;
+      init.to_flush_access = external.access;
+      init.has_write = has_write_access(external.access);
+      init.last_write_stage = external.stage == rhi::PipelineStage::None
+                                  ? rhi::PipelineStage::TopOfPipe
+                                  : external.stage;
     }
     auto [it, inserted] = subresource_states.emplace(key, init);
     return it->second;
@@ -726,38 +784,102 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       desired.access = use.access;
       desired.stage =
           use.stage == rhi::PipelineStage::None ? rhi::PipelineStage::TopOfPipe : use.stage;
-      if (use.type == RGResourceType::Buffer || use.type == RGResourceType::ExternalBuffer) {
+      const bool is_buffer =
+          use.type == RGResourceType::Buffer || use.type == RGResourceType::ExternalBuffer;
+      if (is_buffer) {
         desired.layout = rhi::ResourceLayout::Undefined;
       } else {
         desired.layout = layout_from_access(use.access, pass.type(), use.is_swapchain_write);
       }
 
-      const bool needs_barrier = (resource_state.layout != desired.layout) ||
-                                 has_write_access(resource_state.access) ||
-                                 has_write_access(desired.access);
-      if (needs_barrier) {
-        barriers.emplace_back(BarrierInfo{
-            .resource = use.resource,
-            .src_state = resource_state,
-            .dst_state = desired,
-            .debug_id = use.debug_id,
-            .is_swapchain_write = use.is_swapchain_write,
-            .subresource_mip = use.mip,
-            .subresource_slice = use.slice,
-        });
-      }
+      const bool is_write = has_write_access(desired.access);
+      const bool layout_change = !is_buffer && resource_state.layout != desired.layout;
 
-      if (has_write_access(desired.access)) {
-        resource_state = desired;
-      } else {
-        resource_state.layout = desired.layout;
-        if (has_write_access(resource_state.access)) {
-          resource_state.access = desired.access;
-          resource_state.stage = desired.stage;
-        } else {
-          resource_state.access = flag_or(resource_state.access, desired.access);
-          resource_state.stage = flag_or(resource_state.stage, desired.stage);
+      if (is_write) {
+        const rhi::PipelineStage read_stages = read_stage_mask(resource_state);
+        const bool has_reads = read_stages != rhi::PipelineStage::None;
+        const bool need_barrier = layout_change || resource_state.has_write || has_reads;
+
+        if (need_barrier) {
+          RGState src{};
+          if (resource_state.has_write) {
+            src.stage = resource_state.last_write_stage;
+            if (has_reads) {
+              src.stage = flag_or(src.stage, read_stages);
+            }
+            src.access = resource_state.to_flush_access;
+          } else if (has_reads) {
+            src.stage = read_stages;
+            src.access = rhi::AccessFlags::None;
+          } else {
+            // No prior writes/reads. If we need a layout transition, sync within the destination
+            // stage to avoid swapchain acquire hazards.
+            src.stage = layout_change ? desired.stage : rhi::PipelineStage::TopOfPipe;
+            src.access = rhi::AccessFlags::None;
+          }
+          src.layout = resource_state.layout;
+
+          barriers.emplace_back(BarrierInfo{
+              .resource = use.resource,
+              .src_state = src,
+              .dst_state = desired,
+              .debug_id = use.debug_id,
+              .is_swapchain_write = use.is_swapchain_write,
+              .subresource_mip = use.mip,
+              .subresource_slice = use.slice,
+          });
         }
+
+        resource_state.has_write = true;
+        resource_state.last_write_stage = desired.stage;
+        resource_state.to_flush_access = desired.access;
+        if (!is_buffer) {
+          resource_state.layout = desired.layout;
+        }
+        clear_invalidated(resource_state);
+      } else {
+        const bool need_invalidate =
+            need_invalidate_read(resource_state, desired.stage, desired.access);
+        const bool need_barrier = layout_change ||
+                                  resource_state.to_flush_access != rhi::AccessFlags::None ||
+                                  need_invalidate;
+
+        if (need_barrier) {
+          RGState src{};
+          if (resource_state.has_write) {
+            src.stage = resource_state.last_write_stage;
+            src.access = resource_state.to_flush_access;
+          } else {
+            src.stage = rhi::PipelineStage::TopOfPipe;
+            src.access = rhi::AccessFlags::None;
+          }
+          src.layout = resource_state.layout;
+
+          barriers.emplace_back(BarrierInfo{
+              .resource = use.resource,
+              .src_state = src,
+              .dst_state = desired,
+              .debug_id = use.debug_id,
+              .is_swapchain_write = use.is_swapchain_write,
+              .subresource_mip = use.mip,
+              .subresource_slice = use.slice,
+          });
+
+          if (resource_state.to_flush_access != rhi::AccessFlags::None || layout_change) {
+            clear_invalidated(resource_state);
+          }
+          resource_state.to_flush_access = rhi::AccessFlags::None;
+          if (!is_buffer) {
+            resource_state.layout = desired.layout;
+          }
+        } else if (!is_buffer && resource_state.layout == rhi::ResourceLayout::Undefined) {
+          resource_state.layout = desired.layout;
+        }
+
+        for_each_stage_bit(desired.stage, [&](uint32_t bit) {
+          resource_state.invalidated_in_stage[bit] =
+              flag_or(resource_state.invalidated_in_stage[bit], desired.access);
+        });
       }
     }
 
