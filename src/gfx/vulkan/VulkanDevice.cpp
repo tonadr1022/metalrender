@@ -1434,6 +1434,9 @@ std::string to_string(VkPresentModeKHR present_mode) {
 
 }  // namespace
 
+void VulkanDevice::cmd_encoder_wait_for(rhi::CmdEncoder* /*cmd_enc_first*/,
+                                        rhi::CmdEncoder* /*cmd_enc_second*/) {}
+
 bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapchain* swap) {
   auto* swapchain = (VulkanSwapchain*)swap;
   VkSurfaceCapabilitiesKHR surface_properties;

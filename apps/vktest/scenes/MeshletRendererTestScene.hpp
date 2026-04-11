@@ -28,12 +28,11 @@ class MeshletRendererScene final : public ITestScene {
   ViewData prepare_view_data();
   CullData prepare_cull_data(const ViewData& vd);
 
+  void render();
   void add_render_graph_passes() override;
 
  private:
   void recreate_meshlet_pso();
-  void flush_pending_model_textures(ModelGPUMgr& mgr, rhi::Device& device,
-                                    GPUFrameAllocator3& staging, rhi::CmdEncoder* enc);
 
   rhi::PipelineHandleHolder meshlet_pso_;
   rhi::PipelineHandleHolder clear_indirect_pso_;

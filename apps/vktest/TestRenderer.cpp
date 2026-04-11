@@ -122,23 +122,14 @@ void TestRenderer::render(bool imgui_ui_active) {
 
   model_gpu_mgr_->set_curr_frame_idx(ctx_.curr_frame_in_flight_idx);
   shader_mgr_->replace_dirty_pipelines();
+
   add_render_graph_passes();
   static int i = 0;
-  bool verbose = i++ == 0;
-  {
-    ZoneScopedN("acquire_next_swapchain_image");
-    device_->acquire_next_swapchain_image(swapchain_);
-  }
+  bool verbose = i++ == -1;
+  rg_.bake(window_->get_window_size(), verbose);
 
-  {
-    ZoneScopedN("bake");
-    rg_.bake(window_->get_window_size(), verbose);
-  }
+  device_->acquire_next_swapchain_image(swapchain_);
 
-  // ModelGPUMgr uploads use BufferCopyMgr::copy_to_buffer. On discrete GPUs, geometry buffers are
-  // not host-mapped, so that enqueues vkCmdCopyBuffer work. MemeRenderer drains these before the
-  // graph; vktest must do the same or mesh/task draws read empty buffers (blank meshlet scene).
-  std::vector<CmdEncoder*> wait_for_encoders;
   if (!buffer_copy_mgr_.get_copies().empty()) {
     ZoneScopedN("buffer_upload_copies");
     auto* copy_enc = device_->begin_cmd_encoder(QueueType::Graphics);
@@ -161,16 +152,22 @@ void TestRenderer::render(bool imgui_ui_active) {
     }
     buffer_copy_mgr_.clear_copies();
     copy_enc->end_encoding();
-    wait_for_encoders.push_back(copy_enc);
   }
 
   {
     ZoneScopedN("execute");
     auto* enc = device_->begin_cmd_encoder();
-    for (auto* wait_enc : wait_for_encoders) {
-      device_->cmd_encoder_wait_for(wait_enc, enc);
-    }
     imgui_renderer_->flush_pending_texture_uploads(enc, frame_gpu_upload_allocator_);
+    {
+      const auto& pending = model_gpu_mgr_->get_pending_texture_uploads();
+      if (!pending.empty()) {
+        for (const auto& upload : pending) {
+          upload_texture_data(upload, device_->get_tex(upload.tex), frame_gpu_upload_allocator_,
+                              enc);
+        }
+        model_gpu_mgr_->clear_pending_texture_uploads();
+      }
+    }
     rg_.execute(enc);
     enc->end_encoding();
   }

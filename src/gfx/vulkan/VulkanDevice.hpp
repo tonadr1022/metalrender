@@ -101,9 +101,8 @@ class VulkanDevice : public rhi::Device {
   void submit_frame() override;
   void immediate_submit(rhi::QueueType, ImmediateSubmitFn&&) override { ASSERT(0); }
 
-  void cmd_encoder_wait_for(rhi::CmdEncoder* /*cmd_enc*/, rhi::CmdEncoder* /*wait_for*/) override {
-    //    ASSERT(0);
-  }
+  void cmd_encoder_wait_for(rhi::CmdEncoder* cmd_enc_first,
+                            rhi::CmdEncoder* cmd_enc_second) override;
 
   bool recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapchain* swapchain) override;
 
@@ -138,6 +137,23 @@ class VulkanDevice : public rhi::Device {
                                     VkSemaphore& out_acquire_semaphore);
   void set_vk_debug_name(VkObjectType object_type, uint64_t object_handle, const char* name);
   VkSemaphore create_semaphore(const char* name = nullptr);
+
+  struct SemaphoreCache {
+    std::vector<VkSemaphore> free_semaphores;
+  };
+  SemaphoreCache semaphore_cache_;
+
+  VkSemaphore get_or_create_semaphore(const char* name = nullptr) {
+    if (semaphore_cache_.free_semaphores.empty()) {
+      return create_semaphore();
+    }
+    VkSemaphore sema = semaphore_cache_.free_semaphores.back();
+    semaphore_cache_.free_semaphores.pop_back();
+    if (name) {
+      set_vk_debug_name(VK_OBJECT_TYPE_SEMAPHORE, (uint64_t)sema, name);
+    }
+    return sema;
+  }
 
   struct Queue {
     VkQueue queue;

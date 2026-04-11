@@ -282,8 +282,6 @@ void MeshletRendererScene::add_render_graph_passes() {
     auto depth_att_id = p.write_depth_output(depth_att);
     p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, depth_att_id, view_cb_suballoc,
               globals_cb_buf](CmdEncoder* enc) {
-      flush_pending_model_textures(*ctx_.model_gpu_mgr, *ctx_.device, *ctx_.frame_staging, enc);
-
       glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
       ctx_.device->enqueue_swapchain_for_present(ctx_.swapchain, enc);
       enc->begin_rendering({
@@ -361,19 +359,6 @@ void MeshletRendererScene::recreate_meshlet_pso() {
       .depth_stencil = GraphicsPipelineCreateInfo::depth_enable(true, CompareOp::Less),
       .name = "debug_meshlet_hello",
   });
-}
-
-void MeshletRendererScene::flush_pending_model_textures(ModelGPUMgr& mgr, rhi::Device& device,
-                                                        GPUFrameAllocator3& staging,
-                                                        rhi::CmdEncoder* enc) {
-  const auto& pending = mgr.get_pending_texture_uploads();
-  if (pending.empty()) {
-    return;
-  }
-  for (const auto& upload : pending) {
-    upload_texture_data(upload, device.get_tex(upload.tex), staging, enc);
-  }
-  mgr.clear_pending_texture_uploads();
 }
 
 }  // namespace teng::gfx
