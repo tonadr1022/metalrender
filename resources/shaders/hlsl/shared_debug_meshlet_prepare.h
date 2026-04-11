@@ -14,6 +14,7 @@ struct DebugMeshletPreparePC {
   uint cull_data_offset_bytes;
   uint max_draws;
   uint culling_enabled;
+  uint visible_obj_cnt_buf_idx;
 };
 
 PUSHCONSTANT(DebugMeshletPreparePC, pc);

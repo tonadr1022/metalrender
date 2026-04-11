@@ -35,7 +35,7 @@ struct TestSceneContext {
   GPUFrameAllocator3* frame_staging{};
   ImGuiRenderer* imgui_renderer{};
   ModelGPUMgr* model_gpu_mgr{};
-  uint32_t curr_frame_idx{};
+  uint32_t curr_frame_in_flight_idx{};
   std::filesystem::path resource_dir{};
   float time_sec{};
   float delta_time_sec{};

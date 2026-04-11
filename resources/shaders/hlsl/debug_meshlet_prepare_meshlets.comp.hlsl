@@ -11,25 +11,33 @@
 #include "math.hlsli"
 // clang-format on
 
+groupshared uint g_visible_in_group;
+
 [NumThreads(64, 1, 1)] void main(uint dtid
-                                 : SV_DispatchThreadID) {
-  if (dtid >= pc.max_draws) {
-    return;
+                                 : SV_DispatchThreadID, uint gtid
+                                 : SV_GroupIndex) {
+  const bool in_range = dtid < pc.max_draws;
+
+  InstanceData instance_data = (InstanceData)0;
+  uint mesh_id = 0xFFFFFFFFu;
+  if (in_range) {
+    instance_data = bindless_buffers[pc.instance_data_buf_idx].Load<InstanceData>(
+        dtid * (uint)sizeof(InstanceData));
+    mesh_id = instance_data.mesh_id;
   }
 
-  InstanceData instance_data = bindless_buffers[pc.instance_data_buf_idx].Load<InstanceData>(
-      dtid * (uint)sizeof(InstanceData));
-  if (instance_data.mesh_id == 0xFFFFFFFFu) {
-    return;
+  const bool valid_mesh = in_range && (mesh_id != 0xFFFFFFFFu);
+
+  MeshData mesh_data = (MeshData)0;
+  uint task_groups = 0;
+  if (valid_mesh) {
+    mesh_data =
+        bindless_buffers[pc.mesh_data_buf_idx].Load<MeshData>(mesh_id * (uint)sizeof(MeshData));
+    task_groups = (mesh_data.meshlet_count + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
   }
 
-  MeshData mesh_data = bindless_buffers[pc.mesh_data_buf_idx].Load<MeshData>(
-      instance_data.mesh_id * (uint)sizeof(MeshData));
-
-  uint task_groups = (mesh_data.meshlet_count + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
-
-  bool visible = true;
-  if (pc.culling_enabled != 0) {
+  bool visible = valid_mesh;
+  if (valid_mesh && pc.culling_enabled != 0) {
     ViewData view_data =
         bindless_buffers[pc.view_data_buf_idx].Load<ViewData>(pc.view_data_offset_bytes);
     CullData cull_data =
@@ -49,7 +57,28 @@
               (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0] > -radius);
   }
 
-  if (!visible) {
+  const bool contribute = visible;
+
+  if (gtid == 0) {
+    g_visible_in_group = 0;
+  }
+  GroupMemoryBarrierWithGroupSync();
+
+  const uint lane_contrib = contribute ? 1u : 0u;
+  const uint wave_sum = WaveActiveSum(lane_contrib);
+  if (WaveIsFirstLane()) {
+    InterlockedAdd(g_visible_in_group, wave_sum);
+  }
+  GroupMemoryBarrierWithGroupSync();
+
+  if (gtid == 0 && g_visible_in_group > 0) {
+    RWByteAddressBuffer vis_cnt_buf = bindless_rwbuffers[pc.visible_obj_cnt_buf_idx];
+    uint unused;
+    vis_cnt_buf.InterlockedAdd(0, g_visible_in_group, unused);
+  }
+  GroupMemoryBarrierWithGroupSync();
+
+  if (!contribute) {
     return;
   }
 

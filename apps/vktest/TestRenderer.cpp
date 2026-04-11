@@ -74,10 +74,7 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   init_imgui();
 }
 
-void TestRenderer::update_ctx() {
-  ctx_.time_sec = static_cast<float>(glfwGetTime());
-  ctx_.curr_frame_idx = (ctx_.curr_frame_idx + 1) % k_max_frames_in_flight;
-}
+void TestRenderer::update_ctx() { ctx_.time_sec = static_cast<float>(glfwGetTime()); }
 
 void TestRenderer::set_scene(TestDebugScene id) {
   if (scene_) {
@@ -123,7 +120,7 @@ void TestRenderer::render(bool imgui_ui_active) {
     scene_->on_frame(ctx_);
   }
 
-  model_gpu_mgr_->set_curr_frame_idx(ctx_.curr_frame_idx);
+  model_gpu_mgr_->set_curr_frame_idx(ctx_.curr_frame_in_flight_idx);
   shader_mgr_->replace_dirty_pipelines();
   add_render_graph_passes();
   static int i = 0;
@@ -180,7 +177,7 @@ void TestRenderer::render(bool imgui_ui_active) {
 
   device_->submit_frame();
 
-  ctx_.curr_frame_idx = (ctx_.curr_frame_idx + 1) % k_max_frames_in_flight;
+  ctx_.curr_frame_in_flight_idx = (ctx_.curr_frame_in_flight_idx + 1) % k_max_frames_in_flight;
 }
 
 void TestRenderer::shutdown() {
