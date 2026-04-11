@@ -466,20 +466,20 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
     const rhi::TextureUsage usage = device_->get_tex(tex_att_handles_[i])->desc().usage;
     free_atts_[TexPoolKey{tex_att_infos_[i], usage}].emplace_back(tex_att_handles_[i]);
   }
-  // history bufs are now gtg
-  for (auto& [key, bufs] : history_free_bufs_) {
+  // Deferred-pool buffers from the prior execute: safe to merge into the free list now.
+  for (auto& [key, bufs] : defer_pool_pending_return_) {
     for (auto& buf : bufs) {
       const rhi::BufferUsage usage = device_->get_buf(buf)->desc().usage;
       free_bufs_[BufPoolKey{key.info, usage}].emplace_back(buf);
     }
   }
-  history_free_bufs_.clear();
+  defer_pool_pending_return_.clear();
 
   for (size_t i = 0; i < buffer_infos_.size(); i++) {
-    if (history_buffer_handles_[i].is_valid()) {
-      const rhi::BufferUsage usage = device_->get_buf(history_buffer_handles_[i])->desc().usage;
-      history_free_bufs_[BufPoolKey{buffer_infos_[i], usage}].emplace_back(
-          history_buffer_handles_[i]);
+    if (defer_pool_handles_by_slot_[i].is_valid()) {
+      const rhi::BufferUsage usage = device_->get_buf(defer_pool_handles_by_slot_[i])->desc().usage;
+      defer_pool_pending_return_[BufPoolKey{buffer_infos_[i], usage}].emplace_back(
+          defer_pool_handles_by_slot_[i]);
     } else {
       const rhi::BufferUsage usage = device_->get_buf(buffer_handles_[i])->desc().usage;
       free_bufs_[BufPoolKey{buffer_infos_[i], usage}].emplace_back(buffer_handles_[i]);
@@ -682,7 +682,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   }
   {  // create buffers
     buffer_handles_.clear();
-    history_buffer_handles_.clear();
+    defer_pool_handles_by_slot_.clear();
     for (size_t i = 0; i < buffer_infos_.size(); ++i) {
       const auto& binfo = buffer_infos_[i];
       const rhi::BufferUsage derived_usage = buffer_desc_usage_for_bake(buf_physical_access[i]);
@@ -710,9 +710,9 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       }
       buffer_handles_.emplace_back(actual_buf_handle);
       if (binfo.defer_reuse) {
-        history_buffer_handles_.emplace_back(actual_buf_handle);
+        defer_pool_handles_by_slot_.emplace_back(actual_buf_handle);
       } else {
-        history_buffer_handles_.emplace_back();
+        defer_pool_handles_by_slot_.emplace_back();
       }
     }
   }
@@ -1483,7 +1483,7 @@ void RenderGraph::shutdown() {
   };
   destroy(free_bufs_);
   destroy(free_atts_);
-  destroy(history_free_bufs_);
+  destroy(defer_pool_pending_return_);
 }
 
 void RGPass::add_read_usage(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access,

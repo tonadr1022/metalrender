@@ -38,9 +38,15 @@ struct AttachmentInfo {
   }
 };
 
+// Descriptor for transient buffers created via `RenderGraph::create_buffer` (pooled per bake).
 struct BufferInfo {
-  size_t size;
-  bool defer_reuse;
+  size_t size{};
+  // When true, the physical `BufferHandle` is not returned to the pool until after the next
+  // `execute()` finishes (one execution boundary), so reuse on a later `bake()` cannot race
+  // in-flight GPU reads. This is pool lifetime only: it does not allocate a second buffer, add an
+  // RG version for "previous frame" reads, or implement temporal attachment/buffer history in the
+  // graph.
+  bool defer_reuse{};
   bool operator==(const BufferInfo& other) const {
     return size == other.size && defer_reuse == other.defer_reuse;
   }
@@ -159,10 +165,19 @@ enum class RGPassType { None, Compute, Graphics, Transfer };
 // - auto barrier placement
 // - external resource integration
 //
+// Buffer / attachment pooling lifetime:
+// - Transient attachment textures and internal buffers are pooled across bake/execute cycles.
+// - `BufferInfo::defer_reuse` delays returning the same handle to the free list until the next
+//   execute completes (see `defer_pool_*` members); it is not shader-visible "history".
+// - Attachment textures are returned to the pool at the end of each execute (no defer path yet).
+//
 // The following are TODOs
 // - multiple queues
 // - auto buffers
-// - attachment image/buffer history (ie read from previous frame)
+// - temporal attachments / explicit "previous frame" RG resources for shader reads (not
+// implemented;
+//   unrelated to `defer_reuse`, which only defers pool return)
+// - (optional) first-class temporal buffers in the graph beyond pool deferral
 //
 // Misc notes:
 // - not thread safe
@@ -348,7 +363,9 @@ class RenderGraph {
   std::vector<BufferInfo> buffer_infos_;
   std::vector<rhi::TextureHandle> tex_att_handles_;
   std::vector<rhi::BufferHandle> buffer_handles_;
-  std::vector<rhi::BufferHandle> history_buffer_handles_;
+  // Per-buffer slot: valid handle when `buffer_infos_[i].defer_reuse` so execute teardown can route
+  // the handle into `defer_pool_pending_return_` instead of `free_bufs_`.
+  std::vector<rhi::BufferHandle> defer_pool_handles_by_slot_;
 
   struct BarrierInfo {
     RGResourceHandle resource;
@@ -370,7 +387,9 @@ class RenderGraph {
 
   std::unordered_map<TexPoolKey, std::vector<rhi::TextureHandle>, TexPoolKeyHash> free_atts_;
   std::unordered_map<BufPoolKey, std::vector<rhi::BufferHandle>, BufPoolKeyHash> free_bufs_;
-  std::unordered_map<BufPoolKey, std::vector<rhi::BufferHandle>, BufPoolKeyHash> history_free_bufs_;
+  // Buffers waiting one execute boundary before merging into `free_bufs_` (see `defer_reuse`).
+  std::unordered_map<BufPoolKey, std::vector<rhi::BufferHandle>, BufPoolKeyHash>
+      defer_pool_pending_return_;
 
   struct BufferInfoAndHandle {
     BufferInfo buf_info;
