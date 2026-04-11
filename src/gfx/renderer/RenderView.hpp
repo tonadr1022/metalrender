@@ -15,6 +15,7 @@ struct IdxOffset {
   rhi::BufferHandle buf;
   uint32_t idx;
   uint32_t offset_bytes;
+  void* write_ptr;
 };
 
 struct RenderView {

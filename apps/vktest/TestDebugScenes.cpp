@@ -441,7 +441,8 @@ void flush_pending_model_textures(ModelGPUMgr& mgr, rhi::Device& device,
 
 class MeshletRendererScene final : public ITestScene {
  public:
-  explicit MeshletRendererScene(const TestSceneContext& ctx) : ITestScene(ctx) {
+  explicit MeshletRendererScene(const TestSceneContext& ctx)
+      : ITestScene(ctx), frame_uniform_gpu_allocator_(ctx_.device, true) {
     ASSERT(ctx_.model_gpu_mgr != nullptr);
     ASSERT(ctx_.shader_mgr != nullptr);
     ASSERT(ctx_.frame_staging != nullptr);
@@ -458,12 +459,6 @@ class MeshletRendererScene final : public ITestScene {
     ASSERT(res->totals.task_cmd_count == ctx_.model_gpu_mgr->geometry_batch().task_cmd_count);
 
     constexpr size_t k_ubo_align = 256;
-    view_cb_buf_ = ctx_.device->create_buf_h({
-        .usage = BufferUsage::Uniform,
-        .size = align_up(sizeof(ViewData), k_ubo_align),
-        .flags = BufferDescFlags::CPUAccessible,
-        .name = "meshlet_hello_view",
-    });
     view_prepare_storage_buf_ = ctx_.device->create_buf_h({
         .usage = BufferUsage::Storage,
         .size = align_up(sizeof(ViewData), k_ubo_align),
@@ -556,15 +551,7 @@ class MeshletRendererScene final : public ITestScene {
     recreate_meshlet_pso();
   }
 
-  void add_render_graph_passes() override {
-    auto& batch = ctx_.model_gpu_mgr->geometry_batch();
-    const uint32_t tc = batch.task_cmd_count;
-    if (tc == 0 || batch.get_stats().vertex_count == 0) {
-      return;
-    }
-
-    meshlet_readback_frames_++;
-
+  ViewData prepare_view_data() {
     const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
                          std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height));
     glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.f), aspect, 0.1f, 100.f);
@@ -580,29 +567,52 @@ class MeshletRendererScene final : public ITestScene {
     vd.proj = proj;
     vd.inv_proj = glm::inverse(proj);
     vd.camera_pos = glm::vec4(fps_camera_.camera().pos, 1.f);
-    std::memcpy(ctx_.device->get_buf(view_cb_buf_.handle)->contents(), &vd, sizeof(vd));
-    std::memcpy(ctx_.device->get_buf(view_prepare_storage_buf_.handle)->contents(), &vd,
-                sizeof(vd));
+    return vd;
+  }
 
-    const auto normalize_plane = [](const glm::vec4& plane) {
+  CullData prepare_cull_data(const ViewData& vd) {
+    const glm::mat4 projection_transpose = glm::transpose(vd.proj);
+    auto normalize_plane = [](const glm::vec4& plane) {
       const glm::vec3 n = glm::vec3(plane);
       const float inv_len = 1.f / glm::length(n);
       return glm::vec4(n * inv_len, plane.w * inv_len);
     };
-    const glm::mat4 projection_transpose = glm::transpose(proj);
     const glm::vec4 frustum_x = normalize_plane(projection_transpose[0] + projection_transpose[3]);
     const glm::vec4 frustum_y = normalize_plane(projection_transpose[1] + projection_transpose[3]);
+
     CullData cd{};
     cd.frustum = glm::vec4(frustum_x.x, frustum_x.z, frustum_y.y, frustum_y.z);
     cd.z_near = 0.1f;
     cd.z_far = 100.f;
-    cd.p00 = proj[0][0];
-    cd.p11 = proj[1][1];
+    cd.p00 = vd.proj[0][0];
+    cd.p11 = vd.proj[1][1];
     cd.pyramid_width = 0;
     cd.pyramid_height = 0;
     cd.pyramid_mip_count = 0;
     cd.paused = 0;
-    std::memcpy(ctx_.device->get_buf(cull_storage_buf_.handle)->contents(), &cd, sizeof(cd));
+    return cd;
+  }
+
+  void add_render_graph_passes() override {
+    auto& batch = ctx_.model_gpu_mgr->geometry_batch();
+    const uint32_t tc = batch.task_cmd_count;
+    if (tc == 0 || batch.get_stats().vertex_count == 0) {
+      return;
+    }
+
+    const uint32_t fif = ctx_.device->get_info().frames_in_flight;
+    frame_uniform_gpu_allocator_.set_frame_idx(fif);
+
+    meshlet_readback_frames_++;
+
+    auto vd = prepare_view_data();
+    auto view_cb_suballoc = frame_uniform_gpu_allocator_.alloc2(sizeof(ViewData), &vd);
+
+    memcpy(ctx_.device->get_buf(view_prepare_storage_buf_.handle)->contents(), &vd, sizeof(vd));
+
+    auto cd = prepare_cull_data(vd);
+
+    memcpy(ctx_.device->get_buf(cull_storage_buf_.handle)->contents(), &cd, sizeof(cd));
 
     const size_t task_cmd_bytes = std::max(static_cast<size_t>(tc) * sizeof(TaskCmd), size_t{256});
     RGResourceId task_cmd_dst_rg = ctx_.rg->create_buffer(
@@ -689,7 +699,7 @@ class MeshletRendererScene final : public ITestScene {
 
       auto depth_att_id = p.write_depth_output(depth_att);
       p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, visible_object_count_rg, depth_att_id,
-                readback_fif_i = ctx_.curr_frame_in_flight_idx](CmdEncoder* enc) {
+                readback_fif_i = ctx_.curr_frame_in_flight_idx, view_cb_suballoc](CmdEncoder* enc) {
         flush_pending_model_textures(*ctx_.model_gpu_mgr, *ctx_.device, *ctx_.frame_staging, enc);
 
         GlobalData gd{};
@@ -725,7 +735,7 @@ class MeshletRendererScene final : public ITestScene {
         enc->bind_srv(ctx_.model_gpu_mgr->materials_allocator().get_buffer_handle(), 11);
 
         enc->bind_cbv(globals_cb_buf_.handle, GLOBALS_SLOT, 0, sizeof(GlobalData));
-        enc->bind_cbv(view_cb_buf_.handle, VIEW_DATA_SLOT, 0, sizeof(ViewData));
+        enc->bind_cbv(view_cb_suballoc.buf, VIEW_DATA_SLOT, 0, sizeof(ViewData));
 
         Task2PC task_pc{};
         task_pc.flags = 0;
@@ -809,7 +819,7 @@ class MeshletRendererScene final : public ITestScene {
   PipelineHandleHolder clear_indirect_pso_;
   PipelineHandleHolder prepare_meshlets_pso_;
   // TextureHandleHolder meshlet_depth_tex_;
-  BufferHandleHolder view_cb_buf_;
+  // BufferHandleHolder view_cb_bufs_[k_max_frames_in_flight];
   BufferHandleHolder view_prepare_storage_buf_;
   BufferHandleHolder globals_cb_buf_;
   BufferHandleHolder cull_storage_buf_;
@@ -819,6 +829,7 @@ class MeshletRendererScene final : public ITestScene {
   bool gpu_object_frustum_cull_{true};
   std::array<BufferHandleHolder, k_max_frames_in_flight> draw_count_readback_{};
   std::array<BufferHandleHolder, k_max_frames_in_flight> visible_object_count_readback_{};
+  GPUFrameAllocator3 frame_uniform_gpu_allocator_;
   uint32_t meshlet_readback_frames_{0};
 };
 

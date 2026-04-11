@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/Config.hpp"
+#include "gfx/renderer/BufferSuballoc.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
@@ -42,6 +43,8 @@ struct GPUFrameAllocator3 {
   explicit GPUFrameAllocator3(rhi::Device* device, bool uniform_allocator);
 
   Alloc alloc(uint32_t size);
+  BufferSuballoc alloc2(uint32_t size);
+  BufferSuballoc alloc2(uint32_t size, void* data);
   Alloc alloc(uint32_t size, void* data);
 
   void set_frame_idx(uint32_t frame_idx);

@@ -91,6 +91,36 @@ GPUFrameAllocator3::Alloc GPUFrameAllocator3::alloc(uint32_t size) {
   return allocation;
 }
 
+BufferSuballoc GPUFrameAllocator3::alloc2(uint32_t size) {
+  auto allocation = alloc(size);
+  uint32_t idx = UINT32_MAX;
+  if (!uniform_allocator_) {
+    auto* buf = device_->get_buf(allocation.buf);
+    idx = buf->bindless_idx();
+  }
+  return BufferSuballoc{
+      .buf = allocation.buf,
+      .bindless_idx = idx,
+      .offset_bytes = allocation.offset,
+      .write_ptr = allocation.write_ptr,
+  };
+}
+
+BufferSuballoc GPUFrameAllocator3::alloc2(uint32_t size, void* data) {
+  auto allocation = alloc(size, data);
+  uint32_t idx = UINT32_MAX;
+  if (!uniform_allocator_) {
+    auto* buf = device_->get_buf(allocation.buf);
+    idx = buf->bindless_idx();
+  }
+  return BufferSuballoc{
+      .buf = allocation.buf,
+      .bindless_idx = idx,
+      .offset_bytes = allocation.offset,
+      .write_ptr = allocation.write_ptr,
+  };
+}
+
 void GPUFrameAllocator3::set_frame_idx(uint32_t frame_idx) {
   frame_idx_ = frame_idx;
   for (auto& buf : curr_frame().full_staging_buffers) {
