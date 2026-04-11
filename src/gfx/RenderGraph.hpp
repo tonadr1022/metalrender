@@ -122,13 +122,6 @@ struct RGResourceIdStableEq {
   }
 };
 
-struct ResourceAndUsage {
-  RGResourceId id;
-  rhi::AccessFlags access;
-  rhi::PipelineStage stage;
-  uint32_t pass_rw_read_idx{UINT32_MAX};
-};
-
 enum class RGPassType { None, Compute, Graphics, Transfer };
 
 // This render graph has the following features:
@@ -234,10 +227,6 @@ class RenderGraph {
     std::vector<NameAndAccess> internal_reads_;
     std::vector<NameAndAccess> internal_writes_;
 
-    // [[nodiscard]] const std::vector<ResourceAndUsage>& get_resource_usages() const {
-    // return resource_usages_;
-    // }
-
     [[nodiscard]] uint32_t get_idx() const { return pass_i_; }
     void set_ex(auto&& f) { execute_fn_ = f; }
     [[nodiscard]] const std::string& get_name() const { return rg_->debug_name(name_id_); }
@@ -250,7 +239,6 @@ class RenderGraph {
     void add_write_usage(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access,
                          bool is_swapchain_write = false, int32_t subresource_mip = -1,
                          int32_t subresource_slice = -1);
-    std::vector<ResourceAndUsage> resource_usages_;
     ExecuteFn execute_fn_;
     RenderGraph* rg_{};
     uint32_t pass_i_{};

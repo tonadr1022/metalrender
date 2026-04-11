@@ -1,10 +1,7 @@
 #include "RenderGraph.hpp"
 
-#include <vulkan/vk_enum_string_helper.h>
-
 #include <algorithm>
 #include <array>
-#include <ranges>
 #include <string>
 #include <tracy/Tracy.hpp>
 #include <utility>
@@ -17,7 +14,6 @@
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
-#include "gfx/vulkan/VulkanSwapchain.hpp"
 #include "small_vector/small_vector.hpp"
 
 namespace TENG_NAMESPACE {
@@ -295,47 +291,6 @@ inline bool need_invalidate_read(const SubresourceState& state, rhi::PipelineSta
   });
   return need_invalidate;
 }
-
-// [[maybe_unused]] rhi::ResourceState convert_resource_state(rhi::AccessFlags access) {
-//   if (has_flag(access, rhi::AccessFlags::ColorAttachmentWrite)) {
-//     return rhi::ResourceState::ColorWrite;
-//   }
-//   if (has_flag(access, rhi::AccessFlags::DepthStencilWrite)) {
-//     return rhi::ResourceState::DepthStencilWrite;
-//   }
-//   if (has_flag(access, rhi::AccessFlags::ShaderWrite)) {
-//     return rhi::ResourceState::ShaderWrite;
-//   }
-//   if (has_flag(access, rhi::AccessFlags::TransferWrite)) {
-//     return rhi::ResourceState::TransferWrite;
-//   }
-//   if (has_flag(access, rhi::AccessFlags::ShaderRead)) {
-//     return rhi::ResourceState::ShaderRead;
-//   }
-//   if (has_flag(access, rhi::AccessFlags::ColorAttachmentRead)) {
-//     return rhi::ResourceState::ColorRead;
-//   }
-//   if (has_flag(access, rhi::AccessFlags::DepthStencilRead)) {
-//     return rhi::ResourceState::DepthStencilRead;
-//   }
-//   if (has_flag(access, rhi::AccessFlags::IndirectCommandRead)) {
-//     return rhi::ResourceState::IndirectRead;
-//   }
-//   if (has_flag(access, rhi::AccessFlags::IndexRead)) {
-//     return rhi::ResourceState::IndexRead;
-//   }
-//   if (has_flag(access, rhi::AccessFlags::VertexAttributeRead)) {
-//     return rhi::ResourceState::VertexRead;
-//   }
-//   if (has_flag(access, rhi::AccessFlags::UniformRead)) {
-//     return rhi::ResourceState::ShaderRead;
-//   }
-//   if (has_flag(access, rhi::AccessFlags::InputAttachmentRead)) {
-//     ASSERT(0);
-//   }
-//   ASSERT(0);
-//   return rhi::ResourceState::None;
-// }
 
 }  // namespace
 
@@ -1430,7 +1385,6 @@ void RenderGraph::Pass::w_swapchain_tex(rhi::Swapchain* swapchain) {
   auto curr_tex = swapchain->get_current_texture();
   ASSERT(type_ == RGPassType::Graphics);
   // TODO: remove
-  [[maybe_unused]] auto* vulkan_swapchain = static_cast<gfx::vk::VulkanSwapchain*>(swapchain);
   auto swapchain_id = rg_->import_external_texture(
       curr_tex,
       RGState{.stage = rhi::PipelineStage::BottomOfPipe, .layout = rhi::ResourceLayout::Undefined},
