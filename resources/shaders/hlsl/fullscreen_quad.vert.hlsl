@@ -8,11 +8,6 @@ struct VOut {
 VOut main(uint vert_id : SV_VertexID) {
   VOut o;
   o.uv = float2((vert_id << 1) & 2, vert_id & 2);
-#ifdef VULKAN
-  o.pos = float4(o.uv.x * 2.0 - 1.0, o.uv.y * 2.0 - 1.0, 0.0, 1.0);
-#else
   o.pos = float4(o.uv.x * 2.0 - 1.0, 1.0 - o.uv.y * 2.0, 0.0, 1.0);
-#endif
-
   return o;
 }

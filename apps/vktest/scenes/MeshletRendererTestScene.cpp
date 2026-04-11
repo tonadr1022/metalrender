@@ -224,7 +224,6 @@ ViewData MeshletRendererScene::prepare_view_data() {
   const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
                        std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height));
   glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.f), aspect, 0.1f, 100.f);
-  proj[1][1] = -proj[1][1];
   fps_camera_.camera().calc_vectors();
   const glm::mat4 view = fps_camera_.camera().get_view_mat();
   const glm::mat4 vp = proj * view;
