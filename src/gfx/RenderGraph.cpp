@@ -135,12 +135,6 @@ std::string to_string(rhi::AccessFlags access) {
   if (has_flag(access, rhi::AccessFlags::TransferWrite)) {
     result += "TransferWrite | ";
   }
-  if (has_flag(access, rhi::AccessFlags::HostRead)) {
-    result += "HostRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::HostWrite)) {
-    result += "HostWrite | ";
-  }
   if (has_flag(access, rhi::AccessFlags::MemoryRead)) {
     result += "MemoryRead | ";
   }
@@ -184,10 +178,6 @@ std::string to_string(rhi::ResourceLayout layout) {
       return "Layout_ComputeRW";
     case rhi::ResourceLayout::InputAttachment:
       return "Layout_InputAttachment";
-    case rhi::ResourceLayout::HostRead:
-      return "Layout_HostRead";
-    case rhi::ResourceLayout::HostWrite:
-      return "Layout_HostWrite";
   }
   return "Layout_Unknown";
 }
@@ -239,12 +229,6 @@ rhi::ResourceLayout layout_from_access(rhi::AccessFlags access, RGPassType pass_
   }
   if (has_flag(access, rhi::AccessFlags::InputAttachmentRead)) {
     return rhi::ResourceLayout::InputAttachment;
-  }
-  if (has_flag(access, rhi::AccessFlags::HostRead)) {
-    return rhi::ResourceLayout::HostRead;
-  }
-  if (has_flag(access, rhi::AccessFlags::HostWrite)) {
-    return rhi::ResourceLayout::HostWrite;
   }
   if (has_flag(access, rhi::AccessFlags::ShaderSampledRead) ||
       has_flag(access, rhi::AccessFlags::ShaderRead)) {

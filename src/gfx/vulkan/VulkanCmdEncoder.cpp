@@ -22,6 +22,20 @@ namespace gfx::vk {
 
 namespace {
 
+VkDependencyInfoKHR make_dependency_info(VkImageMemoryBarrier2* img_barrier,
+                                         uint32_t barrier_count = 1) {
+  return VkDependencyInfoKHR{
+      .sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
+      .dependencyFlags = 0,
+      .memoryBarrierCount = 0,
+      .pMemoryBarriers = nullptr,
+      .bufferMemoryBarrierCount = 0,
+      .pBufferMemoryBarriers = nullptr,
+      .imageMemoryBarrierCount = barrier_count,
+      .pImageMemoryBarriers = img_barrier,
+  };
+}
+
 std::pair<VkPipelineStageFlags2, VkAccessFlags2> convert_pipeline_stage_and_access(
     rhi::ResourceState state) {
   VkPipelineStageFlags2 stage{};
@@ -408,7 +422,7 @@ void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src
   const uint32_t bpp = uncompressed_texel_bytes(tex->desc().format);
   ASSERT(bpp > 0);
   ASSERT(src_bytes_per_row % bpp == 0);
-  const uint32_t row_texels = static_cast<uint32_t>(src_bytes_per_row / bpp);
+  const auto row_texels = static_cast<uint32_t>(src_bytes_per_row / bpp);
   ASSERT(row_texels >= static_cast<uint32_t>(src_size.x));
   VkBufferImageCopy region{
       .bufferOffset = static_cast<VkDeviceSize>(src_offset),
@@ -426,18 +440,105 @@ void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src
   region.imageExtent.width = static_cast<uint32_t>(src_size.x);
   region.imageExtent.height = static_cast<uint32_t>(src_size.y);
   region.imageExtent.depth = static_cast<uint32_t>(src_size.z);
+  VkImageLayout pre_final_barrier_layout{};
+  {
+    VkImageMemoryBarrier2 img_barrier{.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+    img_barrier.image = tex->image();
+    img_barrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
+    img_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
+    img_barrier.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
+    img_barrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    pre_final_barrier_layout = img_barrier.newLayout;
+    img_barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                    .baseMipLevel = 0,
+                                    .levelCount = tex->desc().mip_levels,
+                                    .baseArrayLayer = 0,
+                                    .layerCount = tex->desc().array_length};
+    VkDependencyInfoKHR dep_info = make_dependency_info(&img_barrier);
+    vkCmdPipelineBarrier2(cmd(), &dep_info);
+  }
 
-  flush_barriers();
-  barrier(dst_tex, rhi::PipelineStage::TopOfPipe, rhi::AccessFlags::None,
-          rhi::PipelineStage::AllTransfer, rhi::AccessFlags::TransferWrite,
-          rhi::ResourceLayout::Undefined, rhi::ResourceLayout::TransferDst, -1, -1);
-  flush_barriers();
   vkCmdCopyBufferToImage(cmd(), buf->buffer(), tex->image(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
                          1, &region);
-  flush_barriers();
-  barrier(dst_tex, rhi::PipelineStage::AllTransfer, rhi::AccessFlags::TransferWrite,
-          rhi::PipelineStage::FragmentShader, rhi::AccessFlags::ShaderSampledRead,
-          rhi::ResourceLayout::TransferDst, rhi::ResourceLayout::ShaderReadOnly, -1, -1);
+
+  if (mip_level < 0 && tex->desc().mip_levels > 1) {
+    uint32_t array_layers = tex->desc().array_length;
+    uint32_t mip_levels = tex->desc().mip_levels;
+    VkExtent2D curr_img_size = {tex->desc().dims.x, tex->desc().dims.y};
+    VkImageLayout curr_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    for (uint32_t mip_level = 0; mip_level < mip_levels; mip_level++) {
+      VkImageMemoryBarrier2 img_barrier{.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+      img_barrier.image = tex->image();
+      img_barrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
+      img_barrier.srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT;
+      img_barrier.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
+      img_barrier.dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT;
+      img_barrier.oldLayout = curr_layout;
+      curr_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+      img_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+      img_barrier.subresourceRange =
+          VkImageSubresourceRange{.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                  .baseMipLevel = mip_level,
+                                  .levelCount = 1,
+                                  .baseArrayLayer = 0,
+                                  .layerCount = array_layers};
+      VkDependencyInfoKHR dep_info = make_dependency_info(&img_barrier);
+      vkCmdPipelineBarrier2KHR(cmd(), &dep_info);
+      if (mip_level < mip_levels - 1) {
+        VkExtent2D half_img_size = {curr_img_size.width / 2, curr_img_size.height / 2};
+        VkImageBlit2KHR blit{
+            .sType = VK_STRUCTURE_TYPE_IMAGE_BLIT_2_KHR,
+            .srcSubresource =
+                VkImageSubresourceLayers{
+                    .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                    .mipLevel = mip_level,
+                    .baseArrayLayer = 0,
+                    .layerCount = array_layers,
+                },
+            .srcOffsets = {VkOffset3D{},
+                           VkOffset3D{static_cast<int32_t>(curr_img_size.width),
+                                      static_cast<int32_t>(curr_img_size.height), 1u}},
+            .dstSubresource = VkImageSubresourceLayers{.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                                       .mipLevel = mip_level + 1,
+                                                       .baseArrayLayer = 0,
+                                                       .layerCount = array_layers},
+            .dstOffsets = {VkOffset3D{},
+                           VkOffset3D{static_cast<int32_t>(half_img_size.width),
+                                      static_cast<int32_t>(half_img_size.height), 1u}}};
+        VkBlitImageInfo2KHR info{.sType = VK_STRUCTURE_TYPE_BLIT_IMAGE_INFO_2_KHR,
+                                 .srcImage = tex->image(),
+                                 .srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                                 .dstImage = tex->image(),
+                                 .dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                                 .regionCount = 1,
+                                 .pRegions = &blit,
+                                 .filter = VK_FILTER_LINEAR};
+        vkCmdBlitImage2(cmd(), &info);
+        curr_img_size = half_img_size;
+      }
+    }
+    pre_final_barrier_layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+  }
+
+  {
+    VkImageMemoryBarrier2 img_barrier{.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
+    img_barrier.image = tex->image();
+    img_barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+    img_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+    img_barrier.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
+    img_barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+    img_barrier.oldLayout = pre_final_barrier_layout;
+    img_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    img_barrier.subresourceRange = {.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                                    .baseMipLevel = 0,
+                                    .levelCount = tex->desc().mip_levels,
+                                    .baseArrayLayer = 0,
+                                    .layerCount = tex->desc().array_length};
+    VkDependencyInfoKHR dep_info = make_dependency_info(&img_barrier);
+    vkCmdPipelineBarrier2(cmd(), &dep_info);
+  }
 }
 
 void VulkanCmdEncoder::copy_tex_to_buf(rhi::TextureHandle /*src_tex*/, size_t /*src_slice*/,

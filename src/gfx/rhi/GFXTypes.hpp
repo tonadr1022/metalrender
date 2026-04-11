@@ -348,8 +348,6 @@ enum class AccessFlags : uint64_t {
   DepthStencilWrite = 0X00000400ULL,
   TransferRead = 0X00000800ULL,
   TransferWrite = 0X00001000ULL,
-  HostRead = 0X00002000ULL,
-  HostWrite = 0X00004000ULL,
   MemoryRead = 0X00008000ULL,
   MemoryWrite = 0X00010000ULL,
   ShaderSampledRead = 0X100000000ULL,
@@ -359,13 +357,11 @@ enum class AccessFlags : uint64_t {
             rhi::AccessFlags::VertexAttributeRead | rhi::AccessFlags::UniformRead |
             rhi::AccessFlags::InputAttachmentRead | rhi::AccessFlags::ShaderRead |
             rhi::AccessFlags::ColorAttachmentRead | rhi::AccessFlags::DepthStencilRead |
-            rhi::AccessFlags::TransferRead | rhi::AccessFlags::HostRead |
-            rhi::AccessFlags::MemoryRead | rhi::AccessFlags::ShaderSampledRead |
-            rhi::AccessFlags::ShaderStorageRead,
+            rhi::AccessFlags::TransferRead | rhi::AccessFlags::MemoryRead |
+            rhi::AccessFlags::ShaderSampledRead | rhi::AccessFlags::ShaderStorageRead,
   AnyWrite = rhi::AccessFlags::ShaderWrite | rhi::AccessFlags::ColorAttachmentWrite |
              rhi::AccessFlags::DepthStencilWrite | rhi::AccessFlags::TransferWrite |
-             rhi::AccessFlags::HostWrite | rhi::AccessFlags::MemoryWrite |
-             rhi::AccessFlags::ShaderStorageWrite,
+             rhi::AccessFlags::MemoryWrite | rhi::AccessFlags::ShaderStorageWrite,
 };
 
 AUGMENT_ENUM_CLASS(AccessFlags);
@@ -387,8 +383,6 @@ enum class ResourceLayout : uint8_t {
   Present,
   ComputeRW,
   InputAttachment,
-  HostRead,
-  HostWrite,
 };
 
 AUGMENT_ENUM_CLASS(ResourceLayout);

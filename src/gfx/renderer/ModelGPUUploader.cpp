@@ -280,7 +280,7 @@ void upload_texture_data(const GPUTexUpload& upload, rhi::Texture* tex, GPUFrame
     }
     enc->upload_texture_data(upload_buf.buf, upload_buf.offset, bytes_per_row, upload.tex,
                              glm::uvec3{tex->desc().dims.x, tex->desc().dims.y, 1},
-                             glm::uvec3{0, 0, 0}, 0);
+                             glm::uvec3{0, 0, 0}, -1);
   }
 }
 

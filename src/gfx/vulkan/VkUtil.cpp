@@ -131,12 +131,6 @@ VkAccessFlags2 convert(rhi::AccessFlags access) {
   if (has_flag(access, rhi::AccessFlags::TransferWrite)) {
     flags |= VK_ACCESS_2_TRANSFER_WRITE_BIT;
   }
-  if (has_flag(access, rhi::AccessFlags::HostRead)) {
-    flags |= VK_ACCESS_2_HOST_READ_BIT;
-  }
-  if (has_flag(access, rhi::AccessFlags::HostWrite)) {
-    flags |= VK_ACCESS_2_HOST_WRITE_BIT;
-  }
   if (has_flag(access, rhi::AccessFlags::MemoryRead)) {
     flags |= VK_ACCESS_2_MEMORY_READ_BIT;
   }
@@ -173,8 +167,6 @@ VkImageLayout convert(rhi::ResourceLayout layout) {
       return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
     case rhi::ResourceLayout::ComputeRW:
     case rhi::ResourceLayout::General:
-    case rhi::ResourceLayout::HostRead:
-    case rhi::ResourceLayout::HostWrite:
       return VK_IMAGE_LAYOUT_GENERAL;
     case rhi::ResourceLayout::Undefined:
     default:

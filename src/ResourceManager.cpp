@@ -4,7 +4,6 @@
 
 #include "core/Config.hpp"
 #include "core/EAssert.hpp"
-#include "core/Logger.hpp"
 #include "gfx/ModelGPUManager.hpp"
 
 namespace TENG_NAMESPACE {
