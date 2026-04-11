@@ -5,13 +5,16 @@
 #include "core/Util.hpp"
 #include "gfx/BackedGPUAllocator.hpp"
 #include "gfx/DrawBatch.hpp"
+#include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/renderer/BufferResize.hpp"
+#include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Texture.hpp"
 #include "hlsl/material.h"
 #include "hlsl/shader_constants.h"
 #include "hlsl/shared_instance_data.h"
 #include "hlsl/shared_mesh_data.h"
+#include "ktx.h"
 
 namespace TENG_NAMESPACE {
 
@@ -228,6 +231,57 @@ void upload_model(ModelLoadResult& result, ModelInstance& model, rhi::Device& de
               .task_cmd_count = task_cmd_count,
           },
   });
+}
+
+void upload_texture_data(const GPUTexUpload& upload, rhi::Texture* tex, GPUFrameAllocator3& staging,
+                         rhi::CmdEncoder* enc) {
+  const auto& tex_upload = upload.upload;
+  ASSERT(tex_upload.data);
+  if (tex_upload.load_type == CPUTextureLoadType::Ktx2) {
+    auto* ktx_tex = (ktxTexture2*)tex_upload.data.get();
+    const auto& desc = upload.upload.desc;
+    size_t block_width = get_block_width_bytes(desc.format);
+    size_t bytes_per_block = get_bytes_per_block(desc.format);
+    size_t total_img_size = 0;
+    for (uint32_t mip_level = 0; mip_level < desc.mip_levels; mip_level++) {
+      total_img_size += ktxTexture_GetImageSize(ktxTexture(ktx_tex), mip_level);
+    }
+    auto upload_buf = staging.alloc(static_cast<uint32_t>(total_img_size));
+    ASSERT(upload_buf.buf.is_valid());
+    size_t curr_dst_offset = 0;
+    for (uint32_t mip_level = 0; mip_level < desc.mip_levels; mip_level++) {
+      size_t offset = 0;
+      auto result = ktxTexture_GetImageOffset(ktxTexture(ktx_tex), mip_level, 0, 0, &offset);
+      ASSERT(result == KTX_SUCCESS);
+      auto img_mip_level_size_bytes = ktxTexture_GetImageSize(ktxTexture(ktx_tex), mip_level);
+      uint32_t mip_width = std::max(1u, desc.dims.x >> mip_level);
+      uint32_t mip_height = std::max(1u, desc.dims.y >> mip_level);
+      uint32_t blocks_wide = align_divide_up(mip_width, static_cast<uint32_t>(block_width));
+      auto bpr = static_cast<size_t>(blocks_wide) * bytes_per_block;
+      memcpy(static_cast<std::byte*>(upload_buf.write_ptr) + curr_dst_offset,
+             reinterpret_cast<const std::byte*>(ktx_tex->pData) + offset, img_mip_level_size_bytes);
+      enc->upload_texture_data(
+          upload_buf.buf, upload_buf.offset + static_cast<uint32_t>(curr_dst_offset), bpr,
+          upload.tex, glm::uvec3{mip_width, mip_height, 1}, glm::uvec3{0, 0, 0}, mip_level);
+      curr_dst_offset += img_mip_level_size_bytes;
+    }
+  } else {
+    size_t src_bytes_per_row = tex_upload.bytes_per_row;
+    size_t bytes_per_row = align_up(src_bytes_per_row, 256);
+    size_t total_size = bytes_per_row * tex->desc().dims.y;
+    auto upload_buf = staging.alloc(static_cast<uint32_t>(total_size));
+    size_t dst_offset = 0;
+    size_t src_offset = 0;
+    for (size_t row = 0; row < tex->desc().dims.y; row++) {
+      memcpy(static_cast<std::byte*>(upload_buf.write_ptr) + dst_offset,
+             static_cast<const std::byte*>(tex_upload.data.get()) + src_offset, src_bytes_per_row);
+      dst_offset += bytes_per_row;
+      src_offset += src_bytes_per_row;
+    }
+    enc->upload_texture_data(upload_buf.buf, upload_buf.offset, bytes_per_row, upload.tex,
+                             glm::uvec3{tex->desc().dims.x, tex->desc().dims.y, 1},
+                             glm::uvec3{0, 0, 0}, 0);
+  }
 }
 
 }  // namespace gfx

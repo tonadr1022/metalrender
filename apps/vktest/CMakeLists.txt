@@ -11,6 +11,7 @@ add_executable(${target_name}
     TestDebugScenes.cpp
     TestRenderer.cpp
     TestApp.cpp
+    MeshletRendererTestScene.cpp
 )
 
 target_include_directories(${target_name} PRIVATE ${COMMON_SOURCE_DIR} ${METALRENDER_APP_DIR})

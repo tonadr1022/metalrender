@@ -44,6 +44,10 @@ void upload_model(ModelLoadResult& result, ModelInstance& model, rhi::Device& de
                   GeometryBatch& draw_batch, ModelGPUHandle& out_handle,
                   BlockPool<ModelGPUHandle, ModelGPUResources>& model_gpu_resource_pool);
 
+struct GPUFrameAllocator3;
+void upload_texture_data(const GPUTexUpload& upload, rhi::Texture* tex, GPUFrameAllocator3& staging,
+                         rhi::CmdEncoder* enc);
+
 }  // namespace gfx
 
 }  // namespace TENG_NAMESPACE
