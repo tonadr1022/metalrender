@@ -9,6 +9,7 @@
 #include "core/Util.hpp"
 #include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
+#include "gfx/RenderGraph.hpp"
 #include "gfx/ShaderManager.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
@@ -434,15 +435,17 @@ void MeshletRendererScene::add_render_graph_passes() {
       auto& p = ctx_.rg->add_compute_pass("meshlet_depth_reduce_" + std::to_string(mip));
       RGResourceId depth_handle{};
       if (mip == 0) {
-        depth_handle = p.sample_tex(depth_src_rg, rhi::PipelineStage::ComputeShader);
+        depth_handle = p.sample_tex(depth_src_rg, rhi::PipelineStage::ComputeShader,
+                                    RgSubresourceRange::single_mip(0));
       }
       if (mip == 0) {
-        p.write_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader, static_cast<int32_t>(mip));
+        p.write_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader,
+                    RgSubresourceRange::single_mip(mip));
       } else {
         depth_pyramid_id =
             p.rw_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader,
                      rhi::AccessFlags::ShaderSampledRead, rhi::AccessFlags::ShaderWrite,
-                     static_cast<int32_t>(mip - 1), static_cast<int32_t>(mip));
+                     RgSubresourceRange::single_mip(mip - 1), RgSubresourceRange::single_mip(mip));
       }
       if (mip == final_mip) {
         final_depth_pyramid_rg = depth_pyramid_id;
@@ -494,9 +497,11 @@ void MeshletRendererScene::add_render_graph_passes() {
 
   {
     auto& p = ctx_.rg->add_graphics_pass("shade");
-    gbuffer_a_id = p.sample_tex(gbuffer_a_id);
+    gbuffer_a_id = p.sample_tex(gbuffer_a_id, rhi::PipelineStage::FragmentShader,
+                                RgSubresourceRange::single_mip(0));
     if (depth_reduce_ran) {
-      p.sample_tex(final_depth_pyramid_rg);
+      p.sample_tex(final_depth_pyramid_rg, rhi::PipelineStage::FragmentShader,
+                   RgSubresourceRange::all_mips_all_slices());
     }
     p.w_swapchain_tex(ctx_.swapchain);
     p.set_ex([this, gbuffer_a_id, depth_reduce_ran](CmdEncoder* enc) {

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <tuple>
@@ -105,7 +106,21 @@ using ExecuteFn = std::function<void(rhi::CmdEncoder* enc)>;
 
 class RenderGraph;
 
-enum class RGResourceType { Texture, Buffer, ExternalTexture, ExternalBuffer };
+enum class RGResourceType {
+  Texture,
+  Buffer,
+  ExternalTexture,
+  ExternalBuffer,
+};
+inline bool is_texture(RGResourceType type) {
+  return type == RGResourceType::Texture || type == RGResourceType::ExternalTexture;
+}
+inline bool is_buffer(RGResourceType type) {
+  return type == RGResourceType::Buffer || type == RGResourceType::ExternalBuffer;
+}
+inline bool is_external(RGResourceType type) {
+  return type == RGResourceType::ExternalTexture || type == RGResourceType::ExternalBuffer;
+}
 
 const char* to_string(RGResourceType type);
 
@@ -113,6 +128,39 @@ struct RGState {
   rhi::AccessFlags access{rhi::AccessFlags::None};
   rhi::PipelineStage stage{rhi::PipelineStage::TopOfPipe};
   rhi::ResourceLayout layout{rhi::ResourceLayout::Undefined};
+};
+
+inline bool operator==(const RGState& a, const RGState& b) noexcept {
+  return a.access == b.access && a.stage == b.stage && a.layout == b.layout;
+}
+
+/// Subresource slice for texture reads/writes in the render graph. Buffers ignore this.
+struct RgSubresourceRange {
+  static constexpr uint32_t k_all_mips = UINT32_MAX;
+  static constexpr uint32_t k_all_slices = UINT32_MAX;
+
+  uint32_t base_mip{};
+  uint32_t mip_count{k_all_mips};
+  uint32_t base_slice{};
+  uint32_t slice_count{k_all_slices};
+
+  [[nodiscard]] constexpr static RgSubresourceRange all_mips_all_slices() noexcept { return {}; }
+  [[nodiscard]] constexpr static RgSubresourceRange single_mip(uint32_t m) noexcept {
+    return RgSubresourceRange{m, 1u, 0u, 1u};
+  }
+  [[nodiscard]] constexpr static RgSubresourceRange mip_span(uint32_t base_mip,
+                                                             uint32_t count) noexcept {
+    return RgSubresourceRange{base_mip, count, 0u, 1u};
+  }
+  [[nodiscard]] constexpr static RgSubresourceRange mip_layers(uint32_t base_mip, uint32_t mip_cnt,
+                                                               uint32_t base_sl,
+                                                               uint32_t slice_cnt) noexcept {
+    return RgSubresourceRange{base_mip, mip_cnt, base_sl, slice_cnt};
+  }
+  [[nodiscard]] constexpr bool operator==(const RgSubresourceRange& o) const noexcept {
+    return base_mip == o.base_mip && mip_count == o.mip_count && base_slice == o.base_slice &&
+           slice_count == o.slice_count;
+  }
 };
 
 struct RGResourceHandle {
@@ -196,6 +244,9 @@ class RenderGraph {
   void execute(rhi::CmdEncoder* enc);
   void shutdown();
 
+  /// Debug/CI: validates texture barrier coalescing invariants (returns false on failure).
+  [[nodiscard]] static bool run_barrier_coalesce_self_tests();
+
   class Pass {
    public:
     Pass() = default;
@@ -204,19 +255,24 @@ class RenderGraph {
     // Sampled image (HLSL Texture* with .Sample / .SampleLevel / .Load -> SPIR-V OpImageFetch).
     // Barriers use ShaderReadOnly / SHADER_READ_ONLY_OPTIMAL; bind with bind_srv (SAMPLED_IMAGE).
     RGResourceId sample_tex(RGResourceId id);
-    RGResourceId sample_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip = -1,
-                            int32_t subresource_slice = -1);
+    RGResourceId sample_tex(
+        RGResourceId id, rhi::PipelineStage stage,
+        RgSubresourceRange subresource = RgSubresourceRange::all_mips_all_slices());
     // Storage read (ShaderStorageRead -> compute GENERAL). Use for RWTexture2D[] / storage buffers,
     // not for Texture2D + bind_srv; that layout must match storage descriptors (e.g. bind_uav).
-    RGResourceId read_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip = -1,
-                          int32_t subresource_slice = -1);
-    RGResourceId write_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip = -1,
-                           int32_t subresource_slice = -1);
+    RGResourceId read_tex(
+        RGResourceId id, rhi::PipelineStage stage,
+        RgSubresourceRange subresource = RgSubresourceRange::all_mips_all_slices());
+    RGResourceId write_tex(
+        RGResourceId id, rhi::PipelineStage stage,
+        RgSubresourceRange subresource = RgSubresourceRange::all_mips_all_slices());
     RGResourceId write_color_output(RGResourceId id);
     RGResourceId write_depth_output(RGResourceId id);
-    RGResourceId rw_tex(RGResourceId input, rhi::PipelineStage stage, rhi::AccessFlags read_access,
-                        rhi::AccessFlags write_access, int32_t read_subresource_mip = -1,
-                        int32_t write_subresource_mip = -1);
+    RGResourceId rw_tex(
+        RGResourceId input, rhi::PipelineStage stage, rhi::AccessFlags read_access,
+        rhi::AccessFlags write_access,
+        RgSubresourceRange read_subresource = RgSubresourceRange::all_mips_all_slices(),
+        RgSubresourceRange write_subresource = RgSubresourceRange::all_mips_all_slices());
     RGResourceId rw_color_output(RGResourceId input);
     RGResourceId rw_depth_output(RGResourceId input);
     void w_swapchain_tex(rhi::Swapchain* swapchain);
@@ -249,8 +305,7 @@ class RenderGraph {
       rhi::AccessFlags acc;
       RGResourceType type;
       bool is_swapchain_write{false};
-      int32_t subresource_mip{-1};
-      int32_t subresource_slice{-1};
+      RgSubresourceRange subresource{RgSubresourceRange::all_mips_all_slices()};
     };
 
     [[nodiscard]] const std::vector<NameAndAccess>& get_external_reads() const {
@@ -281,10 +336,11 @@ class RenderGraph {
 
    private:
     void add_read_usage(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access,
-                        int32_t subresource_mip = -1, int32_t subresource_slice = -1);
-    void add_write_usage(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access,
-                         bool is_swapchain_write = false, int32_t subresource_mip = -1,
-                         int32_t subresource_slice = -1);
+                        RgSubresourceRange subresource = RgSubresourceRange::all_mips_all_slices());
+    void add_write_usage(
+        RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access,
+        bool is_swapchain_write = false,
+        RgSubresourceRange subresource = RgSubresourceRange::all_mips_all_slices());
     ExecuteFn execute_fn_;
     RenderGraph* rg_{};
     uint32_t pass_i_{};
@@ -301,6 +357,10 @@ class RenderGraph {
   RGResourceId import_external_texture(rhi::TextureHandle tex_handle,
                                        std::string_view debug_name = {});
   RGResourceId import_external_texture(rhi::TextureHandle tex_handle, const RGState& initial,
+                                       std::string_view debug_name = {});
+  /// Per-mip initial state for external textures (size must equal `tex_handle` mip count).
+  RGResourceId import_external_texture(rhi::TextureHandle tex_handle,
+                                       std::span<const RGState> per_mip_initial,
                                        std::string_view debug_name = {});
   RGResourceId import_external_texture(const rhi::TextureHandleHolder& tex_handle,
                                        std::string_view debug_name = {}) {
@@ -321,6 +381,15 @@ class RenderGraph {
   [[nodiscard]] rhi::BufferHandle get_buf(RGResourceHandle buf_handle) const;
   [[nodiscard]] rhi::TextureHandle get_external_texture(RGResourceId id) const;
   [[nodiscard]] rhi::BufferHandle get_external_buffer(RGResourceId id) const;
+
+  struct BarrierInfo {
+    RGResourceHandle resource;
+    RGState src_state;
+    RGState dst_state;
+    RGResourceId debug_id{};
+    bool is_swapchain_write{false};
+    RgSubresourceRange subresource{};
+  };
 
  private:
   struct StringHash {
@@ -388,15 +457,6 @@ class RenderGraph {
   // the handle into `defer_pool_pending_return_` instead of `free_bufs_`.
   std::vector<rhi::BufferHandle> defer_pool_handles_by_slot_;
 
-  struct BarrierInfo {
-    RGResourceHandle resource;
-    RGState src_state;
-    RGState dst_state;
-    RGResourceId debug_id{};
-    bool is_swapchain_write{false};
-    int32_t subresource_mip{-1};
-    int32_t subresource_slice{-1};
-  };
   std::vector<Pass> passes_;
   std::vector<std::vector<BarrierInfo>> pass_barrier_infos_;
   std::vector<std::unordered_set<uint32_t>> pass_dependencies_;
@@ -430,6 +490,8 @@ class RenderGraph {
   std::unordered_map<RGResourceId, rhi::BufferHandle, RGResourceIdStableHash, RGResourceIdStableEq>
       rg_id_to_external_buffer_;
   std::unordered_map<uint64_t, RGState> external_initial_states_;
+  /// Optional per-mip initial `RGState` for external textures (key: physical handle `to64()`).
+  std::unordered_map<uint64_t, std::vector<RGState>> external_tex_mip_initial_states_;
 
   struct ResourceRecord {
     RGResourceType type{};

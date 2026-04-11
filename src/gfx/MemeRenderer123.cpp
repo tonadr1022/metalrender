@@ -308,7 +308,8 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
             renderer_cv::pipeline_mesh_shaders.get() != 0 && view_id == main_render_view_id_;
         if (depth_pyramid_read_by_draw_cull) {
           prep_meshlets_pass.sample_tex(final_depth_pyramid_ids[(int)view_id],
-                                        rhi::PipelineStage::ComputeShader);
+                                        rhi::PipelineStage::ComputeShader,
+                                        RgSubresourceRange::all_mips_all_slices());
         }
       }
       if (!instance_vis_rg_ids.empty()) {
@@ -638,16 +639,17 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
                                        "_view:" + std::to_string((int)view_id));
         RGResourceId depth_handle{};
         if (mip == 0) {
-          depth_handle = p.sample_tex(depth_ids[(int)view_id], rhi::PipelineStage::ComputeShader);
+          depth_handle = p.sample_tex(depth_ids[(int)view_id], rhi::PipelineStage::ComputeShader,
+                                      RgSubresourceRange::single_mip(0));
         }
         if (mip == 0) {
           p.write_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader,
-                      static_cast<int32_t>(mip));
+                      RgSubresourceRange::single_mip(mip));
         } else {
-          depth_pyramid_id =
-              p.rw_tex(depth_pyramid_id, rhi::PipelineStage::ComputeShader,
-                       rhi::AccessFlags::ShaderSampledRead, rhi::AccessFlags::ShaderWrite,
-                       static_cast<int32_t>(mip - 1), static_cast<int32_t>(mip));
+          depth_pyramid_id = p.rw_tex(
+              depth_pyramid_id, rhi::PipelineStage::ComputeShader,
+              rhi::AccessFlags::ShaderSampledRead, rhi::AccessFlags::ShaderWrite,
+              RgSubresourceRange::single_mip(mip - 1), RgSubresourceRange::single_mip(mip));
         }
         if (mip == final_mip - 1) {
           final_depth_pyramid_ids[(int)view_id] = depth_pyramid_id;
@@ -732,11 +734,17 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
 
   {
     auto& p = rg_.add_graphics_pass("shade");
-    auto depth_tex_id = p.sample_tex(depth_ids[(int)main_render_view_id_]);
+    auto depth_tex_id =
+        p.sample_tex(depth_ids[(int)main_render_view_id_], rhi::PipelineStage::FragmentShader,
+                     RgSubresourceRange::single_mip(0));
     ASSERT(depth_tex_id.is_valid());
-    auto gbuffer_a_id = p.sample_tex(gbuffer_pass_info.gbuffer_a_id);
+    auto gbuffer_a_id =
+        p.sample_tex(gbuffer_pass_info.gbuffer_a_id, rhi::PipelineStage::FragmentShader,
+                     RgSubresourceRange::single_mip(0));
     ASSERT(gbuffer_a_id.is_valid());
-    auto gbuffer_b_id = p.sample_tex(gbuffer_pass_info.gbuffer_b_id);
+    auto gbuffer_b_id =
+        p.sample_tex(gbuffer_pass_info.gbuffer_b_id, rhi::PipelineStage::FragmentShader,
+                     RgSubresourceRange::single_mip(0));
     ASSERT(gbuffer_b_id.is_valid());
     const DebugRenderMode debug_mode = clamped_debug_render_mode();
     bool secondary_view_debug_enabled =
@@ -744,12 +752,14 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
     RGResourceId shadow_tex_rg_handle;
     if (get_shadows_enabled()) {
       ASSERT(csm_depth_id.is_valid());
-      shadow_tex_rg_handle = p.sample_tex(csm_depth_id);
+      shadow_tex_rg_handle = p.sample_tex(csm_depth_id, rhi::PipelineStage::FragmentShader,
+                                          RgSubresourceRange::single_mip(0));
     }
 
     if (obj_or_meshlet_occlusion_culling_enabled &&
         debug_mode == DebugRenderMode::DepthReduceMips) {
-      p.sample_tex(final_depth_pyramid_ids[(int)main_render_view_id_]);
+      p.sample_tex(final_depth_pyramid_ids[(int)main_render_view_id_],
+                   rhi::PipelineStage::FragmentShader, RgSubresourceRange::all_mips_all_slices());
     }
     p.w_swapchain_tex(swapchain_);
     p.set_ex([this, gbuffer_a_id, gbuffer_b_id, depth_tex_id, shadow_tex_rg_handle,

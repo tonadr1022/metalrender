@@ -26,6 +26,8 @@ struct GPUBarrier {
     ResourceState dst_layout;
     uint32_t mip;
     uint32_t slice;
+    uint32_t mip_level_count{1};
+    uint32_t array_layer_count{1};
     ImageAspect aspect;
   };
   union {
@@ -47,13 +49,20 @@ struct GPUBarrier {
   static GPUBarrier tex_barrier(TextureHandle handle, ResourceState src_state,
                                 ResourceState dst_state, uint32_t mip = k_gpu_barrier_mip_all,
                                 uint32_t slice = k_gpu_barrier_slice_all,
-                                ImageAspect aspect = ImageAspect_Color) {
+                                ImageAspect aspect = ImageAspect_Color,
+                                uint32_t mip_level_count = 1, uint32_t array_layer_count = 1) {
+    const uint32_t resolved_mip_cnt =
+        mip == k_gpu_barrier_mip_all ? k_gpu_barrier_mip_all : mip_level_count;
+    const uint32_t resolved_layer_cnt =
+        slice == k_gpu_barrier_slice_all ? k_gpu_barrier_slice_all : array_layer_count;
     return {.type = Type::Texture,
             .tex = {.texture = handle,
                     .src_layout = src_state,
                     .dst_layout = dst_state,
                     .mip = mip,
                     .slice = slice,
+                    .mip_level_count = resolved_mip_cnt,
+                    .array_layer_count = resolved_layer_cnt,
                     .aspect = aspect}};
   }
 };

@@ -1,10 +1,7 @@
 #include "RenderGraph.hpp"
 
 #include <algorithm>
-#include <array>
-#include <string>
 #include <tracy/Tracy.hpp>
-#include <utility>
 
 #include "core/Config.hpp"
 #include "core/EAssert.hpp"
@@ -78,7 +75,9 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
         }
         enc->barrier(tex_handle, barrier.src_state.stage, barrier.src_state.access,
                      barrier.dst_state.stage, barrier.dst_state.access, barrier.src_state.layout,
-                     barrier.dst_state.layout, barrier.subresource_mip, barrier.subresource_slice);
+                     barrier.dst_state.layout, static_cast<int32_t>(barrier.subresource.base_mip),
+                     static_cast<int32_t>(barrier.subresource.base_slice),
+                     barrier.subresource.mip_count, barrier.subresource.slice_count);
       }
     }
 
@@ -136,6 +135,7 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
   rg_id_to_external_buffer_.clear();
   curr_submitted_swapchain_textures_.clear();
   external_initial_states_.clear();
+  external_tex_mip_initial_states_.clear();
 }
 
 RenderGraph::NameId RenderGraph::intern_name(std::string_view name) {
@@ -221,7 +221,9 @@ RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
     RGResourceId id{.idx = it->second.idx,
                     .type = RGResourceType::ExternalTexture,
                     .version = rec.latest_version};
-    external_initial_states_[get_physical_handle(id).to64()] = initial;
+    const RGResourceHandle phys = get_physical_handle(id);
+    external_initial_states_[phys.to64()] = initial;
+    external_tex_mip_initial_states_.erase(phys.to64());
     rg_id_to_external_texture_[id] = tex_handle;
     return id;
   }
@@ -232,9 +234,52 @@ RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
   RGResourceId id{.idx = static_cast<uint32_t>(resources_.size() - 1),
                   .type = RGResourceType::ExternalTexture,
                   .version = 0};
-  external_initial_states_[RGResourceHandle{.idx = static_cast<uint32_t>(idx),
-                                            .type = RGResourceType::ExternalTexture}
-                               .to64()] = initial;
+  const RGResourceHandle phys{.idx = static_cast<uint32_t>(idx),
+                              .type = RGResourceType::ExternalTexture};
+  external_initial_states_[phys.to64()] = initial;
+  external_tex_handle_to_id_.emplace(key, id);
+  rg_id_to_external_texture_[id] = tex_handle;
+  return id;
+}
+
+RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
+                                                  std::span<const RGState> per_mip_initial,
+                                                  std::string_view debug_name) {
+  rhi::Texture* tex = device_->get_tex(tex_handle);
+  ALWAYS_ASSERT(tex != nullptr);
+  ALWAYS_ASSERT(!per_mip_initial.empty());
+  ALWAYS_ASSERT(per_mip_initial.size() == tex->desc().mip_levels);
+  const auto key = tex_handle.to64();
+  if (auto it = external_tex_handle_to_id_.find(key); it != external_tex_handle_to_id_.end()) {
+    if (!debug_name.empty()) {
+      auto& rec = resources_[it->second.idx];
+      if (rec.debug_name == kInvalidNameId) {
+        rec.debug_name = intern_name(debug_name);
+      }
+    }
+    const auto& rec = resources_[it->second.idx];
+    RGResourceId id{.idx = it->second.idx,
+                    .type = RGResourceType::ExternalTexture,
+                    .version = rec.latest_version};
+    const RGResourceHandle phys = get_physical_handle(id);
+    external_tex_mip_initial_states_[phys.to64()] =
+        std::vector<RGState>(per_mip_initial.begin(), per_mip_initial.end());
+    external_initial_states_[phys.to64()] = per_mip_initial[0];
+    rg_id_to_external_texture_[id] = tex_handle;
+    return id;
+  }
+  auto idx = external_textures_.size();
+  external_textures_.emplace_back(tex_handle);
+  auto record = create_resource_record(RGResourceType::ExternalTexture, idx, debug_name);
+  resources_.push_back(record);
+  RGResourceId id{.idx = static_cast<uint32_t>(resources_.size() - 1),
+                  .type = RGResourceType::ExternalTexture,
+                  .version = 0};
+  const RGResourceHandle phys{.idx = static_cast<uint32_t>(idx),
+                              .type = RGResourceType::ExternalTexture};
+  external_tex_mip_initial_states_[phys.to64()] =
+      std::vector<RGState>(per_mip_initial.begin(), per_mip_initial.end());
+  external_initial_states_[phys.to64()] = per_mip_initial[0];
   external_tex_handle_to_id_.emplace(key, id);
   rg_id_to_external_texture_[id] = tex_handle;
   return id;
@@ -357,22 +402,20 @@ RGResourceId RGPass::sample_tex(RGResourceId id) {
   return sample_tex(id, stage);
 }
 
-RGResourceId RGPass::sample_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip,
-                                int32_t subresource_slice) {
-  add_read_usage(id, stage, rhi::AccessFlags::ShaderSampledRead, subresource_mip,
-                 subresource_slice);
+RGResourceId RGPass::sample_tex(RGResourceId id, rhi::PipelineStage stage,
+                                RgSubresourceRange subresource) {
+  add_read_usage(id, stage, rhi::AccessFlags::ShaderSampledRead, subresource);
   return id;
 }
 
-RGResourceId RGPass::read_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip,
-                              int32_t subresource_slice) {
-  add_read_usage(id, stage, rhi::AccessFlags::ShaderStorageRead, subresource_mip,
-                 subresource_slice);
+RGResourceId RGPass::read_tex(RGResourceId id, rhi::PipelineStage stage,
+                              RgSubresourceRange subresource) {
+  add_read_usage(id, stage, rhi::AccessFlags::ShaderStorageRead, subresource);
   return id;
 }
 
-RGResourceId RGPass::write_tex(RGResourceId id, rhi::PipelineStage stage, int32_t subresource_mip,
-                               int32_t subresource_slice) {
+RGResourceId RGPass::write_tex(RGResourceId id, rhi::PipelineStage stage,
+                               RgSubresourceRange subresource) {
   rhi::AccessFlags access{};
   if (id.type == RGResourceType::ExternalTexture) {
     if (type_ == RGPassType::Transfer) {
@@ -384,7 +427,7 @@ RGResourceId RGPass::write_tex(RGResourceId id, rhi::PipelineStage stage, int32_
     access = (type_ == RGPassType::Transfer) ? rhi::AccessFlags::TransferWrite
                                              : rhi::AccessFlags::ShaderWrite;
   }
-  add_write_usage(id, stage, access, false, subresource_mip, subresource_slice);
+  add_write_usage(id, stage, access, false, subresource);
   return id;
 }
 
@@ -499,46 +542,60 @@ void RenderGraph::shutdown() {
 }
 
 void RGPass::add_read_usage(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access,
-                            int32_t subresource_mip, int32_t subresource_slice) {
-  int32_t mip = subresource_mip;
-  int32_t slice = subresource_slice;
-  if (id.type == RGResourceType::Buffer || id.type == RGResourceType::ExternalBuffer) {
-    mip = -1;
-    slice = -1;
-  }
+                            RgSubresourceRange subresource) {
+  const RgSubresourceRange sr =
+      (id.type == RGResourceType::Buffer || id.type == RGResourceType::ExternalBuffer)
+          ? RgSubresourceRange::all_mips_all_slices()
+          : subresource;
   if (id.type == RGResourceType::ExternalTexture || id.type == RGResourceType::ExternalBuffer) {
     rg_->add_external_read_id(id);
-    external_reads_.emplace_back(NameAndAccess{id, stage, access, id.type, false, mip, slice});
+    external_reads_.emplace_back(NameAndAccess{.id = id,
+                                               .stage = stage,
+                                               .acc = access,
+                                               .type = id.type,
+                                               .is_swapchain_write = false,
+                                               .subresource = sr});
   } else {
-    internal_reads_.emplace_back(NameAndAccess{id, stage, access, id.type, false, mip, slice});
+    internal_reads_.emplace_back(NameAndAccess{.id = id,
+                                               .stage = stage,
+                                               .acc = access,
+                                               .type = id.type,
+                                               .is_swapchain_write = false,
+                                               .subresource = sr});
   }
 }
 
 void RGPass::add_write_usage(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access,
-                             bool is_swapchain_write, int32_t subresource_mip,
-                             int32_t subresource_slice) {
-  int32_t mip = subresource_mip;
-  int32_t slice = subresource_slice;
-  if (id.type == RGResourceType::Buffer || id.type == RGResourceType::ExternalBuffer) {
-    mip = -1;
-    slice = -1;
-  }
+                             bool is_swapchain_write, RgSubresourceRange subresource) {
+  const RgSubresourceRange sr =
+      (id.type == RGResourceType::Buffer || id.type == RGResourceType::ExternalBuffer)
+          ? RgSubresourceRange::all_mips_all_slices()
+          : subresource;
   rg_->register_write(id, *this);
   if (id.type == RGResourceType::ExternalTexture || id.type == RGResourceType::ExternalBuffer) {
-    external_writes_.emplace_back(
-        NameAndAccess{id, stage, access, id.type, is_swapchain_write, mip, slice});
+    external_writes_.emplace_back(NameAndAccess{.id = id,
+                                                .stage = stage,
+                                                .acc = access,
+                                                .type = id.type,
+                                                .is_swapchain_write = is_swapchain_write,
+                                                .subresource = sr});
   } else {
-    internal_writes_.emplace_back(
-        NameAndAccess{id, stage, access, id.type, is_swapchain_write, mip, slice});
+    internal_writes_.emplace_back(NameAndAccess{.id = id,
+                                                .stage = stage,
+                                                .acc = access,
+                                                .type = id.type,
+                                                .is_swapchain_write = is_swapchain_write,
+                                                .subresource = sr});
   }
 }
 
 RGResourceId RGPass::rw_tex(RGResourceId input, rhi::PipelineStage stage,
                             rhi::AccessFlags read_access, rhi::AccessFlags write_access,
-                            int32_t read_subresource_mip, int32_t write_subresource_mip) {
+                            RgSubresourceRange read_subresource,
+                            RgSubresourceRange write_subresource) {
   auto output = rg_->next_version(input);
-  add_read_usage(input, stage, read_access, read_subresource_mip, -1);
-  add_write_usage(output, stage, write_access, false, write_subresource_mip, -1);
+  add_read_usage(input, stage, read_access, read_subresource);
+  add_write_usage(output, stage, write_access, false, write_subresource);
   return output;
 }
 

@@ -138,8 +138,9 @@ void RenderGraph::bake_write_debug_dump_if_requested_(glm::uvec2 fb_size) {
   }
 
   const auto barrier_key = [](const BarrierInfo& b) {
-    return std::format("{}:{}:m{}:s{}", to_string(b.resource.type), b.resource.idx,
-                       b.subresource_mip, b.subresource_slice);
+    return std::format("{}:{}:m{}+{}:s{}+{}", to_string(b.resource.type), b.resource.idx,
+                       b.subresource.base_mip, b.subresource.mip_count, b.subresource.base_slice,
+                       b.subresource.slice_count);
   };
 
   std::map<std::pair<uint32_t, uint32_t>, std::set<std::string>> edge_labels;
@@ -305,8 +306,14 @@ void RenderGraph::bake_write_debug_dump_if_requested_(glm::uvec2 fb_size) {
             } else {
               jf << "          \"debug_id\": null,\n";
             }
-            jf << std::format("          \"subresource_mip\": {},\n", barrier.subresource_mip);
-            jf << std::format("          \"subresource_slice\": {},\n", barrier.subresource_slice);
+            jf << std::format("          \"subresource_base_mip\": {},\n",
+                              barrier.subresource.base_mip);
+            jf << std::format("          \"subresource_mip_count\": {},\n",
+                              barrier.subresource.mip_count);
+            jf << std::format("          \"subresource_base_slice\": {},\n",
+                              barrier.subresource.base_slice);
+            jf << std::format("          \"subresource_slice_count\": {},\n",
+                              barrier.subresource.slice_count);
             jf << std::format("          \"is_swapchain_write\": {},\n",
                               barrier.is_swapchain_write ? "true" : "false");
             jf << "          \"src\": {\n";

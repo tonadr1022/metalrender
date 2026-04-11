@@ -216,6 +216,107 @@ inline bool need_invalidate_read(const SubresourceState& state, rhi::PipelineSta
   return need_invalidate;
 }
 
+uint32_t rg_resolved_mip_level_count(const RgSubresourceRange& r, uint32_t texture_mip_levels) {
+  if (r.base_mip >= texture_mip_levels) {
+    return 0;
+  }
+  if (r.mip_count == RgSubresourceRange::k_all_mips) {
+    return texture_mip_levels - r.base_mip;
+  }
+  ASSERT(r.mip_count <= texture_mip_levels - r.base_mip);
+  return r.mip_count;
+}
+
+uint32_t rg_resolved_slice_count(const RgSubresourceRange& r, uint32_t texture_array_layers) {
+  if (r.base_slice >= texture_array_layers) {
+    return 0;
+  }
+  if (r.slice_count == RgSubresourceRange::k_all_slices) {
+    return texture_array_layers - r.base_slice;
+  }
+  ASSERT(r.slice_count <= texture_array_layers - r.base_slice);
+  return r.slice_count;
+}
+
+bool rg_barrier_mergeable(const RenderGraph::BarrierInfo& a, const RenderGraph::BarrierInfo& b) {
+  if (a.resource.to64() != b.resource.to64()) {
+    return false;
+  }
+  if (a.is_swapchain_write != b.is_swapchain_write) {
+    return false;
+  }
+  if (!(a.src_state == b.src_state) || !(a.dst_state == b.dst_state)) {
+    return false;
+  }
+  if (is_buffer(a.resource.type)) {
+    return false;
+  }
+  if (a.subresource.base_slice != b.subresource.base_slice ||
+      a.subresource.slice_count != b.subresource.slice_count) {
+    return false;
+  }
+  return b.subresource.base_mip == a.subresource.base_mip + a.subresource.mip_count;
+}
+
+void coalesce_pass_texture_barriers(std::vector<RenderGraph::BarrierInfo>& barriers) {
+  if (barriers.size() < 2) {
+    return;
+  }
+  std::ranges::stable_sort(barriers, [](const RenderGraph::BarrierInfo& x,
+                                        const RenderGraph::BarrierInfo& y) {
+    if (x.resource.to64() != y.resource.to64()) {
+      return x.resource.to64() < y.resource.to64();
+    }
+    if (x.is_swapchain_write != y.is_swapchain_write) {
+      return x.is_swapchain_write < y.is_swapchain_write;
+    }
+    if (x.src_state.layout != y.src_state.layout) {
+      return static_cast<int>(x.src_state.layout) < static_cast<int>(y.src_state.layout);
+    }
+    if (x.dst_state.layout != y.dst_state.layout) {
+      return static_cast<int>(x.dst_state.layout) < static_cast<int>(y.dst_state.layout);
+    }
+    if (x.src_state.access != y.src_state.access) {
+      return static_cast<uint64_t>(x.src_state.access) < static_cast<uint64_t>(y.src_state.access);
+    }
+    if (x.dst_state.access != y.dst_state.access) {
+      return static_cast<uint64_t>(x.dst_state.access) < static_cast<uint64_t>(y.dst_state.access);
+    }
+    if (x.src_state.stage != y.src_state.stage) {
+      return static_cast<uint64_t>(x.src_state.stage) < static_cast<uint64_t>(y.src_state.stage);
+    }
+    if (x.dst_state.stage != y.dst_state.stage) {
+      return static_cast<uint64_t>(x.dst_state.stage) < static_cast<uint64_t>(y.dst_state.stage);
+    }
+    if (x.subresource.base_slice != y.subresource.base_slice) {
+      return x.subresource.base_slice < y.subresource.base_slice;
+    }
+    if (x.subresource.slice_count != y.subresource.slice_count) {
+      return x.subresource.slice_count < y.subresource.slice_count;
+    }
+    return x.subresource.base_mip < y.subresource.base_mip;
+  });
+
+  std::vector<RenderGraph::BarrierInfo> out;
+  out.reserve(barriers.size());
+  for (size_t i = 0; i < barriers.size();) {
+    RenderGraph::BarrierInfo cur = barriers[i];
+    if (is_buffer(cur.resource.type)) {
+      out.push_back(cur);
+      ++i;
+      continue;
+    }
+    size_t j = i + 1;
+    while (j < barriers.size() && rg_barrier_mergeable(cur, barriers[j])) {
+      cur.subresource.mip_count += barriers[j].subresource.mip_count;
+      ++j;
+    }
+    out.push_back(cur);
+    i = j;
+  }
+  barriers.swap(out);
+}
+
 }  // namespace
 
 void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
@@ -489,8 +590,30 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
       return it->second;
     }
     SubresourceState init{};
-    if (auto init_it = external_initial_states_.find(handle.to64());
-        init_it != external_initial_states_.end()) {
+    const uint64_t h64 = handle.to64();
+    if (handle.type == RGResourceType::ExternalTexture) {
+      if (auto mit = external_tex_mip_initial_states_.find(h64);
+          mit != external_tex_mip_initial_states_.end() && !mit->second.empty() && mip >= 0 &&
+          static_cast<size_t>(mip) < mit->second.size()) {
+        const RGState external = mit->second[static_cast<size_t>(mip)];
+        init.layout = external.layout;
+        init.to_flush_access = external.access;
+        init.has_write = has_write_access(external.access);
+        init.last_write_stage = external.stage == rhi::PipelineStage::None
+                                    ? rhi::PipelineStage::TopOfPipe
+                                    : external.stage;
+      } else if (auto init_it = external_initial_states_.find(h64);
+                 init_it != external_initial_states_.end()) {
+        const RGState external = init_it->second;
+        init.layout = external.layout;
+        init.to_flush_access = external.access;
+        init.has_write = has_write_access(external.access);
+        init.last_write_stage = external.stage == rhi::PipelineStage::None
+                                    ? rhi::PipelineStage::TopOfPipe
+                                    : external.stage;
+      }
+    } else if (auto init_it = external_initial_states_.find(h64);
+               init_it != external_initial_states_.end()) {
       const RGState external = init_it->second;
       init.layout = external.layout;
       init.to_flush_access = external.access;
@@ -531,28 +654,67 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
     };
     std::unordered_map<RgSubresourceStateKey, PassUse, RgSubresourceStateKeyHash> pass_uses;
 
-    auto accumulate_use = [&](const RenderGraph::Pass::NameAndAccess& use) {
-      const auto rg_resource_handle = get_physical_handle(use.id);
-      RgSubresourceStateKey key{.type = rg_resource_handle.type,
-                                .idx = rg_resource_handle.idx,
-                                .mip = use.subresource_mip,
-                                .slice = use.subresource_slice};
+    auto merge_pass_use_key = [&](const RgSubresourceStateKey& key, const PassUse& incoming) {
       auto it = pass_uses.find(key);
       if (it == pass_uses.end()) {
-        pass_uses.emplace(key, PassUse{.resource = rg_resource_handle,
-                                       .debug_id = use.id,
-                                       .access = use.acc,
-                                       .stage = use.stage,
-                                       .type = use.type,
-                                       .is_swapchain_write = use.is_swapchain_write,
-                                       .mip = use.subresource_mip,
-                                       .slice = use.subresource_slice});
+        pass_uses.emplace(key, incoming);
         return;
       }
       auto& entry = it->second;
-      entry.access = flag_or(entry.access, use.acc);
-      entry.stage = flag_or(entry.stage, use.stage);
-      entry.is_swapchain_write |= use.is_swapchain_write;
+      entry.access = flag_or(entry.access, incoming.access);
+      entry.stage = flag_or(entry.stage, incoming.stage);
+      entry.is_swapchain_write |= incoming.is_swapchain_write;
+    };
+
+    auto accumulate_use = [&](const RenderGraph::Pass::NameAndAccess& use) {
+      const auto rg_resource_handle = get_physical_handle(use.id);
+      if (use.type == RGResourceType::Buffer || use.type == RGResourceType::ExternalBuffer) {
+        const RgSubresourceStateKey key{
+            .type = rg_resource_handle.type, .idx = rg_resource_handle.idx, .mip = -1, .slice = -1};
+        merge_pass_use_key(key, PassUse{.resource = rg_resource_handle,
+                                        .debug_id = use.id,
+                                        .access = use.acc,
+                                        .stage = use.stage,
+                                        .type = use.type,
+                                        .is_swapchain_write = use.is_swapchain_write,
+                                        .mip = -1,
+                                        .slice = -1});
+        return;
+      }
+
+      uint32_t tex_mip_levels{};
+      uint32_t tex_array_layers{};
+      if (use.type == RGResourceType::ExternalTexture) {
+        rhi::Texture* tex = device_->get_tex(get_external_tex(rg_resource_handle));
+        ALWAYS_ASSERT(tex != nullptr);
+        tex_mip_levels = std::max(1u, tex->desc().mip_levels);
+        tex_array_layers = std::max(1u, tex->desc().array_length);
+      } else if (use.type == RGResourceType::Texture) {
+        ALWAYS_ASSERT(rg_resource_handle.idx < tex_att_infos_.size());
+        tex_mip_levels = std::max(1u, tex_att_infos_[rg_resource_handle.idx].mip_levels);
+        tex_array_layers = std::max(1u, tex_att_infos_[rg_resource_handle.idx].array_layers);
+      }
+
+      const uint32_t mip_run = rg_resolved_mip_level_count(use.subresource, tex_mip_levels);
+      const uint32_t slice_run = rg_resolved_slice_count(use.subresource, tex_array_layers);
+      for (uint32_t m = 0; m < mip_run; ++m) {
+        const uint32_t mip_i = use.subresource.base_mip + m;
+        for (uint32_t s = 0; s < slice_run; ++s) {
+          const uint32_t slice_i = use.subresource.base_slice + s;
+          const RgSubresourceStateKey key{.type = rg_resource_handle.type,
+                                          .idx = rg_resource_handle.idx,
+                                          .mip = static_cast<int32_t>(mip_i),
+                                          .slice = static_cast<int32_t>(slice_i)};
+          merge_pass_use_key(key, PassUse{.resource = rg_resource_handle,
+                                          .debug_id = use.id,
+                                          .access = use.acc,
+                                          .stage = use.stage,
+                                          .type = use.type,
+                                          .is_swapchain_write = use.is_swapchain_write,
+                                          .mip = static_cast<int32_t>(mip_i),
+                                          .slice = static_cast<int32_t>(slice_i)});
+        }
+      }
     };
 
     for (const auto& write_use : pass.get_external_writes()) {
@@ -566,58 +728,6 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
     }
     for (const auto& read_use : pass.get_internal_reads()) {
       accumulate_use(read_use);
-    }
-
-    // Whole-texture uses (mip=-1) do not share subresource state with per-mip passes (e.g.
-    // depth_reduce). Expand to explicit mips so barriers match what shaders actually access.
-    {
-      std::vector<std::pair<RgSubresourceStateKey, PassUse>> to_expand;
-      to_expand.reserve(pass_uses.size());
-      for (const auto& [key, use] : pass_uses) {
-        if (use.mip != -1 || use.slice != -1) {
-          continue;
-        }
-        if (use.type != RGResourceType::Texture && use.type != RGResourceType::ExternalTexture) {
-          continue;
-        }
-        to_expand.emplace_back(key, use);
-      }
-      for (const auto& [old_key, use] : to_expand) {
-        pass_uses.erase(old_key);
-        uint32_t mip_levels = 1;
-        if (use.resource.type == RGResourceType::ExternalTexture) {
-          rhi::Texture* tex = device_->get_tex(get_external_tex(use.resource));
-          ALWAYS_ASSERT(tex != nullptr);
-          mip_levels = std::max(1u, tex->desc().mip_levels);
-        } else if (use.resource.type == RGResourceType::Texture) {
-          ALWAYS_ASSERT(use.resource.idx < tex_att_infos_.size());
-          mip_levels = std::max(1u, tex_att_infos_[use.resource.idx].mip_levels);
-        } else {
-          continue;
-        }
-        for (uint32_t m = 0; m < mip_levels; ++m) {
-          const RgSubresourceStateKey new_key{.type = use.resource.type,
-                                              .idx = use.resource.idx,
-                                              .mip = static_cast<int32_t>(m),
-                                              .slice = -1};
-          auto it = pass_uses.find(new_key);
-          if (it == pass_uses.end()) {
-            pass_uses.emplace(new_key, PassUse{.resource = use.resource,
-                                               .debug_id = use.debug_id,
-                                               .access = use.access,
-                                               .stage = use.stage,
-                                               .type = use.type,
-                                               .is_swapchain_write = use.is_swapchain_write,
-                                               .mip = static_cast<int32_t>(m),
-                                               .slice = -1});
-          } else {
-            auto& entry = it->second;
-            entry.access = flag_or(entry.access, use.access);
-            entry.stage = flag_or(entry.stage, use.stage);
-            entry.is_swapchain_write |= use.is_swapchain_write;
-          }
-        }
-      }
     }
 
     for (const auto& [key, use] : pass_uses) {
@@ -668,8 +778,11 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
               .dst_state = desired,
               .debug_id = use.debug_id,
               .is_swapchain_write = use.is_swapchain_write,
-              .subresource_mip = use.mip,
-              .subresource_slice = use.slice,
+              .subresource = is_buffer
+                                 ? RgSubresourceRange{0, 1u, 0u, 1u}
+                                 : RgSubresourceRange::mip_layers(
+                                       use.mip >= 0 ? static_cast<uint32_t>(use.mip) : 0u, 1u,
+                                       use.slice >= 0 ? static_cast<uint32_t>(use.slice) : 0u, 1u),
           });
         }
 
@@ -704,8 +817,11 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
               .dst_state = desired,
               .debug_id = use.debug_id,
               .is_swapchain_write = use.is_swapchain_write,
-              .subresource_mip = use.mip,
-              .subresource_slice = use.slice,
+              .subresource = is_buffer
+                                 ? RgSubresourceRange{}
+                                 : RgSubresourceRange::mip_layers(
+                                       use.mip >= 0 ? static_cast<uint32_t>(use.mip) : 0u, 1u,
+                                       use.slice >= 0 ? static_cast<uint32_t>(use.slice) : 0u, 1u),
           });
 
           if (resource_state.to_flush_access != rhi::AccessFlags::None || layout_change) {
@@ -723,6 +839,8 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
         });
       }
     }
+
+    coalesce_pass_texture_barriers(barriers);
 
     if (verbose) {
       static constexpr const char* kCyan = "\033[36m";
@@ -765,8 +883,12 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
           LINFO("\t{}debug_id: idx={} type={} ver={}", kDim, barrier.debug_id.idx,
                 to_string(barrier.debug_id.type), barrier.debug_id.version);
         }
-        LINFO("\t{}subresource: mip={} slice={} swapchain_write={}", kDim, barrier.subresource_mip,
-              barrier.subresource_slice, barrier.is_swapchain_write);
+        LINFO(
+            "\t{}subresource: base_mip={} mip_count={} base_slice={} slice_count={} "
+            "swapchain_write={}",
+            kDim, barrier.subresource.base_mip, barrier.subresource.mip_count,
+            barrier.subresource.base_slice, barrier.subresource.slice_count,
+            barrier.is_swapchain_write);
         LINFO("\t{}why_barrier: [{}]", kDim, why.empty() ? "?" : why);
         LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "SRC_ACCESS:", kReset),
               rg_fmt::to_string(barrier.src_state.access));
@@ -901,8 +1023,74 @@ void RenderGraph::bake_validate_() {
       if (barrier.debug_id.is_valid()) {
         ALWAYS_ASSERT(barrier.debug_id.idx < resources_.size());
       }
+
+      if (is_texture(barrier.resource.type)) {
+        uint32_t max_mips = 1;
+        uint32_t max_layers = 1;
+        if (barrier.resource.type == RGResourceType::ExternalTexture) {
+          rhi::Texture* t = device_->get_tex(external_textures_[barrier.resource.idx]);
+          ALWAYS_ASSERT(t);
+          max_mips = std::max(1u, t->desc().mip_levels);
+          max_layers = std::max(1u, t->desc().array_length);
+        } else {
+          ALWAYS_ASSERT(barrier.resource.idx < tex_att_infos_.size());
+          max_mips = std::max(1u, tex_att_infos_[barrier.resource.idx].mip_levels);
+          max_layers = std::max(1u, tex_att_infos_[barrier.resource.idx].array_layers);
+        }
+        ALWAYS_ASSERT(barrier.subresource.mip_count != RgSubresourceRange::k_all_mips);
+        ALWAYS_ASSERT(barrier.subresource.slice_count != RgSubresourceRange::k_all_slices);
+        ALWAYS_ASSERT(barrier.subresource.base_mip < max_mips);
+        ALWAYS_ASSERT(barrier.subresource.base_slice < max_layers);
+        ALWAYS_ASSERT(barrier.subresource.base_mip + barrier.subresource.mip_count <= max_mips);
+        ALWAYS_ASSERT(barrier.subresource.base_slice + barrier.subresource.slice_count <=
+                      max_layers);
+      }
     }
   }
+}
+
+bool RenderGraph::run_barrier_coalesce_self_tests() {
+  using B = BarrierInfo;
+  RGResourceHandle h{.idx = 0, .type = RGResourceType::ExternalTexture};
+  const RGState src{.access = rhi::AccessFlags::ShaderWrite,
+                    .stage = rhi::PipelineStage::ComputeShader,
+                    .layout = rhi::ResourceLayout::ComputeRW};
+  const RGState dst{.access = rhi::AccessFlags::ShaderSampledRead,
+                    .stage = rhi::PipelineStage::FragmentShader,
+                    .layout = rhi::ResourceLayout::ShaderReadOnly};
+
+  std::vector<B> merge_three;
+  for (uint32_t m : {0u, 1u, 2u}) {
+    merge_three.push_back(B{.resource = h,
+                            .src_state = src,
+                            .dst_state = dst,
+                            .debug_id = {},
+                            .is_swapchain_write = false,
+                            .subresource = RgSubresourceRange::single_mip(m)});
+  }
+  coalesce_pass_texture_barriers(merge_three);
+  if (merge_three.size() != 1 || merge_three[0].subresource.base_mip != 0u ||
+      merge_three[0].subresource.mip_count != 3u || merge_three[0].subresource.slice_count != 1u) {
+    return false;
+  }
+
+  const RGState other_src{.access = rhi::AccessFlags::ShaderSampledRead,
+                          .stage = rhi::PipelineStage::FragmentShader,
+                          .layout = rhi::ResourceLayout::ShaderReadOnly};
+  std::vector<B> no_merge = {B{.resource = h,
+                               .src_state = src,
+                               .dst_state = dst,
+                               .debug_id = {},
+                               .is_swapchain_write = false,
+                               .subresource = RgSubresourceRange::single_mip(0u)},
+                             B{.resource = h,
+                               .src_state = other_src,
+                               .dst_state = dst,
+                               .debug_id = {},
+                               .is_swapchain_write = false,
+                               .subresource = RgSubresourceRange::single_mip(1u)}};
+  coalesce_pass_texture_barriers(no_merge);
+  return no_merge.size() == 2;
 }
 
 }  // namespace gfx

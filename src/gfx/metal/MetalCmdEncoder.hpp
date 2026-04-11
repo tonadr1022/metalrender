@@ -105,7 +105,10 @@ class CmdEncoderBase : public rhi::CmdEncoder {
   void barrier(rhi::BufferHandle, rhi::PipelineStage, rhi::AccessFlags, rhi::PipelineStage,
                rhi::AccessFlags) override;
   void barrier(rhi::TextureHandle, rhi::PipelineStage, rhi::AccessFlags, rhi::PipelineStage,
-               rhi::AccessFlags, int32_t /*base_mip_level*/, int32_t /*base_array_layer*/) override;
+               rhi::AccessFlags, rhi::ResourceLayout /*src_layout*/,
+               rhi::ResourceLayout /*dst_layout*/, int32_t /*base_mip_level*/,
+               int32_t /*base_array_layer*/, uint32_t /*mip_level_count*/,
+               uint32_t /*array_layer_count*/) override;
   void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage, rhi::AccessFlags src_access,
                rhi::PipelineStage dst_stage, rhi::AccessFlags dst_access, size_t, size_t) override {
     barrier(buf, src_stage, src_access, dst_stage, dst_access);

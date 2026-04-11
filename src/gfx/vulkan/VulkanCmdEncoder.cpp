@@ -672,17 +672,10 @@ void VulkanCmdEncoder::barrier(rhi::BufferHandle buf, rhi::PipelineStage src_sta
 
 void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage,
                                rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
-                               rhi::AccessFlags dst_access, int32_t base_mip_level,
-                               int32_t base_array_layer) {
-  barrier(tex, src_stage, src_access, dst_stage, dst_access, rhi::ResourceLayout::Undefined,
-          rhi::ResourceLayout::Undefined, base_mip_level, base_array_layer);
-}
-
-void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage,
-                               rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
                                rhi::AccessFlags dst_access, rhi::ResourceLayout src_layout,
                                rhi::ResourceLayout dst_layout, int32_t base_mip_level,
-                               int32_t base_array_layer) {
+                               int32_t base_array_layer, uint32_t mip_level_count,
+                               uint32_t array_layer_count) {
   VkImageAspectFlags aspect_mask = 0;
   auto* texture = (VulkanTexture*)device_->get_tex(tex);
 
@@ -713,6 +706,16 @@ void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_st
   if (new_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
     new_layout = layout_from_vk_access(dst_acc);
   }
+
+  const uint32_t base_mip_u = base_mip_level < 0 ? 0u : static_cast<uint32_t>(base_mip_level);
+  const uint32_t vk_level_count = (base_mip_level < 0 || mip_level_count == UINT32_MAX)
+                                      ? VK_REMAINING_MIP_LEVELS
+                                      : mip_level_count;
+  const uint32_t base_layer_u = base_array_layer < 0 ? 0u : static_cast<uint32_t>(base_array_layer);
+  const uint32_t vk_layer_count = (base_array_layer < 0 || array_layer_count == UINT32_MAX)
+                                      ? VK_REMAINING_ARRAY_LAYERS
+                                      : array_layer_count;
+
   // Prefer tracked layouts when known so oldLayout matches validation / GPU reality.
   if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
     if (base_mip_level < 0) {
@@ -721,17 +724,12 @@ void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_st
         old_layout = uniform;
       }
     } else {
-      VkImageLayout ml = texture->mip_layout(static_cast<uint32_t>(base_mip_level));
+      VkImageLayout ml = texture->mip_layout(base_mip_u);
       if (ml != VK_IMAGE_LAYOUT_UNDEFINED) {
         old_layout = ml;
       }
     }
   }
-
-  const uint32_t base_mip_u = base_mip_level < 0 ? 0u : static_cast<uint32_t>(base_mip_level);
-  const uint32_t level_count = base_mip_level < 0 ? VK_REMAINING_MIP_LEVELS : 1u;
-  const uint32_t base_layer_u = base_array_layer < 0 ? 0u : static_cast<uint32_t>(base_array_layer);
-  const uint32_t layer_count = base_array_layer < 0 ? VK_REMAINING_ARRAY_LAYERS : 1u;
 
   img_barriers_.emplace_back(VkImageMemoryBarrier2{
       .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
@@ -744,15 +742,22 @@ void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_st
       .image = texture->image(),
       .subresourceRange = VkImageSubresourceRange{.aspectMask = aspect_mask,
                                                   .baseMipLevel = base_mip_u,
-                                                  .levelCount = level_count,
+                                                  .levelCount = vk_level_count,
                                                   .baseArrayLayer = base_layer_u,
-                                                  .layerCount = layer_count},
+                                                  .layerCount = vk_layer_count},
   });
   if (new_layout != VK_IMAGE_LAYOUT_UNDEFINED) {
     if (base_mip_level < 0) {
       texture->set_all_mip_layouts(new_layout);
+    } else if (mip_level_count == UINT32_MAX) {
+      const uint32_t levels = texture->desc().mip_levels;
+      for (uint32_t m = base_mip_u; m < levels; ++m) {
+        texture->set_mip_layout(m, new_layout);
+      }
     } else {
-      texture->set_mip_layout(static_cast<uint32_t>(base_mip_level), new_layout);
+      for (uint32_t i = 0; i < mip_level_count; ++i) {
+        texture->set_mip_layout(base_mip_u + i, new_layout);
+      }
     }
   }
 }
@@ -825,18 +830,31 @@ void VulkanCmdEncoder::barrier(rhi::GPUBarrier* gpu_barrier, size_t barrier_coun
           .subresourceRange =
               {.aspectMask = convert(img_barr.aspect),
                .baseMipLevel = img_barr.mip == rhi::k_gpu_barrier_mip_all ? 0 : img_barr.mip,
-               .levelCount =
-                   img_barr.mip == rhi::k_gpu_barrier_mip_all ? VK_REMAINING_MIP_LEVELS : 1u,
+               .levelCount = img_barr.mip == rhi::k_gpu_barrier_mip_all
+                                 ? VK_REMAINING_MIP_LEVELS
+                                 : (img_barr.mip_level_count == rhi::k_gpu_barrier_mip_all
+                                        ? VK_REMAINING_MIP_LEVELS
+                                        : img_barr.mip_level_count),
                .baseArrayLayer =
                    img_barr.slice == rhi::k_gpu_barrier_slice_all ? 0u : img_barr.slice,
-               .layerCount =
-                   img_barr.slice == rhi::k_gpu_barrier_slice_all ? VK_REMAINING_ARRAY_LAYERS : 1u},
+               .layerCount = img_barr.slice == rhi::k_gpu_barrier_slice_all
+                                 ? VK_REMAINING_ARRAY_LAYERS
+                                 : (img_barr.array_layer_count == rhi::k_gpu_barrier_slice_all
+                                        ? VK_REMAINING_ARRAY_LAYERS
+                                        : img_barr.array_layer_count)},
       });
       auto* vk_tex = (VulkanTexture*)device_->get_tex(img_barr.texture);
       if (img_barr.mip == rhi::k_gpu_barrier_mip_all) {
         vk_tex->set_all_mip_layouts(new_layout);
+      } else if (img_barr.mip_level_count == rhi::k_gpu_barrier_mip_all) {
+        const uint32_t levels = vk_tex->desc().mip_levels;
+        for (uint32_t m = img_barr.mip; m < levels; ++m) {
+          vk_tex->set_mip_layout(m, new_layout);
+        }
       } else {
-        vk_tex->set_mip_layout(img_barr.mip, new_layout);
+        for (uint32_t i = 0; i < img_barr.mip_level_count; ++i) {
+          vk_tex->set_mip_layout(img_barr.mip + i, new_layout);
+        }
       }
     }
   }

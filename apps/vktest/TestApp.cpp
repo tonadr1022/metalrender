@@ -9,6 +9,8 @@
 #include "TestRenderer.hpp"
 #include "Util.hpp"
 #include "core/CVar.hpp"
+#include "core/EAssert.hpp"
+#include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
@@ -44,6 +46,7 @@ TestApp::TestApp() {
       .app_name = "lol",
       .frames_in_flight = 3,
   });
+  ALWAYS_ASSERT(RenderGraph::run_barrier_coalesce_self_tests());
   gfx::apply_renderer_cvar_device_constraints(true);
 
   auto win_dims = window_->get_window_size();

@@ -108,7 +108,8 @@ void GBufferRenderer::bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase
   }
   out_draw_count_buf_rg_handle = p.read_buf(*view.rg_ids.draw_count, PipelineStage::TaskShader);
   if (late) {
-    p.sample_tex(*view.rg_ids.final_depth_pyramid, PipelineStage::TaskShader);
+    p.sample_tex(*view.rg_ids.final_depth_pyramid, PipelineStage::TaskShader,
+                 RgSubresourceRange::all_mips_all_slices());
     *view.rg_ids.meshlet_vis = p.rw_buf(*view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
   } else {
     *view.rg_ids.meshlet_vis = p.write_buf(*view.rg_ids.meshlet_vis, PipelineStage::TaskShader);

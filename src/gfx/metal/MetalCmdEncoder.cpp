@@ -671,10 +671,15 @@ void CmdEncoderBase<UseMTL4>::barrier(rhi::BufferHandle, rhi::PipelineStage src_
 }
 
 template <bool UseMTL4>
-void CmdEncoderBase<UseMTL4>::barrier(rhi::TextureHandle, rhi::PipelineStage src_stage,
-                                      rhi::AccessFlags, rhi::PipelineStage dst_stage,
-                                      rhi::AccessFlags, int32_t /*base_mip_level*/,
-                                      int32_t /*base_array_layer*/) {
+void CmdEncoderBase<UseMTL4>::barrier(rhi::TextureHandle /*tex*/, rhi::PipelineStage src_stage,
+                                      rhi::AccessFlags /*src_access*/, rhi::PipelineStage dst_stage,
+                                      rhi::AccessFlags /*dst_access*/,
+                                      rhi::ResourceLayout /*src_layout*/,
+                                      rhi::ResourceLayout /*dst_layout*/,
+                                      int32_t /*base_mip_level*/, int32_t /*base_array_layer*/,
+                                      uint32_t /*mip_level_count*/,
+                                      uint32_t /*array_layer_count*/) {
+  // Metal: coarse encoder-wide stage visibility; mip/layer ranges are not modeled per subresource.
   auto src_mtl_stage = mtl::util::convert_stage(src_stage);
   auto dst_mtl_stage = mtl::util::convert_stage(dst_stage);
   if (dst_mtl_stage & (MTL::StageDispatch | MTL::StageBlit)) {

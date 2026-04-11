@@ -74,24 +74,41 @@ class CmdEncoder {
   virtual void barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage,
                        rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
                        rhi::AccessFlags dst_access) {
-    barrier(tex, src_stage, src_access, dst_stage, dst_access, -1, -1);
+    barrier(tex, src_stage, src_access, dst_stage, dst_access, rhi::ResourceLayout::Undefined,
+            rhi::ResourceLayout::Undefined, -1, -1, UINT32_MAX, UINT32_MAX);
   }
   virtual void barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage,
                        rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
                        rhi::AccessFlags dst_access, rhi::ResourceLayout src_layout,
                        rhi::ResourceLayout dst_layout) {
-    barrier(tex, src_stage, src_access, dst_stage, dst_access, src_layout, dst_layout, -1, -1);
+    barrier(tex, src_stage, src_access, dst_stage, dst_access, src_layout, dst_layout, -1, -1,
+            UINT32_MAX, UINT32_MAX);
   }
+  /// Texture memory barrier. Negative `base_mip_level` / `base_array_layer` mean base 0 with
+  /// `UINT32_MAX` counts (all mips / all layers). Otherwise counts are explicit mip/layer
+  /// level counts (at least 1 when bases are non-negative).
+  virtual void barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage,
+                       rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
+                       rhi::AccessFlags dst_access, rhi::ResourceLayout src_layout,
+                       rhi::ResourceLayout dst_layout, int32_t base_mip_level,
+                       int32_t base_array_layer, uint32_t mip_level_count,
+                       uint32_t array_layer_count) = 0;
   virtual void barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage,
                        rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
                        rhi::AccessFlags dst_access, int32_t base_mip_level,
-                       int32_t base_array_layer) = 0;
+                       int32_t base_array_layer) {
+    barrier(tex, src_stage, src_access, dst_stage, dst_access, rhi::ResourceLayout::Undefined,
+            rhi::ResourceLayout::Undefined, base_mip_level, base_array_layer,
+            base_mip_level < 0 ? UINT32_MAX : 1u, base_array_layer < 0 ? UINT32_MAX : 1u);
+  }
   virtual void barrier(rhi::TextureHandle tex, rhi::PipelineStage src_stage,
                        rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
-                       rhi::AccessFlags dst_access, rhi::ResourceLayout /*src_layout*/,
-                       rhi::ResourceLayout /*dst_layout*/, int32_t base_mip_level,
+                       rhi::AccessFlags dst_access, rhi::ResourceLayout src_layout,
+                       rhi::ResourceLayout dst_layout, int32_t base_mip_level,
                        int32_t base_array_layer) {
-    barrier(tex, src_stage, src_access, dst_stage, dst_access, base_mip_level, base_array_layer);
+    barrier(tex, src_stage, src_access, dst_stage, dst_access, src_layout, dst_layout,
+            base_mip_level, base_array_layer, base_mip_level < 0 ? UINT32_MAX : 1u,
+            base_array_layer < 0 ? UINT32_MAX : 1u);
   }
   virtual void barrier(rhi::BufferHandle buf, rhi::PipelineStage src_stage,
                        rhi::AccessFlags src_access, rhi::PipelineStage dst_stage,
