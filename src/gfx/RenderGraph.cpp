@@ -9,6 +9,7 @@
 #include "core/Config.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
+#include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -260,6 +261,88 @@ rhi::ResourceLayout layout_from_access(rhi::AccessFlags access, RGPassType pass_
   return rhi::ResourceLayout::Undefined;
 }
 
+rhi::TextureUsage texture_usage_from_accumulated_access(rhi::AccessFlags acc) {
+  using U = rhi::TextureUsage;
+  auto u = U::None;
+  if (has_flag(acc, rhi::AccessFlags::ColorAttachmentRead) ||
+      has_flag(acc, rhi::AccessFlags::ColorAttachmentWrite) ||
+      has_flag(acc, rhi::AccessFlags::InputAttachmentRead)) {
+    u |= U::ColorAttachment;
+  }
+  if (has_flag(acc, rhi::AccessFlags::DepthStencilRead) ||
+      has_flag(acc, rhi::AccessFlags::DepthStencilWrite)) {
+    u |= U::DepthStencilAttachment;
+  }
+  if (has_flag(acc, rhi::AccessFlags::ShaderSampledRead) ||
+      has_flag(acc, rhi::AccessFlags::ShaderRead)) {
+    u |= U::Sample;
+  }
+  if (has_flag(acc, rhi::AccessFlags::ShaderStorageRead) ||
+      has_flag(acc, rhi::AccessFlags::ShaderStorageWrite)) {
+    u |= U::Storage;
+  }
+  if (has_flag(acc, rhi::AccessFlags::ShaderWrite)) {
+    u |= U::ShaderWrite;
+  }
+  if (has_flag(acc, rhi::AccessFlags::TransferRead)) {
+    u |= U::TransferSrc;
+  }
+  if (has_flag(acc, rhi::AccessFlags::TransferWrite)) {
+    u |= U::TransferDst;
+  }
+  return u;
+}
+
+rhi::TextureUsage fallback_texture_usage(const AttachmentInfo& att_info) {
+  using U = rhi::TextureUsage;
+  const auto attach =
+      !is_depth_format(att_info.format) ? U::ColorAttachment : U::DepthStencilAttachment;
+  return attach | U::Sample | U::Storage;
+}
+
+rhi::TextureUsage texture_desc_usage_for_bake(rhi::AccessFlags accumulated,
+                                              const AttachmentInfo& att_info) {
+  const auto u = texture_usage_from_accumulated_access(accumulated);
+  if (u == rhi::TextureUsage::None) {
+    return fallback_texture_usage(att_info);
+  }
+  return u;
+}
+
+rhi::BufferUsage buffer_usage_from_accumulated_access(rhi::AccessFlags acc) {
+  using B = rhi::BufferUsage;
+  auto u = B::None;
+  if (has_flag(acc, rhi::AccessFlags::ShaderStorageRead) ||
+      has_flag(acc, rhi::AccessFlags::ShaderStorageWrite)) {
+    u |= B::Storage;
+  }
+  if (has_flag(acc, rhi::AccessFlags::IndirectCommandRead)) {
+    u |= B::Indirect;
+  }
+  if (has_flag(acc, rhi::AccessFlags::ShaderRead)) {
+    u |= B::Uniform;
+  }
+  if (has_flag(acc, rhi::AccessFlags::IndexRead)) {
+    u |= B::Index;
+  }
+  if (has_flag(acc, rhi::AccessFlags::VertexAttributeRead)) {
+    u |= B::Vertex;
+  }
+  if (has_flag(acc, rhi::AccessFlags::UniformRead)) {
+    u |= B::Uniform;
+  }
+  return u;
+}
+
+rhi::BufferUsage buffer_desc_usage_for_bake(rhi::AccessFlags accumulated) {
+  using B = rhi::BufferUsage;
+  const auto u = buffer_usage_from_accumulated_access(accumulated);
+  if (u == B::None) {
+    return B::Storage | B::Indirect;
+  }
+  return u;
+}
+
 struct SubresourceState {
   rhi::PipelineStage last_write_stage{rhi::PipelineStage::None};
   rhi::AccessFlags to_flush_access{rhi::AccessFlags::None};
@@ -380,21 +463,26 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
   }
 
   for (size_t i = 0; i < tex_att_infos_.size(); i++) {
-    free_atts_[tex_att_infos_[i]].emplace_back(tex_att_handles_[i]);
+    const rhi::TextureUsage usage = device_->get_tex(tex_att_handles_[i])->desc().usage;
+    free_atts_[TexPoolKey{tex_att_infos_[i], usage}].emplace_back(tex_att_handles_[i]);
   }
   // history bufs are now gtg
-  for (auto& [info, bufs] : history_free_bufs_) {
+  for (auto& [key, bufs] : history_free_bufs_) {
     for (auto& buf : bufs) {
-      free_bufs_[info].emplace_back(buf);
+      const rhi::BufferUsage usage = device_->get_buf(buf)->desc().usage;
+      free_bufs_[BufPoolKey{key.info, usage}].emplace_back(buf);
     }
   }
   history_free_bufs_.clear();
 
   for (size_t i = 0; i < buffer_infos_.size(); i++) {
     if (history_buffer_handles_[i].is_valid()) {
-      history_free_bufs_[buffer_infos_[i]].emplace_back(history_buffer_handles_[i]);
+      const rhi::BufferUsage usage = device_->get_buf(history_buffer_handles_[i])->desc().usage;
+      history_free_bufs_[BufPoolKey{buffer_infos_[i], usage}].emplace_back(
+          history_buffer_handles_[i]);
     } else {
-      free_bufs_[buffer_infos_[i]].emplace_back(buffer_handles_[i]);
+      const rhi::BufferUsage usage = device_->get_buf(buffer_handles_[i])->desc().usage;
+      free_bufs_[BufPoolKey{buffer_infos_[i], usage}].emplace_back(buffer_handles_[i]);
     }
   }
   tex_att_infos_.clear();
@@ -425,21 +513,21 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     intermed_pass_stack_.clear();
     pass_stack_.clear();
 
-    static std::vector<AttachmentInfo> stale_atts;
-    stale_atts.clear();
+    static std::vector<TexPoolKey> stale_tex_keys;
+    stale_tex_keys.clear();
 
-    for (auto& [att_info, handles] : free_atts_) {
+    for (auto& [key, handles] : free_atts_) {
       ASSERT(!handles.empty());
       auto* tex = device_->get_tex(handles[0]);
-      if (att_info.size_class == SizeClass::Swapchain && glm::uvec2{tex->desc().dims} != fb_size) {
+      if (key.info.size_class == SizeClass::Swapchain && glm::uvec2{tex->desc().dims} != fb_size) {
         for (const auto& handle : handles) {
           device_->destroy(handle);
         }
-        stale_atts.emplace_back(att_info);
+        stale_tex_keys.emplace_back(key);
       }
     }
-    for (auto& stale_att : stale_atts) {
-      free_atts_.erase(stale_att);
+    for (const auto& stale_key : stale_tex_keys) {
+      free_atts_.erase(stale_key);
     }
   }
 
@@ -514,10 +602,43 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     }
   }
 
+  std::vector<rhi::AccessFlags> tex_physical_access(tex_att_infos_.size(), rhi::AccessFlags::None);
+  std::vector<rhi::AccessFlags> buf_physical_access(buffer_infos_.size(), rhi::AccessFlags::None);
+  auto accumulate_name_access = [&](const Pass::NameAndAccess& use) {
+    if (use.id.type == RGResourceType::ExternalTexture ||
+        use.id.type == RGResourceType::ExternalBuffer) {
+      return;
+    }
+    const RGResourceHandle phys = get_physical_handle(use.id);
+    if (phys.type == RGResourceType::Texture) {
+      ALWAYS_ASSERT(phys.idx < tex_physical_access.size());
+      tex_physical_access[phys.idx] = flag_or(tex_physical_access[phys.idx], use.acc);
+    } else if (phys.type == RGResourceType::Buffer) {
+      ALWAYS_ASSERT(phys.idx < buf_physical_access.size());
+      buf_physical_access[phys.idx] = flag_or(buf_physical_access[phys.idx], use.acc);
+    }
+  };
+  for (uint32_t pass_i : pass_stack_) {
+    const auto& pass = passes_[pass_i];
+    for (const auto& u : pass.get_external_writes()) {
+      accumulate_name_access(u);
+    }
+    for (const auto& u : pass.get_internal_writes()) {
+      accumulate_name_access(u);
+    }
+    for (const auto& u : pass.get_external_reads()) {
+      accumulate_name_access(u);
+    }
+    for (const auto& u : pass.get_internal_reads()) {
+      accumulate_name_access(u);
+    }
+  }
+
   {
     // create attachment images
     tex_att_handles_.clear();
-    for (const auto& att_info : tex_att_infos_) {
+    for (size_t i = 0; i < tex_att_infos_.size(); ++i) {
+      const auto& att_info = tex_att_infos_[i];
       if (att_info.is_swapchain_tex) {
         ASSERT(0);
         continue;
@@ -529,8 +650,12 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
         return att_info.dims;
       };
 
+      const rhi::TextureUsage derived_usage =
+          texture_desc_usage_for_bake(tex_physical_access[i], att_info);
+
       rhi::TextureHandle actual_att_handle{};
-      auto free_att_it = free_atts_.find(att_info);
+      const TexPoolKey pool_key{att_info, derived_usage};
+      auto free_att_it = free_atts_.find(pool_key);
       if (free_att_it != free_atts_.end()) {
         auto& texture_handles = free_att_it->second;
         if (!texture_handles.empty()) {
@@ -541,17 +666,13 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
 
       if (!actual_att_handle.is_valid()) {
         auto dims = get_att_dims();
-        auto att_tx_handle = device_->create_tex(rhi::TextureDesc{
-            .format = att_info.format,
-            .usage =
-                (!is_depth_format(att_info.format) ? rhi::TextureUsage::ColorAttachment
-                                                   : rhi::TextureUsage::DepthStencilAttachment) |
-                // TODO: track usages
-                rhi::TextureUsage::Sample | rhi::TextureUsage::Storage,
-            .dims = glm::uvec3{dims.x, dims.y, 1},
-            .mip_levels = att_info.mip_levels,
-            .array_length = att_info.array_layers,
-            .name = "render_graph_tex_att"});
+        auto att_tx_handle =
+            device_->create_tex(rhi::TextureDesc{.format = att_info.format,
+                                                 .usage = derived_usage,
+                                                 .dims = glm::uvec3{dims.x, dims.y, 1},
+                                                 .mip_levels = att_info.mip_levels,
+                                                 .array_length = att_info.array_layers,
+                                                 .name = "render_graph_tex_att"});
         actual_att_handle = att_tx_handle;
       }
 
@@ -562,9 +683,13 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   {  // create buffers
     buffer_handles_.clear();
     history_buffer_handles_.clear();
-    for (const auto& binfo : buffer_infos_) {
+    for (size_t i = 0; i < buffer_infos_.size(); ++i) {
+      const auto& binfo = buffer_infos_[i];
+      const rhi::BufferUsage derived_usage = buffer_desc_usage_for_bake(buf_physical_access[i]);
+
       rhi::BufferHandle actual_buf_handle{};
-      auto free_buf_it = free_bufs_.find(binfo);
+      const BufPoolKey pool_key{binfo, derived_usage};
+      auto free_buf_it = free_bufs_.find(pool_key);
       if (free_buf_it != free_bufs_.end()) {
         auto& buffer_handles = free_buf_it->second;
         if (!buffer_handles.empty()) {
@@ -577,8 +702,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       }
       if (!actual_buf_handle.is_valid()) {
         auto buf_handle = device_->create_buf(rhi::BufferDesc{
-            // TODO: track usage
-            .usage = (rhi::BufferUsage)(rhi::BufferUsage::Storage | rhi::BufferUsage::Indirect),
+            .usage = derived_usage,
             .size = binfo.size,
             .name = "render_graph_buffer",
         });
@@ -593,7 +717,8 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     }
   }
   // enqueue delete unused free buffers
-  for (auto& [binfo, handles] : free_bufs_) {
+  for (auto& [key, handles] : free_bufs_) {
+    (void)key;
     for (const auto& handle : handles) {
       device_->destroy(handle);
     }
@@ -1348,7 +1473,8 @@ void RenderGraph::dfs(const std::vector<std::unordered_set<uint32_t>>& pass_depe
 
 void RenderGraph::shutdown() {
   auto destroy = [this](auto& resource_map) {
-    for (auto& [att_info, handles] : resource_map) {
+    for (auto& [key, handles] : resource_map) {
+      (void)key;
       for (const auto& handle : handles) {
         device_->destroy(handle);
       }

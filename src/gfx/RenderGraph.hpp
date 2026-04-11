@@ -58,7 +58,35 @@ struct AttachmentInfoHash {
 
 struct BufferInfoHash {
   size_t operator()(const BufferInfo& buff_info) const {
-    auto h = std::make_tuple(buff_info.size);
+    auto h = std::make_tuple(buff_info.size, buff_info.defer_reuse);
+    return util::hash::tuple_hash<decltype(h)>{}(h);
+  }
+};
+
+struct TexPoolKey {
+  AttachmentInfo info;
+  rhi::TextureUsage usage{rhi::TextureUsage::None};
+  bool operator==(const TexPoolKey& o) const { return info == o.info && usage == o.usage; }
+};
+
+struct TexPoolKeyHash {
+  size_t operator()(const TexPoolKey& k) const {
+    using U = std::underlying_type_t<rhi::TextureUsage>;
+    auto h = std::make_tuple(AttachmentInfoHash{}(k.info), static_cast<U>(k.usage));
+    return util::hash::tuple_hash<decltype(h)>{}(h);
+  }
+};
+
+struct BufPoolKey {
+  BufferInfo info;
+  rhi::BufferUsage usage{rhi::BufferUsage::None};
+  bool operator==(const BufPoolKey& o) const { return info == o.info && usage == o.usage; }
+};
+
+struct BufPoolKeyHash {
+  size_t operator()(const BufPoolKey& k) const {
+    using U = std::underlying_type_t<rhi::BufferUsage>;
+    auto h = std::make_tuple(BufferInfoHash{}(k.info), static_cast<U>(k.usage));
     return util::hash::tuple_hash<decltype(h)>{}(h);
   }
 };
@@ -340,10 +368,9 @@ class RenderGraph {
   std::vector<rhi::BufferHandle> external_buffers_;
   std::vector<rhi::TextureHandle> curr_submitted_swapchain_textures_;
 
-  std::unordered_map<AttachmentInfo, std::vector<rhi::TextureHandle>, AttachmentInfoHash>
-      free_atts_;
-  std::unordered_map<BufferInfo, std::vector<rhi::BufferHandle>, BufferInfoHash> free_bufs_;
-  std::unordered_map<BufferInfo, std::vector<rhi::BufferHandle>, BufferInfoHash> history_free_bufs_;
+  std::unordered_map<TexPoolKey, std::vector<rhi::TextureHandle>, TexPoolKeyHash> free_atts_;
+  std::unordered_map<BufPoolKey, std::vector<rhi::BufferHandle>, BufPoolKeyHash> free_bufs_;
+  std::unordered_map<BufPoolKey, std::vector<rhi::BufferHandle>, BufPoolKeyHash> history_free_bufs_;
 
   struct BufferInfoAndHandle {
     BufferInfo buf_info;
