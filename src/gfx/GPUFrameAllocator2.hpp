@@ -42,6 +42,13 @@ struct GPUFrameAllocator3 {
 
   explicit GPUFrameAllocator3(rhi::Device* device, bool uniform_allocator);
 
+  void clear() {
+    for (auto& frame : frames_) {
+      frame.full_staging_buffers.clear();
+      frame.free_staging_buffers.clear();
+    }
+  }
+
   Alloc alloc(uint32_t size);
   BufferSuballoc alloc2(uint32_t size);
   BufferSuballoc alloc2(uint32_t size, void* data);

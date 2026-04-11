@@ -8,8 +8,6 @@ struct DebugMeshletPreparePC {
   uint draw_cnt_buf_idx;
   uint instance_data_buf_idx;
   uint mesh_data_buf_idx;
-  uint view_data_buf_idx;
-  uint view_data_offset_bytes;
   uint cull_data_buf_idx;
   uint cull_data_offset_bytes;
   uint max_draws;

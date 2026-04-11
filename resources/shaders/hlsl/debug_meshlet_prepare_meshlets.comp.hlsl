@@ -13,6 +13,8 @@
 
 groupshared uint g_visible_in_group;
 
+CONSTANT_BUFFER(ViewData, view_data, VIEW_DATA_SLOT);
+
 [NumThreads(64, 1, 1)] void main(uint dtid
                                  : SV_DispatchThreadID, uint gtid
                                  : SV_GroupIndex) {
@@ -38,8 +40,6 @@ groupshared uint g_visible_in_group;
 
   bool visible = valid_mesh;
   if (valid_mesh && pc.culling_enabled != 0) {
-    ViewData view_data =
-        bindless_buffers[pc.view_data_buf_idx].Load<ViewData>(pc.view_data_offset_bytes);
     CullData cull_data =
         bindless_buffers[pc.cull_data_buf_idx].Load<CullData>(pc.cull_data_offset_bytes);
 

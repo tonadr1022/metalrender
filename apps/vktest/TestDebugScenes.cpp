@@ -600,8 +600,7 @@ class MeshletRendererScene final : public ITestScene {
       return;
     }
 
-    const uint32_t fif = ctx_.device->get_info().frames_in_flight;
-    frame_uniform_gpu_allocator_.set_frame_idx(fif);
+    frame_uniform_gpu_allocator_.set_frame_idx(ctx_.curr_frame_in_flight_idx);
 
     meshlet_readback_frames_++;
 
@@ -652,8 +651,8 @@ class MeshletRendererScene final : public ITestScene {
       task_cmd_dst_rg = p.write_buf(task_cmd_dst_rg, PipelineStage::ComputeShader);
       indirect_args_rg = p.rw_buf(indirect_args_rg, PipelineStage::ComputeShader);
       visible_object_count_rg = p.rw_buf(visible_object_count_rg, PipelineStage::ComputeShader);
-      p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, visible_object_count_rg,
-                max_draws](CmdEncoder* enc) {
+      p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, visible_object_count_rg, max_draws,
+                view_cb_suballoc](CmdEncoder* enc) {
         enc->bind_pipeline(prepare_meshlets_pso_);
         auto& geo_batch = ctx_.model_gpu_mgr->geometry_batch();
         DebugMeshletPreparePC pc{};
@@ -666,15 +665,16 @@ class MeshletRendererScene final : public ITestScene {
                 ->bindless_idx();
         pc.mesh_data_buf_idx =
             ctx_.device->get_buf(geo_batch.mesh_buf.get_buffer_handle())->bindless_idx();
-        pc.view_data_buf_idx =
-            ctx_.device->get_buf(view_prepare_storage_buf_.handle)->bindless_idx();
-        pc.view_data_offset_bytes = 0;
         pc.cull_data_buf_idx = ctx_.device->get_buf(cull_storage_buf_.handle)->bindless_idx();
         pc.cull_data_offset_bytes = 0;
         pc.max_draws = max_draws;
         pc.culling_enabled = gpu_object_frustum_cull_ ? 1u : 0u;
         pc.visible_obj_cnt_buf_idx =
             ctx_.device->get_buf(ctx_.rg->get_buf(visible_object_count_rg))->bindless_idx();
+
+        enc->bind_cbv(view_cb_suballoc.buf, VIEW_DATA_SLOT, view_cb_suballoc.offset_bytes,
+                      sizeof(ViewData));
+
         enc->push_constants(&pc, sizeof(pc));
         enc->dispatch_compute({align_divide_up(static_cast<uint64_t>(max_draws), 64ull), 1, 1},
                               {64, 1, 1});
