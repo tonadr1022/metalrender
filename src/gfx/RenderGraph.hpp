@@ -358,6 +358,17 @@ class RenderGraph {
                   std::unordered_set<uint32_t>& visited_passes, std::vector<uint32_t>& pass_stack,
                   uint32_t pass);
 
+  void bake_reset_and_gc_pools_(glm::uvec2 fb_size);
+  void bake_find_sink_passes_(bool verbose);
+  void bake_compute_pass_order_(bool verbose);
+  void bake_accumulate_physical_access_(std::vector<rhi::AccessFlags>& tex_physical_access,
+                                        std::vector<rhi::AccessFlags>& buf_physical_access);
+  void bake_allocate_transient_resources_(glm::uvec2 fb_size,
+                                          const std::vector<rhi::AccessFlags>& tex_physical_access,
+                                          const std::vector<rhi::AccessFlags>& buf_physical_access);
+  void bake_schedule_barriers_(bool verbose);
+  void bake_validate_();
+
   // glm::uvec2 prev_frame_fb_size_{};
   std::vector<AttachmentInfo> tex_att_infos_;
   std::vector<BufferInfo> buffer_infos_;
