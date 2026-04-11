@@ -368,6 +368,7 @@ class RenderGraph {
                                           const std::vector<rhi::AccessFlags>& buf_physical_access);
   void bake_schedule_barriers_(bool verbose);
   void bake_validate_();
+  void bake_write_debug_dump_if_requested_(glm::uvec2 fb_size);
 
   // glm::uvec2 prev_frame_fb_size_{};
   std::vector<AttachmentInfo> tex_att_infos_;

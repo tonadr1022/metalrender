@@ -12,6 +12,7 @@
 
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
+#include "gfx/RenderGraph.Format.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Texture.hpp"
@@ -26,163 +27,6 @@ namespace {
 constexpr uint8_t kPassDepDfsWhite = 0;
 constexpr uint8_t kPassDepDfsGray = 1;
 constexpr uint8_t kPassDepDfsBlack = 2;
-
-const char* to_string(RGPassType type) {
-  switch (type) {
-    case RGPassType::Compute:
-      return "Compute";
-    case RGPassType::Graphics:
-      return "Graphics";
-    case RGPassType::Transfer:
-      return "Transfer";
-    case RGPassType::None:
-      return "None";
-  }
-}
-
-std::string to_string(rhi::PipelineStage stage) {
-  std::string result;
-  if (has_flag(stage, rhi::PipelineStage::TopOfPipe)) {
-    result += "PipelineStage_TopOfPipe | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::DrawIndirect)) {
-    result += "PipelineStage_DrawIndirect | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::VertexInput)) {
-    result += "PipelineStage_VertexInput | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::VertexShader)) {
-    result += "PipelineStage_VertexShader | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::TaskShader)) {
-    result += "PipelineStage_TaskShader | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::MeshShader)) {
-    result += "PipelineStage_MeshShader | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::FragmentShader)) {
-    result += "PipelineStage_FragmentShader | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::EarlyFragmentTests)) {
-    result += "PipelineStage_EarlyFragmentTests | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::LateFragmentTests)) {
-    result += "PipelineStage_LateFragmentTests | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::ColorAttachmentOutput)) {
-    result += "PipelineStage_ColorAttachmentOutput | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::ComputeShader)) {
-    result += "PipelineStage_ComputeShader | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::AllTransfer)) {
-    result += "PipelineStage_AllTransfer | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::BottomOfPipe)) {
-    result += "PipelineStage_BottomOfPipe | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::Host)) {
-    result += "PipelineStage_Host | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::AllGraphics)) {
-    result += "PipelineStage_AllGraphics | ";
-  }
-  if (has_flag(stage, rhi::PipelineStage::AllCommands)) {
-    result += "PipelineStage_AllCommands | ";
-  }
-  if (result.size()) {
-    result = result.substr(0, result.size() - 3);
-  }
-  return result;
-}
-
-std::string to_string(rhi::AccessFlags access) {
-  std::string result;
-  if (has_flag(access, rhi::AccessFlags::IndirectCommandRead)) {
-    result += "IndirectCommandRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::IndexRead)) {
-    result += "IndexRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::VertexAttributeRead)) {
-    result += "VertexAttributeRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::UniformRead)) {
-    result += "UniformRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::InputAttachmentRead)) {
-    result += "InputAttachmentRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::ShaderRead)) {
-    result += "ShaderRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::ShaderWrite)) {
-    result += "ShaderWrite | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::ColorAttachmentRead)) {
-    result += "ColorAttachmentRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::ColorAttachmentWrite)) {
-    result += "ColorAttachmentWrite | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::DepthStencilRead)) {
-    result += "DepthStencilRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::DepthStencilWrite)) {
-    result += "DepthStencilWrite | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::TransferRead)) {
-    result += "TransferRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::TransferWrite)) {
-    result += "TransferWrite | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::MemoryRead)) {
-    result += "MemoryRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::MemoryWrite)) {
-    result += "MemoryWrite | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::ShaderSampledRead)) {
-    result += "ShaderSampledRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::ShaderStorageRead)) {
-    result += "ShaderStorageRead | ";
-  }
-  if (has_flag(access, rhi::AccessFlags::ShaderStorageWrite)) {
-    result += "ShaderStorageWrite | ";
-  }
-  if (result.size()) {
-    result = result.substr(0, result.size() - 3);
-  }
-  return result;
-}
-
-std::string to_string(rhi::ResourceLayout layout) {
-  switch (layout) {
-    case rhi::ResourceLayout::Undefined:
-      return "Layout_Undefined";
-    case rhi::ResourceLayout::General:
-      return "Layout_General";
-    case rhi::ResourceLayout::ShaderReadOnly:
-      return "Layout_ShaderReadOnly";
-    case rhi::ResourceLayout::ColorAttachment:
-      return "Layout_ColorAttachment";
-    case rhi::ResourceLayout::DepthStencil:
-      return "Layout_DepthStencil";
-    case rhi::ResourceLayout::TransferSrc:
-      return "Layout_TransferSrc";
-    case rhi::ResourceLayout::TransferDst:
-      return "Layout_TransferDst";
-    case rhi::ResourceLayout::Present:
-      return "Layout_Present";
-    case rhi::ResourceLayout::ComputeRW:
-      return "Layout_ComputeRW";
-    case rhi::ResourceLayout::InputAttachment:
-      return "Layout_InputAttachment";
-  }
-  return "Layout_Unknown";
-}
 
 struct RgSubresourceStateKey {
   RGResourceType type{};
@@ -395,6 +239,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   bake_allocate_transient_resources_(fb_size, tex_physical_access, buf_physical_access);
   bake_schedule_barriers_(verbose);
   bake_validate_();
+  bake_write_debug_dump_if_requested_(fb_size);
   if (verbose) {
     LINFO("//////////// Done Baking Render Graph ////////////");
   }
@@ -497,7 +342,8 @@ void RenderGraph::bake_compute_pass_order_(bool verbose) {
             &pass.get_external_writes()};
         for (auto& arr : arrays) {
           for (const auto& u : *arr) {
-            LINFO("{:<50}\t{:<50}\t{:<50}", debug_name(u.id), to_string(u.acc), to_string(u.stage));
+            LINFO("{:<50}\t{:<50}\t{:<50}", debug_name(u.id), rg_fmt::to_string(u.acc),
+                  rg_fmt::to_string(u.stage));
           }
         }
       }
@@ -896,8 +742,8 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
 
       barrier_total_count += barriers.size();
       LINFO("{}[exec {:>3} | pass_i {:>3}]{} {} {} — {}{} barrier(s){}", kGreen,
-            barrier_pass_exec_ord, pass_i, kReset, to_string(pass.type()), pass.get_name(), kYellow,
-            barriers.size(), kReset);
+            barrier_pass_exec_ord, pass_i, kReset, rg_fmt::to_string(pass.type()), pass.get_name(),
+            kYellow, barriers.size(), kReset);
 
       for (size_t bi = 0; bi < barriers.size(); ++bi) {
         const auto& barrier = barriers[bi];
@@ -931,17 +777,17 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
               barrier.subresource_slice, barrier.is_swapchain_write);
         LINFO("\t{}why_barrier: [{}]", kDim, why.empty() ? "?" : why);
         LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "SRC_ACCESS:", kReset),
-              to_string(barrier.src_state.access));
+              rg_fmt::to_string(barrier.src_state.access));
         LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "DST_ACCESS:", kReset),
-              to_string(barrier.dst_state.access));
+              rg_fmt::to_string(barrier.dst_state.access));
         LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "SRC_STAGE:", kReset),
-              to_string(barrier.src_state.stage));
+              rg_fmt::to_string(barrier.src_state.stage));
         LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "DST_STAGE:", kReset),
-              to_string(barrier.dst_state.stage));
+              rg_fmt::to_string(barrier.dst_state.stage));
         LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "SRC_LAYOUT:", kReset),
-              to_string(barrier.src_state.layout));
+              rg_fmt::to_string(barrier.src_state.layout));
         LINFO("\t{} {}", std::format("{}{:<14}{}", kCyan, "DST_LAYOUT:", kReset),
-              to_string(barrier.dst_state.layout));
+              rg_fmt::to_string(barrier.dst_state.layout));
       }
       if (!barriers.empty()) {
         LINFO("");

@@ -17,6 +17,8 @@ extern AutoCVarInt shadows_enabled;
 extern AutoCVarInt debug_render_mode;
 extern AutoCVarInt ui_imgui_enabled;
 extern AutoCVarInt developer_render_graph_verbose;
+extern AutoCVarInt developer_render_graph_dump_mode;
+extern AutoCVarString developer_render_graph_dump_dir;
 extern AutoCVarInt developer_collect_meshlet_draw_stats;
 
 }  // namespace renderer_cv

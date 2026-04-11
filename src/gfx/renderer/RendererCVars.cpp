@@ -32,6 +32,13 @@ AutoCVarInt developer_render_graph_verbose{
     "renderer.developer.render_graph_verbose", "Verbose RenderGraph bake logging.", 0,
     static_cast<CVarFlags>(static_cast<uint16_t>(CVarFlags::EditCheckbox) |
                            static_cast<uint16_t>(CVarFlags::Advanced))};
+AutoCVarInt developer_render_graph_dump_mode{
+    "renderer.developer.render_graph_dump_mode",
+    "After each successful RenderGraph::bake: 0=off, 1=JSON, 2=GraphViz DOT, 3=both.", 0,
+    CVarFlags::Advanced};
+AutoCVarString developer_render_graph_dump_dir{
+    "renderer.developer.render_graph_dump_dir",
+    "Directory for render graph dumps (required when render_graph_dump_mode is non-zero).", ""};
 AutoCVarInt developer_collect_meshlet_draw_stats{
     "renderer.developer.collect_meshlet_draw_stats", "Record meshlet draw statistics for readback.",
     1,

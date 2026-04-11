@@ -27,6 +27,8 @@ add_library(${target_name} SHARED
     gfx/DrawBatch.cpp
     gfx/RenderGraph.cpp
     gfx/RenderGraph.Bake.cpp
+    gfx/RenderGraph.Format.cpp
+    gfx/RenderGraph.DebugDump.cpp
     gfx/BackedGPUAllocator.cpp
     gfx/ModelGPUManager.cpp
     gfx/renderer/BufferResize.cpp
