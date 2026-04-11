@@ -52,7 +52,7 @@ constexpr Flags flag_or(Flags x, Bits y) noexcept {
 
 constexpr uint32_t kStageBitCount = 64;
 
-inline void for_each_stage_bit(rhi::PipelineStage stage, const auto& fn) {
+inline void for_each_set_stage_bits(rhi::PipelineStage stage, const auto& fn) {
   auto mask = static_cast<uint64_t>(stage);
   for (uint32_t i = 0; i < kStageBitCount; ++i) {
     if ((mask & (1ull << i)) != 0) {
@@ -177,15 +177,6 @@ rhi::BufferUsage buffer_usage_from_accumulated_access(rhi::AccessFlags acc) {
   return u;
 }
 
-rhi::BufferUsage buffer_desc_usage_for_bake(rhi::AccessFlags accumulated) {
-  using B = rhi::BufferUsage;
-  const auto u = buffer_usage_from_accumulated_access(accumulated);
-  if (u == B::None) {
-    return B::Storage | B::Indirect;
-  }
-  return u;
-}
-
 struct SubresourceState {
   rhi::PipelineStage last_write_stage{rhi::PipelineStage::None};
   rhi::AccessFlags to_flush_access{rhi::AccessFlags::None};
@@ -210,10 +201,12 @@ inline rhi::PipelineStage read_stage_mask(const SubresourceState& state) {
   return mask;
 }
 
+// returns true if, for any pipeline stage in stages, access has bits not yet recorded in
+// invalidated_in_stage for that stage.
 inline bool need_invalidate_read(const SubresourceState& state, rhi::PipelineStage stages,
                                  rhi::AccessFlags access) {
   bool need_invalidate = false;
-  for_each_stage_bit(stages, [&](uint32_t bit) {
+  for_each_set_stage_bits(stages, [&](uint32_t bit) {
     const auto inv = state.invalidated_in_stage[bit];
     const uint64_t missing = static_cast<uint64_t>(access) & ~static_cast<uint64_t>(inv);
     if (missing != 0) {
@@ -442,7 +435,8 @@ void RenderGraph::bake_allocate_transient_resources_(
     defer_pool_handles_by_slot_.clear();
     for (size_t i = 0; i < buffer_infos_.size(); ++i) {
       const auto& binfo = buffer_infos_[i];
-      const rhi::BufferUsage derived_usage = buffer_desc_usage_for_bake(buf_physical_access[i]);
+      const rhi::BufferUsage derived_usage =
+          buffer_usage_from_accumulated_access(buf_physical_access[i]);
 
       rhi::BufferHandle actual_buf_handle{};
       const BufPoolKey pool_key{binfo, derived_usage};
@@ -721,11 +715,9 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
           if (!is_buffer) {
             resource_state.layout = desired.layout;
           }
-        } else if (!is_buffer && resource_state.layout == rhi::ResourceLayout::Undefined) {
-          resource_state.layout = desired.layout;
         }
 
-        for_each_stage_bit(desired.stage, [&](uint32_t bit) {
+        for_each_set_stage_bits(desired.stage, [&](uint32_t bit) {
           resource_state.invalidated_in_stage[bit] =
               flag_or(resource_state.invalidated_in_stage[bit], desired.access);
         });

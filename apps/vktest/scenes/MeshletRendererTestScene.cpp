@@ -4,6 +4,7 @@
 
 #include "ResourceManager.hpp"
 #include "Window.hpp"
+#include "core/Logger.hpp"
 #include "core/MathUtil.hpp"
 #include "core/Util.hpp"
 #include "gfx/ImGuiRenderer.hpp"
@@ -429,7 +430,7 @@ void MeshletRendererScene::add_render_graph_passes() {
     RGResourceId depth_pyramid_id = depth_pyramid_rg;
     const RGResourceId depth_src_rg = depth_att_id;
 
-    for (uint32_t mip = 0; mip < final_mip; mip++) {
+    for (uint32_t mip = 0; mip <= final_mip; mip++) {
       auto& p = ctx_.rg->add_compute_pass("meshlet_depth_reduce_" + std::to_string(mip));
       RGResourceId depth_handle{};
       if (mip == 0) {
@@ -443,7 +444,7 @@ void MeshletRendererScene::add_render_graph_passes() {
                      rhi::AccessFlags::ShaderSampledRead, rhi::AccessFlags::ShaderWrite,
                      static_cast<int32_t>(mip - 1), static_cast<int32_t>(mip));
       }
-      if (mip == final_mip - 1) {
+      if (mip == final_mip) {
         final_depth_pyramid_rg = depth_pyramid_id;
       }
 
