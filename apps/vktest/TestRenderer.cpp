@@ -11,7 +11,6 @@
 #include "core/Logger.hpp"  // IWYU pragma: keep
 #include "gfx/ModelGPUManager.hpp"
 #include "gfx/ShaderManager.hpp"
-#include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "hlsl/material.h"
@@ -53,7 +52,6 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   shader_mgr_ = std::make_unique<gfx::ShaderManager>();
   shader_mgr_->init(
       device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
-  renderer_cv::pipeline_mesh_shaders.set(1);
   imgui_renderer_ = std::make_unique<ImGuiRenderer>(*shader_mgr_, device_);
   rg_.init(device_);
   model_gpu_mgr_ = std::make_unique<ModelGPUMgr>(*device_, static_instance_mgr_, static_draw_batch_,
@@ -205,6 +203,8 @@ void TestRenderer::imgui_scene_overlay() {
     scene_->on_imgui();
   }
 }
+
+void TestRenderer::request_render_graph_debug_dump() { rg_.request_debug_dump_once(); }
 
 void TestRenderer::init_imgui() {
   IMGUI_CHECKVERSION();

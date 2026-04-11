@@ -2,11 +2,14 @@
 
 #include <GLFW/glfw3.h>
 
+#include <filesystem>
 #include <tracy/Tracy.hpp>
 
 #include "ResourceManager.hpp"
 #include "TestRenderer.hpp"
 #include "Util.hpp"
+#include "core/CVar.hpp"
+#include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "imgui.h"
@@ -19,6 +22,11 @@ TestApp::TestApp() {
   ZoneScoped;
   resource_dir_ = get_resource_dir();
   std::filesystem::current_path(resource_dir_.parent_path());
+  local_resource_dir_ = resource_dir_ / "local";
+  if (!std::filesystem::exists(local_resource_dir_)) {
+    std::filesystem::create_directories(local_resource_dir_);
+  }
+  CVarSystem::get().load_from_file((local_resource_dir_ / "cvars.txt").string());
 
   window_ = create_platform_window();
 
@@ -36,6 +44,7 @@ TestApp::TestApp() {
       .app_name = "lol",
       .frames_in_flight = 3,
   });
+  gfx::apply_renderer_cvar_device_constraints(true);
 
   auto win_dims = window_->get_window_size();
   swapchain_ = device_->create_swapchain_h(gfx::rhi::SwapchainDesc{
@@ -98,6 +107,7 @@ void TestApp::run() {
     }
   }
 
+  CVarSystem::get().save_to_file((local_resource_dir_ / "cvars.txt").string());
   renderer_->shutdown();
   ResourceManager::shutdown();
   renderer_.reset();
@@ -110,6 +120,13 @@ void TestApp::on_imgui() {
   ZoneScoped;
   ImGui::Begin("TestApp");
   ImGui::Text("ImGui enabled: %d", imgui_enabled_);
+  if (renderer_cv::developer_render_graph_dump_mode.get() == 3) {
+    ImGui::Separator();
+    ImGui::TextWrapped("dump_dir: %s", renderer_cv::developer_render_graph_dump_dir.get());
+    if (ImGui::Button("Dump render graph (JSON+DOT)")) {
+      renderer_->request_render_graph_debug_dump();
+    }
+  }
   ImGui::End();
   renderer_->imgui_scene_overlay();
 }

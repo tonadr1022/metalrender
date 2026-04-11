@@ -954,6 +954,13 @@ void MemeRenderer123::on_imgui() {
       ImGui::Text("Render Mode %s", to_string(clamped_debug_render_mode()));
       ImGui::SliderInt("Debug CSM cascade level", &debug_cascade_level_, 0,
                        csm_renderer_->num_cascades() - 1);
+      if (renderer_cv::developer_render_graph_dump_mode.get() == 3) {
+        ImGui::Separator();
+        ImGui::TextWrapped("dump_dir: %s", renderer_cv::developer_render_graph_dump_dir.get());
+        if (ImGui::Button("Dump render graph (JSON+DOT)")) {
+          rg_.request_debug_dump_once();
+        }
+      }
       ImGui::Separator();
       ImGui::EndTabItem();
     }

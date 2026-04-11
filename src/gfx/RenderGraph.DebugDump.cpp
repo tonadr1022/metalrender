@@ -16,6 +16,12 @@
 namespace TENG_NAMESPACE {
 namespace gfx {
 
+RenderGraph::DebugDumpOnceRequestScope::~DebugDumpOnceRequestScope() {
+  if (rg != nullptr) {
+    rg->debug_dump_once_requested_ = false;
+  }
+}
+
 namespace {
 
 void write_json_str(std::ostream& o, std::string_view s) {
@@ -100,6 +106,11 @@ void RenderGraph::bake_write_debug_dump_if_requested_(glm::uvec2 fb_size) {
   if (mode == 0) {
     return;
   }
+  if (mode == 3 && !debug_dump_once_requested_) {
+    return;
+  }
+  DebugDumpOnceRequestScope clear_mode3_request{mode == 3 ? this : nullptr};
+
   const char* dir_c = renderer_cv::developer_render_graph_dump_dir.get();
   const std::string dir = dir_c ? std::string(dir_c) : std::string();
   if (dir.empty()) {
@@ -121,6 +132,9 @@ void RenderGraph::bake_write_debug_dump_if_requested_(glm::uvec2 fb_size) {
   if (ec) {
     LWARN("RenderGraph dump: could not create directory '{}': {}", dir, ec.message());
     return;
+  }
+  if (mode == 3) {
+    LINFO("Render graph on-demand dump (JSON+DOT) under '{}'", dir);
   }
 
   const auto barrier_key = [](const BarrierInfo& b) {

@@ -43,6 +43,7 @@ class TestRenderer {
   explicit TestRenderer(const CreateInfo& cinfo);
   void render(bool imgui_ui_active);
   void imgui_scene_overlay();
+  void request_render_graph_debug_dump();
   void on_cursor_pos(double x, double y);
   void on_key_event(int key, int action, int mods);
   void shutdown();

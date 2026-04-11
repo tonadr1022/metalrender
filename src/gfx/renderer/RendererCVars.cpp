@@ -34,8 +34,9 @@ AutoCVarInt developer_render_graph_verbose{
                            static_cast<uint16_t>(CVarFlags::Advanced))};
 AutoCVarInt developer_render_graph_dump_mode{
     "renderer.developer.render_graph_dump_mode",
-    "After each successful RenderGraph::bake: 0=off, 1=JSON, 2=GraphViz DOT, 3=both.", 0,
-    CVarFlags::Advanced};
+    "After each successful RenderGraph::bake: 0=off, 1=JSON, 2=GraphViz DOT, 3=JSON+DOT once per "
+    "ImGui \"Dump render graph\" request (requires render_graph_dump_dir).",
+    0, CVarFlags::Advanced};
 AutoCVarString developer_render_graph_dump_dir{
     "renderer.developer.render_graph_dump_dir",
     "Directory for render graph dumps (required when render_graph_dump_mode is non-zero).", ""};

@@ -15,6 +15,7 @@ class TestApp {
  private:
   void on_imgui();
   std::filesystem::path resource_dir_;
+  std::filesystem::path local_resource_dir_;
   std::unique_ptr<teng::Window> window_;
   std::unique_ptr<teng::gfx::rhi::Device> device_;
   teng::gfx::rhi::SwapchainHandleHolder swapchain_;

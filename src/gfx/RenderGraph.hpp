@@ -190,6 +190,8 @@ class RenderGraph {
 
   void init(rhi::Device* device);
   void bake(glm::uvec2 fb_size, bool verbose = false);
+  /// Arm a single JSON+DOT dump when `developer_render_graph_dump_mode` is 3 (not thread-safe).
+  void request_debug_dump_once() { debug_dump_once_requested_ = true; }
   void execute();
   void execute(rhi::CmdEncoder* enc);
   void shutdown();
@@ -369,6 +371,13 @@ class RenderGraph {
   void bake_schedule_barriers_(bool verbose);
   void bake_validate_();
   void bake_write_debug_dump_if_requested_(glm::uvec2 fb_size);
+
+  struct DebugDumpOnceRequestScope {
+    RenderGraph* rg{};
+    explicit DebugDumpOnceRequestScope(RenderGraph* r) : rg(r) {}
+    ~DebugDumpOnceRequestScope();
+  };
+  bool debug_dump_once_requested_{false};
 
   // glm::uvec2 prev_frame_fb_size_{};
   std::vector<AttachmentInfo> tex_att_infos_;
