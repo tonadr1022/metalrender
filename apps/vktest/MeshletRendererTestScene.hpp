@@ -48,7 +48,7 @@ class MeshletRendererScene final : public ITestScene {
   ModelHandle test_model_handle_;
   InstanceMgr::Alloc instance_alloc_{};
   bool gpu_object_frustum_cull_{true};
-  std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> draw_count_readback_{};
+  std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> task_cmd_group_count_readback_{};
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> visible_object_count_readback_{};
   GPUFrameAllocator3 frame_uniform_gpu_allocator_;
   uint32_t meshlet_readback_frames_{0};

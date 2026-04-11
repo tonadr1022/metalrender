@@ -74,7 +74,7 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
       {.path = "debug_meshlet_prepare_meshlets", .type = rhi::ShaderType::Compute});
 
   for (int i = 0; i < k_max_frames_in_flight; i++) {
-    draw_count_readback_[static_cast<size_t>(i)] = ctx_.device->create_buf_h({
+    task_cmd_group_count_readback_[static_cast<size_t>(i)] = ctx_.device->create_buf_h({
         .size = sizeof(uint32_t),
         .flags = rhi::BufferDescFlags::CPUAccessible,
         .name = "meshlet_draw_count_readback",
@@ -126,7 +126,7 @@ void MeshletRendererScene::on_imgui() {
   if (meshlet_readback_frames_ >= ctx_.device->get_info().frames_in_flight) {
     const uint32_t curr = ctx_.curr_frame_in_flight_idx;
     visible_meshlet_task_groups = *reinterpret_cast<const uint32_t*>(
-        ctx_.device->get_buf(draw_count_readback_[curr].handle)->contents());
+        ctx_.device->get_buf(task_cmd_group_count_readback_[curr].handle)->contents());
     visible_objects = *reinterpret_cast<const uint32_t*>(
         ctx_.device->get_buf(visible_object_count_readback_[curr].handle)->contents());
   }
@@ -280,85 +280,91 @@ void MeshletRendererScene::add_render_graph_passes() {
         "meshlet_hello_depth_att");
 
     auto depth_att_id = p.write_depth_output(depth_att);
-    p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, visible_object_count_rg, depth_att_id,
-              readback_fif_i = ctx_.curr_frame_in_flight_idx, view_cb_suballoc](CmdEncoder* enc) {
-      flush_pending_model_textures(*ctx_.model_gpu_mgr, *ctx_.device, *ctx_.frame_staging, enc);
+    p.set_ex(
+        [this, task_cmd_dst_rg, indirect_args_rg, depth_att_id, view_cb_suballoc](CmdEncoder* enc) {
+          flush_pending_model_textures(*ctx_.model_gpu_mgr, *ctx_.device, *ctx_.frame_staging, enc);
 
-      GlobalData gd{};
-      gd.render_mode = DEBUG_RENDER_MODE_NONE;
-      gd.frame_num = 0;
-      gd.meshlet_stats_enabled = 0;
-      gd._padding = 0;
-      std::memcpy(ctx_.device->get_buf(globals_cb_buf_.handle)->contents(), &gd, sizeof(gd));
+          GlobalData gd{};
+          gd.render_mode = DEBUG_RENDER_MODE_NONE;
+          gd.frame_num = 0;
+          gd.meshlet_stats_enabled = 0;
+          gd._padding = 0;
+          std::memcpy(ctx_.device->get_buf(globals_cb_buf_.handle)->contents(), &gd, sizeof(gd));
 
-      glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
-      ctx_.device->enqueue_swapchain_for_present(ctx_.swapchain, enc);
-      enc->begin_rendering({
-          RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::Clear,
-                                   ClearValue{.color = clear_color}),
-          RenderAttInfo::depth_stencil_att(
-              ctx_.rg->get_att_img(depth_att_id), LoadOp::Clear,
-              ClearValue{.depth_stencil = {.depth = 1.f, .stencil = 0}}),
-      });
-      enc->bind_pipeline(meshlet_pso_);
-      enc->set_cull_mode(CullMode::Back);
-      enc->set_wind_order(WindOrder::CounterClockwise);
-      enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
-      enc->set_scissor({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
+          glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
+          ctx_.device->enqueue_swapchain_for_present(ctx_.swapchain, enc);
+          enc->begin_rendering({
+              RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::Clear,
+                                       ClearValue{.color = clear_color}),
+              RenderAttInfo::depth_stencil_att(
+                  ctx_.rg->get_att_img(depth_att_id), LoadOp::Clear,
+                  ClearValue{.depth_stencil = {.depth = 1.f, .stencil = 0}}),
+          });
+          enc->bind_pipeline(meshlet_pso_);
+          enc->set_cull_mode(CullMode::Back);
+          enc->set_wind_order(WindOrder::CounterClockwise);
+          enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
+          enc->set_scissor({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
 
-      auto& geo_batch = ctx_.model_gpu_mgr->geometry_batch();
-      enc->bind_srv(geo_batch.mesh_buf.get_buffer_handle(), 5);
-      enc->bind_srv(geo_batch.meshlet_buf.get_buffer_handle(), 6);
-      enc->bind_srv(geo_batch.meshlet_triangles_buf.get_buffer_handle(), 7);
-      enc->bind_srv(geo_batch.meshlet_vertices_buf.get_buffer_handle(), 8);
-      enc->bind_srv(geo_batch.vertex_buf.get_buffer_handle(), 9);
-      enc->bind_srv(ctx_.model_gpu_mgr->instance_mgr().get_instance_data_buf(), 10);
-      enc->bind_srv(ctx_.rg->get_buf(task_cmd_dst_rg), 4);
-      enc->bind_srv(ctx_.model_gpu_mgr->materials_allocator().get_buffer_handle(), 11);
+          auto& geo_batch = ctx_.model_gpu_mgr->geometry_batch();
+          enc->bind_srv(geo_batch.mesh_buf.get_buffer_handle(), 5);
+          enc->bind_srv(geo_batch.meshlet_buf.get_buffer_handle(), 6);
+          enc->bind_srv(geo_batch.meshlet_triangles_buf.get_buffer_handle(), 7);
+          enc->bind_srv(geo_batch.meshlet_vertices_buf.get_buffer_handle(), 8);
+          enc->bind_srv(geo_batch.vertex_buf.get_buffer_handle(), 9);
+          enc->bind_srv(ctx_.model_gpu_mgr->instance_mgr().get_instance_data_buf(), 10);
+          enc->bind_srv(ctx_.rg->get_buf(task_cmd_dst_rg), 4);
+          enc->bind_srv(ctx_.model_gpu_mgr->materials_allocator().get_buffer_handle(), 11);
 
-      enc->bind_cbv(globals_cb_buf_.handle, GLOBALS_SLOT, 0, sizeof(GlobalData));
-      enc->bind_cbv(view_cb_suballoc.buf, VIEW_DATA_SLOT, 0, sizeof(ViewData));
+          enc->bind_cbv(globals_cb_buf_.handle, GLOBALS_SLOT, 0, sizeof(GlobalData));
+          enc->bind_cbv(view_cb_suballoc.buf, VIEW_DATA_SLOT, 0, sizeof(ViewData));
 
-      Task2PC task_pc{};
-      task_pc.flags = 0;
-      task_pc.alpha_test_enabled = 0;
-      task_pc.out_draw_count_buf_idx =
-          ctx_.device->get_buf(ctx_.rg->get_buf(indirect_args_rg))->bindless_idx();
-      enc->push_constants(&task_pc, sizeof(task_pc));
+          Task2PC task_pc{};
+          task_pc.flags = 0;
+          task_pc.alpha_test_enabled = 0;
+          task_pc.out_draw_count_buf_idx =
+              ctx_.device->get_buf(ctx_.rg->get_buf(indirect_args_rg))->bindless_idx();
+          enc->push_constants(&task_pc, sizeof(task_pc));
 
-      enc->draw_mesh_threadgroups_indirect(ctx_.rg->get_buf(indirect_args_rg), 0,
-                                           {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+          enc->draw_mesh_threadgroups_indirect(ctx_.rg->get_buf(indirect_args_rg), 0,
+                                               {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
 
-      if (ctx_.imgui_ui_active && ctx_.imgui_renderer != nullptr) {
-        ctx_.imgui_renderer->render(enc,
-                                    {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height},
-                                    ctx_.curr_frame_in_flight_idx);
-      }
+          if (ctx_.imgui_ui_active && ctx_.imgui_renderer != nullptr) {
+            ctx_.imgui_renderer->render(enc,
+                                        {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height},
+                                        ctx_.curr_frame_in_flight_idx);
+          }
 
-      enc->end_rendering();
+          enc->end_rendering();
+        });
+  }
 
-      // Copy indirect groupCountX to CPU readback (outside render pass). Slot matches
-      // frames-in-flight fencing (see on_imgui read index).
-      auto indirect_h = ctx_.rg->get_buf(indirect_args_rg);
-      auto readback_h = draw_count_readback_[readback_fif_i].handle;
-      enc->barrier(indirect_h, PipelineStage::DrawIndirect | PipelineStage::TaskShader,
-                   AccessFlags::IndirectCommandRead, PipelineStage::AllTransfer,
-                   AccessFlags::TransferRead);
-      enc->barrier(readback_h, PipelineStage::AllCommands, AccessFlags::AnyWrite,
-                   PipelineStage::AllTransfer, AccessFlags::TransferWrite);
-      enc->copy_buffer_to_buffer(indirect_h, 0, readback_h, 0, sizeof(uint32_t));
-      enc->barrier(readback_h, PipelineStage::AllTransfer, AccessFlags::TransferWrite,
-                   PipelineStage::Host, AccessFlags::HostRead);
-
-      auto visible_cnt_h = ctx_.rg->get_buf(visible_object_count_rg);
-      auto visible_readback_h = visible_object_count_readback_[readback_fif_i].handle;
-      enc->barrier(visible_cnt_h, PipelineStage::ComputeShader, AccessFlags::ShaderStorageWrite,
-                   PipelineStage::AllTransfer, AccessFlags::TransferRead);
-      enc->barrier(visible_readback_h, PipelineStage::AllCommands, AccessFlags::AnyWrite,
-                   PipelineStage::AllTransfer, AccessFlags::TransferWrite);
+  {
+    auto readback_idx = ctx_.curr_frame_in_flight_idx;
+    auto& p = ctx_.rg->add_transfer_pass("readback_visible_object_count");
+    indirect_args_rg = p.read_buf(indirect_args_rg, PipelineStage::ComputeShader);
+    p.write_buf(ctx_.rg->import_external_buffer(task_cmd_group_count_readback_[readback_idx].handle,
+                                                "task_cmd_group_count_readback"),
+                PipelineStage::AllTransfer);
+    p.set_ex([this, indirect_args_rg, readback_idx](CmdEncoder* enc) {
+      auto visible_cnt_h = ctx_.rg->get_buf(indirect_args_rg);
+      auto visible_readback_h = task_cmd_group_count_readback_[readback_idx].handle;
       enc->copy_buffer_to_buffer(visible_cnt_h, 0, visible_readback_h, 0, sizeof(uint32_t));
-      enc->barrier(visible_readback_h, PipelineStage::AllTransfer, AccessFlags::TransferWrite,
-                   PipelineStage::Host, AccessFlags::HostRead);
+    });
+  }
+
+  {
+    auto& p = ctx_.rg->add_transfer_pass("readback_visible_object_count");
+    visible_object_count_rg = p.read_buf(visible_object_count_rg, PipelineStage::ComputeShader);
+    p.write_buf(ctx_.rg->import_external_buffer(
+                    visible_object_count_readback_[ctx_.curr_frame_in_flight_idx].handle,
+                    "visible_object_count_readback"),
+                PipelineStage::AllTransfer);
+    p.set_ex([this, visible_object_count_rg](CmdEncoder* enc) {
+      auto readback_idx = ctx_.curr_frame_in_flight_idx;
+      auto visible_cnt_h = ctx_.rg->get_buf(visible_object_count_rg);
+      auto visible_readback_h = visible_object_count_readback_[readback_idx].handle;
+      enc->copy_buffer_to_buffer(visible_cnt_h, 0, visible_readback_h, 0, sizeof(uint32_t));
     });
   }
 }
