@@ -125,7 +125,7 @@ void TestRenderer::render(bool imgui_ui_active) {
 
   add_render_graph_passes();
   static int i = 0;
-  bool verbose = i++ == -1;
+  bool verbose = i++ == 0;
   rg_.bake(window_->get_window_size(), verbose);
 
   device_->acquire_next_swapchain_image(swapchain_);

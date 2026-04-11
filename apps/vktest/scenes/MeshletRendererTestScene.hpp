@@ -34,6 +34,7 @@ class MeshletRendererScene final : public ITestScene {
  private:
   void recreate_meshlet_pso();
 
+  rhi::PipelineHandleHolder shade_pso_;
   rhi::PipelineHandleHolder meshlet_pso_;
   rhi::PipelineHandleHolder clear_indirect_pso_;
   rhi::PipelineHandleHolder prepare_meshlets_pso_;

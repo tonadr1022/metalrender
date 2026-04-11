@@ -66,6 +66,11 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
   ASSERT(res);
   ASSERT(res->totals.task_cmd_count == ctx_.model_gpu_mgr->geometry_batch().task_cmd_count);
 
+  shade_pso_ = ctx_.shader_mgr->create_graphics_pipeline({
+      .shaders = {{{"fullscreen_quad", ShaderType::Vertex},
+                   {"meshlet_test/shade", ShaderType::Fragment}}},
+      .name = "meshlet_test/shade",
+  });
   clear_indirect_pso_ = ctx_.shader_mgr->create_compute_pipeline(
       {.path = "test_clear_cnt_buf", .type = rhi::ShaderType::Compute});
   prepare_meshlets_pso_ = ctx_.shader_mgr->create_compute_pipeline(
@@ -266,6 +271,9 @@ void MeshletRendererScene::add_render_graph_passes() {
     });
   }
 
+  RGResourceId gbuffer_a_id =
+      ctx_.rg->create_texture({.format = rhi::TextureFormat::R16G16B16A16Sfloat}, "gbuffer_a");
+
   {
     auto& p = ctx_.rg->add_graphics_pass("meshlet_hello");
     task_cmd_dst_rg =
@@ -274,18 +282,18 @@ void MeshletRendererScene::add_render_graph_passes() {
         p.read_buf(indirect_args_rg, PipelineStage::TaskShader | PipelineStage::DrawIndirect,
                    AccessFlags::IndirectCommandRead);
     visible_object_count_rg = p.copy_from_buf(visible_object_count_rg);
-    p.w_swapchain_tex(ctx_.swapchain);
+    gbuffer_a_id = p.write_color_output(gbuffer_a_id);
     auto depth_att = ctx_.rg->create_texture(
         {.format = TextureFormat::D32float, .size_class = SizeClass::Swapchain},
         "meshlet_hello_depth_att");
 
     auto depth_att_id = p.write_depth_output(depth_att);
     p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, depth_att_id, view_cb_suballoc,
-              globals_cb_buf](CmdEncoder* enc) {
+              globals_cb_buf, gbuffer_a_id](CmdEncoder* enc) {
       glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
       ctx_.device->enqueue_swapchain_for_present(ctx_.swapchain, enc);
       enc->begin_rendering({
-          RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::Clear,
+          RenderAttInfo::color_att(ctx_.rg->get_att_img(gbuffer_a_id), LoadOp::Clear,
                                    ClearValue{.color = clear_color}),
           RenderAttInfo::depth_stencil_att(
               ctx_.rg->get_att_img(depth_att_id), LoadOp::Clear,
@@ -323,12 +331,6 @@ void MeshletRendererScene::add_render_graph_passes() {
       enc->draw_mesh_threadgroups_indirect(ctx_.rg->get_buf(indirect_args_rg), 0,
                                            {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
 
-      if (ctx_.imgui_ui_active && ctx_.imgui_renderer != nullptr) {
-        ctx_.imgui_renderer->render(enc,
-                                    {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height},
-                                    ctx_.curr_frame_in_flight_idx);
-      }
-
       enc->end_rendering();
     });
   }
@@ -343,6 +345,32 @@ void MeshletRendererScene::add_render_graph_passes() {
                                visible_object_count_readback_[ctx_.curr_frame_in_flight_idx].handle,
                                "visible_object_count_readback"),
                            0, 0, sizeof(uint32_t));
+
+  {
+    auto& p = ctx_.rg->add_graphics_pass("shade");
+    gbuffer_a_id = p.sample_tex(gbuffer_a_id);
+    p.w_swapchain_tex(ctx_.swapchain);
+    p.set_ex([this, gbuffer_a_id](CmdEncoder* enc) {
+      enc->begin_rendering({
+          RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::DontCare),
+      });
+      enc->bind_pipeline(shade_pso_);
+      enc->bind_srv(ctx_.rg->get_att_img(gbuffer_a_id), 0);
+      enc->set_wind_order(rhi::WindOrder::CounterClockwise);
+      enc->set_cull_mode(rhi::CullMode::None);
+      glm::uvec2 dims = {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
+      enc->set_viewport({0, 0}, dims);
+      enc->set_scissor({0, 0}, dims);
+      enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
+
+      if (ctx_.imgui_ui_active && ctx_.imgui_renderer != nullptr) {
+        ctx_.imgui_renderer->render(enc,
+                                    {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height},
+                                    ctx_.curr_frame_in_flight_idx);
+      }
+      enc->end_rendering();
+    });
+  }
 }
 
 void MeshletRendererScene::recreate_meshlet_pso() {
