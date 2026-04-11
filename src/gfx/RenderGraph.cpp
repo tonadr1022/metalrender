@@ -22,6 +22,11 @@ namespace gfx {
 
 namespace {
 
+// Pass→producer dependency walk in bake() (white/gray/black DFS).
+constexpr uint8_t kPassDepDfsWhite = 0;
+constexpr uint8_t kPassDepDfsGray = 1;
+constexpr uint8_t kPassDepDfsBlack = 2;
+
 const char* to_string(RGPassType type) {
   switch (type) {
     case RGPassType::Compute:
@@ -415,7 +420,8 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   {
     sink_passes_.clear();
     pass_dependencies_.clear();
-    intermed_pass_visited_.clear();
+    pass_dep_dfs_state_.clear();
+    pass_dep_dfs_path_.clear();
     intermed_pass_stack_.clear();
     pass_stack_.clear();
 
@@ -473,9 +479,12 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
       p.clear();
     }
     pass_dependencies_.resize(passes_.size());
+    pass_dep_dfs_state_.assign(passes_.size(), kPassDepDfsWhite);
+    pass_dep_dfs_path_.clear();
+    pass_dep_dfs_path_.reserve(passes_.size());
     for (uint32_t pass_i : sink_passes_) {
       intermed_pass_stack_.push_back(pass_i);
-      find_deps_recursive(pass_i, 0);
+      find_deps_recursive(pass_i);
     }
     static std::unordered_set<uint32_t> curr_stack_passes;
     static std::unordered_set<uint32_t> visited_passes;
@@ -485,7 +494,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
     visited_passes.reserve(passes_.size());
     pass_stack_.clear();
     for (uint32_t root : intermed_pass_stack_) {
-      dfs(pass_dependencies_, curr_stack_passes, visited_passes, pass_stack_, root);
+      dfs(pass_dependencies_, passes_, curr_stack_passes, visited_passes, pass_stack_, root);
     }
     if (verbose) {
       LINFO("//////////////// Pass Order ////////////////");
@@ -1063,17 +1072,27 @@ AttachmentInfo* RenderGraph::get_tex_att_info(RGResourceHandle handle) {
   return &tex_att_infos_[handle.idx];
 }
 
-void RenderGraph::find_deps_recursive(uint32_t pass_i, uint32_t stack_size) {
-  // TODO: rid of stack size
-  if (stack_size > passes_.size() * 100) {
-    ALWAYS_ASSERT(0 && "RenderGraph: Cycle");
+void RenderGraph::find_deps_recursive(uint32_t pass_i) {
+  ALWAYS_ASSERT(pass_i < pass_dep_dfs_state_.size());
+  const uint8_t st = pass_dep_dfs_state_[pass_i];
+  if (st == kPassDepDfsGray) {
+    LERROR(
+        "RenderGraph: cycle in pass dependency graph (re-entered pass '{}' while resolving "
+        "producer chain). Current DFS stack:",
+        passes_[pass_i].get_name());
+    for (uint32_t p : pass_dep_dfs_path_) {
+      LERROR("  {}", passes_[p].get_name());
+    }
+    LERROR("  -> '{}' (closes the cycle)", passes_[pass_i].get_name());
+    ALWAYS_ASSERT(0 && "RenderGraph: cycle in pass dependency graph");
   }
-  if (intermed_pass_visited_.contains(pass_i)) {
+  if (st == kPassDepDfsBlack) {
     return;
   }
-  intermed_pass_visited_.insert(pass_i);
+
+  pass_dep_dfs_state_[pass_i] = kPassDepDfsGray;
+  pass_dep_dfs_path_.push_back(pass_i);
   auto& pass = passes_[pass_i];
-  stack_size++;
 
   for (const auto& external_read : pass.get_external_reads()) {
     auto writer_pass_it = resource_use_id_to_writer_pass_idx_.find(external_read.id);
@@ -1088,7 +1107,7 @@ void RenderGraph::find_deps_recursive(uint32_t pass_i, uint32_t stack_size) {
     uint32_t write_pass_i = writer_pass_it->second;
     intermed_pass_stack_.emplace_back(write_pass_i);
     pass_dependencies_[pass_i].insert(write_pass_i);
-    find_deps_recursive(write_pass_i, stack_size);
+    find_deps_recursive(write_pass_i);
   }
 
   for (const auto& read : pass.get_internal_reads()) {
@@ -1103,8 +1122,11 @@ void RenderGraph::find_deps_recursive(uint32_t pass_i, uint32_t stack_size) {
     uint32_t write_pass_i = writer_pass_it->second;
     intermed_pass_stack_.emplace_back(write_pass_i);
     pass_dependencies_[pass_i].insert(write_pass_i);
-    find_deps_recursive(write_pass_i, stack_size);
+    find_deps_recursive(write_pass_i);
   }
+
+  pass_dep_dfs_path_.pop_back();
+  pass_dep_dfs_state_[pass_i] = kPassDepDfsBlack;
 }
 
 rhi::TextureHandle RenderGraph::get_att_img(RGResourceId tex_id) const {
@@ -1302,18 +1324,21 @@ RGResourceId RGPass::import_external_buffer(rhi::BufferHandle buf_handle, const 
 }
 
 void RenderGraph::dfs(const std::vector<std::unordered_set<uint32_t>>& pass_dependencies,
+                      const std::vector<Pass>& passes,
                       std::unordered_set<uint32_t>& curr_stack_passes,
                       std::unordered_set<uint32_t>& visited_passes,
                       std::vector<uint32_t>& pass_stack, uint32_t pass) {
   if (curr_stack_passes.contains(pass)) {
-    ASSERT(0 && "Cycle detected");
+    LERROR("RenderGraph: cycle in pass dependency graph during topological sort (pass '{}').",
+           passes[pass].get_name());
+    ALWAYS_ASSERT(0 && "RenderGraph: cycle in pass dependency graph");
   }
   if (visited_passes.contains(pass)) return;
 
   curr_stack_passes.insert(pass);
 
   for (const auto& dep : pass_dependencies[pass]) {
-    dfs(pass_dependencies, curr_stack_passes, visited_passes, pass_stack, dep);
+    dfs(pass_dependencies, passes, curr_stack_passes, visited_passes, pass_stack, dep);
   }
 
   curr_stack_passes.erase(pass);

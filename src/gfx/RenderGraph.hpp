@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -308,9 +309,9 @@ class RenderGraph {
     return external_textures_[handle.idx];
   }
 
-  void find_deps_recursive(uint32_t pass_i, uint32_t stack_size);
+  void find_deps_recursive(uint32_t pass_i);
   static void dfs(const std::vector<std::unordered_set<uint32_t>>& pass_dependencies,
-                  std::unordered_set<uint32_t>& curr_stack_passes,
+                  const std::vector<Pass>& passes, std::unordered_set<uint32_t>& curr_stack_passes,
                   std::unordered_set<uint32_t>& visited_passes, std::vector<uint32_t>& pass_stack,
                   uint32_t pass);
 
@@ -373,8 +374,9 @@ class RenderGraph {
   ResourceRecord create_resource_record(RGResourceType type, uint32_t physical_idx,
                                         std::string_view debug_name);
 
-  // cache for intermediate calc data
-  std::unordered_set<uint32_t> intermed_pass_visited_;
+  // cache for intermediate calc data (pass dependency DFS: 0=white, 1=gray, 2=black)
+  std::vector<uint8_t> pass_dep_dfs_state_;
+  std::vector<uint32_t> pass_dep_dfs_path_;
   std::vector<uint32_t> intermed_pass_stack_;
   rhi::Device* device_{};
   size_t external_texture_count_{};
