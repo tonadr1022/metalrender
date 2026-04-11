@@ -3,6 +3,7 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <array>
 #include <cstdint>
 #include <cstring>
 #include <glm/gtc/matrix_transform.hpp>
@@ -13,6 +14,7 @@
 #include "ResourceManager.hpp"
 #include "Window.hpp"
 #include "core/EAssert.hpp"
+#include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/ImGuiRenderer.hpp"
@@ -21,9 +23,9 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/ShaderManager.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
-#include "gfx/renderer/ModelGPUUploader.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
+#include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Pipeline.hpp"
@@ -31,8 +33,12 @@
 #include "gfx/rhi/Texture.hpp"
 #include "hlsl/default_vertex.h"
 #include "hlsl/shader_constants.h"
+#include "hlsl/shared_cull_data.h"
+#include "hlsl/shared_debug_meshlet_prepare.h"
+#include "hlsl/shared_forward_meshlet.h"
 #include "hlsl/shared_globals.h"
 #include "hlsl/shared_task_cmd.h"
+#include "hlsl/shared_test_clear_buf.h"
 #include "imgui.h"
 #include "ktx.h"
 
@@ -459,12 +465,37 @@ class MeshletRendererScene final : public ITestScene {
         .flags = BufferDescFlags::CPUAccessible,
         .name = "meshlet_hello_view",
     });
+    view_prepare_storage_buf_ = ctx_.device->create_buf_h({
+        .usage = BufferUsage::Storage,
+        .size = align_up(sizeof(ViewData), k_ubo_align),
+        .flags = BufferDescFlags::CPUAccessible,
+        .name = "meshlet_prepare_view_storage",
+    });
     globals_cb_buf_ = ctx_.device->create_buf_h({
         .usage = BufferUsage::Uniform,
         .size = align_up(sizeof(GlobalData), k_ubo_align),
         .flags = BufferDescFlags::CPUAccessible,
         .name = "meshlet_hello_globals",
     });
+    cull_storage_buf_ = ctx_.device->create_buf_h({
+        .usage = BufferUsage::Storage,
+        .size = align_up(sizeof(CullData), k_ubo_align),
+        .flags = BufferDescFlags::CPUAccessible,
+        .name = "meshlet_prepare_cull_storage",
+    });
+
+    clear_indirect_pso_ = ctx_.shader_mgr->create_compute_pipeline(
+        {.path = "test_clear_cnt_buf", .type = ShaderType::Compute});
+    prepare_meshlets_pso_ = ctx_.shader_mgr->create_compute_pipeline(
+        {.path = "debug_meshlet_prepare_meshlets", .type = ShaderType::Compute});
+
+    for (int i = 0; i < k_max_frames_in_flight; i++) {
+      draw_count_readback_[static_cast<size_t>(i)] = ctx_.device->create_buf_h({
+          .size = sizeof(uint32_t),
+          .flags = BufferDescFlags::CPUAccessible,
+          .name = "meshlet_draw_count_readback",
+      });
+    }
 
     fps_camera_.camera().pos = {0.f, 0.f, 3.f};
     fps_camera_.camera().pitch = 0.f;
@@ -499,6 +530,19 @@ class MeshletRendererScene final : public ITestScene {
     }
   }
 
+  void on_imgui() override {
+    ImGui::Begin("Meshlet renderer");
+    ImGui::Checkbox("GPU object frustum cull", &gpu_object_frustum_cull_);
+    uint32_t visible_meshlet_task_groups = 0;
+    if (meshlet_readback_frames_ >= ctx_.device->get_info().frames_in_flight) {
+      const uint32_t curr = ctx_.curr_frame_idx;
+      visible_meshlet_task_groups = *reinterpret_cast<const uint32_t*>(
+          ctx_.device->get_buf(draw_count_readback_[curr].handle)->contents());
+    }
+    ImGui::Text("Visible mesh task groups (GPU): %u", visible_meshlet_task_groups);
+    ImGui::End();
+  }
+
   void on_swapchain_resize() override {
     recreate_meshlet_depth_tex();
     recreate_meshlet_pso();
@@ -511,30 +555,97 @@ class MeshletRendererScene final : public ITestScene {
       return;
     }
 
-    RGResourceId task_cmd_rg = ctx_.rg->create_buffer(
-        {.size = std::max(static_cast<size_t>(tc) * sizeof(TaskCmd), size_t{256}),
-         .defer_reuse = true},
-        "meshlet_hello_task_cmds");
+    meshlet_readback_frames_++;
 
-    auto& upload_pass = ctx_.rg->add_transfer_pass("meshlet_hello_task_cmd_upload");
-    upload_pass.write_buf(task_cmd_rg, PipelineStage::AllTransfer);
-    upload_pass.set_ex([this, task_cmd_rg, tc](CmdEncoder* enc) {
-      std::vector<TaskCmd> cmds;
-      ModelInstance* inst = ResourceManager::get().get_model(test_model_handle_);
-      ASSERT(inst);
-      const ModelGPUResources* res = ctx_.model_gpu_mgr->model_resources(inst->model_gpu_handle);
-      ASSERT(res);
-      append_meshlet_task_cmds(*res, instance_alloc_.instance_data_alloc.offset, cmds);
-      ASSERT(static_cast<uint32_t>(cmds.size()) == tc);
-      auto bytes = static_cast<uint32_t>(cmds.size() * sizeof(TaskCmd));
-      auto upload = ctx_.frame_staging->alloc(bytes);
-      std::memcpy(upload.write_ptr, cmds.data(), bytes);
-      enc->copy_buffer_to_buffer(upload.buf, upload.offset, ctx_.rg->get_buf(task_cmd_rg), 0,
-                                 bytes);
+    const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
+                         std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height));
+    glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.f), aspect, 0.1f, 100.f);
+    proj[1][1] = -proj[1][1];
+    fps_camera_.camera().calc_vectors();
+    const glm::mat4 view = fps_camera_.camera().get_view_mat();
+    const glm::mat4 vp = proj * view;
+
+    ViewData vd{};
+    vd.vp = vp;
+    vd.inv_vp = glm::inverse(vp);
+    vd.view = view;
+    vd.proj = proj;
+    vd.inv_proj = glm::inverse(proj);
+    vd.camera_pos = glm::vec4(fps_camera_.camera().pos, 1.f);
+    std::memcpy(ctx_.device->get_buf(view_cb_buf_.handle)->contents(), &vd, sizeof(vd));
+    std::memcpy(ctx_.device->get_buf(view_prepare_storage_buf_.handle)->contents(), &vd,
+                sizeof(vd));
+
+    const auto normalize_plane = [](const glm::vec4& plane) {
+      const glm::vec3 n = glm::vec3(plane);
+      const float inv_len = 1.f / glm::length(n);
+      return glm::vec4(n * inv_len, plane.w * inv_len);
+    };
+    const glm::mat4 projection_transpose = glm::transpose(proj);
+    const glm::vec4 frustum_x = normalize_plane(projection_transpose[0] + projection_transpose[3]);
+    const glm::vec4 frustum_y = normalize_plane(projection_transpose[1] + projection_transpose[3]);
+    CullData cd{};
+    cd.frustum = glm::vec4(frustum_x.x, frustum_x.z, frustum_y.y, frustum_y.z);
+    cd.z_near = 0.1f;
+    cd.z_far = 100.f;
+    cd.p00 = proj[0][0];
+    cd.p11 = proj[1][1];
+    cd.pyramid_width = 0;
+    cd.pyramid_height = 0;
+    cd.pyramid_mip_count = 0;
+    cd.paused = 0;
+    std::memcpy(ctx_.device->get_buf(cull_storage_buf_.handle)->contents(), &cd, sizeof(cd));
+
+    const size_t task_cmd_bytes = std::max(static_cast<size_t>(tc) * sizeof(TaskCmd), size_t{256});
+    RGResourceId task_cmd_dst_rg = ctx_.rg->create_buffer(
+        {.size = task_cmd_bytes, .defer_reuse = true}, "meshlet_hello_task_cmds");
+    RGResourceId indirect_args_rg = ctx_.rg->create_buffer(
+        {.size = std::max(size_t{256}, sizeof(uint32_t) * 3), .defer_reuse = true},
+        "meshlet_hello_indirect_args");
+
+    const uint32_t max_draws = ctx_.model_gpu_mgr->instance_mgr().stats().max_instance_data_count;
+
+    auto& clear_indirect_pass = ctx_.rg->add_compute_pass("meshlet_clear_indirect");
+    clear_indirect_pass.write_buf(indirect_args_rg, PipelineStage::ComputeShader);
+    clear_indirect_pass.set_ex([this, indirect_args_rg](CmdEncoder* enc) {
+      enc->bind_pipeline(clear_indirect_pso_);
+      TestClearBufPC pc{};
+      pc.buf_idx = ctx_.device->get_buf(ctx_.rg->get_buf(indirect_args_rg))->bindless_idx();
+      enc->push_constants(&pc, sizeof(pc));
+      enc->dispatch_compute({1, 1, 1}, {1, 1, 1});
+    });
+
+    auto& prepare_pass = ctx_.rg->add_compute_pass("meshlet_prepare_meshlets");
+    prepare_pass.write_buf(task_cmd_dst_rg, PipelineStage::ComputeShader);
+    indirect_args_rg = prepare_pass.rw_buf(indirect_args_rg, PipelineStage::ComputeShader);
+    prepare_pass.set_ex([this, task_cmd_dst_rg, indirect_args_rg, max_draws](CmdEncoder* enc) {
+      enc->bind_pipeline(prepare_meshlets_pso_);
+      auto& geo_batch = ctx_.model_gpu_mgr->geometry_batch();
+      DebugMeshletPreparePC pc{};
+      pc.dst_task_cmd_buf_idx =
+          ctx_.device->get_buf(ctx_.rg->get_buf(task_cmd_dst_rg))->bindless_idx();
+      pc.draw_cnt_buf_idx =
+          ctx_.device->get_buf(ctx_.rg->get_buf(indirect_args_rg))->bindless_idx();
+      pc.instance_data_buf_idx =
+          ctx_.device->get_buf(ctx_.model_gpu_mgr->instance_mgr().get_instance_data_buf())
+              ->bindless_idx();
+      pc.mesh_data_buf_idx =
+          ctx_.device->get_buf(geo_batch.mesh_buf.get_buffer_handle())->bindless_idx();
+      pc.view_data_buf_idx = ctx_.device->get_buf(view_prepare_storage_buf_.handle)->bindless_idx();
+      pc.view_data_offset_bytes = 0;
+      pc.cull_data_buf_idx = ctx_.device->get_buf(cull_storage_buf_.handle)->bindless_idx();
+      pc.cull_data_offset_bytes = 0;
+      pc.max_draws = max_draws;
+      pc.culling_enabled = gpu_object_frustum_cull_ ? 1u : 0u;
+      enc->push_constants(&pc, sizeof(pc));
+      enc->dispatch_compute({align_divide_up(static_cast<uint64_t>(max_draws), 64ull), 1, 1},
+                            {64, 1, 1});
     });
 
     auto& p = ctx_.rg->add_graphics_pass("meshlet_hello");
-    p.read_buf(task_cmd_rg, PipelineStage::MeshShader | PipelineStage::TaskShader);
+    p.read_buf(task_cmd_dst_rg, PipelineStage::MeshShader | PipelineStage::TaskShader);
+    p.read_buf(indirect_args_rg, PipelineStage::TaskShader | PipelineStage::DrawIndirect,
+               AccessFlags::IndirectCommandRead);
     p.w_swapchain_tex(ctx_.swapchain);
     auto depth_att = ctx_.rg->create_texture(
         {
@@ -544,27 +655,11 @@ class MeshletRendererScene final : public ITestScene {
         "meshlet_hello_depth_att");
 
     auto depth_att_id = p.write_depth_output(depth_att);
-    p.set_ex([this, task_cmd_rg, tc, depth_att_id](CmdEncoder* enc) {
+    const uint32_t readback_fif_i =
+        static_cast<uint32_t>(ctx_.curr_frame_idx % k_max_frames_in_flight);
+    p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, depth_att_id,
+              readback_fif_i](CmdEncoder* enc) {
       flush_pending_model_textures(*ctx_.model_gpu_mgr, *ctx_.device, *ctx_.frame_staging, enc);
-
-      const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
-                           std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height));
-      glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.f), aspect, 0.1f, 100.f);
-      proj[1][1] = -proj[1][1];
-      fps_camera_.camera().calc_vectors();
-      const glm::mat4 view = fps_camera_.camera().get_view_mat();
-      const float t = ctx_.time_sec;
-      const glm::mat4 model = glm::rotate(glm::mat4(1.f), t * 0.5f, glm::vec3(0.f, 1.f, 0.f));
-      const glm::mat4 vp = proj * view * model;
-
-      ViewData vd{};
-      vd.vp = vp;
-      vd.inv_vp = glm::inverse(vp);
-      vd.view = view * model;
-      vd.proj = proj;
-      vd.inv_proj = glm::inverse(proj);
-      vd.camera_pos = glm::vec4(fps_camera_.camera().pos, 1.f);
-      std::memcpy(ctx_.device->get_buf(view_cb_buf_.handle)->contents(), &vd, sizeof(vd));
 
       GlobalData gd{};
       gd.render_mode = DEBUG_RENDER_MODE_NONE;
@@ -595,14 +690,41 @@ class MeshletRendererScene final : public ITestScene {
       enc->bind_srv(geo_batch.meshlet_vertices_buf.get_buffer_handle(), 8);
       enc->bind_srv(geo_batch.vertex_buf.get_buffer_handle(), 9);
       enc->bind_srv(ctx_.model_gpu_mgr->instance_mgr().get_instance_data_buf(), 10);
-      enc->bind_srv(ctx_.rg->get_buf(task_cmd_rg), 4);
+      enc->bind_srv(ctx_.rg->get_buf(task_cmd_dst_rg), 4);
       enc->bind_srv(ctx_.model_gpu_mgr->materials_allocator().get_buffer_handle(), 11);
 
       enc->bind_cbv(globals_cb_buf_.handle, GLOBALS_SLOT, 0, sizeof(GlobalData));
       enc->bind_cbv(view_cb_buf_.handle, VIEW_DATA_SLOT, 0, sizeof(ViewData));
 
-      enc->draw_mesh_threadgroups({tc, 1, 1}, {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+      Task2PC task_pc{};
+      task_pc.flags = 0;
+      task_pc.alpha_test_enabled = 0;
+      task_pc.out_draw_count_buf_idx =
+          ctx_.device->get_buf(ctx_.rg->get_buf(indirect_args_rg))->bindless_idx();
+      enc->push_constants(&task_pc, sizeof(task_pc));
+
+      enc->draw_mesh_threadgroups_indirect(ctx_.rg->get_buf(indirect_args_rg), 0,
+                                           {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+
+      if (ctx_.imgui_ui_active && ctx_.imgui_renderer != nullptr) {
+        ctx_.imgui_renderer->render(
+            enc, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height}, ctx_.curr_frame_idx);
+      }
+
       enc->end_rendering();
+
+      // Copy indirect groupCountX to CPU readback (outside render pass). Slot matches
+      // frames-in-flight fencing (see on_imgui read index).
+      auto indirect_h = ctx_.rg->get_buf(indirect_args_rg);
+      auto readback_h = draw_count_readback_[readback_fif_i].handle;
+      enc->barrier(indirect_h, PipelineStage::DrawIndirect | PipelineStage::TaskShader,
+                   AccessFlags::IndirectCommandRead, PipelineStage::AllTransfer,
+                   AccessFlags::TransferRead);
+      enc->barrier(readback_h, PipelineStage::AllCommands, AccessFlags::AnyWrite,
+                   PipelineStage::AllTransfer, AccessFlags::TransferWrite);
+      enc->copy_buffer_to_buffer(indirect_h, 0, readback_h, 0, sizeof(uint32_t));
+      enc->barrier(readback_h, PipelineStage::AllTransfer, AccessFlags::TransferWrite,
+                   PipelineStage::Host, AccessFlags::HostRead);
     });
   }
 
@@ -641,12 +763,19 @@ class MeshletRendererScene final : public ITestScene {
   }
 
   PipelineHandleHolder meshlet_pso_;
+  PipelineHandleHolder clear_indirect_pso_;
+  PipelineHandleHolder prepare_meshlets_pso_;
   // TextureHandleHolder meshlet_depth_tex_;
   BufferHandleHolder view_cb_buf_;
+  BufferHandleHolder view_prepare_storage_buf_;
   BufferHandleHolder globals_cb_buf_;
+  BufferHandleHolder cull_storage_buf_;
   FpsCameraController fps_camera_;
   ModelHandle test_model_handle_;
   InstanceMgr::Alloc instance_alloc_{};
+  bool gpu_object_frustum_cull_{true};
+  std::array<BufferHandleHolder, k_max_frames_in_flight> draw_count_readback_{};
+  uint32_t meshlet_readback_frames_{0};
 };
 
 }  // namespace

@@ -206,6 +206,12 @@ void TestRenderer::add_render_graph_passes() {
   scene_->add_render_graph_passes();
 }
 
+void TestRenderer::imgui_scene_overlay() {
+  if (scene_) {
+    scene_->on_imgui();
+  }
+}
+
 void TestRenderer::init_imgui() {
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();

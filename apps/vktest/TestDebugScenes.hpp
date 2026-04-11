@@ -60,6 +60,7 @@ class ITestScene {
   virtual void on_frame(const TestSceneContext&) {}
   virtual void on_cursor_pos(double, double) {}
   virtual void on_key_event(int, int, int) {}
+  virtual void on_imgui() {}
 
  protected:
   [[maybe_unused]] const TestSceneContext& ctx_;

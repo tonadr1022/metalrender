@@ -106,9 +106,10 @@ void TestApp::run() {
   device_->shutdown();
 }
 
-void TestApp::on_imgui() const {
+void TestApp::on_imgui() {
   ZoneScoped;
   ImGui::Begin("TestApp");
   ImGui::Text("ImGui enabled: %d", imgui_enabled_);
   ImGui::End();
+  renderer_->imgui_scene_overlay();
 }

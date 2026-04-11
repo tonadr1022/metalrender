@@ -30,3 +30,7 @@ metalrender
 ### Validating HLSL changes
 
 Run `teng-shaderc` on shaders you change; after editing a shared `.hlsli` / header include, use `--all` (as `agent_verify.sh` does) so dependents stay in sync.
+
+### Mindset
+
+No shortcuts. Changes need to consider long term maintainability. Be thorough

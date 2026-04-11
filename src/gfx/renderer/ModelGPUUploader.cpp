@@ -1,6 +1,5 @@
 #include "ModelGPUUploader.hpp"
 
-#include <algorithm>
 #include <tracy/Tracy.hpp>
 
 #include "core/Util.hpp"
@@ -13,32 +12,10 @@
 #include "hlsl/shader_constants.h"
 #include "hlsl/shared_instance_data.h"
 #include "hlsl/shared_mesh_data.h"
-#include "hlsl/shared_task_cmd.h"
 
 namespace TENG_NAMESPACE {
 
 namespace gfx {
-
-void append_meshlet_task_cmds(const ModelGPUResources& res, uint32_t instance_data_base,
-                              std::vector<TaskCmd>& out_cmds) {
-  const uint32_t mesh_alloc_off = res.static_draw_batch_alloc.mesh_alloc.offset;
-  for (size_t i = 0; i < res.base_instance_datas.size(); ++i) {
-    const uint32_t mesh_idx = res.base_instance_datas[i].mesh_id - mesh_alloc_off;
-    const uint32_t meshlet_base = res.gpu_meshlet_base[mesh_idx];
-    const uint32_t meshlet_count = res.meshes[mesh_idx].meshlet_count;
-    const uint32_t task_groups = align_divide_up(meshlet_count, K_TASK_TG_SIZE);
-    const uint32_t instance_id = instance_data_base + static_cast<uint32_t>(i);
-    for (uint32_t g = 0; g < task_groups; ++g) {
-      TaskCmd cmd{};
-      cmd.instance_id = instance_id;
-      cmd.task_offset = meshlet_base + g * K_TASK_TG_SIZE;
-      cmd.group_base = g * K_TASK_TG_SIZE;
-      cmd.task_count = std::min<uint32_t>(K_TASK_TG_SIZE, meshlet_count - g * K_TASK_TG_SIZE);
-      cmd.late_draw_visibility = 1u;
-      out_cmds.push_back(cmd);
-    }
-  }
-}
 
 namespace {
 
