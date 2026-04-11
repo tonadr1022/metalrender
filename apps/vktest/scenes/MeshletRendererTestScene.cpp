@@ -2,6 +2,7 @@
 
 #include "ResourceManager.hpp"
 #include "Window.hpp"
+#include "core/Logger.hpp"
 #include "core/Util.hpp"
 #include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
@@ -35,11 +36,12 @@ std::filesystem::path resolve_model_path(const std::filesystem::path& resource_d
   return path;
 }
 
-void add_buffer_readback_copy(RenderGraph& rg, std::string_view pass_name, RGResourceId src_buf,
-                              RGResourceId dst_rg_id, size_t src_offset, size_t dst_offset,
-                              size_t size_bytes) {
+void add_buffer_readback_copy2(RenderGraph& rg, std::string_view pass_name, RGResourceId& src_buf,
+                               RGResourceId dst_rg_id, size_t src_offset, size_t dst_offset,
+                               size_t size_bytes) {
   auto& p = rg.add_transfer_pass(pass_name);
-  p.copy_from_buf(src_buf);
+  auto old_src_buf = src_buf;
+  src_buf = p.copy_from_buf(old_src_buf);
   p.write_buf(dst_rg_id, rhi::PipelineStage::AllTransfer);
   p.set_ex([&rg, src_buf, dst_rg_id, dst_offset, src_offset, size_bytes](rhi::CmdEncoder* enc) {
     enc->copy_buffer_to_buffer(rg.get_buf(src_buf), src_offset, rg.get_external_buffer(dst_rg_id),
@@ -335,16 +337,18 @@ void MeshletRendererScene::add_render_graph_passes() {
     });
   }
 
-  add_buffer_readback_copy(*ctx_.rg, "readback_task_cmd_group_count", indirect_args_rg,
-                           ctx_.rg->import_external_buffer(
-                               task_cmd_group_count_readback_[ctx_.curr_frame_in_flight_idx].handle,
-                               "task_cmd_group_count_readback"),
-                           0, 0, sizeof(uint32_t));
-  add_buffer_readback_copy(*ctx_.rg, "readback_visible_object_count", visible_object_count_rg,
-                           ctx_.rg->import_external_buffer(
-                               visible_object_count_readback_[ctx_.curr_frame_in_flight_idx].handle,
-                               "visible_object_count_readback"),
-                           0, 0, sizeof(uint32_t));
+  add_buffer_readback_copy2(
+      *ctx_.rg, "readback_task_cmd_group_count", indirect_args_rg,
+      ctx_.rg->import_external_buffer(
+          task_cmd_group_count_readback_[ctx_.curr_frame_in_flight_idx].handle,
+          "task_cmd_group_count_readback"),
+      0, 0, sizeof(uint32_t));
+  add_buffer_readback_copy2(
+      *ctx_.rg, "readback_visible_object_count", visible_object_count_rg,
+      ctx_.rg->import_external_buffer(
+          visible_object_count_readback_[ctx_.curr_frame_in_flight_idx].handle,
+          "visible_object_count_readback"),
+      0, 0, sizeof(uint32_t));
 
   {
     auto& p = ctx_.rg->add_graphics_pass("shade");
@@ -374,16 +378,10 @@ void MeshletRendererScene::add_render_graph_passes() {
 }
 
 void MeshletRendererScene::recreate_meshlet_pso() {
-  auto tex_h = ctx_.swapchain->get_texture(0);
-  if (!tex_h.is_valid()) {
-    return;
-  }
-  const auto fmt = ctx_.device->get_tex(tex_h)->desc().format;
   meshlet_pso_ = ctx_.shader_mgr->create_graphics_pipeline({
       .shaders = {{"debug_meshlet_hello", ShaderType::Task},
                   {"debug_meshlet_hello", ShaderType::Mesh},
                   {"debug_meshlet_hello", ShaderType::Fragment}},
-      .rendering = {.color_formats = {fmt}, .depth_format = TextureFormat::D32float},
       .depth_stencil = GraphicsPipelineCreateInfo::depth_enable(true, CompareOp::Less),
       .name = "debug_meshlet_hello",
   });

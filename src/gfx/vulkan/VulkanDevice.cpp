@@ -1475,7 +1475,6 @@ bool VulkanDevice::recreate_swapchain(const rhi::SwapchainDesc& desc, rhi::Swapc
   VkPresentModeKHR selected_present_mode{VK_PRESENT_MODE_FIFO_KHR};
   // prefer mailbox for vsync on
   auto vsync = desc.vsync;
-  vsync = false;
   VkPresentModeKHR preferred_present_mode{vsync ? VK_PRESENT_MODE_MAILBOX_KHR
                                                 : VK_PRESENT_MODE_IMMEDIATE_KHR};
   for (uint32_t i = 0; i < present_mode_count; i++) {

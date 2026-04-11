@@ -444,9 +444,9 @@ void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src
   {
     VkImageMemoryBarrier2 img_barrier{.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
     img_barrier.image = tex->image();
-    img_barrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
-    img_barrier.srcStageMask = VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT;
-    img_barrier.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
+    img_barrier.srcAccessMask = 0;
+    img_barrier.srcStageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+    img_barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
     img_barrier.dstStageMask = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
     img_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     img_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
@@ -472,9 +472,9 @@ void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src
       VkImageMemoryBarrier2 img_barrier{.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2};
       img_barrier.image = tex->image();
       img_barrier.srcAccessMask = VK_ACCESS_2_MEMORY_WRITE_BIT;
-      img_barrier.srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT;
+      img_barrier.srcStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT | VK_PIPELINE_STAGE_2_COPY_BIT;
       img_barrier.dstAccessMask = VK_ACCESS_2_MEMORY_READ_BIT;
-      img_barrier.dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT;
+      img_barrier.dstStageMask = VK_PIPELINE_STAGE_2_BLIT_BIT | VK_PIPELINE_STAGE_2_COPY_BIT;
       img_barrier.oldLayout = curr_layout;
       curr_layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
       img_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
