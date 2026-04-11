@@ -14,6 +14,7 @@
 groupshared uint g_visible_in_group;
 
 CONSTANT_BUFFER(ViewData, view_data, VIEW_DATA_SLOT);
+CONSTANT_BUFFER(CullData, cull_data, 4);
 
 [NumThreads(64, 1, 1)] void main(uint dtid
                                  : SV_DispatchThreadID, uint gtid
@@ -40,9 +41,6 @@ CONSTANT_BUFFER(ViewData, view_data, VIEW_DATA_SLOT);
 
   bool visible = valid_mesh;
   if (valid_mesh && pc.culling_enabled != 0) {
-    CullData cull_data =
-        bindless_buffers[pc.cull_data_buf_idx].Load<CullData>(pc.cull_data_offset_bytes);
-
     float3 world_center =
         rotate_quat(instance_data.scale * mesh_data.center, instance_data.rotation) +
         instance_data.translation;

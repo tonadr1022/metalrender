@@ -9,14 +9,11 @@
 #include <vector>
 
 #include "Camera.hpp"
-#include "MeshletRendererTestScene.hpp"
-#include "ResourceManager.hpp"
 #include "core/EAssert.hpp"
 #include "core/Util.hpp"
 #include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
-#include "gfx/ModelLoader.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/rhi/Buffer.hpp"
@@ -27,7 +24,7 @@
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
 #include "hlsl/default_vertex.h"
-#include "ktx.h"
+#include "scenes/MeshletRendererTestScene.hpp"
 
 using namespace teng;
 using namespace teng::gfx;
@@ -36,20 +33,6 @@ using namespace teng::gfx::rhi;
 namespace teng::gfx {
 
 namespace {
-
-[[maybe_unused]] constexpr const char* sponza_path = "Models/Sponza/glTF/Sponza.gltf";
-[[maybe_unused]] constexpr const char* chessboard_path =
-    "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf";
-[[maybe_unused]] constexpr const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
-[[maybe_unused]] constexpr const char* cube_path = "Models/Cube/glTF/Cube.gltf";
-
-std::filesystem::path resolve_model_path(const std::filesystem::path& resource_dir,
-                                         const std::string& path) {
-  if (path.starts_with("Models")) {
-    return resource_dir / "models" / "gltf" / path;
-  }
-  return path;
-}
 
 class ComputePlusVertexScene final : public ITestScene {
  public:
