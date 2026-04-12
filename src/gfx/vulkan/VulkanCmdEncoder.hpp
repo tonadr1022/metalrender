@@ -61,7 +61,7 @@ class VulkanCmdEncoder : public rhi::CmdEncoder {
   void push_constants(void* data, size_t size) override;
   void end_encoding() override;
   void set_label(const std::string& /*label*/) override { ASSERT(0); }
-  void set_viewport(glm::uvec2 min, glm::uvec2 extent) override;
+  void set_viewport(glm::ivec2 min, glm::ivec2 extent) override;
   void set_scissor(glm::uvec2 min, glm::uvec2 extent) override;
 
   void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset, size_t src_bytes_per_row,

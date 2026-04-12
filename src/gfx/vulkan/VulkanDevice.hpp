@@ -96,6 +96,7 @@ class VulkanDevice : public rhi::Device {
 
   rhi::SamplerHandle create_sampler(const rhi::SamplerDesc& desc) override;
   [[nodiscard]] const Info& get_info() const override { return info_; }
+  [[nodiscard]] rhi::GpuAdapterInfo query_gpu_adapter_info() const override;
 
   rhi::CmdEncoder* begin_cmd_encoder(rhi::QueueType queue_type) override;
   void submit_frame() override;

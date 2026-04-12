@@ -394,7 +394,7 @@ void VulkanCmdEncoder::end_encoding() {
   VK_CHECK(vkEndCommandBuffer(cmd()));
 }
 
-void VulkanCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 extent) {
+void VulkanCmdEncoder::set_viewport(glm::ivec2 min, glm::ivec2 extent) {
   VkViewport viewport{
       .x = static_cast<float>(min.x),
       .y = static_cast<float>(min.y),
@@ -407,7 +407,8 @@ void VulkanCmdEncoder::set_viewport(glm::uvec2 min, glm::uvec2 extent) {
   // TODO: move this to set_scissor
   VkRect2D scissor{
       .offset = {0, 0},
-      .extent = {extent.x, extent.y},
+      // TODO: extract this.
+      .extent = {static_cast<uint32_t>(extent.x), static_cast<uint32_t>(std::abs(extent.y))},
   };
   vkCmdSetScissor(cmd(), 0, 1, &scissor);
 }

@@ -111,6 +111,7 @@ class Device : public rhi::Device {
   void submit_frame() override;
   void immediate_submit(rhi::QueueType queue_type, ImmediateSubmitFn&& submit_fn) override;
   [[nodiscard]] const Info& get_info() const override { return info_; }
+  [[nodiscard]] rhi::GpuAdapterInfo query_gpu_adapter_info() const override;
 
   void use_bindless_buffer(MTL::RenderCommandEncoder* enc);
   rhi::CmdEncoder* begin_cmd_encoder(rhi::QueueType queue_type) override;

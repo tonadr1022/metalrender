@@ -156,6 +156,25 @@ MTL::SamplerMipFilter convert_mip_filter(rhi::FilterMode m) {
 
 }  // namespace
 
+rhi::GpuAdapterInfo Device::query_gpu_adapter_info() const {
+  rhi::GpuAdapterInfo out{};
+  if (!device_) {
+    return out;
+  }
+  if (NS::String* name = device_->name()) {
+    out.name = name->utf8String();
+  }
+  if (device_->isLowPower()) {
+    out.kind = rhi::GpuAdapterKind::Integrated;
+  } else if (!device_->hasUnifiedMemory()) {
+    out.kind = rhi::GpuAdapterKind::Discrete;
+  } else {
+    out.kind = rhi::GpuAdapterKind::Integrated;
+  }
+  out.api_version = "Metal";
+  return out;
+}
+
 bool Device::init(const InitInfo& init_info, const DeviceInitInfo& metal_init_info) {
   ZoneScoped;
   // TODO: actually check for mtl4 support

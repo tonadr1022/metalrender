@@ -1,7 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <span>
+#include <string>
 
 #include "GFXTypes.hpp"
 #include "core/Config.hpp"
@@ -32,6 +34,24 @@ enum class GraphicsCapability : uint32_t {
 };
 
 AUGMENT_ENUM_CLASS(GraphicsCapability);
+
+enum class GpuAdapterKind : uint8_t {
+  Unknown,
+  Integrated,
+  Discrete,
+  Virtual,
+  Cpu,
+  Other,
+};
+
+struct GpuAdapterInfo {
+  std::string name;
+  GpuAdapterKind kind{GpuAdapterKind::Unknown};
+  std::string api_version;
+  std::string driver_version;
+  uint32_t vendor_id{0};
+  uint32_t device_id{0};
+};
 
 class Device {
  public:
@@ -141,6 +161,7 @@ class Device {
                                   uint32_t query_count, std::span<uint64_t> out_timestamps) = 0;
 
   [[nodiscard]] virtual const Info &get_info() const = 0;
+  [[nodiscard]] virtual GpuAdapterInfo query_gpu_adapter_info() const = 0;
   [[nodiscard]] size_t frames_in_flight() const { return get_info().frames_in_flight; }
   virtual void on_imgui() {}
 

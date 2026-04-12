@@ -357,7 +357,7 @@ void CmdEncoderBase<UseMTL4>::bind_pipeline(rhi::PipelineHandle handle) {
 }
 
 template <bool UseMTL4>
-void CmdEncoderBase<UseMTL4>::set_viewport(glm::uvec2 min, glm::uvec2 extent) {
+void CmdEncoderBase<UseMTL4>::set_viewport(glm::ivec2 min, glm::ivec2 extent) {
   MTL::Viewport vp;
   vp.originX = min.x;
   vp.originY = min.y;

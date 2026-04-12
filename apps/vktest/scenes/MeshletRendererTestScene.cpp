@@ -48,6 +48,12 @@ glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
     0.0f, f, 0.0f, 0.0f,
     0.0f, 0.0f, 0.0f, -1.0f,
     0.0f, 0.0f, z_near, 0.0f};
+	// float f = 1.0f / tanf(fov_y / 2.0f);
+	// return {
+	//     f / aspect, 0.0f, 0.0f, 0.0f,
+	//     0.0f, f, 0.0f, 0.0f,
+	//     0.0f, 0.0f, 0.0f, 1.0f,
+	//     0.0f, 0.0f, z_near, 0.0f};
   // clang-format on
 }
 
@@ -90,9 +96,9 @@ void encode_meshlet_test_draw_pass(
     RGResourceId meshlet_stats_rg, RGResourceId task_cmd_rg, rhi::BufferHandle indirect_buf,
     InstanceMgr& inst_mgr, std::span<const rhi::PipelineHandleHolder> psos, rhi::CmdEncoder* enc) {
   ASSERT(psos.size() == static_cast<size_t>(AlphaMaskType::Count));
-  enc->set_wind_order(rhi::WindOrder::CounterClockwise);
-  enc->set_cull_mode(rhi::CullMode::Back);
-  enc->set_viewport({0, 0}, viewport_dims);
+  enc->set_wind_order(rhi::WindOrder::Clockwise);
+  enc->set_cull_mode(rhi::CullMode::None);
+  enc->set_viewport({0, 0}, {viewport_dims.x, viewport_dims.y});
 
   enc->bind_uav(rg.get_external_buffer(meshlet_vis_rg), 1);
   if (late_pass) {
@@ -715,7 +721,7 @@ void MeshletRendererScene::add_render_graph_passes() {
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
       enc->set_cull_mode(rhi::CullMode::None);
       glm::uvec2 dims = {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
-      enc->set_viewport({0, 0}, dims);
+      enc->set_viewport({0, 0}, {dims.x, dims.y});
       enc->set_scissor({0, 0}, dims);
 
       const uint32_t gbuffer_bindless =

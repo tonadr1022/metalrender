@@ -78,7 +78,7 @@ class CmdEncoderBase : public rhi::CmdEncoder {
   void end_rendering() override;
   void end_encoding() override;
   void bind_pipeline(rhi::PipelineHandle handle) override;
-  void set_viewport(glm::uvec2 min, glm::uvec2 extent) override;
+  void set_viewport(glm::ivec2 min, glm::ivec2 extent) override;
   void set_scissor(glm::uvec2 min, glm::uvec2 extent) override;
   void draw_primitives(rhi::PrimitiveTopology topology, size_t vertex_start, size_t count,
                        size_t instance_count) override;

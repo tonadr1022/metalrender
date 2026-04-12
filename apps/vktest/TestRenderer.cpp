@@ -221,8 +221,52 @@ void TestRenderer::add_render_graph_passes() {
 }
 
 void TestRenderer::imgui_scene_overlay() {
+  imgui_device_info();
   if (scene_) {
     scene_->on_imgui();
+  }
+}
+
+namespace {
+
+const char* gpu_adapter_kind_str(rhi::GpuAdapterKind k) {
+  switch (k) {
+    case rhi::GpuAdapterKind::Integrated:
+      return "Integrated";
+    case rhi::GpuAdapterKind::Discrete:
+      return "Discrete";
+    case rhi::GpuAdapterKind::Virtual:
+      return "Virtual";
+    case rhi::GpuAdapterKind::Cpu:
+      return "CPU";
+    case rhi::GpuAdapterKind::Other:
+      return "Other";
+    case rhi::GpuAdapterKind::Unknown:
+    default:
+      return "Unknown";
+  }
+}
+
+}  // namespace
+
+void TestRenderer::imgui_device_info() {
+  const rhi::GpuAdapterInfo info = device_->query_gpu_adapter_info();
+  ImGui::Separator();
+  ImGui::TextUnformatted("GPU / adapter");
+  if (!info.name.empty()) {
+    ImGui::TextWrapped("Name: %s", info.name.c_str());
+  } else {
+    ImGui::TextUnformatted("Name: (unavailable)");
+  }
+  ImGui::Text("Kind: %s", gpu_adapter_kind_str(info.kind));
+  if (!info.api_version.empty()) {
+    ImGui::Text("API: %s", info.api_version.c_str());
+  }
+  if (!info.driver_version.empty()) {
+    ImGui::Text("Driver: %s", info.driver_version.c_str());
+  }
+  if (info.vendor_id != 0 || info.device_id != 0) {
+    ImGui::Text("Vendor ID: 0x%08X  Device ID: 0x%08X", info.vendor_id, info.device_id);
   }
 }
 

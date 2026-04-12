@@ -4,6 +4,7 @@
 #include <volk.h>
 #include <VkBootstrap.h>
 #include <algorithm>
+#include <format>
 #include <fstream>
 #include <mutex>
 #include <tracy/Tracy.hpp>
@@ -279,6 +280,43 @@ void check_vkb_result(const char* err_msg, const auto& vkb_result) {
 }
 
 }  // namespace
+
+rhi::GpuAdapterInfo VulkanDevice::query_gpu_adapter_info() const {
+  rhi::GpuAdapterInfo out{};
+  if (physical_device_ == VK_NULL_HANDLE) {
+    return out;
+  }
+  VkPhysicalDeviceProperties props{};
+  vkGetPhysicalDeviceProperties(physical_device_, &props);
+  out.name = props.deviceName;
+  switch (props.deviceType) {
+    case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+      out.kind = rhi::GpuAdapterKind::Integrated;
+      break;
+    case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+      out.kind = rhi::GpuAdapterKind::Discrete;
+      break;
+    case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+      out.kind = rhi::GpuAdapterKind::Virtual;
+      break;
+    case VK_PHYSICAL_DEVICE_TYPE_CPU:
+      out.kind = rhi::GpuAdapterKind::Cpu;
+      break;
+    case VK_PHYSICAL_DEVICE_TYPE_OTHER:
+    default:
+      out.kind = rhi::GpuAdapterKind::Other;
+      break;
+  }
+  out.api_version =
+      std::format("{}.{}.{}", VK_VERSION_MAJOR(props.apiVersion),
+                  VK_VERSION_MINOR(props.apiVersion), VK_VERSION_PATCH(props.apiVersion));
+  out.driver_version =
+      std::format("{}.{}.{}", VK_VERSION_MAJOR(props.driverVersion),
+                  VK_VERSION_MINOR(props.driverVersion), VK_VERSION_PATCH(props.driverVersion));
+  out.vendor_id = props.vendorID;
+  out.device_id = props.deviceID;
+  return out;
+}
 
 void VulkanDevice::shutdown() {
   vkDeviceWaitIdle(device_);

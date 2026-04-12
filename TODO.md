@@ -1,5 +1,6 @@
 # TODOs
 
+- don't flip uv in forward_meshlet.task.hlsl
 - vulkancmdencoder line 466, evaluate whether ORing is bad.
 - track buffer usage in render graph. right now indirect buffer usage is added unnecessarily.
 - when drawing the debug CSM texture, use the array/texture views instead of the broke shit that's there.  

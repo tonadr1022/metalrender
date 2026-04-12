@@ -48,7 +48,7 @@ class CmdEncoder {
   virtual ~CmdEncoder() = default;
   virtual void end_encoding() = 0;
   virtual void set_label(const std::string& label) = 0;
-  virtual void set_viewport(glm::uvec2 min, glm::uvec2 extent) = 0;
+  virtual void set_viewport(glm::ivec2 min, glm::ivec2 extent) = 0;
   virtual void set_scissor(glm::uvec2 min, glm::uvec2 extent) = 0;
 
   virtual void upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,

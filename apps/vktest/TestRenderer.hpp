@@ -57,6 +57,7 @@ class TestRenderer {
   void add_render_graph_passes();
   void init_imgui();
   void update_ctx();
+  void imgui_device_info();
 
   std::unique_ptr<ITestScene> scene_;
   TestDebugScene active_scene_{TestDebugScene::TexturedCubeProcedural};
