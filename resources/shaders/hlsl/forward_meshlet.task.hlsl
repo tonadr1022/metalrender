@@ -139,7 +139,6 @@ Texture2D depth_pyramid_tex : register(t3);
           smid = clamp(smid, float2(0.f, 0.f), float2(1.f, 1.f));
           // Vulkan path currently renders the depth attachment upside down relative to the
           // projected UVs produced by `project_sphere()`, so flip Y before sampling the HZB.
-          smid.y = 1.0f - smid.y;
           int lod_i = int(lod);
           float d0 =
               depth_pyramid_tex.SampleLevel(samp, smid + float2(-halfTexel.x, -halfTexel.y), lod_i)
@@ -158,7 +157,6 @@ Texture2D depth_pyramid_tex : register(t3);
           float near = cull_data.z_near;
           float depth_sphere = near / -view_z;
           visible = visible && depth_sphere >= depth;
-          // visible = visible;
         }
       }
 #endif

@@ -404,13 +404,6 @@ void VulkanCmdEncoder::set_viewport(glm::ivec2 min, glm::ivec2 extent) {
       .maxDepth = 1.0f,
   };
   vkCmdSetViewport(cmd(), 0, 1, &viewport);
-  // TODO: move this to set_scissor
-  VkRect2D scissor{
-      .offset = {0, 0},
-      // TODO: extract this.
-      .extent = {static_cast<uint32_t>(extent.x), static_cast<uint32_t>(std::abs(extent.y))},
-  };
-  vkCmdSetScissor(cmd(), 0, 1, &scissor);
 }
 
 void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src_offset,

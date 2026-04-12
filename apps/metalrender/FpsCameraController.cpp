@@ -67,7 +67,7 @@ void FpsCameraController::update_keyboard(GLFWwindow* window, float dt) {
 void FpsCameraController::apply_mouse_delta(glm::vec2 offset) {
   offset *= cam_.mouse_sensitivity;
   cam_.yaw += offset.x;
-  cam_.pitch += offset.y;
+  cam_.pitch += look_pitch_sign_ * offset.y;
   cam_.pitch = glm::clamp(cam_.pitch, -89.f, 89.f);
   cam_.calc_vectors();
 }

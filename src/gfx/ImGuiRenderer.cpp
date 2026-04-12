@@ -46,9 +46,10 @@ void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t fram
   }
   ASSERT(pso_.is_valid());
   enc->bind_pipeline(pso_);
-  enc->set_cull_mode(rhi::CullMode::None);
+  enc->set_wind_order(rhi::WindOrder::Clockwise);
+  enc->set_cull_mode(rhi::CullMode::Back);
   enc->set_depth_stencil_state(rhi::CompareOp::Always, false);
-  enc->set_viewport(glm::uvec2{}, fb_size);
+  enc->set_viewport(glm::ivec2{}, fb_size);
 
   size_t vert_buf_len = (size_t)draw_data->TotalVtxCount * sizeof(ImDrawVert);
   size_t index_buf_len = (size_t)draw_data->TotalIdxCount * sizeof(ImDrawIdx);
