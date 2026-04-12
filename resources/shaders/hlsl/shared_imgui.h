@@ -4,7 +4,8 @@
 #include "shader_core.h"
 
 // Fragment: use bindless_textures_float when sampling R32F (e.g. depth pyramid mip views).
-#define IMGUI_TEX_FLAG_FLOAT_BINDLESS 1u
+#define IMGUI_TEX_FLAG_FLOAT_BINDLESS (1 << 0)
+#define IMGUI_FLAG_SRGB_COLOR (1 << 1)
 
 struct ImGuiPC {
   float4x4 proj;

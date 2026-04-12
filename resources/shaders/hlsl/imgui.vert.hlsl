@@ -17,5 +17,8 @@ VOut main(uint vert_id : SV_VertexID) {
   o.pos = mul(pc.proj, float4(vert.position, 0.0, 1.0));
   o.uv = vert.tex_coords;
   o.color = ConvertUint32RGBAtoFloat4(vert.color);
+  if ((pc.flags & IMGUI_FLAG_SRGB_COLOR) != 0) {
+    o.color.rgb = pow(o.color.rgb, 2.2);
+  }
   return o;
 }
