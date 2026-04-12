@@ -2,15 +2,19 @@
 
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
+#include <span>
+#include <string>
 
 #include "ResourceManager.hpp"
 #include "Window.hpp"
 #include "core/MathUtil.hpp"
 #include "core/Util.hpp"
+#include "gfx/DrawBatch.hpp"
 #include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/ShaderManager.hpp"
+#include "gfx/renderer/TaskCmdBufRgIds.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
 #include "hlsl/depth_reduce/shared_depth_reduce.h"
@@ -18,8 +22,9 @@
 #include "hlsl/shader_constants.h"
 #include "hlsl/shared_debug_meshlet_prepare.h"
 #include "hlsl/shared_forward_meshlet.h"
+#include "hlsl/shared_globals.h"
+#include "hlsl/shared_meshlet_draw_stats.hlsli"
 #include "hlsl/shared_task_cmd.h"
-#include "hlsl/shared_test_clear_buf.h"
 #include "imgui.h"
 
 namespace teng::gfx {
@@ -74,6 +79,57 @@ void add_buffer_readback_copy2(RenderGraph& rg, std::string_view pass_name, RGRe
   });
 }
 
+// Mirrors `encode_meshlet_mesh_draw_pass` in DrawPassSceneBindings.cpp; uses explicit task flags
+// (no renderer_cv) so vktest stays self-contained.
+void encode_meshlet_test_draw_pass(
+    bool reverse_z, bool late_pass, uint32_t meshlet_task_flags, rhi::Device* device,
+    RenderGraph& rg, const GeometryBatch& batch, rhi::BufferHandle materials_buf,
+    const BufferSuballoc& globals_cb, const BufferSuballoc& view_cb, const BufferSuballoc& cull_cb,
+    rhi::TextureHandle depth_pyramid_tex, glm::uvec2 viewport_dims, RGResourceId meshlet_vis_rg,
+    RGResourceId meshlet_stats_rg, RGResourceId task_cmd_rg, rhi::BufferHandle indirect_buf,
+    InstanceMgr& inst_mgr, std::span<const rhi::PipelineHandleHolder> psos, rhi::CmdEncoder* enc) {
+  ASSERT(psos.size() == static_cast<size_t>(AlphaMaskType::Count));
+  enc->set_wind_order(rhi::WindOrder::CounterClockwise);
+  enc->set_cull_mode(rhi::CullMode::None);
+  enc->set_viewport({0, 0}, viewport_dims);
+
+  enc->bind_uav(rg.get_external_buffer(meshlet_vis_rg), 1);
+  if (late_pass) {
+    enc->bind_srv(depth_pyramid_tex, 3);
+  }
+
+  enc->bind_uav(rg.get_buf(meshlet_stats_rg), 2);
+  enc->bind_srv(batch.mesh_buf.get_buffer_handle(), 5);
+  enc->bind_srv(batch.meshlet_buf.get_buffer_handle(), 6);
+  enc->bind_srv(batch.meshlet_triangles_buf.get_buffer_handle(), 7);
+  enc->bind_srv(batch.meshlet_vertices_buf.get_buffer_handle(), 8);
+  enc->bind_srv(batch.vertex_buf.get_buffer_handle(), 9);
+  enc->bind_srv(inst_mgr.get_instance_data_buf(), 10);
+  enc->bind_srv(materials_buf, 11);
+  enc->bind_cbv(globals_cb.buf, GLOBALS_SLOT, globals_cb.offset_bytes, sizeof(GlobalData));
+  enc->bind_cbv(view_cb.buf, VIEW_DATA_SLOT, view_cb.offset_bytes, sizeof(ViewData));
+  enc->bind_cbv(cull_cb.buf, 4, cull_cb.offset_bytes, sizeof(CullData));
+
+  Task2PC pc{.flags = meshlet_task_flags,
+             .out_draw_count_buf_idx = device->get_buf(indirect_buf)->bindless_idx()};
+
+  TaskCmdBufRgIdsByAlphaMask task_ids{};
+  task_ids[AlphaMaskType::Opaque] = task_cmd_rg;
+  task_ids[AlphaMaskType::Mask] = task_cmd_rg;
+
+  for (size_t alpha_mask_type = 0; alpha_mask_type < static_cast<size_t>(AlphaMaskType::Count);
+       alpha_mask_type++) {
+    enc->bind_srv(rg.get_buf(task_ids[static_cast<AlphaMaskType>(alpha_mask_type)]), 4);
+    enc->bind_pipeline(psos[alpha_mask_type]);
+    enc->set_depth_stencil_state(reverse_z ? rhi::CompareOp::Greater : rhi::CompareOp::Less, true);
+    pc.alpha_test_enabled = static_cast<uint32_t>(alpha_mask_type);
+    enc->push_constants(&pc, sizeof(pc));
+    enc->draw_mesh_threadgroups_indirect(
+        indirect_buf, static_cast<uint32_t>(alpha_mask_type) * sizeof(uint32_t) * 3,
+        {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+  }
+}
+
 }  // namespace
 
 MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
@@ -93,19 +149,25 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
   ASSERT(res);
   ASSERT(res->totals.task_cmd_count == ctx_.model_gpu_mgr->geometry_batch().task_cmd_count);
 
-  meshlet_pso_ = ctx_.shader_mgr->create_graphics_pipeline({
-      .shaders = {{"debug_meshlet_hello", ShaderType::Task},
-                  {"debug_meshlet_hello", ShaderType::Mesh},
-                  {"debug_meshlet_hello", ShaderType::Fragment}},
-      .name = "debug_meshlet_hello",
-  });
+  for (size_t a = 0; a < static_cast<size_t>(AlphaMaskType::Count); ++a) {
+    meshlet_pso_early_[a] = ctx_.shader_mgr->create_graphics_pipeline({
+        .shaders = {{{"forward_meshlet", ShaderType::Task},
+                     {"debug_meshlet_hello", ShaderType::Mesh},
+                     {"debug_meshlet_hello", ShaderType::Fragment}}},
+        .name = std::string("meshlet_test_forward_early_") + std::to_string(a),
+    });
+    meshlet_pso_late_[a] = ctx_.shader_mgr->create_graphics_pipeline({
+        .shaders = {{{"forward_meshlet_late", ShaderType::Task},
+                     {"debug_meshlet_hello", ShaderType::Mesh},
+                     {"debug_meshlet_hello", ShaderType::Fragment}}},
+        .name = std::string("meshlet_test_forward_late_") + std::to_string(a),
+    });
+  }
   shade_pso_ = ctx_.shader_mgr->create_graphics_pipeline({
       .shaders = {{{"fullscreen_quad", ShaderType::Vertex},
                    {"meshlet_test/shade", ShaderType::Fragment}}},
       .name = "meshlet_test/shade",
   });
-  clear_indirect_pso_ = ctx_.shader_mgr->create_compute_pipeline(
-      {.path = "test_clear_cnt_buf", .type = rhi::ShaderType::Compute});
   prepare_meshlets_pso_ = ctx_.shader_mgr->create_compute_pipeline(
       {.path = "debug_meshlet_prepare_meshlets", .type = rhi::ShaderType::Compute});
   depth_reduce_pso_ = ctx_.shader_mgr->create_compute_pipeline(
@@ -122,6 +184,11 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
         .flags = rhi::BufferDescFlags::CPUAccessible,
         .name = "meshlet_visible_object_count_readback",
     });
+    meshlet_stats_buf_readback_[static_cast<size_t>(i)] = ctx_.device->create_buf_h({
+        .size = k_meshlet_draw_stats_bytes,
+        .flags = rhi::BufferDescFlags::CPUAccessible,
+        .name = "meshlet_draw_stats_readback",
+    });
   }
 
   fps_camera_.camera().pos = {0.f, 0.f, 3.f};
@@ -131,6 +198,8 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
 
   make_depth_pyramid_tex();
 }
+
+void MeshletRendererScene::ensure_meshlet_vis_buffer() {}
 
 void MeshletRendererScene::on_swapchain_resize() { make_depth_pyramid_tex(); }
 
@@ -174,6 +243,10 @@ void MeshletRendererScene::shutdown() {
   if (ctx_.window) {
     fps_camera_.set_mouse_captured(ctx_.window->get_handle(), false);
   }
+  if (meshlet_vis_buf_.handle.is_valid()) {
+    ctx_.device->destroy(meshlet_vis_buf_.handle);
+    meshlet_vis_buf_ = {};
+  }
   ResourceManager::get().free_model(test_model_handle_);
 }
 
@@ -199,15 +272,22 @@ void MeshletRendererScene::on_imgui() {
   ImGui::Checkbox("GPU object frustum cull", &gpu_object_frustum_cull_);
   uint32_t visible_meshlet_task_groups = 0;
   uint32_t visible_objects = 0;
+  MeshletDrawStats visible_meshlet_stats{};
   if (frame_num_ >= ctx_.device->get_info().frames_in_flight) {
     const uint32_t curr = ctx_.curr_frame_in_flight_idx;
     visible_meshlet_task_groups = *reinterpret_cast<const uint32_t*>(
         ctx_.device->get_buf(task_cmd_group_count_readback_[curr].handle)->contents());
     visible_objects = *reinterpret_cast<const uint32_t*>(
         ctx_.device->get_buf(visible_object_count_readback_[curr].handle)->contents());
+    visible_meshlet_stats = *reinterpret_cast<const MeshletDrawStats*>(
+        ctx_.device->get_buf(meshlet_stats_buf_readback_[curr].handle)->contents());
   }
   ImGui::Text("Visible mesh task groups (GPU): %u", visible_meshlet_task_groups);
   ImGui::Text("Visible objects (GPU): %u", visible_objects);
+  ImGui::Text("Visible meshlets (GPU): %u", visible_meshlet_stats.meshlets_drawn_early +
+                                                visible_meshlet_stats.meshlets_drawn_late);
+  ImGui::Text("Visible triangles (GPU): %u", visible_meshlet_stats.triangles_drawn_early +
+                                                 visible_meshlet_stats.triangles_drawn_late);
 
   if (depth_pyramid_tex_.is_valid()) {
     auto* dp_tex = ctx_.device->get_tex(depth_pyramid_tex_);
@@ -226,7 +306,6 @@ void MeshletRendererScene::on_imgui() {
           depth_pyramid_tex_.handle, depth_pyramid_tex_.views[static_cast<size_t>(mip)]);
       const float disp_w = 240.f;
       const float disp_h = disp_w * static_cast<float>(mv_h) / static_cast<float>(mv_w);
-      // Inverted V: GPU depth pyramid row order vs default ImGui Image UVs (Vulkan).
       ImGui::Image(MakeImGuiTexRefBindlessFloatView(view_bindless), ImVec2(disp_w, disp_h),
                    ImVec2(0, 1), ImVec2(1, 0));
     } else {
@@ -279,11 +358,64 @@ CullData MeshletRendererScene::prepare_cull_data(const ViewData& vd) {
   return cd;
 }
 
+CullData MeshletRendererScene::prepare_cull_data_late(const ViewData& vd) {
+  CullData cd = prepare_cull_data(vd);
+  if (depth_pyramid_tex_.is_valid()) {
+    const auto* dp = ctx_.device->get_tex(depth_pyramid_tex_);
+    cd.pyramid_width = dp->desc().dims.x;
+    cd.pyramid_height = dp->desc().dims.y;
+    cd.pyramid_mip_count = dp->desc().mip_levels;
+  }
+  return cd;
+}
+
 void MeshletRendererScene::add_render_graph_passes() {
   auto& batch = ctx_.model_gpu_mgr->geometry_batch();
   auto task_cmd_count = batch.task_cmd_count;
   if (task_cmd_count == 0 || batch.get_stats().vertex_count == 0) {
     return;
+  }
+
+  if (ctx_.swapchain) {
+    make_depth_pyramid_tex();
+  }
+  ASSERT(depth_pyramid_tex_.is_valid());
+
+  {
+    const size_t n = ctx_.model_gpu_mgr->instance_mgr().get_num_meshlet_vis_buf_elements();
+    const size_t need = n * sizeof(uint32_t);
+    if (need == 0) {
+      return;
+    }
+    rhi::Buffer* cur =
+        meshlet_vis_buf_.handle.is_valid() ? ctx_.device->get_buf(meshlet_vis_buf_) : nullptr;
+    if (cur == nullptr || cur->size() < need) {
+      if (meshlet_vis_buf_.handle.is_valid()) {
+        ctx_.device->destroy(meshlet_vis_buf_.handle);
+        meshlet_vis_buf_ = {};
+      }
+      meshlet_vis_buf_ = ctx_.device->create_buf_h({
+          .usage = rhi::BufferUsage::Storage,
+          .size = need,
+          .name = "meshlet_test_meshlet_vis",
+      });
+    }
+  }
+  if (!meshlet_vis_buf_.handle.is_valid()) {
+    return;
+  }
+
+  RGResourceId meshlet_vis_rg_id =
+      ctx_.rg->import_external_buffer(meshlet_vis_buf_, "meshlet_test_meshlet_vis_rg");
+
+  if (frame_num_ == 0) {
+    const size_t need =
+        ctx_.model_gpu_mgr->instance_mgr().get_num_meshlet_vis_buf_elements() * sizeof(uint32_t);
+    auto& p = ctx_.rg->add_transfer_pass("meshlet_clear_meshlet_vis");
+    meshlet_vis_rg_id = p.write_buf(meshlet_vis_rg_id, rhi::PipelineStage::AllTransfer);
+    p.set_ex([need, this](rhi::CmdEncoder* enc) {
+      enc->fill_buffer(meshlet_vis_buf_.handle, 0, need, 0);
+    });
   }
 
   frame_uniform_gpu_allocator_.set_frame_idx(ctx_.curr_frame_in_flight_idx);
@@ -293,45 +425,43 @@ void MeshletRendererScene::add_render_graph_passes() {
   auto vd = prepare_view_data();
   auto view_cb_suballoc = frame_uniform_gpu_allocator_.alloc2(sizeof(ViewData), &vd);
 
-  auto cd = prepare_cull_data(vd);
-  auto cull_storage_cb_buf = frame_uniform_gpu_allocator_.alloc2(sizeof(CullData), &cd);
+  auto cd_early = prepare_cull_data(vd);
+  auto cull_early_cb = frame_uniform_gpu_allocator_.alloc2(sizeof(CullData), &cd_early);
+  auto cd_late = prepare_cull_data_late(vd);
+  auto cull_late_cb = frame_uniform_gpu_allocator_.alloc2(sizeof(CullData), &cd_late);
 
   BufferSuballoc globals_cb_buf;
   {
     GlobalData gd{};
     gd.render_mode = DEBUG_RENDER_MODE_NONE;
     gd.frame_num = 0;
-    gd.meshlet_stats_enabled = 0;
+    gd.meshlet_stats_enabled = 1;
     gd._padding = 0;
     globals_cb_buf = frame_uniform_gpu_allocator_.alloc2(sizeof(GlobalData), &gd);
   }
 
   RGResourceId task_cmd_dst_rg = ctx_.rg->create_buffer(
       {.size = task_cmd_count * sizeof(TaskCmd), .defer_reuse = true}, "meshlet_hello_task_cmds");
+  constexpr size_t k_indirect_bytes =
+      sizeof(uint32_t) * 3 * static_cast<size_t>(AlphaMaskType::Count);
   RGResourceId indirect_args_rg = ctx_.rg->create_buffer(
-      {.size = sizeof(uint32_t) * 3, .defer_reuse = true}, "meshlet_hello_indirect_args");
+      {.size = k_indirect_bytes, .defer_reuse = true}, "meshlet_hello_indirect_args");
   RGResourceId visible_object_count_rg = ctx_.rg->create_buffer(
       {.size = sizeof(uint32_t), .defer_reuse = true}, "meshlet_visible_object_count");
+  RGResourceId meshlet_stats_rg = ctx_.rg->create_buffer(
+      {.size = k_meshlet_draw_stats_bytes, .defer_reuse = true}, "meshlet_test_draw_stats");
 
   const uint32_t max_draws = ctx_.model_gpu_mgr->instance_mgr().stats().max_instance_data_count;
 
   {
-    auto& p = ctx_.rg->add_transfer_pass("meshlet_clear_visible_obj_count");
+    auto& p = ctx_.rg->add_transfer_pass("meshlet_clear_visible_and_indirect");
     visible_object_count_rg = p.write_buf(visible_object_count_rg, rhi::PipelineStage::AllTransfer);
-    p.set_ex([this, visible_object_count_rg](CmdEncoder* enc) {
+    indirect_args_rg = p.write_buf(indirect_args_rg, rhi::PipelineStage::AllTransfer);
+    meshlet_stats_rg = p.write_buf(meshlet_stats_rg, rhi::PipelineStage::AllTransfer);
+    p.set_ex([this, visible_object_count_rg, indirect_args_rg, meshlet_stats_rg](CmdEncoder* enc) {
       enc->fill_buffer(ctx_.rg->get_buf(visible_object_count_rg), 0, sizeof(uint32_t), 0);
-    });
-  }
-
-  {
-    auto& p = ctx_.rg->add_compute_pass("meshlet_clear_indirect");
-    indirect_args_rg = p.write_buf(indirect_args_rg, PipelineStage::ComputeShader);
-    p.set_ex([this, indirect_args_rg](CmdEncoder* enc) {
-      enc->bind_pipeline(clear_indirect_pso_);
-      TestClearBufPC pc{
-          .buf_idx = ctx_.device->get_buf(ctx_.rg->get_buf(indirect_args_rg))->bindless_idx()};
-      enc->push_constants(&pc, sizeof(pc));
-      enc->dispatch_compute({1, 1, 1}, {1, 1, 1});
+      enc->fill_buffer(ctx_.rg->get_buf(indirect_args_rg), 0, k_indirect_bytes, 0);
+      enc->fill_buffer(ctx_.rg->get_buf(meshlet_stats_rg), 0, k_meshlet_draw_stats_bytes, 0);
     });
   }
 
@@ -341,7 +471,7 @@ void MeshletRendererScene::add_render_graph_passes() {
     indirect_args_rg = p.rw_buf(indirect_args_rg, PipelineStage::ComputeShader);
     visible_object_count_rg = p.rw_buf(visible_object_count_rg, PipelineStage::ComputeShader);
     p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, visible_object_count_rg, max_draws,
-              view_cb_suballoc, cull_storage_cb_buf](CmdEncoder* enc) {
+              view_cb_suballoc, cull_early_cb](CmdEncoder* enc) {
       enc->bind_pipeline(prepare_meshlets_pso_);
       DebugMeshletPreparePC pc{
           .dst_task_cmd_buf_idx =
@@ -363,7 +493,7 @@ void MeshletRendererScene::add_render_graph_passes() {
 
       enc->bind_cbv(view_cb_suballoc.buf, VIEW_DATA_SLOT, view_cb_suballoc.offset_bytes,
                     sizeof(ViewData));
-      enc->bind_cbv(cull_storage_cb_buf.buf, 4, cull_storage_cb_buf.offset_bytes, sizeof(CullData));
+      enc->bind_cbv(cull_early_cb.buf, 4, cull_early_cb.offset_bytes, sizeof(CullData));
       enc->push_constants(&pc, sizeof(pc));
       enc->dispatch_compute({align_divide_up(static_cast<uint64_t>(max_draws), 64ull), 1, 1},
                             {64, 1, 1});
@@ -377,20 +507,28 @@ void MeshletRendererScene::add_render_graph_passes() {
       "meshlet_hello_depth_att");
   RGResourceId depth_att_id{};
 
+  uint32_t meshlet_flags = MESHLET_OCCLUSION_CULL_ENABLED_BIT;
+  if (gpu_object_frustum_cull_) {
+    meshlet_flags |= MESHLET_FRUSTUM_CULL_ENABLED_BIT;
+  }
+
   {
-    auto& p = ctx_.rg->add_graphics_pass("meshlet_hello");
+    auto& p = ctx_.rg->add_graphics_pass("meshlet_occlusion_early");
     task_cmd_dst_rg =
         p.read_buf(task_cmd_dst_rg, PipelineStage::MeshShader | PipelineStage::TaskShader);
     indirect_args_rg =
         p.read_buf(indirect_args_rg, PipelineStage::TaskShader | PipelineStage::DrawIndirect,
                    AccessFlags::IndirectCommandRead);
-    visible_object_count_rg = p.copy_from_buf(visible_object_count_rg);
+    meshlet_vis_rg_id = p.write_buf(meshlet_vis_rg_id, PipelineStage::TaskShader);
+    meshlet_stats_rg = p.rw_buf(meshlet_stats_rg, PipelineStage::TaskShader);
     gbuffer_a_id = p.write_color_output(gbuffer_a_id);
-
     depth_att_id = p.write_depth_output(depth_att);
+
     p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, depth_att_id, view_cb_suballoc,
-              globals_cb_buf, gbuffer_a_id](CmdEncoder* enc) {
+              globals_cb_buf, gbuffer_a_id, meshlet_vis_rg_id, meshlet_stats_rg, meshlet_flags,
+              cull_early_cb](CmdEncoder* enc) {
       glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
+      const glm::uvec2 vp_dims{ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
       ctx_.device->enqueue_swapchain_for_present(ctx_.swapchain, enc);
       enc->begin_rendering({
           RenderAttInfo::color_att(ctx_.rg->get_att_img(gbuffer_a_id), LoadOp::Clear,
@@ -399,38 +537,14 @@ void MeshletRendererScene::add_render_graph_passes() {
               ctx_.rg->get_att_img(depth_att_id), LoadOp::Clear,
               ClearValue{.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f, .stencil = 0}}),
       });
-      enc->bind_pipeline(meshlet_pso_);
-      enc->set_cull_mode(CullMode::Back);
-      enc->set_wind_order(WindOrder::Clockwise);
-      enc->set_depth_stencil_state(reverse_z_ ? CompareOp::Greater : CompareOp::Less, true);
-      enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
-      enc->set_scissor({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
 
       auto& geo_batch = ctx_.model_gpu_mgr->geometry_batch();
-      enc->bind_srv(geo_batch.mesh_buf.get_buffer_handle(), 5);
-      enc->bind_srv(geo_batch.meshlet_buf.get_buffer_handle(), 6);
-      enc->bind_srv(geo_batch.meshlet_triangles_buf.get_buffer_handle(), 7);
-      enc->bind_srv(geo_batch.meshlet_vertices_buf.get_buffer_handle(), 8);
-      enc->bind_srv(geo_batch.vertex_buf.get_buffer_handle(), 9);
-      enc->bind_srv(ctx_.model_gpu_mgr->instance_mgr().get_instance_data_buf(), 10);
-      enc->bind_srv(ctx_.rg->get_buf(task_cmd_dst_rg), 4);
-      enc->bind_srv(ctx_.model_gpu_mgr->materials_allocator().get_buffer_handle(), 11);
-
-      enc->bind_cbv(globals_cb_buf.buf, GLOBALS_SLOT, globals_cb_buf.offset_bytes,
-                    sizeof(GlobalData));
-      enc->bind_cbv(view_cb_suballoc.buf, VIEW_DATA_SLOT, view_cb_suballoc.offset_bytes,
-                    sizeof(ViewData));
-
-      Task2PC task_pc{
-          .flags = 0,
-          .alpha_test_enabled = 0,
-          .out_draw_count_buf_idx =
-              ctx_.device->get_buf(ctx_.rg->get_buf(indirect_args_rg))->bindless_idx(),
-      };
-      enc->push_constants(&task_pc, sizeof(task_pc));
-
-      enc->draw_mesh_threadgroups_indirect(ctx_.rg->get_buf(indirect_args_rg), 0,
-                                           {K_TASK_TG_SIZE, 1, 1}, {K_MESH_TG_SIZE, 1, 1});
+      encode_meshlet_test_draw_pass(
+          reverse_z_, false, meshlet_flags, ctx_.device, *ctx_.rg, geo_batch,
+          ctx_.model_gpu_mgr->materials_allocator().get_buffer_handle(), globals_cb_buf,
+          view_cb_suballoc, cull_early_cb, rhi::TextureHandle{}, vp_dims, meshlet_vis_rg_id,
+          meshlet_stats_rg, task_cmd_dst_rg, ctx_.rg->get_buf(indirect_args_rg),
+          ctx_.model_gpu_mgr->instance_mgr(), std::span(meshlet_pso_early_), enc);
 
       enc->end_rendering();
     });
@@ -497,6 +611,47 @@ void MeshletRendererScene::add_render_graph_passes() {
     }
   }
 
+  {
+    auto& p = ctx_.rg->add_graphics_pass("meshlet_occlusion_late");
+    task_cmd_dst_rg =
+        p.read_buf(task_cmd_dst_rg, PipelineStage::MeshShader | PipelineStage::TaskShader);
+    indirect_args_rg =
+        p.read_buf(indirect_args_rg, PipelineStage::TaskShader | PipelineStage::DrawIndirect,
+                   AccessFlags::IndirectCommandRead);
+    if (final_depth_pyramid_rg.is_valid()) {
+      p.sample_tex(final_depth_pyramid_rg, rhi::PipelineStage::TaskShader,
+                   RgSubresourceRange::all_mips_all_slices());
+    }
+    meshlet_vis_rg_id = p.rw_buf(meshlet_vis_rg_id, PipelineStage::TaskShader);
+    meshlet_stats_rg = p.rw_buf(meshlet_stats_rg, PipelineStage::TaskShader);
+    visible_object_count_rg = p.copy_from_buf(visible_object_count_rg);
+    gbuffer_a_id = p.rw_color_output(gbuffer_a_id);
+    depth_att_id = p.rw_depth_output(depth_att);
+
+    p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, depth_att_id, view_cb_suballoc,
+              globals_cb_buf, gbuffer_a_id, meshlet_vis_rg_id, meshlet_stats_rg, meshlet_flags,
+              cull_late_cb](CmdEncoder* enc) {
+      const glm::uvec2 vp_dims{ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
+      enc->begin_rendering({
+          RenderAttInfo::color_att(ctx_.rg->get_att_img(gbuffer_a_id), LoadOp::Load,
+                                   ClearValue{.color = glm::vec4{0.f}}),
+          RenderAttInfo::depth_stencil_att(
+              ctx_.rg->get_att_img(depth_att_id), LoadOp::Load,
+              ClearValue{.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f, .stencil = 0}}),
+      });
+
+      auto& geo_batch = ctx_.model_gpu_mgr->geometry_batch();
+      encode_meshlet_test_draw_pass(
+          reverse_z_, true, meshlet_flags, ctx_.device, *ctx_.rg, geo_batch,
+          ctx_.model_gpu_mgr->materials_allocator().get_buffer_handle(), globals_cb_buf,
+          view_cb_suballoc, cull_late_cb, depth_pyramid_tex_.handle, vp_dims, meshlet_vis_rg_id,
+          meshlet_stats_rg, task_cmd_dst_rg, ctx_.rg->get_buf(indirect_args_rg),
+          ctx_.model_gpu_mgr->instance_mgr(), std::span(meshlet_pso_late_), enc);
+
+      enc->end_rendering();
+    });
+  }
+
   add_buffer_readback_copy2(
       *ctx_.rg, "readback_task_cmd_group_count", indirect_args_rg,
       ctx_.rg->import_external_buffer(
@@ -509,6 +664,12 @@ void MeshletRendererScene::add_render_graph_passes() {
           visible_object_count_readback_[ctx_.curr_frame_in_flight_idx].handle,
           "visible_object_count_readback"),
       0, 0, sizeof(uint32_t));
+
+  add_buffer_readback_copy2(*ctx_.rg, "readback_meshlet_draw_stats", meshlet_stats_rg,
+                            ctx_.rg->import_external_buffer(
+                                meshlet_stats_buf_readback_[ctx_.curr_frame_in_flight_idx].handle,
+                                "meshlet_draw_stats_readback"),
+                            0, 0, k_meshlet_draw_stats_bytes);
 
   const bool depth_reduce_ran = final_depth_pyramid_rg.is_valid();
 

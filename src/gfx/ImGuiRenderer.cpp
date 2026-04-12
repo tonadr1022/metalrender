@@ -69,7 +69,7 @@ void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t fram
     ndc_flip_y[1][1] = -1.f;
     proj = ndc_flip_y * proj;
   }
-  [[maybe_unused]] ImGuiPC pc{
+  ImGuiPC pc{
       .proj = proj,
       .vert_buf_idx = vert_buf->bindless_idx(),
       .tex_idx = 0,
@@ -117,7 +117,7 @@ void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t fram
           const auto tid = static_cast<uint64_t>(tex_id);
           if ((tid & 0xFFFFFFFF00000000ull) == kImGuiTexRefBindlessFloatViewMagic) {
             pc.tex_idx = static_cast<uint32_t>(tid & 0xFFFFFFFFull);
-            pc.flags = IMGUI_TEX_FLAG_FLOAT_BINDLESS;
+            pc.flags |= IMGUI_TEX_FLAG_FLOAT_BINDLESS;
           } else {
             pc.tex_idx = device_->get_tex(rhi::TextureHandle{tex_id})->bindless_idx();
           }
