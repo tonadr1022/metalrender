@@ -941,6 +941,15 @@ void RenderGraph::find_deps_recursive(uint32_t pass_i) {
   for (const auto& external_read : pass.get_external_reads()) {
     auto writer_pass_it = resource_use_id_to_writer_pass_idx_.find(external_read.id);
     if (writer_pass_it == resource_use_id_to_writer_pass_idx_.end()) {
+      // External resources are re-imported at version 0 each frame after `execute()` clears the
+      // graph, but GPU memory can still hold valid contents from a prior submitted frame (no
+      // in-graph writer for this id/version). Ordering vs that prior work is enforced by the
+      // submit/fence boundary; `import_external_buffer` / `import_external_texture` should supply
+      // an accurate `RGState` initial when barriers need to reflect the real pre-pass layout.
+      if (external_read.type == RGResourceType::ExternalBuffer ||
+          external_read.type == RGResourceType::ExternalTexture) {
+        continue;
+      }
       LERROR(
           "RenderGraph: external read has no producer pass (no write registered for this resource "
           "id). reader_pass='{}' resource='{}' type={} — add a pass that writes this id/version "

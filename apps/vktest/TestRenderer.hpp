@@ -77,6 +77,7 @@ class TestRenderer {
   BackedGPUAllocator materials_buf_;
   float prev_time_sec_{};
   bool have_prev_time_{};
+  std::vector<rhi::SamplerHandleHolder> samplers_;
 };
 
 }  // namespace gfx

@@ -70,6 +70,28 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo)
   };
   update_ctx();
   init_imgui();
+
+  {
+    LINFO("making samplers");
+    samplers_.emplace_back(device_->create_sampler_h({
+        .min_filter = rhi::FilterMode::Nearest,
+        .mag_filter = rhi::FilterMode::Nearest,
+        .mipmap_mode = rhi::FilterMode::Nearest,
+        .address_mode = rhi::AddressMode::Repeat,
+    }));
+    samplers_.emplace_back(device_->create_sampler_h({
+        .min_filter = rhi::FilterMode::Linear,
+        .mag_filter = rhi::FilterMode::Linear,
+        .mipmap_mode = rhi::FilterMode::Linear,
+        .address_mode = rhi::AddressMode::Repeat,
+    }));
+    samplers_.emplace_back(device_->create_sampler_h({
+        .min_filter = rhi::FilterMode::Nearest,
+        .mag_filter = rhi::FilterMode::Nearest,
+        .mipmap_mode = rhi::FilterMode::Nearest,
+        .address_mode = rhi::AddressMode::ClampToEdge,
+    }));
+  }
 }
 
 void TestRenderer::update_ctx() { ctx_.time_sec = static_cast<float>(glfwGetTime()); }

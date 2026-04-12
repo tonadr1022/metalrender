@@ -631,6 +631,7 @@ rhi::SamplerHandle VulkanDevice::create_sampler(const rhi::SamplerDesc& desc) {
     bindless_idx = static_cast<uint32_t>(idx);
   }
   auto handle = sampler_pool_.alloc(desc, sampler, bindless_idx);
+  LINFO("creating sampler {}", bindless_idx);
   if (bindless_idx != rhi::k_invalid_bindless_idx) {
     write_bindless_sampler(bindless_idx, sampler);
   }
@@ -1963,7 +1964,8 @@ void VulkanDevice::init_bindless_heaps() {
   prime_heap_slot0(bindless_storage_image_, [&] {
     write_bindless_storage_image(0, null_image_view_, VK_IMAGE_LAYOUT_GENERAL);
   });
-  prime_heap_slot0(bindless_sampler_, [&] { write_bindless_sampler(0, null_bindless_sampler_); });
+  // prime_heap_slot0(bindless_sampler_, [&] { write_bindless_sampler(0, null_bindless_sampler_);
+  // });
 
   VkDescriptorPoolSize pad_pool_size{.type = VK_DESCRIPTOR_TYPE_SAMPLER, .descriptorCount = 8};
   VkDescriptorPoolCreateInfo pad_pool_cinfo{.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,

@@ -112,7 +112,9 @@ void GBufferRenderer::bake(PassInfo& gbuffer_pass_info, DrawCullPhase cull_phase
                  RgSubresourceRange::all_mips_all_slices());
     *view.rg_ids.meshlet_vis = p.rw_buf(*view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
   } else {
-    *view.rg_ids.meshlet_vis = p.write_buf(*view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
+    // Early meshlet pass reads per-meshlet history from this UAV; track read access for
+    // backends that require explicit read hazards (notably Vulkan).
+    *view.rg_ids.meshlet_vis = p.rw_buf(*view.rg_ids.meshlet_vis, PipelineStage::TaskShader);
   }
 
   if (late) {

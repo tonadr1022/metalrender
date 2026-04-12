@@ -91,7 +91,7 @@ void encode_meshlet_test_draw_pass(
     InstanceMgr& inst_mgr, std::span<const rhi::PipelineHandleHolder> psos, rhi::CmdEncoder* enc) {
   ASSERT(psos.size() == static_cast<size_t>(AlphaMaskType::Count));
   enc->set_wind_order(rhi::WindOrder::CounterClockwise);
-  enc->set_cull_mode(rhi::CullMode::None);
+  enc->set_cull_mode(rhi::CullMode::Back);
   enc->set_viewport({0, 0}, viewport_dims);
 
   enc->bind_uav(rg.get_external_buffer(meshlet_vis_rg), 1);
@@ -410,10 +410,19 @@ void MeshletRendererScene::add_render_graph_passes() {
     return;
   }
 
-  RGResourceId meshlet_vis_rg_id =
-      ctx_.rg->import_external_buffer(meshlet_vis_buf_, "meshlet_test_meshlet_vis_rg");
+  const bool meshlet_vis_cleared_this_frame = (frame_num_ == 0 || meshlet_vis_buffer_reallocated);
+  // After `RenderGraph::execute`, externals are re-imported at v0; without a same-frame clear, the
+  // first `rw_buf` read still sees last frame's GPU contents. Declare that tail state so barriers
+  // match the real previous writer (task shader UAV).
+  const RGState meshlet_vis_import_initial =
+      meshlet_vis_cleared_this_frame
+          ? RGState{}
+          : RGState{.access = AccessFlags::ShaderRead | AccessFlags::ShaderWrite,
+                    .stage = PipelineStage::TaskShader};
+  RGResourceId meshlet_vis_rg_id = ctx_.rg->import_external_buffer(
+      meshlet_vis_buf_.handle, meshlet_vis_import_initial, "meshlet_test_meshlet_vis_rg");
 
-  if (frame_num_ == 0 || meshlet_vis_buffer_reallocated) {
+  if (meshlet_vis_cleared_this_frame) {
     const size_t need =
         ctx_.model_gpu_mgr->instance_mgr().get_num_meshlet_vis_buf_elements() * sizeof(uint32_t);
     auto& p = ctx_.rg->add_transfer_pass("meshlet_clear_meshlet_vis");
@@ -535,7 +544,7 @@ void MeshletRendererScene::add_render_graph_passes() {
     indirect_args_rg =
         p.read_buf(indirect_args_rg, PipelineStage::TaskShader | PipelineStage::DrawIndirect,
                    AccessFlags::IndirectCommandRead);
-    meshlet_vis_rg_id = p.write_buf(meshlet_vis_rg_id, PipelineStage::TaskShader);
+    meshlet_vis_rg_id = p.rw_buf(meshlet_vis_rg_id, PipelineStage::TaskShader);
     meshlet_stats_rg = p.rw_buf(meshlet_stats_rg, PipelineStage::TaskShader);
     gbuffer_a_id = p.write_color_output(gbuffer_a_id);
     depth_att_id = p.write_depth_output(depth_att);
