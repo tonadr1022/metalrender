@@ -397,9 +397,11 @@ void VulkanCmdEncoder::end_encoding() {
 void VulkanCmdEncoder::set_viewport(glm::ivec2 min, glm::ivec2 extent) {
   VkViewport viewport{
       .x = static_cast<float>(min.x),
-      .y = static_cast<float>(min.y),
+      // y-flip
+      .y = static_cast<float>(min.y + extent.y),
       .width = static_cast<float>(extent.x),
-      .height = static_cast<float>(extent.y),
+      // y-flip
+      .height = static_cast<float>(-extent.y),
       .minDepth = 0.0f,
       .maxDepth = 1.0f,
   };

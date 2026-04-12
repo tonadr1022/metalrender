@@ -93,8 +93,8 @@ void encode_meshlet_test_draw_pass(
   enc->set_wind_order(rhi::WindOrder::Clockwise);
   enc->set_cull_mode(rhi::CullMode::None);
   // TODO: decide whether better todo this at the vulkan level.
-  enc->set_viewport({0, viewport_dims.y}, {viewport_dims.x, -viewport_dims.y});
-  enc->set_scissor({0, 0}, {viewport_dims.x, viewport_dims.y});
+  enc->set_viewport({0, 0}, viewport_dims);
+  enc->set_scissor({0, 0}, viewport_dims);
 
   enc->bind_uav(rg.get_external_buffer(meshlet_vis_rg), 1);
   if (late_pass) {
@@ -312,7 +312,7 @@ void MeshletRendererScene::on_imgui() {
       const float disp_w = 240.f;
       const float disp_h = disp_w * static_cast<float>(mv_h) / static_cast<float>(mv_w);
       ImGui::Image(MakeImGuiTexRefBindlessFloatView(view_bindless), ImVec2(disp_w, disp_h),
-                   ImVec2(0, 1), ImVec2(1, 0));
+                   ImVec2(0, 0), ImVec2(1, 1));
     } else {
       ImGui::TextUnformatted("Depth pyramid (single mip; reduce skipped)");
     }
@@ -717,7 +717,7 @@ void MeshletRendererScene::add_render_graph_passes() {
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
       enc->set_cull_mode(rhi::CullMode::None);
       glm::uvec2 dims = {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
-      enc->set_viewport({0, dims.y}, {dims.x, -dims.y});
+      enc->set_viewport({0, 0}, dims);
       enc->set_scissor({0, 0}, dims);
 
       const uint32_t gbuffer_bindless =
