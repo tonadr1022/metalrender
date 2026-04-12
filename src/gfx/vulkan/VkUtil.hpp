@@ -16,6 +16,7 @@ void augment_memory_barrier2_stages_for_access(VkPipelineStageFlags2& src_stage,
                                                VkAccessFlags2 dst_access);
 VkPrimitiveTopology convert_prim_topology(rhi::PrimitiveTopology top);
 VkCullModeFlags convert(rhi::CullMode cull_mode);
+VkCompareOp convert_compare_op(rhi::CompareOp compare_op);
 
 }  // namespace gfx::vk
 

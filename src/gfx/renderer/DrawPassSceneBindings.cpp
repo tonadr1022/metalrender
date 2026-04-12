@@ -19,7 +19,6 @@ void encode_meshlet_mesh_draw_pass(
     rhi::TextureHandle depth_handle, const DrawPassSceneBindings& scene,
     const MeshletMeshPassView& mesh_pass,
     std::span<const rhi::PipelineHandleHolder> meshlet_psos_by_alpha_mask) {
-  enc->set_depth_stencil_state(reverse_z ? rhi::CompareOp::Greater : rhi::CompareOp::Less, true);
   enc->set_wind_order(rhi::WindOrder::CounterClockwise);
   enc->set_cull_mode(rhi::CullMode::Back);
   enc->set_viewport({0, 0}, device->get_tex(depth_handle)->desc().dims);
@@ -67,6 +66,7 @@ void encode_meshlet_mesh_draw_pass(
         rg.get_buf(mesh_pass.task_cmd_buf_rg_ids[static_cast<AlphaMaskType>(alpha_mask_type)]);
     enc->bind_srv(task_cmd_buf_handle, 4);
     enc->bind_pipeline(meshlet_psos_by_alpha_mask[alpha_mask_type]);
+    enc->set_depth_stencil_state(reverse_z ? rhi::CompareOp::Greater : rhi::CompareOp::Less, true);
     pc.alpha_test_enabled = static_cast<uint32_t>(alpha_mask_type);
     enc->push_constants(&pc, sizeof(pc));
     enc->draw_mesh_threadgroups_indirect(mesh_pass.out_draw_count_buf,

@@ -33,9 +33,9 @@ class MeshletRendererScene final : public ITestScene {
   void add_render_graph_passes() override;
 
  private:
-  void recreate_meshlet_pso();
   void make_depth_pyramid_tex();
 
+  bool reverse_z_{true};
   rhi::PipelineHandleHolder shade_pso_;
   rhi::PipelineHandleHolder meshlet_pso_;
   rhi::PipelineHandleHolder clear_indirect_pso_;

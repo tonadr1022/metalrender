@@ -49,28 +49,6 @@ VkBorderColor convert_border_color(rhi::BorderColor border_color) {
       return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
   }
 }
-VkCompareOp convert_compare_op(rhi::CompareOp compare_op) {
-  switch (compare_op) {
-    case rhi::CompareOp::Never:
-      return VK_COMPARE_OP_NEVER;
-    case rhi::CompareOp::Less:
-      return VK_COMPARE_OP_LESS;
-    case rhi::CompareOp::Equal:
-      return VK_COMPARE_OP_EQUAL;
-    case rhi::CompareOp::LessOrEqual:
-      return VK_COMPARE_OP_LESS_OR_EQUAL;
-    case rhi::CompareOp::Greater:
-      return VK_COMPARE_OP_GREATER;
-    case rhi::CompareOp::NotEqual:
-      return VK_COMPARE_OP_NOT_EQUAL;
-    case rhi::CompareOp::GreaterOrEqual:
-      return VK_COMPARE_OP_GREATER_OR_EQUAL;
-    case rhi::CompareOp::Always:
-      return VK_COMPARE_OP_ALWAYS;
-    default:
-      ASSERT(0);
-  }
-}
 VkSamplerMipmapMode convert_mipmap_mode(rhi::FilterMode filter) {
   switch (filter) {
     case rhi::FilterMode::Linear:
@@ -1093,7 +1071,7 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
       .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
       .depthTestEnable = info.depth_stencil.depth_test_enable,
       .depthWriteEnable = info.depth_stencil.depth_write_enable,
-      .depthCompareOp = static_cast<VkCompareOp>(info.depth_stencil.depth_compare_op),
+      .depthCompareOp = convert_compare_op(info.depth_stencil.depth_compare_op),
       .depthBoundsTestEnable = info.depth_stencil.depth_bounds_test_enable,
       .stencilTestEnable = info.depth_stencil.stencil_test_enable,
       .front = convert_stencil_op_state(info.depth_stencil.stencil_front),
@@ -1116,6 +1094,9 @@ rhi::PipelineHandle VulkanDevice::create_graphics_pipeline(
   states.emplace_back(VK_DYNAMIC_STATE_SCISSOR);
   states.emplace_back(VK_DYNAMIC_STATE_FRONT_FACE);
   states.emplace_back(VK_DYNAMIC_STATE_CULL_MODE);
+  states.emplace_back(VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE);
+  states.emplace_back(VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE);
+  states.emplace_back(VK_DYNAMIC_STATE_DEPTH_COMPARE_OP);
 
   // check if mesh shader
   bool is_mesh_shader = false;

@@ -202,7 +202,7 @@ VkPrimitiveTopology convert_prim_topology(rhi::PrimitiveTopology top) {
     case rhi::PrimitiveTopology::TriangleFan:
       return VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN;
     case rhi::PrimitiveTopology::PatchList:
-      assert(0);
+      ASSERT(0);
       return VK_PRIMITIVE_TOPOLOGY_PATCH_LIST;
   }
 }
@@ -215,6 +215,30 @@ VkCullModeFlags convert(rhi::CullMode cull_mode) {
       return VK_CULL_MODE_FRONT_BIT;
     case rhi::CullMode::Back:
       return VK_CULL_MODE_BACK_BIT;
+  }
+}
+
+VkCompareOp convert_compare_op(rhi::CompareOp compare_op) {
+  switch (compare_op) {
+    case rhi::CompareOp::Never:
+      return VK_COMPARE_OP_NEVER;
+    case rhi::CompareOp::Less:
+      return VK_COMPARE_OP_LESS;
+    case rhi::CompareOp::Equal:
+      return VK_COMPARE_OP_EQUAL;
+    case rhi::CompareOp::LessOrEqual:
+      return VK_COMPARE_OP_LESS_OR_EQUAL;
+    case rhi::CompareOp::Greater:
+      return VK_COMPARE_OP_GREATER;
+    case rhi::CompareOp::NotEqual:
+      return VK_COMPARE_OP_NOT_EQUAL;
+    case rhi::CompareOp::GreaterOrEqual:
+      return VK_COMPARE_OP_GREATER_OR_EQUAL;
+    case rhi::CompareOp::Always:
+      return VK_COMPARE_OP_ALWAYS;
+    default:
+      ASSERT(0);
+      return VK_COMPARE_OP_NEVER;
   }
 }
 

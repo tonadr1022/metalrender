@@ -1,10 +1,10 @@
 #include "MeshletRendererTestScene.hpp"
 
 #include <algorithm>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "ResourceManager.hpp"
 #include "Window.hpp"
-#include "core/Logger.hpp"
 #include "core/MathUtil.hpp"
 #include "core/Util.hpp"
 #include "gfx/ImGuiRenderer.hpp"
@@ -33,6 +33,17 @@ namespace {
     "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf";
 [[maybe_unused]] constexpr const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
 [[maybe_unused]] constexpr const char* cube_path = "Models/Cube/glTF/Cube.gltf";
+
+glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
+  // clang-format off
+  float f = 1.0f / tanf(fov_y / 2.0f);
+  return {
+    f / aspect, 0.0f, 0.0f, 0.0f,
+    0.0f, f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, -1.0f,
+    0.0f, 0.0f, z_near, 0.0f};
+  // clang-format on
+}
 
 std::filesystem::path resolve_model_path(const std::filesystem::path& resource_dir,
                                          const std::string& path) {
@@ -82,6 +93,12 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
   ASSERT(res);
   ASSERT(res->totals.task_cmd_count == ctx_.model_gpu_mgr->geometry_batch().task_cmd_count);
 
+  meshlet_pso_ = ctx_.shader_mgr->create_graphics_pipeline({
+      .shaders = {{"debug_meshlet_hello", ShaderType::Task},
+                  {"debug_meshlet_hello", ShaderType::Mesh},
+                  {"debug_meshlet_hello", ShaderType::Fragment}},
+      .name = "debug_meshlet_hello",
+  });
   shade_pso_ = ctx_.shader_mgr->create_graphics_pipeline({
       .shaders = {{{"fullscreen_quad", ShaderType::Vertex},
                    {"meshlet_test/shade", ShaderType::Fragment}}},
@@ -112,14 +129,10 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
   fps_camera_.camera().yaw = -90.f;
   fps_camera_.camera().calc_vectors();
 
-  recreate_meshlet_pso();
   make_depth_pyramid_tex();
 }
 
-void MeshletRendererScene::on_swapchain_resize() {
-  recreate_meshlet_pso();
-  make_depth_pyramid_tex();
-}
+void MeshletRendererScene::on_swapchain_resize() { make_depth_pyramid_tex(); }
 
 void MeshletRendererScene::make_depth_pyramid_tex() {
   if (!ctx_.swapchain || ctx_.swapchain->desc_.width == 0 || ctx_.swapchain->desc_.height == 0) {
@@ -213,7 +226,9 @@ void MeshletRendererScene::on_imgui() {
           depth_pyramid_tex_.handle, depth_pyramid_tex_.views[static_cast<size_t>(mip)]);
       const float disp_w = 240.f;
       const float disp_h = disp_w * static_cast<float>(mv_h) / static_cast<float>(mv_w);
-      ImGui::Image(MakeImGuiTexRefBindlessFloatView(view_bindless), ImVec2(disp_w, disp_h));
+      // Inverted V: GPU depth pyramid row order vs default ImGui Image UVs (Vulkan).
+      ImGui::Image(MakeImGuiTexRefBindlessFloatView(view_bindless), ImVec2(disp_w, disp_h),
+                   ImVec2(0, 1), ImVec2(1, 0));
     } else {
       ImGui::TextUnformatted("Depth pyramid (single mip; reduce skipped)");
     }
@@ -225,7 +240,8 @@ void MeshletRendererScene::on_imgui() {
 ViewData MeshletRendererScene::prepare_view_data() {
   const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
                        std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height));
-  glm::mat4 proj = glm::perspectiveRH_ZO(glm::radians(60.f), aspect, 0.1f, 100.f);
+  float fov = 60.f;
+  const glm::mat4 proj = infinite_perspective_proj(glm::radians(fov), aspect, 0.1f);
   fps_camera_.camera().calc_vectors();
   const glm::mat4 view = fps_camera_.camera().get_view_mat();
   const glm::mat4 vp = proj * view;
@@ -381,11 +397,12 @@ void MeshletRendererScene::add_render_graph_passes() {
                                    ClearValue{.color = clear_color}),
           RenderAttInfo::depth_stencil_att(
               ctx_.rg->get_att_img(depth_att_id), LoadOp::Clear,
-              ClearValue{.depth_stencil = {.depth = 1.f, .stencil = 0}}),
+              ClearValue{.depth_stencil = {.depth = reverse_z_ ? 0.f : 1.f, .stencil = 0}}),
       });
       enc->bind_pipeline(meshlet_pso_);
       enc->set_cull_mode(CullMode::Back);
-      enc->set_wind_order(WindOrder::CounterClockwise);
+      enc->set_wind_order(WindOrder::Clockwise);
+      enc->set_depth_stencil_state(reverse_z_ ? CompareOp::Greater : CompareOp::Less, true);
       enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
       enc->set_scissor({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
 
@@ -545,16 +562,6 @@ void MeshletRendererScene::add_render_graph_passes() {
       enc->end_rendering();
     });
   }
-}
-
-void MeshletRendererScene::recreate_meshlet_pso() {
-  meshlet_pso_ = ctx_.shader_mgr->create_graphics_pipeline({
-      .shaders = {{"debug_meshlet_hello", ShaderType::Task},
-                  {"debug_meshlet_hello", ShaderType::Mesh},
-                  {"debug_meshlet_hello", ShaderType::Fragment}},
-      .depth_stencil = GraphicsPipelineCreateInfo::depth_enable(true, CompareOp::Less),
-      .name = "debug_meshlet_hello",
-  });
 }
 
 }  // namespace teng::gfx

@@ -321,6 +321,12 @@ void VulkanCmdEncoder::bind_pipeline(rhi::PipelineHandle handle) {
   bound_pipeline_ = pipeline;
   ASSERT(pipeline);
   vkCmdBindPipeline(cmd(), bindpoint, pipeline->pipeline_);
+  if (bindpoint == VK_PIPELINE_BIND_POINT_GRAPHICS) {
+    const auto& ds = pipeline->gfx_desc().depth_stencil;
+    vkCmdSetDepthTestEnable(cmd(), ds.depth_test_enable ? VK_TRUE : VK_FALSE);
+    vkCmdSetDepthWriteEnable(cmd(), ds.depth_write_enable ? VK_TRUE : VK_FALSE);
+    vkCmdSetDepthCompareOp(cmd(), convert_compare_op(ds.depth_compare_op));
+  }
   if (!pipeline->bindless_descriptor_sets_.empty()) {
     vkCmdBindDescriptorSets(cmd(), bindpoint, pipeline->layout_, pipeline->bindless_first_set_,
                             static_cast<uint32_t>(pipeline->bindless_descriptor_sets_.size()),
@@ -358,8 +364,12 @@ void VulkanCmdEncoder::draw_indexed_primitives(rhi::PrimitiveTopology topology,
                    static_cast<int32_t>(base_vertex), static_cast<uint32_t>(base_instance));
 }
 
-void VulkanCmdEncoder::set_depth_stencil_state(rhi::CompareOp /*depth_compare_op*/,
-                                               bool /*depth_write_enabled*/) {}
+void VulkanCmdEncoder::set_depth_stencil_state(rhi::CompareOp depth_compare_op,
+                                               bool depth_write_enabled) {
+  vkCmdSetDepthTestEnable(cmd(), VK_TRUE);
+  vkCmdSetDepthWriteEnable(cmd(), depth_write_enabled ? VK_TRUE : VK_FALSE);
+  vkCmdSetDepthCompareOp(cmd(), convert_compare_op(depth_compare_op));
+}
 
 void VulkanCmdEncoder::set_wind_order(rhi::WindOrder wind_order) {
   vkCmdSetFrontFaceEXT(cmd(), wind_order == rhi::WindOrder::Clockwise
