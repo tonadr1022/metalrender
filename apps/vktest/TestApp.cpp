@@ -33,8 +33,8 @@ TestApp::TestApp() {
   window_ = create_platform_window();
 
   ::teng::Window::InitInfo win_init_info{
-      .win_dims_x = 1000,
-      .win_dims_y = 1000,
+      .win_dims_x = -1,
+      .win_dims_y = -1,
       .floating_window = false,
   };
   window_->init(win_init_info);

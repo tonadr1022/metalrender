@@ -47,6 +47,7 @@ class MeshletRendererScene final : public ITestScene {
   std::array<rhi::PipelineHandleHolder, static_cast<size_t>(AlphaMaskType::Count)>
       meshlet_pso_late_;
   rhi::PipelineHandleHolder prepare_meshlets_pso_;
+  rhi::PipelineHandleHolder clear_mesh_indirect_pso_;
   rhi::PipelineHandleHolder depth_reduce_pso_;
   rhi::TexAndViewHolder depth_pyramid_tex_;
   rhi::BufferHandleHolder meshlet_vis_buf_;
