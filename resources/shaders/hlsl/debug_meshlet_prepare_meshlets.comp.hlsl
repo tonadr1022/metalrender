@@ -20,6 +20,8 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
                                  : SV_DispatchThreadID, uint gtid
                                  : SV_GroupIndex) {
   const bool in_range = dtid < pc.max_draws;
+  const bool late = (pc.pass != 0);
+  const bool object_occlusion_enabled = (pc.instance_vis_buf_idx != 0xFFFFFFFFu);
 
   InstanceData instance_data = (InstanceData)0;
   uint mesh_id = 0xFFFFFFFFu;
@@ -31,16 +33,31 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
 
   const bool valid_mesh = in_range && (mesh_id != 0xFFFFFFFFu);
 
+  // Read per-object visibility from the previous frame.
+  // Default true so early pass emits everything when occlusion is disabled.
+  bool visible_last_frame = true;
+  if (valid_mesh && object_occlusion_enabled) {
+    RWByteAddressBuffer instance_vis_buf = bindless_rwbuffers[pc.instance_vis_buf_idx];
+    visible_last_frame = instance_vis_buf.Load(dtid * (uint)sizeof(uint)) != 0;
+  }
+
+  // Early pass: only process objects that were visible last frame.
+  // Late pass: process every object (finds newly visible ones + runs occlusion test).
+  const bool should_process =
+      valid_mesh && (late || !object_occlusion_enabled || visible_last_frame);
+
   MeshData mesh_data = (MeshData)0;
   uint task_groups = 0;
-  if (valid_mesh) {
+  if (should_process) {
     mesh_data =
         bindless_buffers[pc.mesh_data_buf_idx].Load<MeshData>(mesh_id * (uint)sizeof(MeshData));
     task_groups = (mesh_data.meshlet_count + K_TASK_TG_SIZE - 1) / K_TASK_TG_SIZE;
   }
 
-  bool visible = valid_mesh;
-  if (valid_mesh && pc.culling_enabled != 0) {
+  bool visible = should_process;
+
+  // Frustum + near/far plane cull.
+  if (should_process && pc.culling_enabled != 0) {
     float3 world_center =
         rotate_quat(instance_data.scale * mesh_data.center, instance_data.rotation) +
         instance_data.translation;
@@ -53,30 +70,90 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
               (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2] > -radius);
     visible = visible &&
               (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0] > -radius);
+
+    // Late pass: HZB occlusion test (mirrors draw_cull.comp.hlsl).
+    if (late && visible && pc.depth_pyramid_tex_idx != 0xFFFFFFFFu) {
+      ProjectSphereResult proj_res =
+          project_sphere(center.xyz, radius, cull_data.z_near, cull_data.p00, cull_data.p11);
+
+      if (proj_res.success && !any(isnan(proj_res.aabb)) && !any(isinf(proj_res.aabb))) {
+        float4 aabb = proj_res.aabb;
+        uint2 texSize = uint2(cull_data.pyramid_width, cull_data.pyramid_height);
+
+        float2 aabb_size = (aabb.zw - aabb.xy) * float2(texSize);
+        float lod = floor(log2(max(aabb_size.x, aabb_size.y)));
+        lod = clamp(lod, 0.0, float(cull_data.pyramid_mip_count) - 1.0);
+
+        int lod_i = int(lod);
+        uint2 mipDims = uint2(max(1u, cull_data.pyramid_width >> uint(lod_i)),
+                              max(1u, cull_data.pyramid_height >> uint(lod_i)));
+
+        float2 texelSize = 1.0f / float2(mipDims);
+        float2 halfTexel = texelSize * 0.5f;
+
+        float2 center_uv = (aabb.xy + aabb.zw) * 0.5f;
+        center_uv = clamp(center_uv, 0.0f, 1.0f);
+
+        Texture2D depth_pyramid_tex = bindless_textures[pc.depth_pyramid_tex_idx];
+        SamplerState samp = bindless_samplers[NEAREST_CLAMP_EDGE_SAMPLER_IDX];
+
+        float d0 = depth_pyramid_tex
+                       .SampleLevel(samp, center_uv + float2(-halfTexel.x, -halfTexel.y), lod_i)
+                       .x;
+        float d1 = depth_pyramid_tex
+                       .SampleLevel(samp, center_uv + float2(-halfTexel.x, halfTexel.y), lod_i)
+                       .x;
+        float d2 = depth_pyramid_tex
+                       .SampleLevel(samp, center_uv + float2(halfTexel.x, -halfTexel.y), lod_i)
+                       .x;
+        float d3 =
+            depth_pyramid_tex.SampleLevel(samp, center_uv + float2(halfTexel.x, halfTexel.y), lod_i)
+                .x;
+
+        float depth = min(min(d0, d1), min(d2, d3));
+
+        float view_z = center.z + radius;
+        float zn = cull_data.z_near;
+        float depth_sphere = zn / -view_z;
+        visible = visible && (depth_sphere >= depth);
+      }
+    }
   }
 
-  const bool contribute = visible;
+  // Late pass: write per-object visibility back for use by next frame's early pass.
+  if (late && object_occlusion_enabled && valid_mesh) {
+    RWByteAddressBuffer instance_vis_buf = bindless_rwbuffers[pc.instance_vis_buf_idx];
+    instance_vis_buf.Store(dtid * (uint)sizeof(uint), visible ? 1u : 0u);
+  }
 
-  if (gtid == 0) {
+  // Emit decision mirrors draw_cull.comp.hlsl when meshlet occlusion is enabled:
+  //   should_emit = meshlet_occlusion_enabled ? visible : (visible && !visible_last_frame)
+  // Meshlet occlusion is always on in this scene, so should_emit = visible.
+  // For the early pass, non-visible-last-frame objects already have visible=false via
+  // should_process, so this naturally matches the early-pass skip logic.
+  const bool should_emit = visible;
+
+  // --- Groupshared visible-object counter (all threads must reach barriers) ---
+  if (late && gtid == 0) {
     g_visible_in_group = 0;
   }
   GroupMemoryBarrierWithGroupSync();
 
-  const uint lane_contrib = contribute ? 1u : 0u;
+  const uint lane_contrib = should_emit ? 1u : 0u;
   const uint wave_sum = WaveActiveSum(lane_contrib);
-  if (WaveIsFirstLane()) {
+  if (late && WaveIsFirstLane()) {
     InterlockedAdd(g_visible_in_group, wave_sum);
   }
   GroupMemoryBarrierWithGroupSync();
 
-  if (gtid == 0 && g_visible_in_group > 0) {
+  if (late && gtid == 0 && g_visible_in_group > 0) {
     RWByteAddressBuffer vis_cnt_buf = bindless_rwbuffers[pc.visible_obj_cnt_buf_idx];
     uint unused;
     vis_cnt_buf.InterlockedAdd(0, g_visible_in_group, unused);
   }
   GroupMemoryBarrierWithGroupSync();
 
-  if (!contribute) {
+  if (!should_emit) {
     return;
   }
 
@@ -86,7 +163,10 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
 
   TaskCmd cmd;
   cmd.instance_id = dtid;
-  cmd.late_draw_visibility = 1u;
+  // Tells the task shader whether to trust the meshlet visibility buffer:
+  //   1 = object was visible last frame → rely on meshlet vis buf for early occlusion
+  //   0 = newly visible object → task shader draws all meshlets fresh
+  cmd.late_draw_visibility = uint(visible_last_frame);
   RWByteAddressBuffer dst_buf = bindless_rwbuffers[pc.dst_task_cmd_buf_idx];
   for (uint i = 0; i < task_groups; ++i) {
     cmd.task_offset = mesh_data.meshlet_base + i * K_TASK_TG_SIZE;

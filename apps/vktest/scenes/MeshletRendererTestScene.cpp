@@ -7,6 +7,7 @@
 
 #include "ResourceManager.hpp"
 #include "Window.hpp"
+#include "core/Logger.hpp"
 #include "core/MathUtil.hpp"
 #include "core/Util.hpp"
 #include "gfx/DrawBatch.hpp"
@@ -248,10 +249,6 @@ void MeshletRendererScene::shutdown() {
   if (ctx_.window) {
     fps_camera_.set_mouse_captured(ctx_.window->get_handle(), false);
   }
-  if (meshlet_vis_buf_.handle.is_valid()) {
-    ctx_.device->destroy(meshlet_vis_buf_.handle);
-    meshlet_vis_buf_ = {};
-  }
   ResourceManager::get().free_model(test_model_handle_);
 }
 
@@ -275,6 +272,7 @@ void MeshletRendererScene::on_key_event(int key, int action, int mods) {
 void MeshletRendererScene::on_imgui() {
   ImGui::Begin("Meshlet renderer");
   ImGui::Checkbox("GPU object frustum cull", &gpu_object_frustum_cull_);
+  ImGui::Checkbox("GPU object occlusion cull", &gpu_object_occlusion_cull_);
   uint32_t visible_meshlet_task_groups = 0;
   uint32_t visible_objects = 0;
   MeshletDrawStats visible_meshlet_stats{};
@@ -456,21 +454,65 @@ void MeshletRendererScene::add_render_graph_passes() {
     globals_cb_buf = frame_uniform_gpu_allocator_.alloc2(sizeof(GlobalData), &gd);
   }
 
-  RGResourceId task_cmd_dst_rg = ctx_.rg->create_buffer(
-      {.size = task_cmd_count * sizeof(TaskCmd), .defer_reuse = true}, "meshlet_hello_task_cmds");
   constexpr size_t k_indirect_bytes =
       sizeof(uint32_t) * 3 * static_cast<size_t>(AlphaMaskType::Count);
-  RGResourceId indirect_args_rg = ctx_.rg->create_buffer(
-      {.size = k_indirect_bytes, .defer_reuse = true}, "meshlet_hello_indirect_args");
+
+  // When object occlusion is enabled we maintain a persistent per-instance visibility buffer
+  // from the previous frame so the early pass can skip objects that were culled last frame.
+  // Filled to 1 (all visible) only on create/resize; updated by the late cull pass each frame.
+  RGResourceId instance_vis_rg_id{};
+  const uint32_t max_draws = ctx_.model_gpu_mgr->instance_mgr().stats().max_instance_data_count;
+  if (gpu_object_occlusion_cull_) {
+    const size_t required = static_cast<size_t>(max_draws) * sizeof(uint32_t);
+    rhi::Buffer* cur =
+        instance_vis_buf_.handle.is_valid() ? ctx_.device->get_buf(instance_vis_buf_) : nullptr;
+    bool created_or_resized = false;
+    if (!cur || cur->size() < required) {
+      if (instance_vis_buf_.handle.is_valid()) {
+        ctx_.device->destroy(instance_vis_buf_.handle);
+        instance_vis_buf_ = {};
+      }
+      instance_vis_buf_ = ctx_.device->create_buf_h({
+          .usage = rhi::BufferUsage::Storage,
+          .size = required,
+          .name = "meshlet_test_instance_vis",
+      });
+      created_or_resized = true;
+    }
+    // Import with a generic state — the late cull pass declares its write dep explicitly.
+    instance_vis_rg_id = ctx_.rg->import_external_buffer(
+        instance_vis_buf_.handle,
+        RGState{.stage = rhi::PipelineStage::TopOfPipe, .layout = rhi::ResourceLayout::General},
+        "meshlet_test_instance_vis_rg");
+    if (created_or_resized) {
+      // First use: mark all objects as visible so early pass doesn't skip anything.
+      auto& p = ctx_.rg->add_transfer_pass("meshlet_clear_instance_vis");
+      instance_vis_rg_id = p.write_buf(instance_vis_rg_id, rhi::PipelineStage::AllTransfer);
+      p.set_ex([required, this](rhi::CmdEncoder* enc) {
+        enc->fill_buffer(instance_vis_buf_.handle, 0, static_cast<uint32_t>(required), 1u);
+      });
+    }
+  }
+
+  RGResourceId task_cmd_early_rg =
+      ctx_.rg->create_buffer({.size = task_cmd_count * sizeof(TaskCmd), .defer_reuse = true},
+                             "meshlet_hello_task_cmds_early");
+  RGResourceId task_cmd_late_rg =
+      ctx_.rg->create_buffer({.size = task_cmd_count * sizeof(TaskCmd), .defer_reuse = true},
+                             "meshlet_hello_task_cmds_late");
+
+  RGResourceId indirect_args_early_rg = ctx_.rg->create_buffer(
+      {.size = k_indirect_bytes, .defer_reuse = true}, "meshlet_hello_indirect_args_early");
+  RGResourceId indirect_args_late_rg = ctx_.rg->create_buffer(
+      {.size = k_indirect_bytes, .defer_reuse = true}, "meshlet_hello_indirect_args_late");
+
   RGResourceId visible_object_count_rg = ctx_.rg->create_buffer(
       {.size = sizeof(uint32_t), .defer_reuse = true}, "meshlet_visible_object_count");
   RGResourceId meshlet_stats_rg = ctx_.rg->create_buffer(
       {.size = k_meshlet_draw_stats_bytes, .defer_reuse = true}, "meshlet_test_draw_stats");
 
-  const uint32_t max_draws = ctx_.model_gpu_mgr->instance_mgr().stats().max_instance_data_count;
-
   {
-    auto& p = ctx_.rg->add_transfer_pass("meshlet_clear_visible_and_indirect");
+    auto& p = ctx_.rg->add_transfer_pass("meshlet_clear_visible_count_buf_and_stats");
     visible_object_count_rg = p.write_buf(visible_object_count_rg, rhi::PipelineStage::AllTransfer);
     meshlet_stats_rg = p.write_buf(meshlet_stats_rg, rhi::PipelineStage::AllTransfer);
     p.set_ex([this, visible_object_count_rg, meshlet_stats_rg](CmdEncoder* enc) {
@@ -480,31 +522,43 @@ void MeshletRendererScene::add_render_graph_passes() {
   }
 
   {
-    auto& p = ctx_.rg->add_compute_pass("meshlet_clear_indirect_mesh_cmd");
-    indirect_args_rg = p.write_buf(indirect_args_rg, rhi::PipelineStage::ComputeShader);
-    p.set_ex([this, indirect_args_rg](CmdEncoder* enc) {
+    auto& p = ctx_.rg->add_compute_pass("meshlet_clear_indirect_mesh_cmds");
+    indirect_args_early_rg = p.write_buf(indirect_args_early_rg, rhi::PipelineStage::ComputeShader);
+    indirect_args_late_rg = p.write_buf(indirect_args_late_rg, rhi::PipelineStage::ComputeShader);
+    p.set_ex([this, indirect_args_early_rg, indirect_args_late_rg](CmdEncoder* enc) {
       enc->bind_pipeline(clear_mesh_indirect_pso_);
-      TestClearBufPC pc{
-          .buf_idx = ctx_.device->get_buf(ctx_.rg->get_buf(indirect_args_rg))->bindless_idx(),
-      };
-      enc->push_constants(&pc, sizeof(pc));
-      enc->dispatch_compute({static_cast<uint32_t>(AlphaMaskType::Count), 1u, 1u}, {1u, 1u, 1u});
+      for (RGResourceId id : {indirect_args_early_rg, indirect_args_late_rg}) {
+        TestClearBufPC pc{
+            .buf_idx = ctx_.device->get_buf(ctx_.rg->get_buf(id))->bindless_idx(),
+        };
+        enc->push_constants(&pc, sizeof(pc));
+        enc->dispatch_compute({static_cast<uint32_t>(AlphaMaskType::Count), 1u, 1u}, {1u, 1u, 1u});
+      }
     });
   }
 
   {
-    auto& p = ctx_.rg->add_compute_pass("meshlet_prepare_meshlets");
-    task_cmd_dst_rg = p.write_buf(task_cmd_dst_rg, PipelineStage::ComputeShader);
-    indirect_args_rg = p.rw_buf(indirect_args_rg, PipelineStage::ComputeShader);
+    // When object occlusion is enabled, only processes objects that were visible last frame in
+    // early pass.
+    auto& p = ctx_.rg->add_compute_pass("meshlet_prepare_meshlets_early");
+    if (gpu_object_occlusion_cull_) {
+      instance_vis_rg_id = p.rw_buf(instance_vis_rg_id, PipelineStage::ComputeShader);
+    }
+    task_cmd_early_rg = p.write_buf(task_cmd_early_rg, PipelineStage::ComputeShader);
+    indirect_args_early_rg = p.rw_buf(indirect_args_early_rg, PipelineStage::ComputeShader);
     visible_object_count_rg = p.rw_buf(visible_object_count_rg, PipelineStage::ComputeShader);
-    p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, visible_object_count_rg, max_draws,
+    p.set_ex([this, task_cmd_early_rg, indirect_args_early_rg, visible_object_count_rg, max_draws,
               view_cb_suballoc, cull_early_cb](CmdEncoder* enc) {
+      const uint32_t instance_vis_idx =
+          gpu_object_occlusion_cull_ && instance_vis_buf_.handle.is_valid()
+              ? ctx_.device->get_buf(instance_vis_buf_)->bindless_idx()
+              : UINT32_MAX;
       enc->bind_pipeline(prepare_meshlets_pso_);
       DebugMeshletPreparePC pc{
           .dst_task_cmd_buf_idx =
-              ctx_.device->get_buf(ctx_.rg->get_buf(task_cmd_dst_rg))->bindless_idx(),
+              ctx_.device->get_buf(ctx_.rg->get_buf(task_cmd_early_rg))->bindless_idx(),
           .draw_cnt_buf_idx =
-              ctx_.device->get_buf(ctx_.rg->get_buf(indirect_args_rg))->bindless_idx(),
+              ctx_.device->get_buf(ctx_.rg->get_buf(indirect_args_early_rg))->bindless_idx(),
           .instance_data_buf_idx =
               ctx_.device->get_buf(ctx_.model_gpu_mgr->instance_mgr().get_instance_data_buf())
                   ->bindless_idx(),
@@ -516,8 +570,11 @@ void MeshletRendererScene::add_render_graph_passes() {
           .culling_enabled = gpu_object_frustum_cull_,
           .visible_obj_cnt_buf_idx =
               ctx_.device->get_buf(ctx_.rg->get_buf(visible_object_count_rg))->bindless_idx(),
+          .pass = 0u,
+          .instance_vis_buf_idx = instance_vis_idx,
+          // no occlusion test in early pass
+          .depth_pyramid_tex_idx = UINT32_MAX,
       };
-
       enc->bind_cbv(view_cb_suballoc.buf, VIEW_DATA_SLOT, view_cb_suballoc.offset_bytes,
                     sizeof(ViewData));
       enc->bind_cbv(cull_early_cb.buf, 4, cull_early_cb.offset_bytes, sizeof(CullData));
@@ -541,17 +598,17 @@ void MeshletRendererScene::add_render_graph_passes() {
 
   {
     auto& p = ctx_.rg->add_graphics_pass("meshlet_occlusion_early");
-    task_cmd_dst_rg =
-        p.read_buf(task_cmd_dst_rg, PipelineStage::MeshShader | PipelineStage::TaskShader);
-    indirect_args_rg =
-        p.read_buf(indirect_args_rg, PipelineStage::TaskShader | PipelineStage::DrawIndirect,
+    task_cmd_early_rg =
+        p.read_buf(task_cmd_early_rg, PipelineStage::MeshShader | PipelineStage::TaskShader);
+    indirect_args_early_rg =
+        p.read_buf(indirect_args_early_rg, PipelineStage::TaskShader | PipelineStage::DrawIndirect,
                    AccessFlags::IndirectCommandRead);
     meshlet_vis_rg_id = p.rw_buf(meshlet_vis_rg_id, PipelineStage::TaskShader);
     meshlet_stats_rg = p.rw_buf(meshlet_stats_rg, PipelineStage::TaskShader);
     gbuffer_a_id = p.write_color_output(gbuffer_a_id);
     depth_att_id = p.write_depth_output(depth_att);
 
-    p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, depth_att_id, view_cb_suballoc,
+    p.set_ex([this, task_cmd_early_rg, indirect_args_early_rg, depth_att_id, view_cb_suballoc,
               globals_cb_buf, gbuffer_a_id, meshlet_vis_rg_id, meshlet_stats_rg, meshlet_flags,
               cull_early_cb](CmdEncoder* enc) {
       glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
@@ -570,7 +627,7 @@ void MeshletRendererScene::add_render_graph_passes() {
           reverse_z_, false, meshlet_flags, ctx_.device, *ctx_.rg, geo_batch,
           ctx_.model_gpu_mgr->materials_allocator().get_buffer_handle(), globals_cb_buf,
           view_cb_suballoc, cull_early_cb, rhi::TextureHandle{}, vp_dims, meshlet_vis_rg_id,
-          meshlet_stats_rg, task_cmd_dst_rg, ctx_.rg->get_buf(indirect_args_rg),
+          meshlet_stats_rg, task_cmd_early_rg, ctx_.rg->get_buf(indirect_args_early_rg),
           ctx_.model_gpu_mgr->instance_mgr(), std::span(meshlet_pso_early_), enc);
 
       enc->end_rendering();
@@ -638,12 +695,72 @@ void MeshletRendererScene::add_render_graph_passes() {
     }
   }
 
+  // --- Late object cull pass ---
+  // Processes ALL objects regardless of last-frame visibility:
+  //   - Frustum culls (same as early)
+  //   - When occlusion is enabled: HZB test against depth pyramid; writes visibility back to
+  //     instance_vis_buf for use by next frame's early pass.
+  //   - Emits task cmds for all frustum+occlusion-visible objects (meshlet-level occlusion inside
+  //     the task shader then handles per-meshlet culling using the meshlet vis buf).
+  {
+    auto& p = ctx_.rg->add_compute_pass("meshlet_prepare_meshlets_late");
+    task_cmd_late_rg = p.write_buf(task_cmd_late_rg, PipelineStage::ComputeShader);
+    indirect_args_late_rg = p.rw_buf(indirect_args_late_rg, PipelineStage::ComputeShader);
+    visible_object_count_rg = p.rw_buf(visible_object_count_rg, PipelineStage::ComputeShader);
+    if (gpu_object_occlusion_cull_ && instance_vis_rg_id.is_valid()) {
+      // Declare the write dep so the RG inserts the correct UAW barrier.
+      instance_vis_rg_id = p.write_buf(instance_vis_rg_id, PipelineStage::ComputeShader);
+    }
+    if (final_depth_pyramid_rg.is_valid() && gpu_object_occlusion_cull_) {
+      p.sample_tex(final_depth_pyramid_rg, rhi::PipelineStage::ComputeShader,
+                   RgSubresourceRange::all_mips_all_slices());
+    }
+    p.set_ex([this, task_cmd_late_rg, indirect_args_late_rg, visible_object_count_rg, max_draws,
+              view_cb_suballoc, cull_late_cb](CmdEncoder* enc) {
+      const uint32_t instance_vis_idx =
+          gpu_object_occlusion_cull_ && instance_vis_buf_.handle.is_valid()
+              ? ctx_.device->get_buf(instance_vis_buf_)->bindless_idx()
+              : UINT32_MAX;
+      const uint32_t depth_pyramid_idx =
+          gpu_object_occlusion_cull_ && depth_pyramid_tex_.is_valid()
+              ? ctx_.device->get_tex(depth_pyramid_tex_)->bindless_idx()
+              : UINT32_MAX;
+      enc->bind_pipeline(prepare_meshlets_pso_);
+      DebugMeshletPreparePC pc{
+          .dst_task_cmd_buf_idx =
+              ctx_.device->get_buf(ctx_.rg->get_buf(task_cmd_late_rg))->bindless_idx(),
+          .draw_cnt_buf_idx =
+              ctx_.device->get_buf(ctx_.rg->get_buf(indirect_args_late_rg))->bindless_idx(),
+          .instance_data_buf_idx =
+              ctx_.device->get_buf(ctx_.model_gpu_mgr->instance_mgr().get_instance_data_buf())
+                  ->bindless_idx(),
+          .mesh_data_buf_idx =
+              ctx_.device
+                  ->get_buf(ctx_.model_gpu_mgr->geometry_batch().mesh_buf.get_buffer_handle())
+                  ->bindless_idx(),
+          .max_draws = max_draws,
+          .culling_enabled = gpu_object_frustum_cull_,
+          .visible_obj_cnt_buf_idx =
+              ctx_.device->get_buf(ctx_.rg->get_buf(visible_object_count_rg))->bindless_idx(),
+          .pass = 1u,
+          .instance_vis_buf_idx = instance_vis_idx,
+          .depth_pyramid_tex_idx = depth_pyramid_idx,
+      };
+      enc->bind_cbv(view_cb_suballoc.buf, VIEW_DATA_SLOT, view_cb_suballoc.offset_bytes,
+                    sizeof(ViewData));
+      enc->bind_cbv(cull_late_cb.buf, 4, cull_late_cb.offset_bytes, sizeof(CullData));
+      enc->push_constants(&pc, sizeof(pc));
+      enc->dispatch_compute({align_divide_up(static_cast<uint64_t>(max_draws), 64ull), 1, 1},
+                            {64, 1, 1});
+    });
+  }
+
   {
     auto& p = ctx_.rg->add_graphics_pass("meshlet_occlusion_late");
-    task_cmd_dst_rg =
-        p.read_buf(task_cmd_dst_rg, PipelineStage::MeshShader | PipelineStage::TaskShader);
-    indirect_args_rg =
-        p.read_buf(indirect_args_rg, PipelineStage::TaskShader | PipelineStage::DrawIndirect,
+    task_cmd_late_rg =
+        p.read_buf(task_cmd_late_rg, PipelineStage::MeshShader | PipelineStage::TaskShader);
+    indirect_args_late_rg =
+        p.read_buf(indirect_args_late_rg, PipelineStage::TaskShader | PipelineStage::DrawIndirect,
                    AccessFlags::IndirectCommandRead);
     if (final_depth_pyramid_rg.is_valid()) {
       p.sample_tex(final_depth_pyramid_rg, rhi::PipelineStage::TaskShader,
@@ -655,7 +772,7 @@ void MeshletRendererScene::add_render_graph_passes() {
     gbuffer_a_id = p.rw_color_output(gbuffer_a_id);
     depth_att_id = p.rw_depth_output(depth_att);
 
-    p.set_ex([this, task_cmd_dst_rg, indirect_args_rg, depth_att_id, view_cb_suballoc,
+    p.set_ex([this, task_cmd_late_rg, indirect_args_late_rg, depth_att_id, view_cb_suballoc,
               globals_cb_buf, gbuffer_a_id, meshlet_vis_rg_id, meshlet_stats_rg, meshlet_flags,
               cull_late_cb](CmdEncoder* enc) {
       const glm::uvec2 vp_dims{ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
@@ -672,15 +789,16 @@ void MeshletRendererScene::add_render_graph_passes() {
           reverse_z_, true, meshlet_flags, ctx_.device, *ctx_.rg, geo_batch,
           ctx_.model_gpu_mgr->materials_allocator().get_buffer_handle(), globals_cb_buf,
           view_cb_suballoc, cull_late_cb, depth_pyramid_tex_.handle, vp_dims, meshlet_vis_rg_id,
-          meshlet_stats_rg, task_cmd_dst_rg, ctx_.rg->get_buf(indirect_args_rg),
+          meshlet_stats_rg, task_cmd_late_rg, ctx_.rg->get_buf(indirect_args_late_rg),
           ctx_.model_gpu_mgr->instance_mgr(), std::span(meshlet_pso_late_), enc);
 
       enc->end_rendering();
     });
   }
 
+  // Readback the early indirect arg count (opaque dispatch x = task group count, debug stat).
   add_buffer_readback_copy2(
-      *ctx_.rg, "readback_task_cmd_group_count", indirect_args_rg,
+      *ctx_.rg, "readback_task_cmd_group_count", indirect_args_early_rg,
       ctx_.rg->import_external_buffer(
           task_cmd_group_count_readback_[ctx_.curr_frame_in_flight_idx].handle,
           "task_cmd_group_count_readback"),
