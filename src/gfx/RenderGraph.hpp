@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <span>
@@ -23,6 +24,7 @@ class Swapchain;
 namespace gfx {
 
 enum class SizeClass : uint8_t { Swapchain, Custom };
+enum class TemporalSlotMode : uint8_t { DoubleBuffered, SingleSlot };
 
 struct AttachmentInfo {
   rhi::TextureFormat format{rhi::TextureFormat::Undefined};
@@ -31,11 +33,14 @@ struct AttachmentInfo {
   uint32_t array_layers{1};
   SizeClass size_class{SizeClass::Swapchain};
   bool is_swapchain_tex{};
+  bool temporal{};
+  TemporalSlotMode temporal_slot_mode{TemporalSlotMode::DoubleBuffered};
 
   bool operator==(const AttachmentInfo& other) const {
     return is_swapchain_tex == other.is_swapchain_tex && format == other.format &&
            dims == other.dims && mip_levels == other.mip_levels &&
-           array_layers == other.array_layers && size_class == other.size_class;
+           array_layers == other.array_layers && size_class == other.size_class &&
+           temporal == other.temporal && temporal_slot_mode == other.temporal_slot_mode;
   }
 };
 
@@ -48,8 +53,11 @@ struct BufferInfo {
   // RG version for "previous frame" reads, or implement temporal attachment/buffer history in the
   // graph.
   bool defer_reuse{};
+  bool temporal{};
+  TemporalSlotMode temporal_slot_mode{TemporalSlotMode::DoubleBuffered};
   bool operator==(const BufferInfo& other) const {
-    return size == other.size && defer_reuse == other.defer_reuse;
+    return size == other.size && defer_reuse == other.defer_reuse && temporal == other.temporal &&
+           temporal_slot_mode == other.temporal_slot_mode;
   }
 };
 
@@ -58,14 +66,16 @@ struct AttachmentInfoHash {
   size_t operator()(const AttachmentInfo& att_info) const {
     auto h = std::make_tuple((uint32_t)att_info.size_class, att_info.array_layers,
                              att_info.mip_levels, att_info.dims.x, att_info.dims.y,
-                             (uint32_t)att_info.format, att_info.is_swapchain_tex);
+                             (uint32_t)att_info.format, att_info.is_swapchain_tex,
+                             att_info.temporal, (uint32_t)att_info.temporal_slot_mode);
     return util::hash::tuple_hash<decltype(h)>{}(h);
   }
 };
 
 struct BufferInfoHash {
   size_t operator()(const BufferInfo& buff_info) const {
-    auto h = std::make_tuple(buff_info.size, buff_info.defer_reuse);
+    auto h = std::make_tuple(buff_info.size, buff_info.defer_reuse, buff_info.temporal,
+                             (uint32_t)buff_info.temporal_slot_mode);
     return util::hash::tuple_hash<decltype(h)>{}(h);
   }
 };
@@ -212,20 +222,20 @@ enum class RGPassType { None, Compute, Graphics, Transfer };
 // - auto attachment image creation
 // - auto barrier placement
 // - external resource integration
+// - first-class temporal buffer / texture history
 //
 // Buffer / attachment pooling lifetime:
 // - Transient attachment textures and internal buffers are pooled across bake/execute cycles.
 // - `BufferInfo::defer_reuse` delays returning the same handle to the free list until the next
 //   execute completes (see `defer_pool_*` members); it is not shader-visible "history".
 // - Attachment textures are returned to the pool at the end of each execute (no defer path yet).
+// - Temporal resources persist across frames and stay out of the transient pools entirely.
+// - Temporal slot policy chooses either explicit current/history double-buffering or a single
+//   persistent slot reused across frames while preserving logical history/current views.
 //
 // The following are TODOs
 // - multiple queues
 // - auto buffers
-// - temporal attachments / explicit "previous frame" RG resources for shader reads (not
-// implemented;
-//   unrelated to `defer_reuse`, which only defers pool return)
-// - (optional) first-class temporal buffers in the graph beyond pool deferral
 //
 // Misc notes:
 // - not thread safe
@@ -354,6 +364,9 @@ class RenderGraph {
 
   RGResourceId create_texture(const AttachmentInfo& att_info, std::string_view debug_name = {});
   RGResourceId create_buffer(const BufferInfo& buf_info, std::string_view debug_name = {});
+  [[nodiscard]] bool is_temporal(RGResourceId id) const;
+  [[nodiscard]] bool has_history(RGResourceId id) const;
+  RGResourceId history(RGResourceId id);
   RGResourceId import_external_texture(rhi::TextureHandle tex_handle,
                                        std::string_view debug_name = {});
   RGResourceId import_external_texture(rhi::TextureHandle tex_handle, const RGState& initial,
@@ -437,6 +450,7 @@ class RenderGraph {
   void bake_allocate_transient_resources_(glm::uvec2 fb_size,
                                           const std::vector<rhi::AccessFlags>& tex_physical_access,
                                           const std::vector<rhi::AccessFlags>& buf_physical_access);
+  void bake_allocate_temporal_resources_(glm::uvec2 fb_size);
   void bake_schedule_barriers_(bool verbose);
   void bake_validate_();
   void bake_write_debug_dump_if_requested_(glm::uvec2 fb_size);
@@ -493,15 +507,101 @@ class RenderGraph {
   /// Optional per-mip initial `RGState` for external textures (key: physical handle `to64()`).
   std::unordered_map<uint64_t, std::vector<RGState>> external_tex_mip_initial_states_;
 
+  static constexpr uint32_t k_invalid_temporal_idx = UINT32_MAX;
+
+  struct TemporalResourceKey {
+    NameId debug_name{kInvalidNameId};
+    RGResourceType type{};
+    bool operator==(const TemporalResourceKey& other) const {
+      return debug_name == other.debug_name && type == other.type;
+    }
+  };
+
+  struct TemporalResourceKeyHash {
+    size_t operator()(const TemporalResourceKey& key) const noexcept {
+      auto h = std::make_tuple(key.debug_name, static_cast<uint32_t>(key.type));
+      return util::hash::tuple_hash<decltype(h)>{}(h);
+    }
+  };
+
+  struct TemporalTextureState {
+    std::vector<RGState> per_mip;
+  };
+
+  struct TemporalTextureRecord {
+    AttachmentInfo info{};
+    NameId debug_name{kInvalidNameId};
+    TemporalSlotMode slot_mode{TemporalSlotMode::DoubleBuffered};
+    rhi::TextureUsage usage{rhi::TextureUsage::None};
+    std::array<rhi::TextureHandle, 2> handles{};
+    std::array<TemporalTextureState, 2> slot_states{};
+    uint32_t current_slot{};
+    bool history_valid{};
+    bool current_used_this_frame{};
+    bool history_used_this_frame{};
+    bool wrote_current_this_frame{};
+  };
+
+  struct TemporalBufferRecord {
+    BufferInfo info{};
+    NameId debug_name{kInvalidNameId};
+    TemporalSlotMode slot_mode{TemporalSlotMode::DoubleBuffered};
+    rhi::BufferUsage usage{rhi::BufferUsage::None};
+    std::array<rhi::BufferHandle, 2> handles{};
+    std::array<RGState, 2> slot_states{};
+    uint32_t current_slot{};
+    bool history_valid{};
+    bool current_used_this_frame{};
+    bool history_used_this_frame{};
+    bool wrote_current_this_frame{};
+  };
+
   struct ResourceRecord {
     RGResourceType type{};
     uint32_t physical_idx{UINT32_MAX};
     NameId debug_name{RenderGraph::kInvalidNameId};
     uint32_t latest_version{};
+    uint32_t temporal_idx{k_invalid_temporal_idx};
+    bool temporal_history_view{};
   };
   std::vector<ResourceRecord> resources_;
   ResourceRecord create_resource_record(RGResourceType type, uint32_t physical_idx,
                                         std::string_view debug_name);
+  ResourceRecord create_temporal_resource_record(RGResourceType type, uint32_t physical_idx,
+                                                 uint32_t temporal_idx, bool history_view,
+                                                 std::string_view debug_name);
+  uint32_t get_temporal_buffer_index_(NameId debug_name, const BufferInfo& info);
+  uint32_t get_temporal_texture_index_(NameId debug_name, const AttachmentInfo& info);
+  [[nodiscard]] static constexpr uint32_t temporal_slot_count(TemporalSlotMode slot_mode) {
+    return slot_mode == TemporalSlotMode::SingleSlot ? 1u : 2u;
+  }
+  [[nodiscard]] static constexpr bool temporal_has_distinct_history_slot(
+      TemporalSlotMode slot_mode) {
+    return slot_mode == TemporalSlotMode::DoubleBuffered;
+  }
+  [[nodiscard]] static constexpr uint32_t resolve_current_slot(
+      const TemporalTextureRecord& record) {
+    return record.current_slot;
+  }
+  [[nodiscard]] static constexpr uint32_t resolve_current_slot(const TemporalBufferRecord& record) {
+    return record.current_slot;
+  }
+  [[nodiscard]] static constexpr uint32_t resolve_history_slot(
+      const TemporalTextureRecord& record) {
+    return temporal_has_distinct_history_slot(record.slot_mode) ? (record.current_slot ^ 1u)
+                                                                : record.current_slot;
+  }
+  [[nodiscard]] static constexpr uint32_t resolve_history_slot(const TemporalBufferRecord& record) {
+    return temporal_has_distinct_history_slot(record.slot_mode) ? (record.current_slot ^ 1u)
+                                                                : record.current_slot;
+  }
+  void reset_temporal_frame_usage_();
+  void destroy_temporal_texture_record_(TemporalTextureRecord& record);
+  void destroy_temporal_buffer_record_(TemporalBufferRecord& record);
+  void install_temporal_buffer_slot_(uint32_t resource_idx);
+  void install_temporal_texture_slot_(uint32_t resource_idx, glm::uvec2 fb_size);
+  void add_single_slot_temporal_dependencies_and_validate_();
+  void mark_temporal_use_(RGResourceId id, bool is_write);
 
   // cache for intermediate calc data (pass dependency DFS: 0=white, 1=gray, 2=black)
   std::vector<uint8_t> pass_dep_dfs_state_;
@@ -509,6 +609,12 @@ class RenderGraph {
   std::vector<uint32_t> intermed_pass_stack_;
   rhi::Device* device_{};
   size_t external_texture_count_{};
+  std::unordered_map<TemporalResourceKey, uint32_t, TemporalResourceKeyHash>
+      temporal_textures_by_key_;
+  std::unordered_map<TemporalResourceKey, uint32_t, TemporalResourceKeyHash>
+      temporal_buffers_by_key_;
+  std::vector<TemporalTextureRecord> temporal_textures_;
+  std::vector<TemporalBufferRecord> temporal_buffers_;
 };
 
 using RGPass = RenderGraph::Pass;
