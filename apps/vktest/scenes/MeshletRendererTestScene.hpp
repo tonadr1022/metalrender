@@ -13,6 +13,30 @@
 
 namespace teng::gfx {
 
+class RenderGraph;
+class ModelGPUMgr;
+
+class GenerateTaskCmdComputePass {
+ public:
+  GenerateTaskCmdComputePass(rhi::Device& device, RenderGraph& rg, ModelGPUMgr& model_gpu_mgr,
+                             ShaderManager& shader_mgr);
+
+  void bake(uint32_t max_draws, bool late, const BufferSuballoc& view_cb_suballoc,
+            const BufferSuballoc& cull_cb, RGResourceId& task_cmd_rg,
+            RGResourceId& indirect_args_rg, RGResourceId& visible_object_count_rg,
+            RGResourceId& instance_vis_rg, RGResourceId* final_depth_pyramid_rg,
+            rhi::TextureHandle final_depth_pyramid_tex, rhi::BufferHandle instance_vis_buf);
+
+ private:
+  rhi::PipelineHandleHolder prepare_meshlets_pso_;
+  rhi::PipelineHandleHolder prepare_meshlets_late_pso_;
+  bool gpu_object_occlusion_cull_{true};
+  bool gpu_object_frustum_cull_{true};
+  rhi::Device& device_;
+  RenderGraph& rg_;
+  ModelGPUMgr& model_gpu_mgr_;
+};
+
 class MeshletRendererScene final : public ITestScene {
  public:
   explicit MeshletRendererScene(const TestSceneContext& ctx);
@@ -41,12 +65,14 @@ class MeshletRendererScene final : public ITestScene {
   void ensure_meshlet_vis_buffer();
 
   bool reverse_z_{true};
+  std::optional<GenerateTaskCmdComputePass> generate_task_cmd_compute_pass_;
   rhi::PipelineHandleHolder shade_pso_;
   std::array<rhi::PipelineHandleHolder, static_cast<size_t>(AlphaMaskType::Count)>
       meshlet_pso_early_;
   std::array<rhi::PipelineHandleHolder, static_cast<size_t>(AlphaMaskType::Count)>
       meshlet_pso_late_;
   rhi::PipelineHandleHolder prepare_meshlets_pso_;
+  rhi::PipelineHandleHolder prepare_meshlets_late_pso_;
   rhi::PipelineHandleHolder clear_mesh_indirect_pso_;
   rhi::PipelineHandleHolder depth_reduce_pso_;
   rhi::TexAndViewHolder depth_pyramid_tex_;
@@ -56,7 +82,7 @@ class MeshletRendererScene final : public ITestScene {
   ModelHandle test_model_handle_;
   InstanceMgr::Alloc instance_alloc_{};
   bool gpu_object_frustum_cull_{true};
-  bool gpu_object_occlusion_cull_{false};
+  bool gpu_object_occlusion_cull_{true};
   rhi::BufferHandleHolder instance_vis_buf_;
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> task_cmd_group_count_readback_;
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> visible_object_count_readback_;

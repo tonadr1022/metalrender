@@ -11,6 +11,10 @@
 #include "math.hlsli"
 // clang-format on
 
+#ifndef LATE
+#define LATE 0
+#endif
+
 groupshared uint g_visible_in_group;
 
 CONSTANT_BUFFER(ViewData, view_data, VIEW_DATA_SLOT);
@@ -20,8 +24,11 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
                                  : SV_DispatchThreadID, uint gtid
                                  : SV_GroupIndex) {
   const bool in_range = dtid < pc.max_draws;
-  const bool late = (pc.pass != 0);
-  const bool object_occlusion_enabled = (pc.instance_vis_buf_idx != 0xFFFFFFFFu);
+
+  const bool object_occlusion_enabled =
+      (pc.flags & MESHLET_PREPARE_OBJECT_OCCLUSION_CULL_ENABLED_BIT) != 0;
+  const bool object_frustum_cull_enabled =
+      (pc.flags & MESHLET_PREPARE_OBJECT_FRUSTUM_CULL_ENABLED_BIT) != 0;
 
   InstanceData instance_data = (InstanceData)0;
   uint mesh_id = 0xFFFFFFFFu;
@@ -44,7 +51,7 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
   // Early pass: only process objects that were visible last frame.
   // Late pass: process every object (finds newly visible ones + runs occlusion test).
   const bool should_process =
-      valid_mesh && (late || !object_occlusion_enabled || visible_last_frame);
+      valid_mesh && (LATE || !object_occlusion_enabled || visible_last_frame);
 
   MeshData mesh_data = (MeshData)0;
   uint task_groups = 0;
@@ -57,22 +64,24 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
   bool visible = should_process;
 
   // Frustum + near/far plane cull.
-  if (should_process && pc.culling_enabled != 0) {
+  if (should_process && (object_frustum_cull_enabled || object_occlusion_enabled)) {
     float3 world_center =
         rotate_quat(instance_data.scale * mesh_data.center, instance_data.rotation) +
         instance_data.translation;
     float radius = mesh_data.radius * instance_data.scale;
     float4 center = mul(view_data.view, float4(world_center, 1.0));
 
-    visible = visible && ((-center.z + radius) > cull_data.z_near) &&
-              ((-center.z - radius) < cull_data.z_far);
-    visible = visible &&
-              (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2] > -radius);
-    visible = visible &&
-              (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0] > -radius);
+    if (object_frustum_cull_enabled) {
+      visible = visible && ((-center.z + radius) > cull_data.z_near) &&
+                ((-center.z - radius) < cull_data.z_far);
+      visible = visible &&
+                (center.z * cull_data.frustum[3] - abs(center.y) * cull_data.frustum[2] > -radius);
+      visible = visible &&
+                (center.z * cull_data.frustum[1] - abs(center.x) * cull_data.frustum[0] > -radius);
+    }
 
     // Late pass: HZB occlusion test (mirrors draw_cull.comp.hlsl).
-    if (late && visible && pc.depth_pyramid_tex_idx != 0xFFFFFFFFu) {
+    if (LATE && object_occlusion_enabled && visible) {
       ProjectSphereResult proj_res =
           project_sphere(center.xyz, radius, cull_data.z_near, cull_data.p00, cull_data.p11);
 
@@ -120,8 +129,8 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
     }
   }
 
-  // Late pass: write per-object visibility back for use by next frame's early pass.
-  if (late && object_occlusion_enabled && valid_mesh) {
+  // store per-object visibility for next frame's early pass
+  if (LATE && object_occlusion_enabled && valid_mesh) {
     RWByteAddressBuffer instance_vis_buf = bindless_rwbuffers[pc.instance_vis_buf_idx];
     instance_vis_buf.Store(dtid * (uint)sizeof(uint), visible ? 1u : 0u);
   }
@@ -134,19 +143,19 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
   const bool should_emit = visible;
 
   // --- Groupshared visible-object counter (all threads must reach barriers) ---
-  if (late && gtid == 0) {
+  if (LATE && gtid == 0) {
     g_visible_in_group = 0;
   }
   GroupMemoryBarrierWithGroupSync();
 
   const uint lane_contrib = should_emit ? 1u : 0u;
   const uint wave_sum = WaveActiveSum(lane_contrib);
-  if (late && WaveIsFirstLane()) {
+  if (LATE && WaveIsFirstLane()) {
     InterlockedAdd(g_visible_in_group, wave_sum);
   }
   GroupMemoryBarrierWithGroupSync();
 
-  if (late && gtid == 0 && g_visible_in_group > 0) {
+  if (LATE && gtid == 0 && g_visible_in_group > 0) {
     RWByteAddressBuffer vis_cnt_buf = bindless_rwbuffers[pc.visible_obj_cnt_buf_idx];
     uint unused;
     vis_cnt_buf.InterlockedAdd(0, g_visible_in_group, unused);
@@ -157,7 +166,7 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
     return;
   }
 
-  RWByteAddressBuffer task_cmd_cnt_buf = bindless_rwbuffers[pc.draw_cnt_buf_idx];
+  RWByteAddressBuffer task_cmd_cnt_buf = bindless_rwbuffers[pc.taskcmd_cnt_buf_idx];
   uint task_group_base_i;
   task_cmd_cnt_buf.InterlockedAdd(0, task_groups, task_group_base_i);
 
