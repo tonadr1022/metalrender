@@ -13,6 +13,7 @@
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
 #include "gfx/RenderGraph.Format.hpp"
+#include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Texture.hpp"
@@ -331,6 +332,7 @@ void RenderGraph::bake(glm::uvec2 fb_size, bool verbose) {
   std::vector<rhi::AccessFlags> buf_physical_access(buffer_infos_.size(), rhi::AccessFlags::None);
   bake_accumulate_physical_access_(tex_physical_access, buf_physical_access);
   bake_allocate_transient_resources_(fb_size, tex_physical_access, buf_physical_access);
+  bake_allocate_temporal_resources_(fb_size);
   bake_schedule_barriers_(verbose);
   bake_validate_();
   bake_write_debug_dump_if_requested_(fb_size);
@@ -576,6 +578,173 @@ void RenderGraph::bake_allocate_transient_resources_(
     }
   }
   free_bufs_.clear();
+}
+
+void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
+  ZoneScopedN("RG bake: allocate_temporal");
+  std::vector<rhi::AccessFlags> temporal_tex_access(temporal_textures_.size(),
+                                                    rhi::AccessFlags::None);
+  std::vector<rhi::AccessFlags> temporal_buf_access(temporal_buffers_.size(),
+                                                    rhi::AccessFlags::None);
+  std::vector<bool> temporal_tex_present(temporal_textures_.size(), false);
+  std::vector<bool> temporal_buf_present(temporal_buffers_.size(), false);
+
+  for (const auto& rec : resources_) {
+    if (rec.temporal_idx == k_invalid_temporal_idx) {
+      continue;
+    }
+    if (rec.type == RGResourceType::ExternalTexture) {
+      ALWAYS_ASSERT(rec.temporal_idx < temporal_tex_present.size());
+      temporal_tex_present[rec.temporal_idx] = true;
+    } else if (rec.type == RGResourceType::ExternalBuffer) {
+      ALWAYS_ASSERT(rec.temporal_idx < temporal_buf_present.size());
+      temporal_buf_present[rec.temporal_idx] = true;
+    }
+  }
+
+  auto accumulate_temporal_access = [&](const Pass::NameAndAccess& use) {
+    if (use.id.idx >= resources_.size()) {
+      return;
+    }
+    const auto& rec = resources_[use.id.idx];
+    if (rec.temporal_idx == k_invalid_temporal_idx) {
+      return;
+    }
+    if (rec.type == RGResourceType::ExternalTexture) {
+      temporal_tex_access[rec.temporal_idx] =
+          flag_or(temporal_tex_access[rec.temporal_idx], use.acc);
+    } else if (rec.type == RGResourceType::ExternalBuffer) {
+      temporal_buf_access[rec.temporal_idx] =
+          flag_or(temporal_buf_access[rec.temporal_idx], use.acc);
+    }
+  };
+
+  for (uint32_t pass_i : pass_stack_) {
+    const auto& pass = passes_[pass_i];
+    for (const auto& u : pass.get_external_writes()) {
+      accumulate_temporal_access(u);
+    }
+    for (const auto& u : pass.get_internal_writes()) {
+      accumulate_temporal_access(u);
+    }
+    for (const auto& u : pass.get_external_reads()) {
+      accumulate_temporal_access(u);
+    }
+    for (const auto& u : pass.get_internal_reads()) {
+      accumulate_temporal_access(u);
+    }
+  }
+
+  auto resolve_temporal_dims = [&fb_size](const AttachmentInfo& info) {
+    return info.size_class == SizeClass::Swapchain ? fb_size : info.dims;
+  };
+
+  for (size_t i = 0; i < temporal_buffers_.size(); ++i) {
+    if (!temporal_buf_present[i]) {
+      continue;
+    }
+    auto& temporal = temporal_buffers_[i];
+    rhi::BufferUsage derived_usage = buffer_usage_from_accumulated_access(temporal_buf_access[i]);
+    if (derived_usage == rhi::BufferUsage::None) {
+      derived_usage = rhi::BufferUsage::Storage;
+    }
+
+    bool needs_recreate = temporal.usage != derived_usage;
+    for (const auto& handle : temporal.handles) {
+      if (!handle.is_valid()) {
+        needs_recreate = true;
+        break;
+      }
+      auto* buf = device_->get_buf(handle);
+      if (!buf || buf->size() < temporal.info.size || buf->desc().usage != derived_usage) {
+        needs_recreate = true;
+        break;
+      }
+    }
+
+    if (needs_recreate) {
+      destroy_temporal_buffer_record_(temporal);
+      temporal.usage = derived_usage;
+      temporal.current_slot = 0;
+      temporal.history_valid = false;
+      temporal.slot_states = {};
+      for (auto& handle : temporal.handles) {
+        handle = device_->create_buf(rhi::BufferDesc{
+            .usage = derived_usage,
+            .size = temporal.info.size,
+            .name = "render_graph_temporal_buffer",
+        });
+      }
+    }
+  }
+
+  for (size_t i = 0; i < temporal_textures_.size(); ++i) {
+    if (!temporal_tex_present[i]) {
+      continue;
+    }
+    auto& temporal = temporal_textures_[i];
+    const glm::uvec2 dims = resolve_temporal_dims(temporal.info);
+    const rhi::TextureUsage derived_usage =
+        flag_or(texture_desc_usage_for_bake(temporal_tex_access[i], temporal.info),
+                fallback_texture_usage(temporal.info));
+
+    bool needs_recreate = temporal.usage != derived_usage;
+    for (const auto& handle : temporal.handles) {
+      if (!handle.is_valid()) {
+        needs_recreate = true;
+        break;
+      }
+      auto* tex = device_->get_tex(handle);
+      if (!tex) {
+        needs_recreate = true;
+        break;
+      }
+      const auto& desc = tex->desc();
+      if (desc.usage != derived_usage || glm::uvec2{desc.dims.x, desc.dims.y} != dims ||
+          desc.format != temporal.info.format || desc.mip_levels != temporal.info.mip_levels ||
+          desc.array_length != temporal.info.array_layers) {
+        needs_recreate = true;
+        break;
+      }
+    }
+
+    if (needs_recreate) {
+      destroy_temporal_texture_record_(temporal);
+      temporal.usage = derived_usage;
+      temporal.current_slot = 0;
+      temporal.history_valid = false;
+      temporal.slot_states = {};
+      for (size_t slot = 0; slot < temporal.handles.size(); ++slot) {
+        temporal.handles[slot] = device_->create_tex(rhi::TextureDesc{
+            .format = temporal.info.format,
+            .usage = derived_usage,
+            .dims = glm::uvec3{dims.x, dims.y, 1},
+            .mip_levels = temporal.info.mip_levels,
+            .array_length = temporal.info.array_layers,
+            .name = "render_graph_temporal_texture",
+        });
+        temporal.slot_states[slot].per_mip.assign(std::max(1u, temporal.info.mip_levels), {});
+      }
+    } else {
+      for (auto& state : temporal.slot_states) {
+        if (state.per_mip.size() != std::max(1u, temporal.info.mip_levels)) {
+          state.per_mip.assign(std::max(1u, temporal.info.mip_levels), {});
+        }
+      }
+    }
+  }
+
+  for (uint32_t resource_idx = 0; resource_idx < resources_.size(); ++resource_idx) {
+    const auto& rec = resources_[resource_idx];
+    if (rec.temporal_idx == k_invalid_temporal_idx) {
+      continue;
+    }
+    if (rec.type == RGResourceType::ExternalTexture) {
+      install_temporal_texture_slot_(resource_idx, fb_size);
+    } else if (rec.type == RGResourceType::ExternalBuffer) {
+      install_temporal_buffer_slot_(resource_idx);
+    }
+  }
 }
 
 void RenderGraph::bake_schedule_barriers_(bool verbose) {
@@ -908,6 +1077,69 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
       }
     }
     ++barrier_pass_exec_ord;
+  }
+
+  auto final_rg_state = [](const SubresourceState& state) {
+    RGState out{};
+    out.layout = state.layout;
+    if (state.has_write) {
+      out.access = state.to_flush_access;
+      out.stage = state.last_write_stage == rhi::PipelineStage::None ? rhi::PipelineStage::TopOfPipe
+                                                                     : state.last_write_stage;
+      return out;
+    }
+    out.access = rhi::AccessFlags::None;
+    const rhi::PipelineStage read_stages = read_stage_mask(state);
+    out.stage =
+        read_stages == rhi::PipelineStage::None ? rhi::PipelineStage::TopOfPipe : read_stages;
+    return out;
+  };
+
+  for (const auto& rec : resources_) {
+    if (rec.temporal_idx == k_invalid_temporal_idx) {
+      continue;
+    }
+    if (rec.type == RGResourceType::ExternalBuffer) {
+      auto& temporal = temporal_buffers_[rec.temporal_idx];
+      const bool slot_used = rec.temporal_history_view ? temporal.history_used_this_frame
+                                                       : temporal.current_used_this_frame;
+      if (!slot_used) {
+        continue;
+      }
+      const uint32_t slot =
+          rec.temporal_history_view ? (temporal.current_slot ^ 1u) : temporal.current_slot;
+      const RgSubresourceStateKey key{
+          .type = RGResourceType::ExternalBuffer, .idx = rec.physical_idx, .mip = -1, .slice = -1};
+      if (auto it = subresource_states.find(key); it != subresource_states.end()) {
+        temporal.slot_states[slot] = final_rg_state(it->second);
+      }
+      continue;
+    }
+
+    if (rec.type == RGResourceType::ExternalTexture) {
+      auto& temporal = temporal_textures_[rec.temporal_idx];
+      const bool slot_used = rec.temporal_history_view ? temporal.history_used_this_frame
+                                                       : temporal.current_used_this_frame;
+      if (!slot_used) {
+        continue;
+      }
+      const uint32_t slot =
+          rec.temporal_history_view ? (temporal.current_slot ^ 1u) : temporal.current_slot;
+      auto& slot_state = temporal.slot_states[slot];
+      slot_state.per_mip.assign(std::max(1u, temporal.info.mip_levels), {});
+      for (uint32_t mip = 0; mip < slot_state.per_mip.size(); ++mip) {
+        for (uint32_t slice = 0; slice < std::max(1u, temporal.info.array_layers); ++slice) {
+          const RgSubresourceStateKey key{.type = RGResourceType::ExternalTexture,
+                                          .idx = rec.physical_idx,
+                                          .mip = static_cast<int32_t>(mip),
+                                          .slice = static_cast<int32_t>(slice)};
+          if (auto it = subresource_states.find(key); it != subresource_states.end()) {
+            slot_state.per_mip[mip] = final_rg_state(it->second);
+            break;
+          }
+        }
+      }
+    }
   }
 
   if (verbose) {

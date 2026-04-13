@@ -24,8 +24,8 @@ class GenerateTaskCmdComputePass {
   void bake(uint32_t max_draws, bool late, const BufferSuballoc& view_cb_suballoc,
             const BufferSuballoc& cull_cb, RGResourceId& task_cmd_rg,
             RGResourceId& indirect_args_rg, RGResourceId& visible_object_count_rg,
-            RGResourceId& instance_vis_rg, RGResourceId* final_depth_pyramid_rg,
-            rhi::TextureHandle final_depth_pyramid_tex, rhi::BufferHandle instance_vis_buf);
+            RGResourceId* instance_vis_history_rg, RGResourceId* instance_vis_current_rg,
+            RGResourceId* final_depth_pyramid_rg, rhi::TextureHandle final_depth_pyramid_tex);
 
  private:
   rhi::PipelineHandleHolder prepare_meshlets_pso_;
@@ -83,7 +83,6 @@ class MeshletRendererScene final : public ITestScene {
   InstanceMgr::Alloc instance_alloc_{};
   bool gpu_object_frustum_cull_{true};
   bool gpu_object_occlusion_cull_{true};
-  rhi::BufferHandleHolder instance_vis_buf_;
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> task_cmd_group_count_readback_;
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> visible_object_count_readback_;
   GPUFrameAllocator3 frame_uniform_gpu_allocator_;

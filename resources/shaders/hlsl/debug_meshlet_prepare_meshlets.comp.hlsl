@@ -43,9 +43,9 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
   // Read per-object visibility from the previous frame.
   // Default true so early pass emits everything when occlusion is disabled.
   bool visible_last_frame = true;
-  if (valid_mesh && object_occlusion_enabled) {
-    RWByteAddressBuffer instance_vis_buf = bindless_rwbuffers[pc.instance_vis_buf_idx];
-    visible_last_frame = instance_vis_buf.Load(dtid * (uint)sizeof(uint)) != 0;
+  if (valid_mesh && object_occlusion_enabled && pc.instance_vis_prev_buf_idx != 0xFFFFFFFFu) {
+    RWByteAddressBuffer instance_vis_prev_buf = bindless_rwbuffers[pc.instance_vis_prev_buf_idx];
+    visible_last_frame = instance_vis_prev_buf.Load(dtid * (uint)sizeof(uint)) != 0;
   }
 
   // Early pass: only process objects that were visible last frame.
@@ -130,9 +130,10 @@ CONSTANT_BUFFER(CullData, cull_data, 4);
   }
 
   // store per-object visibility for next frame's early pass
-  if (LATE && object_occlusion_enabled && valid_mesh) {
-    RWByteAddressBuffer instance_vis_buf = bindless_rwbuffers[pc.instance_vis_buf_idx];
-    instance_vis_buf.Store(dtid * (uint)sizeof(uint), visible ? 1u : 0u);
+  if (LATE && object_occlusion_enabled && valid_mesh &&
+      pc.instance_vis_curr_buf_idx != 0xFFFFFFFFu) {
+    RWByteAddressBuffer instance_vis_curr_buf = bindless_rwbuffers[pc.instance_vis_curr_buf_idx];
+    instance_vis_curr_buf.Store(dtid * (uint)sizeof(uint), visible ? 1u : 0u);
   }
 
   // Emit decision mirrors draw_cull.comp.hlsl when meshlet occlusion is enabled:

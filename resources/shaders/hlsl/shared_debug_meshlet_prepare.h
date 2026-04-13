@@ -14,7 +14,8 @@ struct DebugMeshletPreparePC {
   uint max_draws;
   uint flags;
   uint visible_obj_cnt_buf_idx;
-  uint instance_vis_buf_idx;
+  uint instance_vis_prev_buf_idx;
+  uint instance_vis_curr_buf_idx;
   uint depth_pyramid_tex_idx;
 };
 
