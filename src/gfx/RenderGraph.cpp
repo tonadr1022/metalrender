@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <tracy/Tracy.hpp>
+#include <type_traits>
 
 #include "core/Config.hpp"
 #include "core/EAssert.hpp"
@@ -16,6 +17,37 @@
 namespace TENG_NAMESPACE {
 
 namespace gfx {
+
+namespace {
+
+template <typename TemporalRecord>
+void advance_temporal_slot_after_execute_(TemporalRecord& record) {
+  if (record.wrote_current_this_frame) {
+    record.history_valid = true;
+    if (record.slot_mode == TemporalSlotMode::DoubleBuffered) {
+      record.current_slot ^= 1u;
+    }
+  }
+}
+
+template <typename TemporalRecord>
+void reset_temporal_frame_flags_(TemporalRecord& record) {
+  record.current_used_this_frame = false;
+  record.history_used_this_frame = false;
+  record.wrote_current_this_frame = false;
+}
+
+template <typename Handle>
+void destroy_temporal_handle_array_(rhi::Device* device, std::array<Handle, 2>& handles) {
+  for (auto& handle : handles) {
+    if (handle.is_valid()) {
+      device->destroy(handle);
+      handle = {};
+    }
+  }
+}
+
+}  // namespace
 
 const char* to_string(RGResourceType type) {
   switch (type) {
@@ -123,20 +155,10 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
     }
   }
   for (auto& record : temporal_buffers_) {
-    if (record.wrote_current_this_frame) {
-      record.history_valid = true;
-      if (temporal_has_distinct_history_slot(record.slot_mode)) {
-        record.current_slot ^= 1u;
-      }
-    }
+    advance_temporal_slot_after_execute_(record);
   }
   for (auto& record : temporal_textures_) {
-    if (record.wrote_current_this_frame) {
-      record.history_valid = true;
-      if (temporal_has_distinct_history_slot(record.slot_mode)) {
-        record.current_slot ^= 1u;
-      }
-    }
+    advance_temporal_slot_after_execute_(record);
   }
   reset_temporal_frame_usage_();
   tex_att_infos_.clear();
@@ -279,39 +301,12 @@ RGResourceId RenderGraph::history(RGResourceId id) {
   }
   ALWAYS_ASSERT(has_history(id));
   const std::string hist_name = debug_name(rec.debug_name) + "_history";
-  if (rec.type == RGResourceType::ExternalTexture) {
-    const bool distinct_history_slot =
-        temporal_has_distinct_history_slot(temporal_textures_[rec.temporal_idx].slot_mode);
-    const auto physical_idx =
-        distinct_history_slot ? static_cast<uint32_t>(external_textures_.size()) : rec.physical_idx;
-    if (distinct_history_slot) {
-      external_textures_.emplace_back();
-    }
-    auto hist_rec = create_temporal_resource_record(RGResourceType::ExternalTexture, physical_idx,
-                                                    rec.temporal_idx, true, hist_name);
-    resources_.push_back(hist_rec);
-    RGResourceId hist_id{.idx = static_cast<uint32_t>(resources_.size() - 1),
-                         .type = RGResourceType::ExternalTexture,
-                         .version = 0};
-    rg_id_to_external_texture_[hist_id] = {};
-    return hist_id;
-  }
-
-  const bool distinct_history_slot =
-      temporal_has_distinct_history_slot(temporal_buffers_[rec.temporal_idx].slot_mode);
-  const auto physical_idx =
-      distinct_history_slot ? static_cast<uint32_t>(external_buffers_.size()) : rec.physical_idx;
-  if (distinct_history_slot) {
-    external_buffers_.emplace_back();
-  }
-  auto hist_rec = create_temporal_resource_record(RGResourceType::ExternalBuffer, physical_idx,
-                                                  rec.temporal_idx, true, hist_name);
-  resources_.push_back(hist_rec);
-  RGResourceId hist_id{.idx = static_cast<uint32_t>(resources_.size() - 1),
-                       .type = RGResourceType::ExternalBuffer,
-                       .version = 0};
-  rg_id_to_external_buffer_[hist_id] = {};
-  return hist_id;
+  const TemporalSlotMode slot_mode = rec.type == RGResourceType::ExternalTexture
+                                         ? temporal_textures_[rec.temporal_idx].slot_mode
+                                         : temporal_buffers_[rec.temporal_idx].slot_mode;
+  const bool distinct_history_slot = temporal_has_distinct_history_slot(slot_mode);
+  return allocate_temporal_history_id_(rec.type, rec.temporal_idx, distinct_history_slot,
+                                       rec.physical_idx, hist_name);
 }
 
 RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
@@ -765,88 +760,108 @@ RenderGraph::ResourceRecord RenderGraph::create_temporal_resource_record(
   return record;
 }
 
-uint32_t RenderGraph::get_temporal_buffer_index_(NameId debug_name, const BufferInfo& info) {
-  const TemporalResourceKey key{.debug_name = debug_name, .type = RGResourceType::ExternalBuffer};
-  if (auto it = temporal_buffers_by_key_.find(key); it != temporal_buffers_by_key_.end()) {
-    auto& record = temporal_buffers_[it->second];
+template <typename Record, typename Info, typename DestroyFn>
+uint32_t RenderGraph::get_temporal_resource_index_(
+    NameId debug_name, const Info& info, RGResourceType resource_type,
+    std::unordered_map<TemporalResourceKey, uint32_t, TemporalResourceKeyHash>& by_key,
+    std::vector<Record>& records, DestroyFn&& destroy) {
+  const TemporalResourceKey key{.debug_name = debug_name, .type = resource_type};
+  if (auto it = by_key.find(key); it != by_key.end()) {
+    auto& record = records[it->second];
     if (!(record.info == info)) {
-      destroy_temporal_buffer_record_(record);
+      destroy(record);
       record.info = info;
       record.debug_name = debug_name;
       record.slot_mode = info.temporal_slot_mode;
-      record.usage = rhi::BufferUsage::None;
+      if constexpr (std::is_same_v<Record, TemporalBufferRecord>) {
+        record.usage = rhi::BufferUsage::None;
+      } else {
+        static_assert(std::is_same_v<Record, TemporalTextureRecord>);
+        record.usage = rhi::TextureUsage::None;
+      }
       record.current_slot = 0;
       record.history_valid = false;
       record.slot_states = {};
     }
     return it->second;
   }
-  const auto idx = static_cast<uint32_t>(temporal_buffers_.size());
-  temporal_buffers_by_key_.emplace(key, idx);
-  temporal_buffers_.push_back(TemporalBufferRecord{
-      .info = info, .debug_name = debug_name, .slot_mode = info.temporal_slot_mode});
+  const auto idx = static_cast<uint32_t>(records.size());
+  by_key.emplace(key, idx);
+  records.push_back(
+      Record{.info = info, .debug_name = debug_name, .slot_mode = info.temporal_slot_mode});
   return idx;
 }
 
+uint32_t RenderGraph::get_temporal_buffer_index_(NameId debug_name, const BufferInfo& info) {
+  return get_temporal_resource_index_(
+      debug_name, info, RGResourceType::ExternalBuffer, temporal_buffers_by_key_, temporal_buffers_,
+      [this](TemporalBufferRecord& r) { destroy_temporal_buffer_record_(r); });
+}
+
 uint32_t RenderGraph::get_temporal_texture_index_(NameId debug_name, const AttachmentInfo& info) {
-  const TemporalResourceKey key{.debug_name = debug_name, .type = RGResourceType::ExternalTexture};
-  if (auto it = temporal_textures_by_key_.find(key); it != temporal_textures_by_key_.end()) {
-    auto& record = temporal_textures_[it->second];
-    if (!(record.info == info)) {
-      destroy_temporal_texture_record_(record);
-      record.info = info;
-      record.debug_name = debug_name;
-      record.slot_mode = info.temporal_slot_mode;
-      record.usage = rhi::TextureUsage::None;
-      record.current_slot = 0;
-      record.history_valid = false;
-      record.slot_states = {};
+  return get_temporal_resource_index_(
+      debug_name, info, RGResourceType::ExternalTexture, temporal_textures_by_key_,
+      temporal_textures_,
+      [this](TemporalTextureRecord& r) { destroy_temporal_texture_record_(r); });
+}
+
+RGResourceId RenderGraph::allocate_temporal_history_id_(RGResourceType type, uint32_t temporal_idx,
+                                                        bool distinct_history_slot,
+                                                        uint32_t base_physical_idx,
+                                                        const std::string& hist_name) {
+  if (type == RGResourceType::ExternalTexture) {
+    const uint32_t physical_idx = distinct_history_slot
+                                      ? static_cast<uint32_t>(external_textures_.size())
+                                      : base_physical_idx;
+    if (distinct_history_slot) {
+      external_textures_.emplace_back();
     }
-    return it->second;
+    resources_.push_back(create_temporal_resource_record(
+        RGResourceType::ExternalTexture, physical_idx, temporal_idx, true, hist_name));
+    RGResourceId hist_id{.idx = static_cast<uint32_t>(resources_.size() - 1),
+                         .type = RGResourceType::ExternalTexture,
+                         .version = 0};
+    rg_id_to_external_texture_[hist_id] = {};
+    return hist_id;
   }
-  const auto idx = static_cast<uint32_t>(temporal_textures_.size());
-  temporal_textures_by_key_.emplace(key, idx);
-  temporal_textures_.push_back(TemporalTextureRecord{
-      .info = info, .debug_name = debug_name, .slot_mode = info.temporal_slot_mode});
-  return idx;
+  ALWAYS_ASSERT(type == RGResourceType::ExternalBuffer);
+  const uint32_t physical_idx =
+      distinct_history_slot ? static_cast<uint32_t>(external_buffers_.size()) : base_physical_idx;
+  if (distinct_history_slot) {
+    external_buffers_.emplace_back();
+  }
+  resources_.push_back(create_temporal_resource_record(RGResourceType::ExternalBuffer, physical_idx,
+                                                       temporal_idx, true, hist_name));
+  RGResourceId hist_id{.idx = static_cast<uint32_t>(resources_.size() - 1),
+                       .type = RGResourceType::ExternalBuffer,
+                       .version = 0};
+  rg_id_to_external_buffer_[hist_id] = {};
+  return hist_id;
 }
 
 void RenderGraph::reset_temporal_frame_usage_() {
   for (auto& record : temporal_buffers_) {
-    record.current_used_this_frame = false;
-    record.history_used_this_frame = false;
-    record.wrote_current_this_frame = false;
+    reset_temporal_frame_flags_(record);
   }
   for (auto& record : temporal_textures_) {
-    record.current_used_this_frame = false;
-    record.history_used_this_frame = false;
-    record.wrote_current_this_frame = false;
+    reset_temporal_frame_flags_(record);
   }
 }
 
 void RenderGraph::destroy_temporal_texture_record_(TemporalTextureRecord& record) {
-  for (auto& handle : record.handles) {
-    if (handle.is_valid()) {
-      device_->destroy(handle);
-      handle = {};
-    }
-  }
+  destroy_temporal_handle_array_(device_, record.handles);
 }
 
 void RenderGraph::destroy_temporal_buffer_record_(TemporalBufferRecord& record) {
-  for (auto& handle : record.handles) {
-    if (handle.is_valid()) {
-      device_->destroy(handle);
-      handle = {};
-    }
-  }
+  destroy_temporal_handle_array_(device_, record.handles);
 }
 
 void RenderGraph::install_temporal_buffer_slot_(uint32_t resource_idx) {
   const auto& rec = resources_[resource_idx];
   auto& temporal = temporal_buffers_[rec.temporal_idx];
-  const uint32_t slot =
-      rec.temporal_history_view ? resolve_history_slot(temporal) : resolve_current_slot(temporal);
+  const uint32_t slot = rec.temporal_history_view
+                            ? resolve_history_slot(temporal.slot_mode, temporal.current_slot)
+                            : resolve_current_slot(temporal.current_slot);
   const auto phys =
       RGResourceHandle{.idx = rec.physical_idx, .type = RGResourceType::ExternalBuffer};
   external_buffers_[rec.physical_idx] = temporal.handles[slot];
@@ -856,12 +871,12 @@ void RenderGraph::install_temporal_buffer_slot_(uint32_t resource_idx) {
       temporal.handles[slot];
 }
 
-void RenderGraph::install_temporal_texture_slot_(uint32_t resource_idx, glm::uvec2 fb_size) {
-  (void)fb_size;
+void RenderGraph::install_temporal_texture_slot_(uint32_t resource_idx) {
   const auto& rec = resources_[resource_idx];
   auto& temporal = temporal_textures_[rec.temporal_idx];
-  const uint32_t slot =
-      rec.temporal_history_view ? resolve_history_slot(temporal) : resolve_current_slot(temporal);
+  const uint32_t slot = rec.temporal_history_view
+                            ? resolve_history_slot(temporal.slot_mode, temporal.current_slot)
+                            : resolve_current_slot(temporal.current_slot);
   const auto phys =
       RGResourceHandle{.idx = rec.physical_idx, .type = RGResourceType::ExternalTexture};
   external_textures_[rec.physical_idx] = temporal.handles[slot];

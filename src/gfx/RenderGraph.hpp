@@ -570,8 +570,16 @@ class RenderGraph {
   ResourceRecord create_temporal_resource_record(RGResourceType type, uint32_t physical_idx,
                                                  uint32_t temporal_idx, bool history_view,
                                                  std::string_view debug_name);
+  template <typename Record, typename Info, typename DestroyFn>
+  uint32_t get_temporal_resource_index_(
+      NameId debug_name, const Info& info, RGResourceType resource_type,
+      std::unordered_map<TemporalResourceKey, uint32_t, TemporalResourceKeyHash>& by_key,
+      std::vector<Record>& records, DestroyFn&& destroy);
   uint32_t get_temporal_buffer_index_(NameId debug_name, const BufferInfo& info);
   uint32_t get_temporal_texture_index_(NameId debug_name, const AttachmentInfo& info);
+  RGResourceId allocate_temporal_history_id_(RGResourceType type, uint32_t temporal_idx,
+                                             bool distinct_history_slot, uint32_t base_physical_idx,
+                                             const std::string& hist_name);
   [[nodiscard]] static constexpr uint32_t temporal_slot_count(TemporalSlotMode slot_mode) {
     return slot_mode == TemporalSlotMode::SingleSlot ? 1u : 2u;
   }
@@ -579,29 +587,39 @@ class RenderGraph {
       TemporalSlotMode slot_mode) {
     return slot_mode == TemporalSlotMode::DoubleBuffered;
   }
-  [[nodiscard]] static constexpr uint32_t resolve_current_slot(
-      const TemporalTextureRecord& record) {
-    return record.current_slot;
+  [[nodiscard]] static constexpr uint32_t resolve_current_slot(uint32_t current_slot) {
+    return current_slot;
   }
-  [[nodiscard]] static constexpr uint32_t resolve_current_slot(const TemporalBufferRecord& record) {
-    return record.current_slot;
-  }
-  [[nodiscard]] static constexpr uint32_t resolve_history_slot(
-      const TemporalTextureRecord& record) {
-    return temporal_has_distinct_history_slot(record.slot_mode) ? (record.current_slot ^ 1u)
-                                                                : record.current_slot;
-  }
-  [[nodiscard]] static constexpr uint32_t resolve_history_slot(const TemporalBufferRecord& record) {
-    return temporal_has_distinct_history_slot(record.slot_mode) ? (record.current_slot ^ 1u)
-                                                                : record.current_slot;
+  [[nodiscard]] static constexpr uint32_t resolve_history_slot(TemporalSlotMode slot_mode,
+                                                               uint32_t current_slot) {
+    return temporal_has_distinct_history_slot(slot_mode) ? (current_slot ^ 1u) : current_slot;
   }
   void reset_temporal_frame_usage_();
   void destroy_temporal_texture_record_(TemporalTextureRecord& record);
   void destroy_temporal_buffer_record_(TemporalBufferRecord& record);
   void install_temporal_buffer_slot_(uint32_t resource_idx);
-  void install_temporal_texture_slot_(uint32_t resource_idx, glm::uvec2 fb_size);
+  void install_temporal_texture_slot_(uint32_t resource_idx);
   void add_single_slot_temporal_dependencies_and_validate_();
   void mark_temporal_use_(RGResourceId id, bool is_write);
+
+  template <typename Fn>
+  [[nodiscard]] static bool temporal_any_slot_invalidated_(uint32_t slot_count, Fn&& fn) {
+    for (uint32_t slot = 0; slot < slot_count; ++slot) {
+      if (fn(slot)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  template <typename TemporalRecord, typename DerivedUsage>
+  static void reset_temporal_for_resource_recreate_(TemporalRecord& temporal,
+                                                    DerivedUsage derived_usage) {
+    temporal.usage = derived_usage;
+    temporal.current_slot = 0;
+    temporal.history_valid = false;
+    temporal.slot_states = {};
+  }
 
   // cache for intermediate calc data (pass dependency DFS: 0=white, 1=gray, 2=black)
   std::vector<uint8_t> pass_dep_dfs_state_;
