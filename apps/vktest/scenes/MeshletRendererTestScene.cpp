@@ -465,8 +465,9 @@ void MeshletRendererScene::add_render_graph_passes() {
   const uint32_t max_draws = ctx_.model_gpu_mgr->instance_mgr().stats().max_instance_data_count;
   if (gpu_object_occlusion_cull_) {
     const size_t required = static_cast<size_t>(max_draws) * sizeof(uint32_t);
-    instance_vis_current_rg =
-        ctx_.rg->create_buffer({.size = required, .temporal = true}, "meshlet_test_instance_vis");
+    instance_vis_current_rg = ctx_.rg->create_buffer(
+        {.size = required, .temporal = true, .temporal_slot_mode = TemporalSlotMode::SingleSlot},
+        "meshlet_test_instance_vis");
     if (ctx_.rg->has_history(instance_vis_current_rg)) {
       instance_vis_history_rg = ctx_.rg->history(instance_vis_current_rg);
     }

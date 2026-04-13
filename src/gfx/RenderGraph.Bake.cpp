@@ -414,6 +414,7 @@ void RenderGraph::bake_compute_pass_order_(bool verbose) {
     pass_dep_dfs_state_.assign(passes_.size(), kPassDepDfsWhite);
     pass_dep_dfs_path_.clear();
     pass_dep_dfs_path_.reserve(passes_.size());
+    add_single_slot_temporal_dependencies_and_validate_();
     for (uint32_t pass_i : sink_passes_) {
       intermed_pass_stack_.push_back(pass_i);
       find_deps_recursive(pass_i);
@@ -446,6 +447,133 @@ void RenderGraph::bake_compute_pass_order_(bool verbose) {
       LINFO("");
     }
   }
+}
+
+void RenderGraph::add_single_slot_temporal_dependencies_and_validate_() {
+  struct PassTemporalUsage {
+    bool history_used{};
+    bool current_used{};
+    bool current_write{};
+  };
+
+  std::vector<std::vector<PassTemporalUsage>> buffer_usage(
+      temporal_buffers_.size(), std::vector<PassTemporalUsage>(passes_.size()));
+  std::vector<std::vector<PassTemporalUsage>> texture_usage(
+      temporal_textures_.size(), std::vector<PassTemporalUsage>(passes_.size()));
+
+  auto accumulate_usage = [&](uint32_t pass_i, const Pass::NameAndAccess& use) {
+    if (use.id.idx >= resources_.size()) {
+      return;
+    }
+    const auto& rec = resources_[use.id.idx];
+    if (rec.temporal_idx == k_invalid_temporal_idx) {
+      return;
+    }
+
+    if (rec.type == RGResourceType::ExternalBuffer) {
+      const auto& temporal = temporal_buffers_[rec.temporal_idx];
+      if (temporal.slot_mode != TemporalSlotMode::SingleSlot) {
+        return;
+      }
+      auto& entry = buffer_usage[rec.temporal_idx][pass_i];
+      if (rec.temporal_history_view) {
+        entry.history_used = true;
+      } else {
+        entry.current_used = true;
+        entry.current_write |= has_write_access(use.acc);
+      }
+      return;
+    }
+
+    if (rec.type == RGResourceType::ExternalTexture) {
+      const auto& temporal = temporal_textures_[rec.temporal_idx];
+      if (temporal.slot_mode != TemporalSlotMode::SingleSlot) {
+        return;
+      }
+      auto& entry = texture_usage[rec.temporal_idx][pass_i];
+      if (rec.temporal_history_view) {
+        entry.history_used = true;
+      } else {
+        entry.current_used = true;
+        entry.current_write |= has_write_access(use.acc);
+      }
+    }
+  };
+
+  for (uint32_t pass_i = 0; pass_i < passes_.size(); ++pass_i) {
+    const auto& pass = passes_[pass_i];
+    for (const auto& use : pass.get_external_reads()) {
+      accumulate_usage(pass_i, use);
+    }
+    for (const auto& use : pass.get_external_writes()) {
+      accumulate_usage(pass_i, use);
+    }
+    for (const auto& use : pass.get_internal_reads()) {
+      accumulate_usage(pass_i, use);
+    }
+    for (const auto& use : pass.get_internal_writes()) {
+      accumulate_usage(pass_i, use);
+    }
+  }
+
+  auto validate_and_link = [this](const auto& temporals, const auto& usage_by_temporal,
+                                  bool is_texture) {
+    for (size_t temporal_idx = 0; temporal_idx < temporals.size(); ++temporal_idx) {
+      const auto& temporal = temporals[temporal_idx];
+      if (temporal.slot_mode != TemporalSlotMode::SingleSlot) {
+        continue;
+      }
+
+      std::vector<uint32_t> prior_history_readers;
+      bool wrote_current = false;
+      uint32_t first_write_pass = UINT32_MAX;
+
+      for (uint32_t pass_i = 0; pass_i < passes_.size(); ++pass_i) {
+        const auto& usage = usage_by_temporal[temporal_idx][pass_i];
+        if (!usage.history_used && !usage.current_used && !usage.current_write) {
+          continue;
+        }
+
+        if (is_texture && usage.history_used && usage.current_write) {
+          LERROR(
+              "RenderGraph: temporal resource '{}' uses SingleSlot but pass '{}' both reads "
+              "history and writes current in the same frame. Temporal textures need "
+              "DoubleBuffered when old/new contents must coexist.",
+              debug_name(temporal.debug_name), passes_[pass_i].get_name());
+          ALWAYS_ASSERT(
+              0 && "SingleSlot temporal texture cannot read history and write current in one pass");
+        }
+
+        if (wrote_current && usage.history_used) {
+          LERROR(
+              "RenderGraph: temporal resource '{}' uses SingleSlot but pass '{}' reads history "
+              "after pass '{}' already wrote current. Switch this resource to DoubleBuffered.",
+              debug_name(temporal.debug_name), passes_[pass_i].get_name(),
+              passes_[first_write_pass].get_name());
+          ALWAYS_ASSERT(0 && "SingleSlot temporal history used after current write");
+        }
+
+        if (usage.current_write) {
+          for (uint32_t reader_pass_i : prior_history_readers) {
+            if (reader_pass_i != pass_i) {
+              pass_dependencies_[pass_i].insert(reader_pass_i);
+            }
+          }
+          wrote_current = true;
+          if (first_write_pass == UINT32_MAX) {
+            first_write_pass = pass_i;
+          }
+        }
+
+        if (usage.history_used) {
+          prior_history_readers.push_back(pass_i);
+        }
+      }
+    }
+  };
+
+  validate_and_link(temporal_buffers_, buffer_usage, false);
+  validate_and_link(temporal_textures_, texture_usage, true);
 }
 
 void RenderGraph::bake_accumulate_physical_access_(
@@ -644,13 +772,15 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
       continue;
     }
     auto& temporal = temporal_buffers_[i];
+    const uint32_t slot_count = temporal_slot_count(temporal.slot_mode);
     rhi::BufferUsage derived_usage = buffer_usage_from_accumulated_access(temporal_buf_access[i]);
     if (derived_usage == rhi::BufferUsage::None) {
       derived_usage = rhi::BufferUsage::Storage;
     }
 
     bool needs_recreate = temporal.usage != derived_usage;
-    for (const auto& handle : temporal.handles) {
+    for (uint32_t slot = 0; slot < slot_count; ++slot) {
+      const auto& handle = temporal.handles[slot];
       if (!handle.is_valid()) {
         needs_recreate = true;
         break;
@@ -668,8 +798,8 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
       temporal.current_slot = 0;
       temporal.history_valid = false;
       temporal.slot_states = {};
-      for (auto& handle : temporal.handles) {
-        handle = device_->create_buf(rhi::BufferDesc{
+      for (uint32_t slot = 0; slot < slot_count; ++slot) {
+        temporal.handles[slot] = device_->create_buf(rhi::BufferDesc{
             .usage = derived_usage,
             .size = temporal.info.size,
             .name = "render_graph_temporal_buffer",
@@ -683,13 +813,15 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
       continue;
     }
     auto& temporal = temporal_textures_[i];
+    const uint32_t slot_count = temporal_slot_count(temporal.slot_mode);
     const glm::uvec2 dims = resolve_temporal_dims(temporal.info);
     const rhi::TextureUsage derived_usage =
         flag_or(texture_desc_usage_for_bake(temporal_tex_access[i], temporal.info),
                 fallback_texture_usage(temporal.info));
 
     bool needs_recreate = temporal.usage != derived_usage;
-    for (const auto& handle : temporal.handles) {
+    for (uint32_t slot = 0; slot < slot_count; ++slot) {
+      const auto& handle = temporal.handles[slot];
       if (!handle.is_valid()) {
         needs_recreate = true;
         break;
@@ -714,7 +846,7 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
       temporal.current_slot = 0;
       temporal.history_valid = false;
       temporal.slot_states = {};
-      for (size_t slot = 0; slot < temporal.handles.size(); ++slot) {
+      for (uint32_t slot = 0; slot < slot_count; ++slot) {
         temporal.handles[slot] = device_->create_tex(rhi::TextureDesc{
             .format = temporal.info.format,
             .usage = derived_usage,
@@ -726,7 +858,8 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
         temporal.slot_states[slot].per_mip.assign(std::max(1u, temporal.info.mip_levels), {});
       }
     } else {
-      for (auto& state : temporal.slot_states) {
+      for (uint32_t slot = 0; slot < slot_count; ++slot) {
+        auto& state = temporal.slot_states[slot];
         if (state.per_mip.size() != std::max(1u, temporal.info.mip_levels)) {
           state.per_mip.assign(std::max(1u, temporal.info.mip_levels), {});
         }
@@ -1106,8 +1239,8 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
       if (!slot_used) {
         continue;
       }
-      const uint32_t slot =
-          rec.temporal_history_view ? (temporal.current_slot ^ 1u) : temporal.current_slot;
+      const uint32_t slot = rec.temporal_history_view ? resolve_history_slot(temporal)
+                                                      : resolve_current_slot(temporal);
       const RgSubresourceStateKey key{
           .type = RGResourceType::ExternalBuffer, .idx = rec.physical_idx, .mip = -1, .slice = -1};
       if (auto it = subresource_states.find(key); it != subresource_states.end()) {
@@ -1123,8 +1256,8 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
       if (!slot_used) {
         continue;
       }
-      const uint32_t slot =
-          rec.temporal_history_view ? (temporal.current_slot ^ 1u) : temporal.current_slot;
+      const uint32_t slot = rec.temporal_history_view ? resolve_history_slot(temporal)
+                                                      : resolve_current_slot(temporal);
       auto& slot_state = temporal.slot_states[slot];
       slot_state.per_mip.assign(std::max(1u, temporal.info.mip_levels), {});
       for (uint32_t mip = 0; mip < slot_state.per_mip.size(); ++mip) {

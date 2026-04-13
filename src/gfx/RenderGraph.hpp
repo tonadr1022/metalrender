@@ -24,6 +24,7 @@ class Swapchain;
 namespace gfx {
 
 enum class SizeClass : uint8_t { Swapchain, Custom };
+enum class TemporalSlotMode : uint8_t { DoubleBuffered, SingleSlot };
 
 struct AttachmentInfo {
   rhi::TextureFormat format{rhi::TextureFormat::Undefined};
@@ -33,12 +34,13 @@ struct AttachmentInfo {
   SizeClass size_class{SizeClass::Swapchain};
   bool is_swapchain_tex{};
   bool temporal{};
+  TemporalSlotMode temporal_slot_mode{TemporalSlotMode::DoubleBuffered};
 
   bool operator==(const AttachmentInfo& other) const {
     return is_swapchain_tex == other.is_swapchain_tex && format == other.format &&
            dims == other.dims && mip_levels == other.mip_levels &&
            array_layers == other.array_layers && size_class == other.size_class &&
-           temporal == other.temporal;
+           temporal == other.temporal && temporal_slot_mode == other.temporal_slot_mode;
   }
 };
 
@@ -52,24 +54,28 @@ struct BufferInfo {
   // graph.
   bool defer_reuse{};
   bool temporal{};
+  TemporalSlotMode temporal_slot_mode{TemporalSlotMode::DoubleBuffered};
   bool operator==(const BufferInfo& other) const {
-    return size == other.size && defer_reuse == other.defer_reuse && temporal == other.temporal;
+    return size == other.size && defer_reuse == other.defer_reuse && temporal == other.temporal &&
+           temporal_slot_mode == other.temporal_slot_mode;
   }
 };
 
 // Custom hash functors defined in your own namespace
 struct AttachmentInfoHash {
   size_t operator()(const AttachmentInfo& att_info) const {
-    auto h = std::make_tuple(
-        (uint32_t)att_info.size_class, att_info.array_layers, att_info.mip_levels, att_info.dims.x,
-        att_info.dims.y, (uint32_t)att_info.format, att_info.is_swapchain_tex, att_info.temporal);
+    auto h = std::make_tuple((uint32_t)att_info.size_class, att_info.array_layers,
+                             att_info.mip_levels, att_info.dims.x, att_info.dims.y,
+                             (uint32_t)att_info.format, att_info.is_swapchain_tex,
+                             att_info.temporal, (uint32_t)att_info.temporal_slot_mode);
     return util::hash::tuple_hash<decltype(h)>{}(h);
   }
 };
 
 struct BufferInfoHash {
   size_t operator()(const BufferInfo& buff_info) const {
-    auto h = std::make_tuple(buff_info.size, buff_info.defer_reuse, buff_info.temporal);
+    auto h = std::make_tuple(buff_info.size, buff_info.defer_reuse, buff_info.temporal,
+                             (uint32_t)buff_info.temporal_slot_mode);
     return util::hash::tuple_hash<decltype(h)>{}(h);
   }
 };
@@ -223,8 +229,9 @@ enum class RGPassType { None, Compute, Graphics, Transfer };
 // - `BufferInfo::defer_reuse` delays returning the same handle to the free list until the next
 //   execute completes (see `defer_pool_*` members); it is not shader-visible "history".
 // - Attachment textures are returned to the pool at the end of each execute (no defer path yet).
-// - Temporal resources are double-buffered, persist across frames, and stay out of the transient
-//   pools entirely.
+// - Temporal resources persist across frames and stay out of the transient pools entirely.
+// - Temporal slot policy chooses either explicit current/history double-buffering or a single
+//   persistent slot reused across frames while preserving logical history/current views.
 //
 // The following are TODOs
 // - multiple queues
@@ -523,6 +530,8 @@ class RenderGraph {
 
   struct TemporalTextureRecord {
     AttachmentInfo info{};
+    NameId debug_name{kInvalidNameId};
+    TemporalSlotMode slot_mode{TemporalSlotMode::DoubleBuffered};
     rhi::TextureUsage usage{rhi::TextureUsage::None};
     std::array<rhi::TextureHandle, 2> handles{};
     std::array<TemporalTextureState, 2> slot_states{};
@@ -535,6 +544,8 @@ class RenderGraph {
 
   struct TemporalBufferRecord {
     BufferInfo info{};
+    NameId debug_name{kInvalidNameId};
+    TemporalSlotMode slot_mode{TemporalSlotMode::DoubleBuffered};
     rhi::BufferUsage usage{rhi::BufferUsage::None};
     std::array<rhi::BufferHandle, 2> handles{};
     std::array<RGState, 2> slot_states{};
@@ -561,11 +572,35 @@ class RenderGraph {
                                                  std::string_view debug_name);
   uint32_t get_temporal_buffer_index_(NameId debug_name, const BufferInfo& info);
   uint32_t get_temporal_texture_index_(NameId debug_name, const AttachmentInfo& info);
+  [[nodiscard]] static constexpr uint32_t temporal_slot_count(TemporalSlotMode slot_mode) {
+    return slot_mode == TemporalSlotMode::SingleSlot ? 1u : 2u;
+  }
+  [[nodiscard]] static constexpr bool temporal_has_distinct_history_slot(
+      TemporalSlotMode slot_mode) {
+    return slot_mode == TemporalSlotMode::DoubleBuffered;
+  }
+  [[nodiscard]] static constexpr uint32_t resolve_current_slot(
+      const TemporalTextureRecord& record) {
+    return record.current_slot;
+  }
+  [[nodiscard]] static constexpr uint32_t resolve_current_slot(const TemporalBufferRecord& record) {
+    return record.current_slot;
+  }
+  [[nodiscard]] static constexpr uint32_t resolve_history_slot(
+      const TemporalTextureRecord& record) {
+    return temporal_has_distinct_history_slot(record.slot_mode) ? (record.current_slot ^ 1u)
+                                                                : record.current_slot;
+  }
+  [[nodiscard]] static constexpr uint32_t resolve_history_slot(const TemporalBufferRecord& record) {
+    return temporal_has_distinct_history_slot(record.slot_mode) ? (record.current_slot ^ 1u)
+                                                                : record.current_slot;
+  }
   void reset_temporal_frame_usage_();
   void destroy_temporal_texture_record_(TemporalTextureRecord& record);
   void destroy_temporal_buffer_record_(TemporalBufferRecord& record);
   void install_temporal_buffer_slot_(uint32_t resource_idx);
   void install_temporal_texture_slot_(uint32_t resource_idx, glm::uvec2 fb_size);
+  void add_single_slot_temporal_dependencies_and_validate_();
   void mark_temporal_use_(RGResourceId id, bool is_write);
 
   // cache for intermediate calc data (pass dependency DFS: 0=white, 1=gray, 2=black)
