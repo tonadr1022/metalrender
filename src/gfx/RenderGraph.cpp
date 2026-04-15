@@ -311,46 +311,38 @@ RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
 RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
                                                   const RGState& initial,
                                                   std::string_view debug_name) {
-  const auto key = tex_handle.to64();
-  if (auto it = external_tex_handle_to_id_.find(key); it != external_tex_handle_to_id_.end()) {
-    if (!debug_name.empty()) {
-      auto& rec = resources_[it->second.idx];
-      if (rec.debug_name == kInvalidNameId) {
-        rec.debug_name = intern_name(debug_name);
-      }
-    }
-    const auto& rec = resources_[it->second.idx];
-    RGResourceId id{.idx = it->second.idx,
-                    .type = RGResourceType::ExternalTexture,
-                    .version = rec.latest_version};
-    const RGResourceHandle phys = get_physical_handle(id);
-    external_initial_states_[phys.to64()] = initial;
-    external_tex_mip_initial_states_.erase(phys.to64());
-    rg_id_to_external_texture_[id] = tex_handle;
-    return id;
-  }
-  auto idx = external_textures_.size();
-  external_textures_.emplace_back(tex_handle);
-  auto record = create_resource_record(RGResourceType::ExternalTexture, idx, debug_name);
-  resources_.push_back(record);
-  RGResourceId id{.idx = static_cast<uint32_t>(resources_.size() - 1),
-                  .type = RGResourceType::ExternalTexture,
-                  .version = 0};
-  const RGResourceHandle phys{.idx = static_cast<uint32_t>(idx),
-                              .type = RGResourceType::ExternalTexture};
-  external_initial_states_[phys.to64()] = initial;
-  external_tex_handle_to_id_.emplace(key, id);
-  rg_id_to_external_texture_[id] = tex_handle;
-  return id;
+  return import_external_texture_(tex_handle, debug_name, initial, {});
 }
 
 RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
                                                   std::span<const RGState> per_mip_initial,
                                                   std::string_view debug_name) {
-  rhi::Texture* tex = device_->get_tex(tex_handle);
-  ALWAYS_ASSERT(tex != nullptr);
   ALWAYS_ASSERT(!per_mip_initial.empty());
-  ALWAYS_ASSERT(per_mip_initial.size() == tex->desc().mip_levels);
+  return import_external_texture_(tex_handle, debug_name, {}, per_mip_initial);
+}
+
+RGResourceId RenderGraph::import_external_texture_(rhi::TextureHandle tex_handle,
+                                                   std::string_view debug_name,
+                                                   const RGState& uniform_initial,
+                                                   std::span<const RGState> per_mip_initial) {
+  const bool per_mip = !per_mip_initial.empty();
+  if (per_mip) {
+    rhi::Texture* tex = device_->get_tex(tex_handle);
+    ALWAYS_ASSERT(tex != nullptr);
+    ALWAYS_ASSERT(per_mip_initial.size() == tex->desc().mip_levels);
+  }
+
+  const auto apply_state = [&](uint64_t phys64) {
+    if (!per_mip) {
+      external_initial_states_[phys64] = uniform_initial;
+      external_tex_mip_initial_states_.erase(phys64);
+    } else {
+      external_tex_mip_initial_states_[phys64] =
+          std::vector<RGState>(per_mip_initial.begin(), per_mip_initial.end());
+      external_initial_states_[phys64] = per_mip_initial[0];
+    }
+  };
+
   const auto key = tex_handle.to64();
   if (auto it = external_tex_handle_to_id_.find(key); it != external_tex_handle_to_id_.end()) {
     if (!debug_name.empty()) {
@@ -364,9 +356,7 @@ RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
                     .type = RGResourceType::ExternalTexture,
                     .version = rec.latest_version};
     const RGResourceHandle phys = get_physical_handle(id);
-    external_tex_mip_initial_states_[phys.to64()] =
-        std::vector<RGState>(per_mip_initial.begin(), per_mip_initial.end());
-    external_initial_states_[phys.to64()] = per_mip_initial[0];
+    apply_state(phys.to64());
     rg_id_to_external_texture_[id] = tex_handle;
     return id;
   }
@@ -379,9 +369,7 @@ RGResourceId RenderGraph::import_external_texture(rhi::TextureHandle tex_handle,
                   .version = 0};
   const RGResourceHandle phys{.idx = static_cast<uint32_t>(idx),
                               .type = RGResourceType::ExternalTexture};
-  external_tex_mip_initial_states_[phys.to64()] =
-      std::vector<RGState>(per_mip_initial.begin(), per_mip_initial.end());
-  external_initial_states_[phys.to64()] = per_mip_initial[0];
+  apply_state(phys.to64());
   external_tex_handle_to_id_.emplace(key, id);
   rg_id_to_external_texture_[id] = tex_handle;
   return id;

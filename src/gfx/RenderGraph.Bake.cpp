@@ -148,6 +148,7 @@ rhi::TextureUsage fallback_texture_usage(const AttachmentInfo& att_info) {
 rhi::TextureUsage texture_desc_usage_for_bake(rhi::AccessFlags accumulated,
                                               const AttachmentInfo& att_info) {
   const auto u = texture_usage_from_accumulated_access(accumulated);
+  ALWAYS_ASSERT(u != rhi::TextureUsage::None);
   if (u == rhi::TextureUsage::None) {
     return fallback_texture_usage(att_info);
   }
@@ -702,28 +703,24 @@ void RenderGraph::bake_allocate_transient_resources_(
 
 void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
   ZoneScopedN("RG bake: allocate_temporal");
-  struct TemporalResourceState {
-    std::vector<rhi::AccessFlags> access;
-    std::vector<bool> present;
-  };
-  TemporalResourceState temporal_state[2];
-  static_assert(((int)RGResourceType::ExternalBuffer - (int)RGResourceType::ExternalTexture) == 1);
-  auto get_temp_state_i = [](RGResourceType type) -> size_t {
-    return static_cast<int>(type) - static_cast<int>(RGResourceType::ExternalTexture);
-  };
-  auto& tex_state = temporal_state[get_temp_state_i(RGResourceType::ExternalTexture)];
-  auto& buf_state = temporal_state[get_temp_state_i(RGResourceType::ExternalBuffer)];
-  tex_state.access.resize(temporal_textures_.size(), rhi::AccessFlags::None);
-  buf_state.access.resize(temporal_buffers_.size(), rhi::AccessFlags::None);
-  tex_state.present.resize(temporal_textures_.size(), false);
-  buf_state.present.resize(temporal_buffers_.size(), false);
+  std::vector<rhi::AccessFlags> temporal_tex_access(temporal_textures_.size(),
+                                                    rhi::AccessFlags::None);
+  std::vector<rhi::AccessFlags> temporal_buf_access(temporal_buffers_.size(),
+                                                    rhi::AccessFlags::None);
+  std::vector<bool> temporal_tex_present(temporal_textures_.size(), false);
+  std::vector<bool> temporal_buf_present(temporal_buffers_.size(), false);
 
   for (const auto& rec : resources_) {
     if (rec.temporal_idx == k_invalid_temporal_idx) {
       continue;
     }
-    ALWAYS_ASSERT(is_external(rec.type));
-    temporal_state[get_temp_state_i(rec.type)].present[rec.temporal_idx] = true;
+    if (rec.type == RGResourceType::ExternalTexture) {
+      ALWAYS_ASSERT(rec.temporal_idx < temporal_tex_present.size());
+      temporal_tex_present[rec.temporal_idx] = true;
+    } else if (rec.type == RGResourceType::ExternalBuffer) {
+      ALWAYS_ASSERT(rec.temporal_idx < temporal_buf_present.size());
+      temporal_buf_present[rec.temporal_idx] = true;
+    }
   }
 
   auto accumulate_temporal_access = [&](const Pass::NameAndAccess& use) {
@@ -734,9 +731,13 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
     if (rec.temporal_idx == k_invalid_temporal_idx) {
       return;
     }
-    ALWAYS_ASSERT(is_external(rec.type));
-    auto& state = temporal_state[get_temp_state_i(rec.type)];
-    state.access[rec.temporal_idx] = flag_or(state.access[rec.temporal_idx], use.acc);
+    if (rec.type == RGResourceType::ExternalTexture) {
+      temporal_tex_access[rec.temporal_idx] =
+          flag_or(temporal_tex_access[rec.temporal_idx], use.acc);
+    } else if (rec.type == RGResourceType::ExternalBuffer) {
+      temporal_buf_access[rec.temporal_idx] =
+          flag_or(temporal_buf_access[rec.temporal_idx], use.acc);
+    }
   };
 
   for (uint32_t pass_i : pass_stack_) {
@@ -751,17 +752,13 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
     }
   }
 
-  auto resolve_temporal_dims = [&fb_size](const AttachmentInfo& info) {
-    return info.size_class == SizeClass::Swapchain ? fb_size : info.dims;
-  };
-
-  for (size_t i = 0; i < buf_state.present.size(); ++i) {
-    if (!buf_state.present[i]) {
+  for (size_t i = 0; i < temporal_buf_present.size(); ++i) {
+    if (!temporal_buf_present[i]) {
       continue;
     }
     auto& temporal_buf = temporal_buffers_[i];
     const uint32_t slot_count = temporal_slot_count(temporal_buf.slot_mode);
-    rhi::BufferUsage derived_usage = buffer_usage_from_accumulated_access(buf_state.access[i]);
+    rhi::BufferUsage derived_usage = buffer_usage_from_accumulated_access(temporal_buf_access[i]);
     if (derived_usage == rhi::BufferUsage::None) {
       derived_usage = rhi::BufferUsage::Storage;
     }
@@ -770,6 +767,7 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
         temporal_buf.usage != derived_usage ||
         temporal_any_slot_invalidated_(slot_count, [&](uint32_t slot) {
           const rhi::BufferHandle& handle = temporal_buf.handles[slot];
+          ASSERT(handle.is_valid());
           if (!handle.is_valid()) {
             return true;
           }
@@ -791,29 +789,22 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
   }
 
   for (size_t i = 0; i < temporal_textures_.size(); ++i) {
-    if (!tex_state.present[i]) {
+    if (!temporal_tex_present[i]) {
       continue;
     }
     auto& temporal = temporal_textures_[i];
     const uint32_t slot_count = temporal_slot_count(temporal.slot_mode);
-    const glm::uvec2 dims = resolve_temporal_dims(temporal.info);
+    const glm::uvec3 dims = resolve_attachment_dims(temporal.info, fb_size);
     const rhi::TextureUsage derived_usage =
-        flag_or(texture_desc_usage_for_bake(tex_state.access[i], temporal.info),
-                fallback_texture_usage(temporal.info));
-
+        texture_usage_from_accumulated_access(temporal_tex_access[i]);
     const bool needs_recreate = temporal.usage != derived_usage ||
                                 temporal_any_slot_invalidated_(slot_count, [&](uint32_t slot) {
                                   const auto& handle = temporal.handles[slot];
-                                  if (!handle.is_valid()) {
-                                    return true;
-                                  }
+                                  ASSERT(handle.is_valid());
                                   auto* tex = device_->get_tex(handle);
-                                  if (!tex) {
-                                    return true;
-                                  }
+                                  ASSERT(tex);
                                   const auto& desc = tex->desc();
-                                  return desc.usage != derived_usage ||
-                                         glm::uvec2{desc.dims.x, desc.dims.y} != dims ||
+                                  return desc.usage != derived_usage || desc.dims != dims ||
                                          desc.format != temporal.info.format ||
                                          desc.mip_levels != temporal.info.mip_levels ||
                                          desc.array_length != temporal.info.array_layers;
@@ -826,7 +817,7 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
         temporal.handles[slot] = device_->create_tex(rhi::TextureDesc{
             .format = temporal.info.format,
             .usage = derived_usage,
-            .dims = glm::uvec3{dims.x, dims.y, 1},
+            .dims = dims,
             .mip_levels = temporal.info.mip_levels,
             .array_length = temporal.info.array_layers,
             .name = "render_graph_temporal_texture",

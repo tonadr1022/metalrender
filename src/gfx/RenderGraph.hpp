@@ -364,9 +364,10 @@ class RenderGraph {
   Pass& add_transfer_pass(std::string_view name) { return add_pass(name, RGPassType::Transfer); }
   Pass& add_graphics_pass(std::string_view name) { return add_pass(name, RGPassType::Graphics); }
 
-  [[nodiscard]] glm::uvec2 resolve_attachment_dims(const AttachmentInfo& info,
+  [[nodiscard]] glm::uvec3 resolve_attachment_dims(const AttachmentInfo& info,
                                                    glm::uvec2 fb_size) const {
-    return info.size_class == SizeClass::Swapchain ? fb_size : info.dims;
+    return info.size_class == SizeClass::Swapchain ? glm::uvec3{fb_size.x, fb_size.y, 1}
+                                                   : glm::uvec3{info.dims.x, info.dims.y, 1};
   }
 
   RGResourceId create_texture(const AttachmentInfo& att_info, std::string_view debug_name = {});
@@ -571,6 +572,11 @@ class RenderGraph {
   std::vector<ResourceRecord> resources_;
   ResourceRecord create_resource_record(RGResourceType type, uint32_t physical_idx,
                                         std::string_view debug_name);
+  /// If `per_mip_initial` is empty, applies `uniform_initial` and clears per-mip overrides.
+  /// Otherwise `per_mip_initial.size()` must equal the texture mip level count.
+  RGResourceId import_external_texture_(rhi::TextureHandle tex_handle, std::string_view debug_name,
+                                        const RGState& uniform_initial,
+                                        std::span<const RGState> per_mip_initial);
   ResourceRecord create_temporal_resource_record(RGResourceType type, uint32_t physical_idx,
                                                  uint32_t temporal_idx, bool history_view,
                                                  std::string_view debug_name);
