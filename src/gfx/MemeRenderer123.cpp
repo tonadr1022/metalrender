@@ -349,7 +349,7 @@ void MemeRenderer123::add_render_graph_passes(const RenderArgs&) {
       for (size_t alpha_mask_type = 0; alpha_mask_type < AlphaMaskType::Count; alpha_mask_type++) {
         if (static_draw_batch_.get_stats().vertex_count > 0) {
           view_handles[static_cast<AlphaMaskType>(alpha_mask_type)] = rg_.create_buffer(
-              {.size = static_draw_batch_.task_cmd_count * sizeof(TaskCmd), .defer_reuse = true},
+              {.size = static_draw_batch_.task_cmd_count * sizeof(TaskCmd)},
               late ? (alpha_mask_type == 0 ? "task_cmd_buf_late_0" : "task_cmd_buf_late_1")
                    : (alpha_mask_type == 0 ? "task_cmd_buf_early_0" : "task_cmd_buf_early_1"));
           prep_meshlets_pass.write_buf(view_handles[static_cast<AlphaMaskType>(alpha_mask_type)],

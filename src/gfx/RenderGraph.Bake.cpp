@@ -5,6 +5,7 @@
 #include <format>
 #include <string>
 #include <tracy/Tracy.hpp>
+#include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -469,34 +470,26 @@ void RenderGraph::add_single_slot_temporal_dependencies_and_validate_() {
     if (rec.temporal_idx == k_invalid_temporal_idx) {
       return;
     }
-
+    size_t usage_row{};
+    TemporalSlotMode slot_mode{};
     if (rec.type == RGResourceType::ExternalBuffer) {
-      const auto& temporal = temporal_buffers_[rec.temporal_idx];
-      if (temporal.slot_mode != TemporalSlotMode::SingleSlot) {
-        return;
-      }
-      auto& entry = usage_by_row[rec.temporal_idx][pass_i];
-      if (rec.temporal_history_view) {
-        entry.history_used = true;
-      } else {
-        entry.current_used = true;
-        entry.current_write |= has_write_access(use.acc);
-      }
+      usage_row = rec.temporal_idx;
+      slot_mode = temporal_buffers_[rec.temporal_idx].slot_mode;
+    } else if (rec.type == RGResourceType::ExternalTexture) {
+      usage_row = buf_rows + rec.temporal_idx;
+      slot_mode = temporal_textures_[rec.temporal_idx].slot_mode;
+    } else {
       return;
     }
-
-    if (rec.type == RGResourceType::ExternalTexture) {
-      const auto& temporal = temporal_textures_[rec.temporal_idx];
-      if (temporal.slot_mode != TemporalSlotMode::SingleSlot) {
-        return;
-      }
-      auto& entry = usage_by_row[buf_rows + rec.temporal_idx][pass_i];
-      if (rec.temporal_history_view) {
-        entry.history_used = true;
-      } else {
-        entry.current_used = true;
-        entry.current_write |= has_write_access(use.acc);
-      }
+    if (slot_mode != TemporalSlotMode::SingleSlot) {
+      return;
+    }
+    auto& entry = usage_by_row[usage_row][pass_i];
+    if (rec.temporal_history_view) {
+      entry.history_used = true;
+    } else {
+      entry.current_used = true;
+      entry.current_write |= has_write_access(use.acc);
     }
   };
 
@@ -709,24 +702,28 @@ void RenderGraph::bake_allocate_transient_resources_(
 
 void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
   ZoneScopedN("RG bake: allocate_temporal");
-  std::vector<rhi::AccessFlags> temporal_tex_access(temporal_textures_.size(),
-                                                    rhi::AccessFlags::None);
-  std::vector<rhi::AccessFlags> temporal_buf_access(temporal_buffers_.size(),
-                                                    rhi::AccessFlags::None);
-  std::vector<bool> temporal_tex_present(temporal_textures_.size(), false);
-  std::vector<bool> temporal_buf_present(temporal_buffers_.size(), false);
+  struct TemporalResourceState {
+    std::vector<rhi::AccessFlags> access;
+    std::vector<bool> present;
+  };
+  TemporalResourceState temporal_state[2];
+  static_assert(((int)RGResourceType::ExternalBuffer - (int)RGResourceType::ExternalTexture) == 1);
+  auto get_temp_state_i = [](RGResourceType type) -> size_t {
+    return static_cast<int>(type) - static_cast<int>(RGResourceType::ExternalTexture);
+  };
+  auto& tex_state = temporal_state[get_temp_state_i(RGResourceType::ExternalTexture)];
+  auto& buf_state = temporal_state[get_temp_state_i(RGResourceType::ExternalBuffer)];
+  tex_state.access.resize(temporal_textures_.size(), rhi::AccessFlags::None);
+  buf_state.access.resize(temporal_buffers_.size(), rhi::AccessFlags::None);
+  tex_state.present.resize(temporal_textures_.size(), false);
+  buf_state.present.resize(temporal_buffers_.size(), false);
 
   for (const auto& rec : resources_) {
     if (rec.temporal_idx == k_invalid_temporal_idx) {
       continue;
     }
-    if (rec.type == RGResourceType::ExternalTexture) {
-      ALWAYS_ASSERT(rec.temporal_idx < temporal_tex_present.size());
-      temporal_tex_present[rec.temporal_idx] = true;
-    } else if (rec.type == RGResourceType::ExternalBuffer) {
-      ALWAYS_ASSERT(rec.temporal_idx < temporal_buf_present.size());
-      temporal_buf_present[rec.temporal_idx] = true;
-    }
+    ALWAYS_ASSERT(is_external(rec.type));
+    temporal_state[get_temp_state_i(rec.type)].present[rec.temporal_idx] = true;
   }
 
   auto accumulate_temporal_access = [&](const Pass::NameAndAccess& use) {
@@ -737,28 +734,20 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
     if (rec.temporal_idx == k_invalid_temporal_idx) {
       return;
     }
-    if (rec.type == RGResourceType::ExternalTexture) {
-      temporal_tex_access[rec.temporal_idx] =
-          flag_or(temporal_tex_access[rec.temporal_idx], use.acc);
-    } else if (rec.type == RGResourceType::ExternalBuffer) {
-      temporal_buf_access[rec.temporal_idx] =
-          flag_or(temporal_buf_access[rec.temporal_idx], use.acc);
-    }
+    ALWAYS_ASSERT(is_external(rec.type));
+    auto& state = temporal_state[get_temp_state_i(rec.type)];
+    state.access[rec.temporal_idx] = flag_or(state.access[rec.temporal_idx], use.acc);
   };
 
   for (uint32_t pass_i : pass_stack_) {
     const auto& pass = passes_[pass_i];
-    for (const auto& u : pass.get_external_writes()) {
-      accumulate_temporal_access(u);
-    }
-    for (const auto& u : pass.get_internal_writes()) {
-      accumulate_temporal_access(u);
-    }
-    for (const auto& u : pass.get_external_reads()) {
-      accumulate_temporal_access(u);
-    }
-    for (const auto& u : pass.get_internal_reads()) {
-      accumulate_temporal_access(u);
+    const std::vector<Pass::NameAndAccess>* name_access_arrays[4] = {
+        &pass.get_external_writes(), &pass.get_internal_writes(), &pass.get_external_reads(),
+        &pass.get_internal_reads()};
+    for (const auto& name_access_array : name_access_arrays) {
+      for (const auto& u : *name_access_array) {
+        accumulate_temporal_access(u);
+      }
     }
   }
 
@@ -766,35 +755,35 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
     return info.size_class == SizeClass::Swapchain ? fb_size : info.dims;
   };
 
-  for (size_t i = 0; i < temporal_buffers_.size(); ++i) {
-    if (!temporal_buf_present[i]) {
+  for (size_t i = 0; i < buf_state.present.size(); ++i) {
+    if (!buf_state.present[i]) {
       continue;
     }
-    auto& temporal = temporal_buffers_[i];
-    const uint32_t slot_count = temporal_slot_count(temporal.slot_mode);
-    rhi::BufferUsage derived_usage = buffer_usage_from_accumulated_access(temporal_buf_access[i]);
+    auto& temporal_buf = temporal_buffers_[i];
+    const uint32_t slot_count = temporal_slot_count(temporal_buf.slot_mode);
+    rhi::BufferUsage derived_usage = buffer_usage_from_accumulated_access(buf_state.access[i]);
     if (derived_usage == rhi::BufferUsage::None) {
       derived_usage = rhi::BufferUsage::Storage;
     }
 
     const bool needs_recreate =
-        temporal.usage != derived_usage ||
+        temporal_buf.usage != derived_usage ||
         temporal_any_slot_invalidated_(slot_count, [&](uint32_t slot) {
-          const auto& handle = temporal.handles[slot];
+          const rhi::BufferHandle& handle = temporal_buf.handles[slot];
           if (!handle.is_valid()) {
             return true;
           }
           auto* buf = device_->get_buf(handle);
-          return !buf || buf->size() < temporal.info.size || buf->desc().usage != derived_usage;
+          return !buf || buf->size() < temporal_buf.info.size || buf->desc().usage != derived_usage;
         });
 
     if (needs_recreate) {
-      destroy_temporal_buffer_record_(temporal);
-      reset_temporal_for_resource_recreate_(temporal, derived_usage);
+      destroy_temporal_record_(temporal_buf);
+      reset_temporal_for_resource_recreate_(temporal_buf, derived_usage);
       for (uint32_t slot = 0; slot < slot_count; ++slot) {
-        temporal.handles[slot] = device_->create_buf(rhi::BufferDesc{
+        temporal_buf.handles[slot] = device_->create_buf(rhi::BufferDesc{
             .usage = derived_usage,
-            .size = temporal.info.size,
+            .size = temporal_buf.info.size,
             .name = "render_graph_temporal_buffer",
         });
       }
@@ -802,14 +791,14 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
   }
 
   for (size_t i = 0; i < temporal_textures_.size(); ++i) {
-    if (!temporal_tex_present[i]) {
+    if (!tex_state.present[i]) {
       continue;
     }
     auto& temporal = temporal_textures_[i];
     const uint32_t slot_count = temporal_slot_count(temporal.slot_mode);
     const glm::uvec2 dims = resolve_temporal_dims(temporal.info);
     const rhi::TextureUsage derived_usage =
-        flag_or(texture_desc_usage_for_bake(temporal_tex_access[i], temporal.info),
+        flag_or(texture_desc_usage_for_bake(tex_state.access[i], temporal.info),
                 fallback_texture_usage(temporal.info));
 
     const bool needs_recreate = temporal.usage != derived_usage ||
@@ -831,7 +820,7 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
                                 });
 
     if (needs_recreate) {
-      destroy_temporal_texture_record_(temporal);
+      destroy_temporal_record_(temporal);
       reset_temporal_for_resource_recreate_(temporal, derived_usage);
       for (uint32_t slot = 0; slot < slot_count; ++slot) {
         temporal.handles[slot] = device_->create_tex(rhi::TextureDesc{
@@ -1215,44 +1204,25 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
     return out;
   };
 
-  for (const auto& rec : resources_) {
-    if (rec.temporal_idx == k_invalid_temporal_idx) {
-      continue;
+  const auto finalize_temporal_barrier_state = [&]<typename RecordT>(RecordT& temporal,
+                                                                     const ResourceRecord& r) {
+    if (!temporal_slot_used_this_frame_(temporal, r)) {
+      return;
     }
-    if (rec.type == RGResourceType::ExternalBuffer) {
-      auto& temporal = temporal_buffers_[rec.temporal_idx];
-      const bool slot_used = rec.temporal_history_view ? temporal.history_used_this_frame
-                                                       : temporal.current_used_this_frame;
-      if (!slot_used) {
-        continue;
-      }
-      const uint32_t slot = rec.temporal_history_view
-                                ? resolve_history_slot(temporal.slot_mode, temporal.current_slot)
-                                : resolve_current_slot(temporal.current_slot);
+    const uint32_t slot = temporal_barrier_target_slot_(temporal, r);
+    if constexpr (std::is_same_v<RecordT, TemporalBufferRecord>) {
       const RgSubresourceStateKey key{
-          .type = RGResourceType::ExternalBuffer, .idx = rec.physical_idx, .mip = -1, .slice = -1};
+          .type = RGResourceType::ExternalBuffer, .idx = r.physical_idx, .mip = -1, .slice = -1};
       if (auto it = subresource_states.find(key); it != subresource_states.end()) {
         temporal.slot_states[slot] = final_rg_state(it->second);
       }
-      continue;
-    }
-
-    if (rec.type == RGResourceType::ExternalTexture) {
-      auto& temporal = temporal_textures_[rec.temporal_idx];
-      const bool slot_used = rec.temporal_history_view ? temporal.history_used_this_frame
-                                                       : temporal.current_used_this_frame;
-      if (!slot_used) {
-        continue;
-      }
-      const uint32_t slot = rec.temporal_history_view
-                                ? resolve_history_slot(temporal.slot_mode, temporal.current_slot)
-                                : resolve_current_slot(temporal.current_slot);
+    } else {
       auto& slot_state = temporal.slot_states[slot];
       slot_state.per_mip.assign(std::max(1u, temporal.info.mip_levels), {});
       for (uint32_t mip = 0; mip < slot_state.per_mip.size(); ++mip) {
         for (uint32_t slice = 0; slice < std::max(1u, temporal.info.array_layers); ++slice) {
           const RgSubresourceStateKey key{.type = RGResourceType::ExternalTexture,
-                                          .idx = rec.physical_idx,
+                                          .idx = r.physical_idx,
                                           .mip = static_cast<int32_t>(mip),
                                           .slice = static_cast<int32_t>(slice)};
           if (auto it = subresource_states.find(key); it != subresource_states.end()) {
@@ -1261,6 +1231,17 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
           }
         }
       }
+    }
+  };
+
+  for (const auto& rec : resources_) {
+    if (rec.temporal_idx == k_invalid_temporal_idx) {
+      continue;
+    }
+    if (rec.type == RGResourceType::ExternalBuffer) {
+      finalize_temporal_barrier_state(temporal_buffers_[rec.temporal_idx], rec);
+    } else if (rec.type == RGResourceType::ExternalTexture) {
+      finalize_temporal_barrier_state(temporal_textures_[rec.temporal_idx], rec);
     }
   }
 

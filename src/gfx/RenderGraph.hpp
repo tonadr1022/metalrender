@@ -9,11 +9,13 @@
 #include <tuple>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "core/Config.hpp"
 #include "core/Hash.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
+#include "gfx/rhi/Device.hpp"
 
 namespace TENG_NAMESPACE {
 
@@ -117,10 +119,10 @@ using ExecuteFn = std::function<void(rhi::CmdEncoder* enc)>;
 class RenderGraph;
 
 enum class RGResourceType {
-  Texture,
-  Buffer,
-  ExternalTexture,
-  ExternalBuffer,
+  Texture = 0,
+  Buffer = 1,
+  ExternalTexture = 2,
+  ExternalBuffer = 3,
 };
 inline bool is_texture(RGResourceType type) {
   return type == RGResourceType::Texture || type == RGResourceType::ExternalTexture;
@@ -362,6 +364,11 @@ class RenderGraph {
   Pass& add_transfer_pass(std::string_view name) { return add_pass(name, RGPassType::Transfer); }
   Pass& add_graphics_pass(std::string_view name) { return add_pass(name, RGPassType::Graphics); }
 
+  [[nodiscard]] glm::uvec2 resolve_attachment_dims(const AttachmentInfo& info,
+                                                   glm::uvec2 fb_size) const {
+    return info.size_class == SizeClass::Swapchain ? fb_size : info.dims;
+  }
+
   RGResourceId create_texture(const AttachmentInfo& att_info, std::string_view debug_name = {});
   RGResourceId create_buffer(const BufferInfo& buf_info, std::string_view debug_name = {});
   [[nodiscard]] bool is_temporal(RGResourceId id) const;
@@ -528,13 +535,19 @@ class RenderGraph {
     std::vector<RGState> per_mip;
   };
 
-  struct TemporalTextureRecord {
-    AttachmentInfo info{};
+  template <typename InfoT, typename UsageT, typename HandleT, typename SlotStateT>
+  struct TemporalRecord {
+    using Info = InfoT;
+    using Usage = UsageT;
+    using Handle = HandleT;
+    using SlotState = SlotStateT;
+
+    InfoT info{};
     NameId debug_name{kInvalidNameId};
     TemporalSlotMode slot_mode{TemporalSlotMode::DoubleBuffered};
-    rhi::TextureUsage usage{rhi::TextureUsage::None};
-    std::array<rhi::TextureHandle, 2> handles{};
-    std::array<TemporalTextureState, 2> slot_states{};
+    UsageT usage{UsageT::None};
+    std::array<HandleT, 2> handles{};
+    std::array<SlotStateT, 2> slot_states{};
     uint32_t current_slot{};
     bool history_valid{};
     bool current_used_this_frame{};
@@ -542,19 +555,10 @@ class RenderGraph {
     bool wrote_current_this_frame{};
   };
 
-  struct TemporalBufferRecord {
-    BufferInfo info{};
-    NameId debug_name{kInvalidNameId};
-    TemporalSlotMode slot_mode{TemporalSlotMode::DoubleBuffered};
-    rhi::BufferUsage usage{rhi::BufferUsage::None};
-    std::array<rhi::BufferHandle, 2> handles{};
-    std::array<RGState, 2> slot_states{};
-    uint32_t current_slot{};
-    bool history_valid{};
-    bool current_used_this_frame{};
-    bool history_used_this_frame{};
-    bool wrote_current_this_frame{};
-  };
+  using TemporalTextureRecord =
+      TemporalRecord<AttachmentInfo, rhi::TextureUsage, rhi::TextureHandle, TemporalTextureState>;
+  using TemporalBufferRecord =
+      TemporalRecord<BufferInfo, rhi::BufferUsage, rhi::BufferHandle, RGState>;
 
   struct ResourceRecord {
     RGResourceType type{};
@@ -587,20 +591,40 @@ class RenderGraph {
       TemporalSlotMode slot_mode) {
     return slot_mode == TemporalSlotMode::DoubleBuffered;
   }
-  [[nodiscard]] static constexpr uint32_t resolve_current_slot(uint32_t current_slot) {
-    return current_slot;
-  }
   [[nodiscard]] static constexpr uint32_t resolve_history_slot(TemporalSlotMode slot_mode,
                                                                uint32_t current_slot) {
     return temporal_has_distinct_history_slot(slot_mode) ? (current_slot ^ 1u) : current_slot;
   }
   void reset_temporal_frame_usage_();
-  void destroy_temporal_texture_record_(TemporalTextureRecord& record);
-  void destroy_temporal_buffer_record_(TemporalBufferRecord& record);
+  template <typename RecordT>
+  void destroy_temporal_record_(RecordT& record);
+  template <typename Fn>
+  void for_each_temporal_record_(Fn&& fn) {
+    for (auto& r : temporal_buffers_) {
+      std::forward<Fn>(fn)(r);
+    }
+    for (auto& r : temporal_textures_) {
+      std::forward<Fn>(fn)(r);
+    }
+  }
   void install_temporal_buffer_slot_(uint32_t resource_idx);
   void install_temporal_texture_slot_(uint32_t resource_idx);
   void add_single_slot_temporal_dependencies_and_validate_();
   void mark_temporal_use_(RGResourceId id, bool is_write);
+
+  template <typename RecordT>
+  [[nodiscard]] static bool temporal_slot_used_this_frame_(const RecordT& temporal,
+                                                           const ResourceRecord& rec) {
+    return rec.temporal_history_view ? temporal.history_used_this_frame
+                                     : temporal.current_used_this_frame;
+  }
+  template <typename RecordT>
+  [[nodiscard]] static uint32_t temporal_barrier_target_slot_(const RecordT& temporal,
+                                                              const ResourceRecord& rec) {
+    return rec.temporal_history_view
+               ? resolve_history_slot(temporal.slot_mode, temporal.current_slot)
+               : temporal.current_slot;
+  }
 
   template <typename Fn>
   [[nodiscard]] static bool temporal_any_slot_invalidated_(uint32_t slot_count, Fn&& fn) {
@@ -612,9 +636,8 @@ class RenderGraph {
     return false;
   }
 
-  template <typename TemporalRecord, typename DerivedUsage>
-  static void reset_temporal_for_resource_recreate_(TemporalRecord& temporal,
-                                                    DerivedUsage derived_usage) {
+  template <typename RecordT, typename DerivedUsage>
+  static void reset_temporal_for_resource_recreate_(RecordT& temporal, DerivedUsage derived_usage) {
     temporal.usage = derived_usage;
     temporal.current_slot = 0;
     temporal.history_valid = false;
@@ -634,6 +657,16 @@ class RenderGraph {
   std::vector<TemporalTextureRecord> temporal_textures_;
   std::vector<TemporalBufferRecord> temporal_buffers_;
 };
+
+template <typename RecordT>
+inline void RenderGraph::destroy_temporal_record_(RecordT& record) {
+  for (auto& handle : record.handles) {
+    if (handle.is_valid()) {
+      device_->destroy(handle);
+      handle = {};
+    }
+  }
+}
 
 using RGPass = RenderGraph::Pass;
 

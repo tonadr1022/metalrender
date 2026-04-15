@@ -467,22 +467,20 @@ void MeshletRendererScene::add_render_graph_passes() {
         "meshlet_test_instance_vis");
   }
 
-  RGResourceId task_cmd_early_rg =
-      ctx_.rg->create_buffer({.size = task_cmd_count * sizeof(TaskCmd), .defer_reuse = true},
-                             "meshlet_hello_task_cmds_early");
-  RGResourceId task_cmd_late_rg =
-      ctx_.rg->create_buffer({.size = task_cmd_count * sizeof(TaskCmd), .defer_reuse = true},
-                             "meshlet_hello_task_cmds_late");
+  RGResourceId task_cmd_early_rg = ctx_.rg->create_buffer(
+      {.size = task_cmd_count * sizeof(TaskCmd)}, "meshlet_hello_task_cmds_early");
+  RGResourceId task_cmd_late_rg = ctx_.rg->create_buffer({.size = task_cmd_count * sizeof(TaskCmd)},
+                                                         "meshlet_hello_task_cmds_late");
 
-  RGResourceId indirect_args_early_rg = ctx_.rg->create_buffer(
-      {.size = k_indirect_bytes, .defer_reuse = true}, "meshlet_hello_indirect_args_early");
-  RGResourceId indirect_args_late_rg = ctx_.rg->create_buffer(
-      {.size = k_indirect_bytes, .defer_reuse = true}, "meshlet_hello_indirect_args_late");
+  RGResourceId indirect_args_early_rg =
+      ctx_.rg->create_buffer({.size = k_indirect_bytes}, "meshlet_hello_indirect_args_early");
+  RGResourceId indirect_args_late_rg =
+      ctx_.rg->create_buffer({.size = k_indirect_bytes}, "meshlet_hello_indirect_args_late");
 
-  RGResourceId visible_object_count_rg = ctx_.rg->create_buffer(
-      {.size = sizeof(uint32_t), .defer_reuse = true}, "meshlet_visible_object_count");
-  RGResourceId meshlet_stats_rg = ctx_.rg->create_buffer(
-      {.size = k_meshlet_draw_stats_bytes, .defer_reuse = true}, "meshlet_test_draw_stats");
+  RGResourceId visible_object_count_rg =
+      ctx_.rg->create_buffer({.size = sizeof(uint32_t)}, "meshlet_visible_object_count");
+  RGResourceId meshlet_stats_rg =
+      ctx_.rg->create_buffer({.size = k_meshlet_draw_stats_bytes}, "meshlet_test_draw_stats");
 
   {
     auto& p = ctx_.rg->add_transfer_pass("meshlet_clear_visible_count_buf_and_stats");

@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <tracy/Tracy.hpp>
-#include <type_traits>
 
 #include "core/Config.hpp"
 #include "core/EAssert.hpp"
@@ -20,8 +19,8 @@ namespace gfx {
 
 namespace {
 
-template <typename TemporalRecord>
-void advance_temporal_slot_after_execute_(TemporalRecord& record) {
+template <typename RecordT>
+void advance_temporal_slot_after_execute_(RecordT& record) {
   if (record.wrote_current_this_frame) {
     record.history_valid = true;
     if (record.slot_mode == TemporalSlotMode::DoubleBuffered) {
@@ -30,20 +29,20 @@ void advance_temporal_slot_after_execute_(TemporalRecord& record) {
   }
 }
 
-template <typename TemporalRecord>
-void reset_temporal_frame_flags_(TemporalRecord& record) {
+template <typename RecordT>
+void reset_temporal_frame_flags_(RecordT& record) {
   record.current_used_this_frame = false;
   record.history_used_this_frame = false;
   record.wrote_current_this_frame = false;
 }
 
-template <typename Handle>
-void destroy_temporal_handle_array_(rhi::Device* device, std::array<Handle, 2>& handles) {
-  for (auto& handle : handles) {
-    if (handle.is_valid()) {
-      device->destroy(handle);
-      handle = {};
-    }
+template <typename RecordT>
+void mark_temporal_use_on_record_(RecordT& temporal, bool temporal_history_view, bool is_write) {
+  if (temporal_history_view) {
+    temporal.history_used_this_frame = true;
+  } else {
+    temporal.current_used_this_frame = true;
+    temporal.wrote_current_this_frame |= is_write;
   }
 }
 
@@ -154,12 +153,7 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
       free_bufs_[BufPoolKey{buffer_infos_[i], usage}].emplace_back(buffer_handles_[i]);
     }
   }
-  for (auto& record : temporal_buffers_) {
-    advance_temporal_slot_after_execute_(record);
-  }
-  for (auto& record : temporal_textures_) {
-    advance_temporal_slot_after_execute_(record);
-  }
+  for_each_temporal_record_([&](auto& record) { advance_temporal_slot_after_execute_(record); });
   reset_temporal_frame_usage_();
   tex_att_infos_.clear();
   buffer_infos_.clear();
@@ -656,12 +650,7 @@ void RenderGraph::shutdown() {
   destroy(free_bufs_);
   destroy(free_atts_);
   destroy(defer_pool_pending_return_);
-  for (auto& record : temporal_buffers_) {
-    destroy_temporal_buffer_record_(record);
-  }
-  for (auto& record : temporal_textures_) {
-    destroy_temporal_texture_record_(record);
-  }
+  for_each_temporal_record_([&](auto& record) { destroy_temporal_record_(record); });
   temporal_buffers_.clear();
   temporal_textures_.clear();
   temporal_buffers_by_key_.clear();
@@ -773,12 +762,7 @@ uint32_t RenderGraph::get_temporal_resource_index_(
       record.info = info;
       record.debug_name = debug_name;
       record.slot_mode = info.temporal_slot_mode;
-      if constexpr (std::is_same_v<Record, TemporalBufferRecord>) {
-        record.usage = rhi::BufferUsage::None;
-      } else {
-        static_assert(std::is_same_v<Record, TemporalTextureRecord>);
-        record.usage = rhi::TextureUsage::None;
-      }
+      record.usage = {};
       record.current_slot = 0;
       record.history_valid = false;
       record.slot_states = {};
@@ -793,16 +777,15 @@ uint32_t RenderGraph::get_temporal_resource_index_(
 }
 
 uint32_t RenderGraph::get_temporal_buffer_index_(NameId debug_name, const BufferInfo& info) {
-  return get_temporal_resource_index_(
-      debug_name, info, RGResourceType::ExternalBuffer, temporal_buffers_by_key_, temporal_buffers_,
-      [this](TemporalBufferRecord& r) { destroy_temporal_buffer_record_(r); });
+  return get_temporal_resource_index_(debug_name, info, RGResourceType::ExternalBuffer,
+                                      temporal_buffers_by_key_, temporal_buffers_,
+                                      [this](auto& r) { destroy_temporal_record_(r); });
 }
 
 uint32_t RenderGraph::get_temporal_texture_index_(NameId debug_name, const AttachmentInfo& info) {
-  return get_temporal_resource_index_(
-      debug_name, info, RGResourceType::ExternalTexture, temporal_textures_by_key_,
-      temporal_textures_,
-      [this](TemporalTextureRecord& r) { destroy_temporal_texture_record_(r); });
+  return get_temporal_resource_index_(debug_name, info, RGResourceType::ExternalTexture,
+                                      temporal_textures_by_key_, temporal_textures_,
+                                      [this](auto& r) { destroy_temporal_record_(r); });
 }
 
 RGResourceId RenderGraph::allocate_temporal_history_id_(RGResourceType type, uint32_t temporal_idx,
@@ -840,20 +823,7 @@ RGResourceId RenderGraph::allocate_temporal_history_id_(RGResourceType type, uin
 }
 
 void RenderGraph::reset_temporal_frame_usage_() {
-  for (auto& record : temporal_buffers_) {
-    reset_temporal_frame_flags_(record);
-  }
-  for (auto& record : temporal_textures_) {
-    reset_temporal_frame_flags_(record);
-  }
-}
-
-void RenderGraph::destroy_temporal_texture_record_(TemporalTextureRecord& record) {
-  destroy_temporal_handle_array_(device_, record.handles);
-}
-
-void RenderGraph::destroy_temporal_buffer_record_(TemporalBufferRecord& record) {
-  destroy_temporal_handle_array_(device_, record.handles);
+  for_each_temporal_record_([&](auto& record) { reset_temporal_frame_flags_(record); });
 }
 
 void RenderGraph::install_temporal_buffer_slot_(uint32_t resource_idx) {
@@ -861,7 +831,7 @@ void RenderGraph::install_temporal_buffer_slot_(uint32_t resource_idx) {
   auto& temporal = temporal_buffers_[rec.temporal_idx];
   const uint32_t slot = rec.temporal_history_view
                             ? resolve_history_slot(temporal.slot_mode, temporal.current_slot)
-                            : resolve_current_slot(temporal.current_slot);
+                            : temporal.current_slot;
   const auto phys =
       RGResourceHandle{.idx = rec.physical_idx, .type = RGResourceType::ExternalBuffer};
   external_buffers_[rec.physical_idx] = temporal.handles[slot];
@@ -876,7 +846,7 @@ void RenderGraph::install_temporal_texture_slot_(uint32_t resource_idx) {
   auto& temporal = temporal_textures_[rec.temporal_idx];
   const uint32_t slot = rec.temporal_history_view
                             ? resolve_history_slot(temporal.slot_mode, temporal.current_slot)
-                            : resolve_current_slot(temporal.current_slot);
+                            : temporal.current_slot;
   const auto phys =
       RGResourceHandle{.idx = rec.physical_idx, .type = RGResourceType::ExternalTexture};
   external_textures_[rec.physical_idx] = temporal.handles[slot];
@@ -902,21 +872,11 @@ void RenderGraph::mark_temporal_use_(RGResourceId id, bool is_write) {
   }
   ALWAYS_ASSERT(!(is_write && rec.temporal_history_view));
   if (rec.type == RGResourceType::ExternalBuffer) {
-    auto& temporal = temporal_buffers_[rec.temporal_idx];
-    if (rec.temporal_history_view) {
-      temporal.history_used_this_frame = true;
-    } else {
-      temporal.current_used_this_frame = true;
-      temporal.wrote_current_this_frame |= is_write;
-    }
+    mark_temporal_use_on_record_(temporal_buffers_[rec.temporal_idx], rec.temporal_history_view,
+                                 is_write);
   } else if (rec.type == RGResourceType::ExternalTexture) {
-    auto& temporal = temporal_textures_[rec.temporal_idx];
-    if (rec.temporal_history_view) {
-      temporal.history_used_this_frame = true;
-    } else {
-      temporal.current_used_this_frame = true;
-      temporal.wrote_current_this_frame |= is_write;
-    }
+    mark_temporal_use_on_record_(temporal_textures_[rec.temporal_idx], rec.temporal_history_view,
+                                 is_write);
   }
 }
 
