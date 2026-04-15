@@ -175,7 +175,7 @@ struct RgSubresourceRange {
   }
 };
 
-struct RGResourceHandle {
+struct RGResourcePhysHandle {
   uint32_t idx{UINT32_MAX};
   RGResourceType type{};
 
@@ -397,14 +397,14 @@ class RenderGraph {
   }
 
   [[nodiscard]] rhi::TextureHandle get_att_img(RGResourceId tex_id) const;
-  [[nodiscard]] rhi::TextureHandle get_att_img(RGResourceHandle tex_handle) const;
+  [[nodiscard]] rhi::TextureHandle get_att_img(RGResourcePhysHandle tex_handle) const;
   [[nodiscard]] rhi::BufferHandle get_buf(RGResourceId buf_id) const;
-  [[nodiscard]] rhi::BufferHandle get_buf(RGResourceHandle buf_handle) const;
+  [[nodiscard]] rhi::BufferHandle get_buf(RGResourcePhysHandle buf_handle) const;
   [[nodiscard]] rhi::TextureHandle get_external_texture(RGResourceId id) const;
   [[nodiscard]] rhi::BufferHandle get_external_buffer(RGResourceId id) const;
 
   struct BarrierInfo {
-    RGResourceHandle resource;
+    RGResourcePhysHandle resource;
     RGState src_state;
     RGState dst_state;
     RGResourceId debug_id{};
@@ -433,13 +433,13 @@ class RenderGraph {
   [[nodiscard]] std::string debug_name(RGResourceId id) const;
 
   AttachmentInfo* get_tex_att_info(RGResourceId id);
-  AttachmentInfo* get_tex_att_info(RGResourceHandle handle);
-  [[nodiscard]] RGResourceHandle get_physical_handle(RGResourceId id) const;
-  rhi::BufferHandle get_external_buf(RGResourceHandle handle) {
+  AttachmentInfo* get_tex_att_info(RGResourcePhysHandle handle);
+  [[nodiscard]] RGResourcePhysHandle get_physical_handle(RGResourceId id) const;
+  rhi::BufferHandle get_external_buf(RGResourcePhysHandle handle) {
     ASSERT(handle.type == RGResourceType::ExternalBuffer);
     return external_buffers_[handle.idx];
   }
-  rhi::TextureHandle get_external_tex(RGResourceHandle handle) {
+  rhi::TextureHandle get_external_tex(RGResourcePhysHandle handle) {
     ASSERT(handle.type == RGResourceType::ExternalTexture);
     return external_textures_[handle.idx];
   }

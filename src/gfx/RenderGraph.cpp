@@ -227,8 +227,8 @@ RGResourceId RenderGraph::create_texture(const AttachmentInfo& att_info,
     return id;
   }
   ASSERT((att_info.is_swapchain_tex || att_info.format != rhi::TextureFormat::Undefined));
-  RGResourceHandle handle = {.idx = static_cast<uint32_t>(tex_att_infos_.size()),
-                             .type = RGResourceType::Texture};
+  RGResourcePhysHandle handle = {.idx = static_cast<uint32_t>(tex_att_infos_.size()),
+                                 .type = RGResourceType::Texture};
   tex_att_infos_.emplace_back(att_info);
 
   auto record = create_resource_record(RGResourceType::Texture, handle.idx, debug_name);
@@ -255,8 +255,8 @@ RGResourceId RenderGraph::create_buffer(const BufferInfo& buf_info, std::string_
     rg_id_to_external_buffer_[id] = {};
     return id;
   }
-  RGResourceHandle handle = {.idx = static_cast<uint32_t>(buffer_infos_.size()),
-                             .type = RGResourceType::Buffer};
+  RGResourcePhysHandle handle = {.idx = static_cast<uint32_t>(buffer_infos_.size()),
+                                 .type = RGResourceType::Buffer};
   buffer_infos_.emplace_back(buf_info);
 
   auto record = create_resource_record(RGResourceType::Buffer, handle.idx, debug_name);
@@ -355,7 +355,7 @@ RGResourceId RenderGraph::import_external_texture_(rhi::TextureHandle tex_handle
     RGResourceId id{.idx = it->second.idx,
                     .type = RGResourceType::ExternalTexture,
                     .version = rec.latest_version};
-    const RGResourceHandle phys = get_physical_handle(id);
+    const RGResourcePhysHandle phys = get_physical_handle(id);
     apply_state(phys.to64());
     rg_id_to_external_texture_[id] = tex_handle;
     return id;
@@ -367,8 +367,8 @@ RGResourceId RenderGraph::import_external_texture_(rhi::TextureHandle tex_handle
   RGResourceId id{.idx = static_cast<uint32_t>(resources_.size() - 1),
                   .type = RGResourceType::ExternalTexture,
                   .version = 0};
-  const RGResourceHandle phys{.idx = static_cast<uint32_t>(idx),
-                              .type = RGResourceType::ExternalTexture};
+  const RGResourcePhysHandle phys{.idx = static_cast<uint32_t>(idx),
+                                  .type = RGResourceType::ExternalTexture};
   apply_state(phys.to64());
   external_tex_handle_to_id_.emplace(key, id);
   rg_id_to_external_texture_[id] = tex_handle;
@@ -406,8 +406,8 @@ RGResourceId RenderGraph::import_external_buffer(rhi::BufferHandle buf_handle,
   RGResourceId id{.idx = static_cast<uint32_t>(resources_.size() - 1),
                   .type = RGResourceType::ExternalBuffer,
                   .version = 0};
-  external_initial_states_[RGResourceHandle{.idx = static_cast<uint32_t>(idx),
-                                            .type = RGResourceType::ExternalBuffer}
+  external_initial_states_[RGResourcePhysHandle{.idx = static_cast<uint32_t>(idx),
+                                                .type = RGResourceType::ExternalBuffer}
                                .to64()] = initial;
   external_buf_handle_to_id_.emplace(key, id);
   rg_id_to_external_buffer_[id] = buf_handle;
@@ -418,7 +418,7 @@ AttachmentInfo* RenderGraph::get_tex_att_info(RGResourceId id) {
   return get_tex_att_info(get_physical_handle(id));
 }
 
-AttachmentInfo* RenderGraph::get_tex_att_info(RGResourceHandle handle) {
+AttachmentInfo* RenderGraph::get_tex_att_info(RGResourcePhysHandle handle) {
   ALWAYS_ASSERT(handle.type == RGResourceType::Texture);
   ALWAYS_ASSERT(handle.idx < tex_att_infos_.size());
   return &tex_att_infos_[handle.idx];
@@ -428,7 +428,7 @@ rhi::TextureHandle RenderGraph::get_att_img(RGResourceId tex_id) const {
   return get_att_img(get_physical_handle(tex_id));
 }
 
-rhi::TextureHandle RenderGraph::get_att_img(RGResourceHandle tex_handle) const {
+rhi::TextureHandle RenderGraph::get_att_img(RGResourcePhysHandle tex_handle) const {
   ASSERT(is_texture(tex_handle.type));
   if (tex_handle.type == RGResourceType::ExternalTexture) {
     ASSERT(tex_handle.idx < external_textures_.size());
@@ -442,7 +442,7 @@ rhi::BufferHandle RenderGraph::get_buf(RGResourceId buf_id) const {
   return get_buf(get_physical_handle(buf_id));
 }
 
-rhi::BufferHandle RenderGraph::get_buf(RGResourceHandle buf_handle) const {
+rhi::BufferHandle RenderGraph::get_buf(RGResourcePhysHandle buf_handle) const {
   ASSERT(is_buffer(buf_handle.type));
   if (buf_handle.type == RGResourceType::ExternalBuffer) {
     ASSERT(buf_handle.idx < external_buffers_.size());
@@ -462,11 +462,11 @@ rhi::BufferHandle RenderGraph::get_external_buffer(RGResourceId id) const {
   return get_buf(id);
 }
 
-RGResourceHandle RenderGraph::get_physical_handle(RGResourceId id) const {
+RGResourcePhysHandle RenderGraph::get_physical_handle(RGResourceId id) const {
   ALWAYS_ASSERT(id.idx < resources_.size());
   const auto& rec = resources_[id.idx];
   ALWAYS_ASSERT(rec.type == id.type);
-  return RGResourceHandle{.idx = rec.physical_idx, .type = rec.type};
+  return RGResourcePhysHandle{.idx = rec.physical_idx, .type = rec.type};
 }
 
 void RenderGraph::register_write(RGResourceId id, RGPass& pass) {
@@ -821,7 +821,7 @@ void RenderGraph::install_temporal_buffer_slot_(uint32_t resource_idx) {
                             ? resolve_history_slot(temporal.slot_mode, temporal.current_slot)
                             : temporal.current_slot;
   const auto phys =
-      RGResourceHandle{.idx = rec.physical_idx, .type = RGResourceType::ExternalBuffer};
+      RGResourcePhysHandle{.idx = rec.physical_idx, .type = RGResourceType::ExternalBuffer};
   external_buffers_[rec.physical_idx] = temporal.handles[slot];
   external_initial_states_[phys.to64()] = temporal.slot_states[slot];
   rg_id_to_external_buffer_[RGResourceId{
@@ -836,7 +836,7 @@ void RenderGraph::install_temporal_texture_slot_(uint32_t resource_idx) {
                             ? resolve_history_slot(temporal.slot_mode, temporal.current_slot)
                             : temporal.current_slot;
   const auto phys =
-      RGResourceHandle{.idx = rec.physical_idx, .type = RGResourceType::ExternalTexture};
+      RGResourcePhysHandle{.idx = rec.physical_idx, .type = RGResourceType::ExternalTexture};
   external_textures_[rec.physical_idx] = temporal.handles[slot];
   rg_id_to_external_texture_[RGResourceId{
       .idx = resource_idx, .type = RGResourceType::ExternalTexture, .version = 0}] =

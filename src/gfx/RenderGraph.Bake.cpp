@@ -573,33 +573,25 @@ void RenderGraph::bake_accumulate_physical_access_(
     std::vector<rhi::AccessFlags>& tex_physical_access,
     std::vector<rhi::AccessFlags>& buf_physical_access) {
   ZoneScopedN("RG bake: accumulate_physical_access");
-  auto accumulate_name_access = [&](const Pass::NameAndAccess& use) {
-    if (use.id.type == RGResourceType::ExternalTexture ||
-        use.id.type == RGResourceType::ExternalBuffer) {
-      return;
-    }
-    const RGResourceHandle phys = get_physical_handle(use.id);
-    if (phys.type == RGResourceType::Texture) {
-      ALWAYS_ASSERT(phys.idx < tex_physical_access.size());
-      tex_physical_access[phys.idx] = flag_or(tex_physical_access[phys.idx], use.acc);
-    } else if (phys.type == RGResourceType::Buffer) {
-      ALWAYS_ASSERT(phys.idx < buf_physical_access.size());
-      buf_physical_access[phys.idx] = flag_or(buf_physical_access[phys.idx], use.acc);
-    }
-  };
+
   for (uint32_t pass_i : pass_stack_) {
     const auto& pass = passes_[pass_i];
-    for (const auto& u : pass.get_external_writes()) {
-      accumulate_name_access(u);
-    }
-    for (const auto& u : pass.get_internal_writes()) {
-      accumulate_name_access(u);
-    }
-    for (const auto& u : pass.get_external_reads()) {
-      accumulate_name_access(u);
-    }
-    for (const auto& u : pass.get_internal_reads()) {
-      accumulate_name_access(u);
+    for (const auto& name_accesses : {&pass.get_external_writes(), &pass.get_internal_writes(),
+                                      &pass.get_external_reads(), &pass.get_internal_reads()}) {
+      for (const auto& use : *name_accesses) {
+        if (use.id.type == RGResourceType::ExternalTexture ||
+            use.id.type == RGResourceType::ExternalBuffer) {
+          continue;
+        }
+        const RGResourcePhysHandle phys = get_physical_handle(use.id);
+        if (phys.type == RGResourceType::Texture) {
+          ALWAYS_ASSERT(phys.idx < tex_physical_access.size());
+          tex_physical_access[phys.idx] = flag_or(tex_physical_access[phys.idx], use.acc);
+        } else if (phys.type == RGResourceType::Buffer) {
+          ALWAYS_ASSERT(phys.idx < buf_physical_access.size());
+          buf_physical_access[phys.idx] = flag_or(buf_physical_access[phys.idx], use.acc);
+        }
+      }
     }
   }
 }
@@ -742,10 +734,8 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
 
   for (uint32_t pass_i : pass_stack_) {
     const auto& pass = passes_[pass_i];
-    const std::vector<Pass::NameAndAccess>* name_access_arrays[4] = {
-        &pass.get_external_writes(), &pass.get_internal_writes(), &pass.get_external_reads(),
-        &pass.get_internal_reads()};
-    for (const auto& name_access_array : name_access_arrays) {
+    for (const auto& name_access_array : {&pass.get_external_writes(), &pass.get_internal_writes(),
+                                          &pass.get_external_reads(), &pass.get_internal_reads()}) {
       for (const auto& u : *name_access_array) {
         accumulate_temporal_access(u);
       }
@@ -759,10 +749,7 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
     auto& temporal_buf = temporal_buffers_[i];
     const uint32_t slot_count = temporal_slot_count(temporal_buf.slot_mode);
     rhi::BufferUsage derived_usage = buffer_usage_from_accumulated_access(temporal_buf_access[i]);
-    if (derived_usage == rhi::BufferUsage::None) {
-      derived_usage = rhi::BufferUsage::Storage;
-    }
-
+    ALWAYS_ASSERT(derived_usage != rhi::BufferUsage::None);
     const bool needs_recreate =
         temporal_buf.usage != derived_usage ||
         temporal_any_slot_invalidated_(slot_count, [&](uint32_t slot) {
@@ -797,6 +784,7 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
     const glm::uvec3 dims = resolve_attachment_dims(temporal.info, fb_size);
     const rhi::TextureUsage derived_usage =
         texture_usage_from_accumulated_access(temporal_tex_access[i]);
+    ALWAYS_ASSERT(derived_usage != rhi::TextureUsage::None);
     const bool needs_recreate = temporal.usage != derived_usage ||
                                 temporal_any_slot_invalidated_(slot_count, [&](uint32_t slot) {
                                   const auto& handle = temporal.handles[slot];
@@ -852,7 +840,7 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
   std::unordered_map<RgSubresourceStateKey, SubresourceState, RgSubresourceStateKeyHash>
       subresource_states;
 
-  auto get_resource_state = [&](RGResourceHandle handle, int32_t mip,
+  auto get_resource_state = [&](RGResourcePhysHandle handle, int32_t mip,
                                 int32_t slice) -> SubresourceState& {
     RgSubresourceStateKey key{.type = handle.type, .idx = handle.idx, .mip = mip, .slice = slice};
     if (auto it = subresource_states.find(key); it != subresource_states.end()) {
@@ -912,7 +900,7 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
     auto& barriers = pass_barrier_infos_[pass_i];
 
     struct PassUse {
-      RGResourceHandle resource;
+      RGResourcePhysHandle resource;
       RGResourceId debug_id{};
       rhi::AccessFlags access{rhi::AccessFlags::None};
       rhi::PipelineStage stage{rhi::PipelineStage::None};
@@ -923,7 +911,7 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
     };
     std::unordered_map<RgSubresourceStateKey, PassUse, RgSubresourceStateKeyHash> pass_uses;
 
-    auto merge_pass_use_key = [&](const RgSubresourceStateKey& key, const PassUse& incoming) {
+    auto merge_new_pass_use = [&](const RgSubresourceStateKey& key, const PassUse& incoming) {
       auto it = pass_uses.find(key);
       if (it == pass_uses.end()) {
         pass_uses.emplace(key, incoming);
@@ -935,12 +923,12 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
       entry.is_swapchain_write |= incoming.is_swapchain_write;
     };
 
-    auto accumulate_use = [&](const RenderGraph::Pass::NameAndAccess& use) {
+    auto accumulate_resource_use = [&](const RenderGraph::Pass::NameAndAccess& use) {
       const auto rg_resource_handle = get_physical_handle(use.id);
       if (use.type == RGResourceType::Buffer || use.type == RGResourceType::ExternalBuffer) {
         const RgSubresourceStateKey key{
             .type = rg_resource_handle.type, .idx = rg_resource_handle.idx, .mip = -1, .slice = -1};
-        merge_pass_use_key(key, PassUse{.resource = rg_resource_handle,
+        merge_new_pass_use(key, PassUse{.resource = rg_resource_handle,
                                         .debug_id = use.id,
                                         .access = use.acc,
                                         .stage = use.stage,
@@ -956,12 +944,12 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
       if (use.type == RGResourceType::ExternalTexture) {
         rhi::Texture* tex = device_->get_tex(get_external_tex(rg_resource_handle));
         ALWAYS_ASSERT(tex != nullptr);
-        tex_mip_levels = std::max(1u, tex->desc().mip_levels);
-        tex_array_layers = std::max(1u, tex->desc().array_length);
+        tex_mip_levels = tex->desc().mip_levels;
+        tex_array_layers = tex->desc().array_length;
       } else if (use.type == RGResourceType::Texture) {
         ALWAYS_ASSERT(rg_resource_handle.idx < tex_att_infos_.size());
-        tex_mip_levels = std::max(1u, tex_att_infos_[rg_resource_handle.idx].mip_levels);
-        tex_array_layers = std::max(1u, tex_att_infos_[rg_resource_handle.idx].array_layers);
+        tex_mip_levels = tex_att_infos_[rg_resource_handle.idx].mip_levels;
+        tex_array_layers = tex_att_infos_[rg_resource_handle.idx].array_layers;
       }
 
       const uint32_t mip_run = rg_resolved_mip_level_count(use.subresource, tex_mip_levels);
@@ -974,7 +962,7 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
                                           .idx = rg_resource_handle.idx,
                                           .mip = static_cast<int32_t>(mip_i),
                                           .slice = static_cast<int32_t>(slice_i)};
-          merge_pass_use_key(key, PassUse{.resource = rg_resource_handle,
+          merge_new_pass_use(key, PassUse{.resource = rg_resource_handle,
                                           .debug_id = use.id,
                                           .access = use.acc,
                                           .stage = use.stage,
@@ -987,16 +975,16 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
     };
 
     for (const auto& write_use : pass.get_external_writes()) {
-      accumulate_use(write_use);
+      accumulate_resource_use(write_use);
     }
     for (const auto& write_use : pass.get_internal_writes()) {
-      accumulate_use(write_use);
+      accumulate_resource_use(write_use);
     }
     for (const auto& read_use : pass.get_external_reads()) {
-      accumulate_use(read_use);
+      accumulate_resource_use(read_use);
     }
     for (const auto& read_use : pass.get_internal_reads()) {
-      accumulate_use(read_use);
+      accumulate_resource_use(read_use);
     }
 
     for (const auto& [key, use] : pass_uses) {
@@ -1386,7 +1374,7 @@ void RenderGraph::bake_validate_() {
 
 bool RenderGraph::run_barrier_coalesce_self_tests() {
   using B = BarrierInfo;
-  RGResourceHandle h{.idx = 0, .type = RGResourceType::ExternalTexture};
+  RGResourcePhysHandle h{.idx = 0, .type = RGResourceType::ExternalTexture};
   const RGState src{.access = rhi::AccessFlags::ShaderWrite,
                     .stage = rhi::PipelineStage::ComputeShader,
                     .layout = rhi::ResourceLayout::ComputeRW};

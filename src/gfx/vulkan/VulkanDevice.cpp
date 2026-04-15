@@ -743,6 +743,8 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
 rhi::TextureHandle VulkanDevice::create_tex(const rhi::TextureDesc& desc) {
   VkImageCreateInfo cinfo{.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
   ASSERT(desc.format != rhi::TextureFormat::Undefined);
+  ASSERT(desc.array_length > 0);
+  ASSERT(desc.mip_levels > 0);
 
   if (desc.dims.z > 1) {
     ASSERT(desc.array_length == 1);
