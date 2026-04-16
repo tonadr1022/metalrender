@@ -227,6 +227,17 @@ void TestRenderer::recreate_resources_on_swapchain_resize() {
 
 void TestRenderer::add_render_graph_passes() {
   ZoneScoped;
+  if (static_instance_mgr_.has_pending_frees(ctx_.curr_frame_in_flight_idx)) {
+    auto instance_data_id = rg_.import_external_buffer(
+        static_instance_mgr_.get_instance_data_buf(),
+        RGState{.stage = PipelineStage::TopOfPipe, .layout = ResourceLayout::General},
+        "instance_data_buf");
+    auto& p = rg_.add_transfer_pass("free_instance_data");
+    p.write_buf(instance_data_id, PipelineStage::AllTransfer);
+    p.set_ex([this](CmdEncoder* enc) {
+      static_instance_mgr_.flush_pending_frees(ctx_.curr_frame_in_flight_idx, enc);
+    });
+  }
   scene_->add_render_graph_passes();
 }
 
