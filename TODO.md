@@ -1,5 +1,6 @@
 # TODOs
 
+- cleanup meshlet vis and instance vis in vktest, why is object level occlusion culling so slow?
 - clean up temporal, needs cleanup. why is temporal create texture External? It shouldn't be external. 
 - vulkancmdencoder line 466, evaluate whether ORing is bad.
 - track buffer usage in render graph. right now indirect buffer usage is added unnecessarily.

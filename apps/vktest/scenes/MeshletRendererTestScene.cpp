@@ -9,7 +9,6 @@
 
 #include "ResourceManager.hpp"
 #include "Window.hpp"
-#include "core/Logger.hpp"
 #include "core/MathUtil.hpp"
 #include "core/Util.hpp"
 #include "gfx/DrawBatch.hpp"
@@ -82,7 +81,6 @@ void encode_meshlet_test_draw_pass(
   ASSERT(psos.size() == static_cast<size_t>(AlphaMaskType::Count));
   enc->set_wind_order(rhi::WindOrder::Clockwise);
   enc->set_cull_mode(rhi::CullMode::None);
-  // TODO: decide whether better todo this at the vulkan level.
   enc->set_viewport({0, 0}, viewport_dims);
   enc->set_scissor({0, 0}, viewport_dims);
 
@@ -228,8 +226,6 @@ void MeshletRendererScene::apply_demo_scene_preset(size_t index) {
   const size_t idx = std::min(index, scene_presets_.size() - 1);
   apply_preset(idx);
 }
-
-void MeshletRendererScene::ensure_meshlet_vis_buffer() {}
 
 void MeshletRendererScene::on_swapchain_resize() { make_depth_pyramid_tex(); }
 
@@ -476,7 +472,7 @@ void MeshletRendererScene::add_render_graph_passes() {
     auto& p = ctx_.rg->add_transfer_pass("meshlet_clear_meshlet_vis");
     meshlet_vis_rg_id = p.write_buf(meshlet_vis_rg_id, rhi::PipelineStage::AllTransfer);
     p.set_ex([need, this](rhi::CmdEncoder* enc) {
-      enc->fill_buffer(meshlet_vis_buf_.handle, 0, static_cast<uint32_t>(need), 0);
+      enc->fill_buffer(meshlet_vis_buf_.handle, 0, static_cast<uint32_t>(need), 1);
     });
   }
 
@@ -507,16 +503,38 @@ void MeshletRendererScene::add_render_graph_passes() {
 
   RGResourceId instance_vis_current_rg{};
   const uint32_t max_draws = ctx_.model_gpu_mgr->instance_mgr().stats().max_instance_data_count;
+  bool instance_vis_primed_this_frame = false;
   if (gpu_object_occlusion_cull_) {
     const size_t required = static_cast<size_t>(max_draws) * sizeof(uint32_t);
-    instance_vis_current_rg = ctx_.rg->create_buffer(
-        {.size = required, .temporal = true, .temporal_slot_mode = TemporalSlotMode::SingleSlot},
-        "meshlet_test_instance_vis");
-    auto& p = ctx_.rg->add_transfer_pass("meshlet_prime_instance_vis");
-    instance_vis_current_rg = p.write_buf(instance_vis_current_rg, rhi::PipelineStage::AllTransfer);
-    p.set_ex([this, instance_vis_current_rg, required](CmdEncoder* enc) {
-      enc->fill_buffer(ctx_.rg->get_buf(instance_vis_current_rg), 0, required, 1);
-    });
+    rhi::Buffer* cur =
+        instance_vis_buf_.handle.is_valid() ? ctx_.device->get_buf(instance_vis_buf_) : nullptr;
+    if (cur == nullptr || cur->size() < required) {
+      if (instance_vis_buf_.handle.is_valid()) {
+        ctx_.device->destroy(instance_vis_buf_.handle);
+        instance_vis_buf_ = {};
+      }
+      instance_vis_buf_ = ctx_.device->create_buf_h({
+          .usage = rhi::BufferUsage::Storage,
+          .size = required,
+          .name = "meshlet_test_instance_vis",
+      });
+      instance_vis_primed_this_frame = true;
+    }
+    const RGState instance_vis_import_initial =
+        instance_vis_primed_this_frame ? RGState{}
+                                       : RGState{.access = rhi::AccessFlags::ShaderStorageRead |
+                                                           rhi::AccessFlags::ShaderStorageWrite,
+                                                 .stage = rhi::PipelineStage::ComputeShader};
+    instance_vis_current_rg = ctx_.rg->import_external_buffer(
+        instance_vis_buf_.handle, instance_vis_import_initial, "meshlet_test_instance_vis_rg");
+    if (instance_vis_primed_this_frame) {
+      auto& p = ctx_.rg->add_transfer_pass("meshlet_prime_instance_vis");
+      instance_vis_current_rg =
+          p.write_buf(instance_vis_current_rg, rhi::PipelineStage::AllTransfer);
+      p.set_ex([this, required](CmdEncoder* enc) {
+        enc->fill_buffer(instance_vis_buf_.handle, 0, static_cast<uint32_t>(required), 1);
+      });
+    }
   }
 
   RGResourceId task_cmd_early_rg = ctx_.rg->create_buffer(
