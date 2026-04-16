@@ -50,6 +50,7 @@ class TestRenderer {
   void recreate_resources_on_swapchain_resize();
   void cycle_debug_scene();
   void set_scene(TestDebugScene id);
+  void apply_demo_scene_preset(size_t index);
   ModelGPUMgr* get_model_gpu_mgr() { return model_gpu_mgr_.get(); }
   ~TestRenderer();
 

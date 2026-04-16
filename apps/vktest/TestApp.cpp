@@ -72,6 +72,10 @@ TestApp::TestApp() {
     if (action == GLFW_PRESS && key == GLFW_KEY_TAB) {
       renderer_->cycle_debug_scene();
     }
+    if (action == GLFW_PRESS && key >= GLFW_KEY_0 && key <= GLFW_KEY_9 &&
+        (mods & GLFW_MOD_SUPER) != 0) {
+      renderer_->apply_demo_scene_preset(static_cast<size_t>(key - GLFW_KEY_0));
+    }
     if (key == GLFW_KEY_G && mods & GLFW_MOD_ALT) {
       imgui_enabled_ = !imgui_enabled_;
     }

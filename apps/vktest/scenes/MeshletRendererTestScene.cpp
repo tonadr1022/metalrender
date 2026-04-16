@@ -1,5 +1,7 @@
 #include "MeshletRendererTestScene.hpp"
 
+#include <GLFW/glfw3.h>
+
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 #include <span>
@@ -30,15 +32,10 @@
 
 namespace teng::gfx {
 
+using namespace teng::demo_scenes;
 using namespace rhi;
 
 namespace {
-
-[[maybe_unused]] constexpr const char* sponza_path = "Models/Sponza/glTF/Sponza.gltf";
-[[maybe_unused]] constexpr const char* chessboard_path =
-    "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf";
-[[maybe_unused]] constexpr const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
-[[maybe_unused]] constexpr const char* cube_path = "Models/Cube/glTF/Cube.gltf";
 
 glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
   // clang-format off
@@ -49,14 +46,6 @@ glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
     0.0f, 0.0f, 0.0f, -1.0f,
     0.0f, 0.0f, z_near, 0.0f};
   // clang-format on
-}
-
-std::filesystem::path resolve_model_path(const std::filesystem::path& resource_dir,
-                                         const std::string& path) {
-  if (path.starts_with("Models")) {
-    return resource_dir / "models" / "gltf" / path;
-  }
-  return path;
 }
 
 uint32_t prev_pow2(uint32_t val) {
@@ -144,17 +133,6 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
   generate_task_cmd_compute_pass_.emplace(*ctx_.device, *ctx_.rg, *ctx_.model_gpu_mgr,
                                           *ctx_.shader_mgr);
 
-  test_model_handle_ = ResourceManager::get().load_model(
-      resolve_model_path(ctx_.resource_dir, sponza_path), glm::mat4{1.f});
-  ModelInstance* inst = ResourceManager::get().get_model(test_model_handle_);
-  ASSERT(inst);
-  auto alloc_opt = ctx_.model_gpu_mgr->instance_alloc(inst->instance_gpu_handle);
-  ASSERT(alloc_opt.has_value());
-  instance_alloc_ = *alloc_opt;
-  const ModelGPUResources* res = ctx_.model_gpu_mgr->model_resources(inst->model_gpu_handle);
-  ASSERT(res);
-  ASSERT(res->totals.task_cmd_count == ctx_.model_gpu_mgr->geometry_batch().task_cmd_count);
-
   for (size_t a = 0; a < static_cast<size_t>(AlphaMaskType::Count); ++a) {
     meshlet_pso_early_[a] = ctx_.shader_mgr->create_graphics_pipeline({
         .shaders = {{{"forward_meshlet", ShaderType::Task},
@@ -197,12 +175,54 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
     });
   }
 
-  fps_camera_.camera().pos = {0.f, 0.f, 3.f};
-  fps_camera_.camera().pitch = 0.f;
-  fps_camera_.camera().yaw = -90.f;
-  fps_camera_.camera().calc_vectors();
+  load_scene_presets();
 
   make_depth_pyramid_tex();
+}
+
+void MeshletRendererScene::load_scene_presets() {
+  scene_presets_.clear();
+  ScenePresetLoaders loaders{
+      .add_model =
+          [this](const std::filesystem::path& p, const glm::mat4& t) {
+            models_.emplace_back(ResourceManager::get().load_model(p, t));
+          },
+      .add_instanced =
+          [this](const std::filesystem::path& p, std::vector<glm::mat4>&& tf) {
+            ResourceManager::InstancedModelLoadRequest req{.path = p,
+                                                           .instance_transforms = std::move(tf)};
+            auto result = ResourceManager::get().load_instanced_models(std::span(&req, 1));
+            for (auto& r : result) {
+              models_.reserve(models_.size() + r.size());
+              models_.insert(models_.end(), std::make_move_iterator(r.begin()),
+                             std::make_move_iterator(r.end()));
+            }
+          },
+  };
+  append_default_scene_presets(scene_presets_, ctx_.resource_dir, loaders);
+}
+
+void MeshletRendererScene::apply_preset(size_t idx) {
+  if (scene_presets_.empty() || idx >= scene_presets_.size()) {
+    return;
+  }
+  auto& preset = scene_presets_[idx];
+  auto old_models = std::move(models_);
+  models_.clear();
+  fps_camera_.camera() = preset.cam;
+  fps_camera_.camera().calc_vectors();
+  preset.load_fn();
+  for (auto& m : old_models) {
+    ResourceManager::get().free_model(m);
+  }
+}
+
+void MeshletRendererScene::apply_demo_scene_preset(size_t index) {
+  if (scene_presets_.empty()) {
+    return;
+  }
+  const size_t idx = std::min(index, scene_presets_.size() - 1);
+  apply_preset(idx);
 }
 
 void MeshletRendererScene::ensure_meshlet_vis_buffer() {}
@@ -249,7 +269,10 @@ void MeshletRendererScene::shutdown() {
   if (ctx_.window) {
     fps_camera_.set_mouse_captured(ctx_.window->get_handle(), false);
   }
-  ResourceManager::get().free_model(test_model_handle_);
+  for (auto& m : models_) {
+    ResourceManager::get().free_model(m);
+  }
+  models_.clear();
 }
 
 void MeshletRendererScene::on_frame(const TestSceneContext& ctx) {
@@ -271,6 +294,32 @@ void MeshletRendererScene::on_key_event(int key, int action, int mods) {
 
 void MeshletRendererScene::on_imgui() {
   ImGui::Begin("Meshlet renderer");
+  if (!scene_presets_.empty()) {
+    ImGui::SeparatorText("Scene presets");
+    static int scene_preset_selection = 0;
+    scene_preset_selection =
+        std::clamp(scene_preset_selection, 0, static_cast<int>(scene_presets_.size()) - 1);
+    const float list_h = ImGui::GetTextLineHeightWithSpacing() * 7.0f;
+    if (ImGui::BeginListBox("##scene_presets", ImVec2(-FLT_MIN, list_h))) {
+      for (int i = 0; i < static_cast<int>(scene_presets_.size()); ++i) {
+        ImGui::PushID(i);
+        const bool selected = (scene_preset_selection == i);
+        if (ImGui::Selectable(scene_presets_[static_cast<size_t>(i)].name.c_str(), selected,
+                              ImGuiSelectableFlags_AllowDoubleClick)) {
+          scene_preset_selection = i;
+          if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+            apply_preset(static_cast<size_t>(i));
+          }
+        }
+        ImGui::PopID();
+      }
+      ImGui::EndListBox();
+    }
+    if (ImGui::Button("Load preset", ImVec2(-FLT_MIN, 0))) {
+      apply_preset(static_cast<size_t>(scene_preset_selection));
+    }
+    ImGui::Separator();
+  }
   ImGui::Checkbox("GPU object frustum cull", &gpu_object_frustum_cull_);
   ImGui::Checkbox("GPU object occlusion cull", &gpu_object_occlusion_cull_);
   uint32_t visible_meshlet_task_groups = 0;
@@ -351,7 +400,7 @@ CullData MeshletRendererScene::prepare_cull_data(const ViewData& vd) {
   CullData cd{};
   cd.frustum = glm::vec4(frustum_x.x, frustum_x.z, frustum_y.y, frustum_y.z);
   cd.z_near = 0.1f;
-  cd.z_far = 100.f;
+  cd.z_far = 10'000.f;
   cd.p00 = vd.proj[0][0];
   cd.p11 = vd.proj[1][1];
   cd.pyramid_width = 0;

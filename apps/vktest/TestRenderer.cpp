@@ -5,6 +5,7 @@
 #include <tracy/Tracy.hpp>
 #include <vector>
 
+#include "../common/ScenePresets.hpp"
 #include "ResourceManager.hpp"
 #include "UI.hpp"
 #include "Window.hpp"
@@ -103,7 +104,16 @@ void TestRenderer::set_scene(TestDebugScene id) {
   }
   active_scene_ = id;
   scene_ = create_test_scene(id, ctx_);
+  if (id == TestDebugScene::MeshletRenderer) {
+    teng::demo_scenes::seed_demo_scene_rng(10000000);
+    scene_->apply_demo_scene_preset(0);
+  }
   LINFO("vktest scene: {}", to_string(id));
+}
+
+void TestRenderer::apply_demo_scene_preset(size_t index) {
+  ASSERT(scene_);
+  scene_->apply_demo_scene_preset(index);
 }
 
 void TestRenderer::cycle_debug_scene() {

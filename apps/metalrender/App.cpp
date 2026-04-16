@@ -3,9 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
-#include <glm/gtc/quaternion.hpp>
-#include <glm/gtc/random.hpp>
-#include <random>
+#include <glm/ext/matrix_transform.hpp>
 
 #include "ResourceManager.hpp"
 #include "UI.hpp"
@@ -18,7 +16,6 @@
 #include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
-#include "glm/ext/matrix_transform.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "implot.h"
@@ -26,29 +23,7 @@
 
 using namespace teng;
 using namespace teng::gfx;
-
-namespace {
-
-constexpr const char* sponza_path = "Models/Sponza/glTF/Sponza.gltf";
-constexpr const char* chessboard_path = "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf";
-constexpr const char* suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
-constexpr const char* cube_path = "Models/Cube/glTF/Cube.gltf";
-
-namespace random {
-
-std::random_device rd{};
-std::default_random_engine eng{rd()};
-
-void seed(int seed) { eng.seed(seed); }
-
-float get_float(float min, float max) {
-  std::uniform_real_distribution<float> dist{min, max};
-  return dist(eng);
-}
-
-}  // namespace random
-
-}  // namespace
+using namespace teng::demo_scenes;
 
 App::App() {
   ZoneScoped;
@@ -111,7 +86,7 @@ App::App() {
   init_camera();
 
   load_scene_presets();
-  random::seed(10000000);
+  demo_scenes::seed_demo_scene_rng(10000000);
   run_preset_scene(0);
 }
 
@@ -229,7 +204,7 @@ void App::on_key_event(int key, int action, [[maybe_unused]] int mods) {
       }
     } else if (key == GLFW_KEY_L && mods & GLFW_MOD_CONTROL) {
       static float h = 40.f;
-      load_model(sponza_path, glm::translate(glm::mat4{1}, glm::vec3{0, h, 0}));
+      load_model(demo_scenes::k_sponza_path, glm::translate(glm::mat4{1}, glm::vec3{0, h, 0}));
       h += 40.f;
     }
   }
@@ -490,7 +465,8 @@ void App::on_imgui(float dt) {
 }
 
 void App::load_model(const std::string& path, const glm::mat4& transform) {
-  models_.emplace_back(ResourceManager::get().load_model(resolve_model_path(path), transform));
+  models_.emplace_back(ResourceManager::get().load_model(
+      demo_scenes::resolve_model_path(resource_dir_, path), transform));
 }
 
 void App::init_camera() {
@@ -539,36 +515,6 @@ void App::shutdown() {
   device_->shutdown();
 }
 
-void App::load_grid(glm::ivec3 radius, float dist, const std::string& path, float scale) {
-  glm::ivec3 iter{};
-  glm::ivec3 dims{radius};
-  std::vector<glm::mat4> transforms;
-  transforms.reserve((2ull * dims.x + 1) * (2 * dims.y + 1) * (2 * dims.z + 1));
-  for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
-    for (iter.y = -dims.y; iter.y <= dims.y; iter.y++) {
-      for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
-        glm::vec3 pos = glm::vec3{iter} * dist;
-        transforms.emplace_back(glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
-      }
-    }
-  }
-  load_instances(path, std::move(transforms));
-};
-
-void App::load_grid(int radius, float dist, const std::string& path, float scale) {
-  glm::ivec3 iter{};
-  glm::ivec3 dims{radius, 1, radius};
-  std::vector<glm::mat4> transforms;
-  transforms.reserve((2ull * dims.x + 1) * (2 * dims.z + 1));
-  for (iter.z = -dims.z; iter.z <= dims.z; iter.z++) {
-    for (iter.x = -dims.x; iter.x <= dims.x; iter.x++) {
-      glm::vec3 pos = glm::vec3{iter} * dist;
-      transforms.emplace_back(glm::translate(glm::scale(glm::mat4{1}, glm::vec3(scale)), pos));
-    }
-  }
-  load_instances(path, std::move(transforms));
-};
-
 void App::clear_all_models() {
   for (auto& m : models_) {
     ResourceManager::get().free_model(m);
@@ -578,41 +524,24 @@ void App::clear_all_models() {
 
 void App::load_scene_presets() {
   scene_presets_.clear();
-  scene_presets_.reserve(10);
-  scene_presets_.emplace_back([&, this]() { load_model(suzanne_path); }, "suzanne",
-                              Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});
-  scene_presets_.emplace_back([&, this]() { load_model(sponza_path); }, "sponza",
-                              Camera{.pos = {-6, 2.5, 0}, .move_speed = 2.0f});
-  scene_presets_.emplace_back(
-      [&, this]() { load_grid(glm::ivec3{2, 1, 2}, 40.0, sponza_path); }, "sponza grid",
-      Camera{.pos = {100, 100, -100}, .pitch = -40, .yaw = 145, .move_speed = 15.f});
-  scene_presets_.emplace_back(
-      [&, this]() { load_model(chessboard_path); }, "chessboard",
-      Camera{.pos = {0.4, 0.4, 0.4}, .pitch = -30, .yaw = -130, .move_speed = .25f});
-  scene_presets_.emplace_back(
-      [&, this]() { load_grid(glm::ivec3{4, 0, 4}, 1.0, chessboard_path, 10.0); },
-      "chessboard grid", Camera{.pos = {-30, 10, -20}, .pitch = -25, .yaw = 40, .move_speed = 2.f});
-  scene_presets_.emplace_back([&, this]() { load_random_of_model(3000, 30.f, 1000, suzanne_path); },
-                              "random suzannes",
-                              Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});
-  scene_presets_.emplace_back([&, this]() { load_random_of_model(50'000, 10.f, 3000, cube_path); },
-                              "random cubes",
-                              Camera{.pos = {0, 0, 3}, .pitch = 0, .yaw = 270, .move_speed = 1.f});
-  scene_presets_.emplace_back([this]() { load_model("/Users/tony/models/Bistro_Godot_opt.glb"); },
-                              "bistro");
-  scene_presets_.emplace_back(
-      [this]() {
-        int n = 22;
-        load_grid(glm::ivec3{n, 0, n}, 40.0, sponza_path);
-      },
-      "many many sponzas",
-      Camera{.pos = {900, 300, -900}, .pitch = -28, .yaw = 134, .move_speed = 15.f});
-  scene_presets_.emplace_back(
-      [this]() {
-        load_model(sponza_path);
-        load_model(chessboard_path, glm::translate(glm::mat4{1}, glm::vec3{0, -10, 0}));
-      },
-      "chess-sponza", Camera{.pos = {-6, 2.5, 0}, .move_speed = 2.0f});
+  demo_scenes::ScenePresetLoaders loaders{
+      .add_model =
+          [this](const std::filesystem::path& p, const glm::mat4& t) {
+            models_.emplace_back(ResourceManager::get().load_model(p, t));
+          },
+      .add_instanced =
+          [this](const std::filesystem::path& p, std::vector<glm::mat4>&& tf) {
+            ResourceManager::InstancedModelLoadRequest req{.path = p,
+                                                           .instance_transforms = std::move(tf)};
+            auto result = ResourceManager::get().load_instanced_models(std::span(&req, 1));
+            for (auto& r : result) {
+              models_.reserve(models_.size() + r.size());
+              models_.insert(models_.end(), std::make_move_iterator(r.begin()),
+                             std::make_move_iterator(r.end()));
+            }
+          },
+  };
+  demo_scenes::append_default_scene_presets(scene_presets_, resource_dir_, loaders);
 }
 void App::run_preset_scene(int idx) {
   auto& preset = scene_presets_[idx];
@@ -626,36 +555,6 @@ void App::run_preset_scene(int idx) {
   for (auto& m : old_models) {
     LINFO("freeing");
     ResourceManager::get().free_model(m);
-  }
-}
-
-void App::load_random_of_model(size_t count, float scale, float radius, const std::string& path) {
-  for (size_t i = 0; i < count; i++) {
-    auto rand_f = [radius]() { return random::get_float(-radius, radius); };
-    auto pos = glm::vec3{rand_f(), rand_f(), rand_f()};
-    glm::vec3 randomAxis = glm::linearRand(glm::vec3(-1.0f), glm::vec3(1.0f));
-    float randomAngle = glm::linearRand(0.0f, glm::two_pi<float>());
-    auto rot = glm::angleAxis(randomAngle, glm::normalize(randomAxis));
-    load_model(path, glm::translate(glm::mat4{1}, pos) * glm::mat4_cast(rot) *
-                         glm::scale(glm::mat4{1}, glm::vec3{scale}));
-  }
-}
-
-std::filesystem::path App::resolve_model_path(const std::string& path) {
-  if (path.starts_with("Models")) {
-    return resource_dir_ / "models" / "gltf" / path;
-  }
-  return path;
-}
-
-void App::load_instances(const std::string& path, std::vector<glm::mat4>&& transforms) {
-  ResourceManager::InstancedModelLoadRequest req{.path = resolve_model_path(path),
-                                                 .instance_transforms = std::move(transforms)};
-  auto result = ResourceManager::get().load_instanced_models(std::span(&req, 1));
-  for (auto& r : result) {
-    models_.reserve(models_.size() + r.size());
-    models_.insert(models_.end(), std::make_move_iterator(r.begin()),
-                   std::make_move_iterator(r.end()));
   }
 }
 

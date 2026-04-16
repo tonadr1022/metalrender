@@ -1,12 +1,13 @@
 #pragma once
 
 #include <array>
+#include <vector>
 
+#include "../../common/ScenePresets.hpp"
 #include "../TestDebugScenes.hpp"
 #include "FpsCameraController.hpp"
 #include "gfx/RendererTypes.hpp"
 #include "gfx/renderer/AlphaMaskType.hpp"
-#include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/rhi/Texture.hpp"
 #include "hlsl/shared_cull_data.h"
 #include "hlsl/shared_globals.h"
@@ -53,6 +54,8 @@ class MeshletRendererScene final : public ITestScene {
 
   void on_swapchain_resize() override;
 
+  void apply_demo_scene_preset(size_t index) override;
+
   ViewData prepare_view_data();
   CullData prepare_cull_data(const ViewData& vd);
   CullData prepare_cull_data_late(const ViewData& vd);
@@ -61,6 +64,9 @@ class MeshletRendererScene final : public ITestScene {
   void add_render_graph_passes() override;
 
  private:
+  void load_scene_presets();
+  void apply_preset(size_t idx);
+
   void make_depth_pyramid_tex();
   void ensure_meshlet_vis_buffer();
 
@@ -79,8 +85,8 @@ class MeshletRendererScene final : public ITestScene {
   rhi::BufferHandleHolder meshlet_vis_buf_;
   int debug_depth_pyramid_mip_{0};
   FpsCameraController fps_camera_;
-  ModelHandle test_model_handle_;
-  InstanceMgr::Alloc instance_alloc_{};
+  std::vector<ModelHandle> models_;
+  std::vector<teng::demo_scenes::ScenePreset> scene_presets_;
   bool gpu_object_frustum_cull_{true};
   bool gpu_object_occlusion_cull_{true};
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> task_cmd_group_count_readback_;

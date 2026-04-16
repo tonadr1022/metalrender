@@ -6,6 +6,7 @@ set(METALRENDER_APP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../metalrender)
 add_executable(${target_name}
     main.cpp
     ${COMMON_SOURCE_DIR}/Util.cpp
+    ${COMMON_SOURCE_DIR}/ScenePresets.cpp
     ${METALRENDER_APP_DIR}/Camera.cpp
     ${METALRENDER_APP_DIR}/FpsCameraController.cpp
     TestDebugScenes.cpp

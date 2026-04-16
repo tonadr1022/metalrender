@@ -61,6 +61,7 @@ class ITestScene {
   virtual void on_cursor_pos(double, double) {}
   virtual void on_key_event(int, int, int) {}
   virtual void on_imgui() {}
+  virtual void apply_demo_scene_preset(size_t) {}
 
  protected:
   [[maybe_unused]] const TestSceneContext& ctx_;
