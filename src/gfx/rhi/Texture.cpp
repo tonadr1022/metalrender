@@ -11,6 +11,8 @@ uint32_t get_block_width_bytes(rhi::TextureFormat format) {
   switch (format) {
     case rhi::TextureFormat::ASTC4x4SrgbBlock:
     case rhi::TextureFormat::ASTC4x4UnormBlock:
+    case rhi::TextureFormat::Bc7SrgbBlock:
+    case rhi::TextureFormat::Bc7UnormBlock:
       return 4;
     default:
       ASSERT(0);
@@ -22,6 +24,8 @@ uint32_t get_bytes_per_block(rhi::TextureFormat format) {
   switch (format) {
     case rhi::TextureFormat::ASTC4x4SrgbBlock:
     case rhi::TextureFormat::ASTC4x4UnormBlock:
+    case rhi::TextureFormat::Bc7SrgbBlock:
+    case rhi::TextureFormat::Bc7UnormBlock:
       return 16;
     default:
       ASSERT(0);

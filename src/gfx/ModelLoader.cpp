@@ -90,8 +90,7 @@ void load_ktx(const void *data, size_t data_size, const std::filesystem::path &p
 
   upload.data = std::unique_ptr<void, UntypedDeleterFuncPtr>(ktx_tex, &free_ktx_texture);
   upload.desc = desc;
-  // TODO: handle other block sizes
-  // TODO: handle BC7
+  // BC7 and ASTC 4x4: 4x4 blocks, 16 bytes per block.
   int blocks_wide = align_divide_up(ktx_tex->baseWidth, 4);
   int blocks_tall = align_divide_up(ktx_tex->baseHeight, 4);
   int src_bytes_per_row = blocks_wide * 16;

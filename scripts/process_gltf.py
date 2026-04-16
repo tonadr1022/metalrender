@@ -26,14 +26,14 @@ def convert_image(src_img: Path) -> bool:
     dst_img.parent.mkdir(parents=True, exist_ok=True)
 
     try:
+        # UASTC+zstd in the file; Vulkan loads transcode to BC7 (see gfx/texture/KtxLoad.cpp).
         subprocess.run(
             [
                 "toktx",
                 "--t2",
                 "--encode",
-                "astc",
-                "--astc_blk_d",
-                "4x4",
+                "uastc",
+                "--zcmp",
                 "--genmipmap",
                 str(tmp_img),
                 str(src_img),

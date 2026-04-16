@@ -8,6 +8,7 @@
 #include "core/Util.hpp"
 #include "gfx/rhi/Barrier.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
+#include "gfx/rhi/Texture.hpp"
 #include "gfx/vulkan/VkUtil.hpp"
 #include "gfx/vulkan/VulkanBuffer.hpp"
 #include "gfx/vulkan/VulkanCommon.hpp"
@@ -192,6 +193,8 @@ VkImageLayout layout_from_vk_access(VkAccessFlags2 access) {
     case Undefined:
     case ASTC4x4UnormBlock:
     case ASTC4x4SrgbBlock:
+    case Bc7UnormBlock:
+    case Bc7SrgbBlock:
     default:
       return 0;
   }
@@ -425,14 +428,31 @@ void VulkanCmdEncoder::upload_texture_data(rhi::BufferHandle src_buf, size_t src
   if (src_size.x == 0 && src_size.y == 0 && src_size.z == 0) {
     src_size = {tex->desc().dims.x, tex->desc().dims.y, std::max(1u, tex->desc().dims.z)};
   }
-  const uint32_t bpp = uncompressed_texel_bytes(tex->desc().format);
-  ASSERT(bpp > 0);
-  ASSERT(src_bytes_per_row % bpp == 0);
-  const auto row_texels = static_cast<uint32_t>(src_bytes_per_row / bpp);
-  ASSERT(row_texels >= static_cast<uint32_t>(src_size.x));
+  const rhi::TextureFormat fmt = tex->desc().format;
+  const uint32_t bpp = uncompressed_texel_bytes(fmt);
+  uint32_t buffer_row_length_texels = 0;
+  if (bpp > 0) {
+    ASSERT(src_bytes_per_row % bpp == 0);
+    const auto row_texels = static_cast<uint32_t>(src_bytes_per_row / bpp);
+    ASSERT(row_texels >= static_cast<uint32_t>(src_size.x));
+    buffer_row_length_texels = (row_texels == static_cast<uint32_t>(src_size.x)) ? 0u : row_texels;
+  } else {
+    // Block-compressed (BC7, ASTC, …): staging row is full rows of compressed blocks.
+    const uint32_t block_texels = rhi::get_block_width_bytes(fmt);
+    const uint32_t block_bytes = rhi::get_bytes_per_block(fmt);
+    ASSERT(block_texels != 0);
+    ASSERT(block_bytes != 0);
+    ASSERT(src_bytes_per_row % block_bytes == 0);
+    const auto blocks_per_row =
+        static_cast<uint32_t>(src_bytes_per_row / static_cast<size_t>(block_bytes));
+    const uint32_t row_texels_from_blocks = blocks_per_row * block_texels;
+    ASSERT(row_texels_from_blocks >= static_cast<uint32_t>(src_size.x));
+    (void)row_texels_from_blocks;
+    buffer_row_length_texels = 0;  // tightly packed; extent defines row width in texels
+  }
   VkBufferImageCopy region{
       .bufferOffset = static_cast<VkDeviceSize>(src_offset),
-      .bufferRowLength = (row_texels == static_cast<uint32_t>(src_size.x)) ? 0u : row_texels,
+      .bufferRowLength = buffer_row_length_texels,
       .bufferImageHeight = 0,
   };
   region.imageSubresource.mipLevel = mip_level < 0 ? 0 : static_cast<uint32_t>(mip_level);

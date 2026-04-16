@@ -175,6 +175,10 @@ constexpr VkFormat convert_format(TextureFormat format) {
       return VK_FORMAT_ASTC_4x4_UNORM_BLOCK;
     case TextureFormat::ASTC4x4SrgbBlock:
       return VK_FORMAT_ASTC_4x4_SRGB_BLOCK;
+    case TextureFormat::Bc7UnormBlock:
+      return VK_FORMAT_BC7_UNORM_BLOCK;
+    case TextureFormat::Bc7SrgbBlock:
+      return VK_FORMAT_BC7_SRGB_BLOCK;
     default:
       ASSERT(0);
       return VK_FORMAT_UNDEFINED;
@@ -198,6 +202,14 @@ constexpr TextureFormat convert_format(VkFormat format) {
       return TextureFormat::R16G16B16A16Sfloat;
     case VK_FORMAT_R32G32B32A32_SFLOAT:
       return TextureFormat::R32G32B32A32Sfloat;
+    case VK_FORMAT_ASTC_4x4_UNORM_BLOCK:
+      return TextureFormat::ASTC4x4UnormBlock;
+    case VK_FORMAT_ASTC_4x4_SRGB_BLOCK:
+      return TextureFormat::ASTC4x4SrgbBlock;
+    case VK_FORMAT_BC7_UNORM_BLOCK:
+      return TextureFormat::Bc7UnormBlock;
+    case VK_FORMAT_BC7_SRGB_BLOCK:
+      return TextureFormat::Bc7SrgbBlock;
     default:
       ASSERT(0);
       return TextureFormat::Undefined;
@@ -393,6 +405,7 @@ void VulkanDevice::init(const InitInfo& init_info) {
   VkPhysicalDeviceFeatures feat{};
   feat.samplerAnisotropy = true;
   feat.shaderInt64 = true;
+  feat.textureCompressionBC = VK_TRUE;
 
   phys_device_selector.set_required_features(feat);
 

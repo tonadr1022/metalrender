@@ -10,11 +10,11 @@
 
 namespace teng::demo_scenes {
 
-inline constexpr const char* k_sponza_path = "Models/Sponza/glTF/Sponza.gltf";
+inline constexpr const char* k_sponza_path = "Models/Sponza/glTF_ktx2/Sponza.gltf";
 inline constexpr const char* k_chessboard_path =
     "Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf";
-inline constexpr const char* k_suzanne_path = "Models/Suzanne/glTF/Suzanne.gltf";
-inline constexpr const char* k_cube_path = "Models/Cube/glTF/Cube.gltf";
+inline constexpr const char* k_suzanne_path = "Models/Suzanne/glTF_ktx2/Suzanne.gltf";
+inline constexpr const char* k_cube_path = "Models/Cube/glTF_ktx2/Cube.gltf";
 
 [[nodiscard]] std::filesystem::path resolve_model_path(const std::filesystem::path& resource_dir,
                                                        const std::string& path);

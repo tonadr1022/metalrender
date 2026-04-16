@@ -141,6 +141,10 @@ rhi::TextureFormat convert(MTL::PixelFormat format) {
       return TextureFormat::ASTC4x4SrgbBlock;
     case MTL::PixelFormatASTC_4x4_LDR:
       return TextureFormat::ASTC4x4UnormBlock;
+    case MTL::PixelFormatBC7_RGBAUnorm:
+      return TextureFormat::Bc7UnormBlock;
+    case MTL::PixelFormatBC7_RGBAUnorm_sRGB:
+      return TextureFormat::Bc7SrgbBlock;
     case MTL::PixelFormatRGBA16Float:
       return TextureFormat::R16G16B16A16Sfloat;
     case MTL::PixelFormatRGBA32Float:
@@ -169,6 +173,10 @@ MTL::PixelFormat convert(rhi::TextureFormat format) {
       return MTL::PixelFormatASTC_4x4_sRGB;
     case TextureFormat::ASTC4x4UnormBlock:
       return MTL::PixelFormatASTC_4x4_LDR;
+    case TextureFormat::Bc7SrgbBlock:
+      return MTL::PixelFormatBC7_RGBAUnorm_sRGB;
+    case TextureFormat::Bc7UnormBlock:
+      return MTL::PixelFormatBC7_RGBAUnorm;
     case TextureFormat::R16G16B16A16Sfloat:
       return MTL::PixelFormatRGBA16Float;
     case TextureFormat::R32G32B32A32Sfloat:

@@ -15,16 +15,17 @@ namespace {
 
 rhi::TextureFormat convert(VkFormat format) {
   switch (format) {
-    case VK_FORMAT_ASTC_4x4_SRGB_BLOCK: {
+    case VK_FORMAT_ASTC_4x4_SRGB_BLOCK:
       return rhi::TextureFormat::ASTC4x4SrgbBlock;
-    }
-    case VK_FORMAT_ASTC_4x4_UNORM_BLOCK: {
+    case VK_FORMAT_ASTC_4x4_UNORM_BLOCK:
       return rhi::TextureFormat::ASTC4x4UnormBlock;
-    }
-    default: {
+    case VK_FORMAT_BC7_SRGB_BLOCK:
+      return rhi::TextureFormat::Bc7SrgbBlock;
+    case VK_FORMAT_BC7_UNORM_BLOCK:
+      return rhi::TextureFormat::Bc7UnormBlock;
+    default:
       ASSERT(0);
       return rhi::TextureFormat::Undefined;
-    }
   }
 }
 
@@ -37,10 +38,12 @@ LoadKtxTextureResult load_ktx_texture(const std::filesystem::path &path) {
       path.string().c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &texture);
   if (result != KTX_SUCCESS) {
     LERROR("Failed to load KTX texture from {}: {}", path.string(), ktxErrorString(result));
+    load_result.texture = nullptr;
+    return load_result;
   }
   auto transcodable = ktxTexture2_NeedsTranscoding(texture);
   if (transcodable) {
-    result = ktxTexture2_TranscodeBasis(texture, KTX_TTF_ASTC_4x4_RGBA, KTX_TF_HIGH_QUALITY);
+    result = ktxTexture2_TranscodeBasis(texture, KTX_TTF_BC7_RGBA, KTX_TF_HIGH_QUALITY);
     if (result != KTX_SUCCESS) {
       LERROR("Failed to transcode KTX texture from {}: {}", path.string(), ktxErrorString(result));
       goto cleanup_failed_load;
@@ -53,6 +56,7 @@ LoadKtxTextureResult load_ktx_texture(const std::filesystem::path &path) {
 
 cleanup_failed_load:
   ktxTexture2_Destroy(texture);
+  load_result.texture = nullptr;
   return load_result;
 }
 
@@ -68,7 +72,7 @@ LoadKtxTextureResult load_ktx_texture(const void *data, size_t data_size) {
   }
   auto transcodable = ktxTexture2_NeedsTranscoding(texture);
   if (transcodable) {
-    result = ktxTexture2_TranscodeBasis(texture, KTX_TTF_ASTC_4x4_RGBA, KTX_TF_HIGH_QUALITY);
+    result = ktxTexture2_TranscodeBasis(texture, KTX_TTF_BC7_RGBA, KTX_TF_HIGH_QUALITY);
     if (result != KTX_SUCCESS) {
       LERROR("Failed to transcode KTX texture from memory: {}", ktxErrorString(result));
       goto cleanup_failed_load;
@@ -78,6 +82,7 @@ LoadKtxTextureResult load_ktx_texture(const void *data, size_t data_size) {
   return load_result;
 cleanup_failed_load:
   ktxTexture2_Destroy(texture);
+  load_result.texture = nullptr;
   return load_result;
 }
 

@@ -48,6 +48,8 @@ enum class TextureFormat : uint8_t {
   R32float,
   ASTC4x4UnormBlock,
   ASTC4x4SrgbBlock,
+  Bc7UnormBlock,
+  Bc7SrgbBlock,
 };
 
 enum class StorageMode : uint8_t {
