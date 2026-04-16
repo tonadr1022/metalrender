@@ -202,19 +202,22 @@ void MeshletRendererScene::load_scene_presets() {
   append_default_scene_presets(scene_presets_, ctx_.resource_dir, loaders);
 }
 
+void MeshletRendererScene::clear_all_models() {
+  for (auto& m : models_) {
+    ResourceManager::get().free_model(m);
+  }
+  models_.clear();
+}
+
 void MeshletRendererScene::apply_preset(size_t idx) {
   if (scene_presets_.empty() || idx >= scene_presets_.size()) {
     return;
   }
   auto& preset = scene_presets_[idx];
-  auto old_models = std::move(models_);
-  models_.clear();
   fps_camera_.camera() = preset.cam;
   fps_camera_.camera().calc_vectors();
+  clear_all_models();
   preset.load_fn();
-  for (auto& m : old_models) {
-    ResourceManager::get().free_model(m);
-  }
 }
 
 void MeshletRendererScene::apply_demo_scene_preset(size_t index) {
@@ -269,10 +272,7 @@ void MeshletRendererScene::shutdown() {
   if (ctx_.window) {
     fps_camera_.set_mouse_captured(ctx_.window->get_handle(), false);
   }
-  for (auto& m : models_) {
-    ResourceManager::get().free_model(m);
-  }
-  models_.clear();
+  clear_all_models();
 }
 
 void MeshletRendererScene::on_frame(const TestSceneContext& ctx) {

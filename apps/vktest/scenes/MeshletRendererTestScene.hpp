@@ -65,6 +65,7 @@ class MeshletRendererScene final : public ITestScene {
 
  private:
   void load_scene_presets();
+  void clear_all_models();
   void apply_preset(size_t idx);
 
   void make_depth_pyramid_tex();
