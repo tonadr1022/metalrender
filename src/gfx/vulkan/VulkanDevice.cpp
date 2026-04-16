@@ -732,6 +732,10 @@ rhi::BufferHandle VulkanDevice::create_buf(const rhi::BufferDesc& desc) {
     bindless_idx = static_cast<uint32_t>(idx);
   }
 
+  if (desc.name) {
+    set_vk_debug_name(VK_OBJECT_TYPE_BUFFER, (uint64_t)buffer, desc.name);
+  }
+
   auto handle = buffer_pool_.alloc(desc, bindless_idx, buffer, allocation, vma_cinfo.flags,
                                    allocation_info.pMappedData);
   if (bindless_idx != rhi::k_invalid_bindless_idx) {
@@ -1006,10 +1010,10 @@ rhi::CmdEncoder* VulkanDevice::begin_cmd_encoder(rhi::QueueType queue_type) {
                                       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
   VK_CHECK(vkResetCommandBuffer(enc.cmd_bufs_[frame_idx()], 0));
   VK_CHECK(vkBeginCommandBuffer(enc.cmd_bufs_[frame_idx()], &begin_info));
-  set_vk_debug_name(
-      VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)enc.cmd_bufs_[frame_idx()],
-      ("cmd_buf_" + std::to_string(frame_idx()) + "_" + std::to_string(curr_cmd_encoder_i_))
-          .c_str());
+  set_vk_debug_name(VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t)enc.cmd_bufs_[frame_idx()],
+                    ("cmd_buf_frame_in_flight_" + std::to_string(frame_idx()) + "_encoder_idx_" +
+                     std::to_string(curr_cmd_encoder_i_))
+                        .c_str());
   curr_cmd_encoder_i_++;
   return &enc;
 }

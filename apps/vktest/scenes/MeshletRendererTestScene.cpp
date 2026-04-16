@@ -9,6 +9,7 @@
 
 #include "ResourceManager.hpp"
 #include "Window.hpp"
+#include "core/Logger.hpp"
 #include "core/MathUtil.hpp"
 #include "core/Util.hpp"
 #include "gfx/DrawBatch.hpp"
@@ -461,9 +462,6 @@ void MeshletRendererScene::add_render_graph_passes() {
   }
 
   const bool meshlet_vis_cleared_this_frame = (frame_num_ == 0 || meshlet_vis_buffer_reallocated);
-  // After `RenderGraph::execute`, externals are re-imported at v0; without a same-frame clear, the
-  // first `rw_buf` read still sees last frame's GPU contents. Declare that tail state so barriers
-  // match the real previous writer (task shader UAV).
   const RGState meshlet_vis_import_initial =
       meshlet_vis_cleared_this_frame
           ? RGState{}
@@ -514,6 +512,11 @@ void MeshletRendererScene::add_render_graph_passes() {
     instance_vis_current_rg = ctx_.rg->create_buffer(
         {.size = required, .temporal = true, .temporal_slot_mode = TemporalSlotMode::SingleSlot},
         "meshlet_test_instance_vis");
+    auto& p = ctx_.rg->add_transfer_pass("meshlet_prime_instance_vis");
+    instance_vis_current_rg = p.write_buf(instance_vis_current_rg, rhi::PipelineStage::AllTransfer);
+    p.set_ex([this, instance_vis_current_rg, required](CmdEncoder* enc) {
+      enc->fill_buffer(ctx_.rg->get_buf(instance_vis_current_rg), 0, required, 1);
+    });
   }
 
   RGResourceId task_cmd_early_rg = ctx_.rg->create_buffer(
@@ -526,10 +529,10 @@ void MeshletRendererScene::add_render_graph_passes() {
   RGResourceId indirect_args_late_rg =
       ctx_.rg->create_buffer({.size = k_indirect_bytes}, "meshlet_hello_indirect_args_late");
 
-  RGResourceId visible_object_count_rg =
-      ctx_.rg->create_buffer({.size = sizeof(uint32_t)}, "meshlet_visible_object_count");
-  RGResourceId meshlet_stats_rg =
-      ctx_.rg->create_buffer({.size = k_meshlet_draw_stats_bytes}, "meshlet_test_draw_stats");
+  RGResourceId visible_object_count_rg = ctx_.rg->create_buffer(
+      {.size = sizeof(uint32_t), .defer_reuse = true}, "meshlet_visible_object_count");
+  RGResourceId meshlet_stats_rg = ctx_.rg->create_buffer(
+      {.size = k_meshlet_draw_stats_bytes, .defer_reuse = true}, "meshlet_test_draw_stats");
 
   {
     auto& p = ctx_.rg->add_transfer_pass("meshlet_clear_visible_count_buf_and_stats");
@@ -558,8 +561,9 @@ void MeshletRendererScene::add_render_graph_passes() {
   }
 
   generate_task_cmd_compute_pass_->bake(
-      max_draws, false, view_cb_suballoc, cull_early_cb, task_cmd_early_rg, indirect_args_early_rg,
-      visible_object_count_rg, &instance_vis_current_rg, nullptr, rhi::TextureHandle{});
+      max_draws, false, gpu_object_frustum_cull_, gpu_object_occlusion_cull_, view_cb_suballoc,
+      cull_early_cb, task_cmd_early_rg, indirect_args_early_rg, visible_object_count_rg,
+      &instance_vis_current_rg, nullptr, rhi::TextureHandle{});
 
   RGResourceId gbuffer_a_id =
       ctx_.rg->create_texture({.format = rhi::TextureFormat::R16G16B16A16Sfloat}, "gbuffer_a");
@@ -672,10 +676,10 @@ void MeshletRendererScene::add_render_graph_passes() {
     }
   }
 
-  generate_task_cmd_compute_pass_->bake(max_draws, true, view_cb_suballoc, cull_late_cb,
-                                        task_cmd_late_rg, indirect_args_late_rg,
-                                        visible_object_count_rg, &instance_vis_current_rg,
-                                        &final_depth_pyramid_rg, depth_pyramid_tex_.handle);
+  generate_task_cmd_compute_pass_->bake(
+      max_draws, true, gpu_object_frustum_cull_, gpu_object_occlusion_cull_, view_cb_suballoc,
+      cull_late_cb, task_cmd_late_rg, indirect_args_late_rg, visible_object_count_rg,
+      &instance_vis_current_rg, &final_depth_pyramid_rg, depth_pyramid_tex_.handle);
 
   {
     auto& p = ctx_.rg->add_graphics_pass("meshlet_occlusion_late");
@@ -803,8 +807,9 @@ GenerateTaskCmdComputePass::GenerateTaskCmdComputePass(rhi::Device& device, Rend
 }
 
 void GenerateTaskCmdComputePass::bake(
-    uint32_t max_draws, bool late, const BufferSuballoc& view_cb_suballoc,
-    const BufferSuballoc& cull_cb, RGResourceId& task_cmd_rg, RGResourceId& indirect_args_rg,
+    uint32_t max_draws, bool late, bool gpu_object_frustum_cull, bool gpu_object_occlusion_cull,
+    const BufferSuballoc& view_cb_suballoc, const BufferSuballoc& cull_cb,
+    RGResourceId& task_cmd_rg, RGResourceId& indirect_args_rg,
     RGResourceId& visible_object_count_rg, RGResourceId* instance_vis_current_rg,
     RGResourceId* final_depth_pyramid_rg, rhi::TextureHandle final_depth_pyramid_tex) {
   auto& p = rg_.add_compute_pass(late ? "meshlet_prepare_meshlets_late"
@@ -812,7 +817,7 @@ void GenerateTaskCmdComputePass::bake(
   task_cmd_rg = p.write_buf(task_cmd_rg, PipelineStage::ComputeShader);
   indirect_args_rg = p.rw_buf(indirect_args_rg, PipelineStage::ComputeShader);
   visible_object_count_rg = p.rw_buf(visible_object_count_rg, PipelineStage::ComputeShader);
-  if (gpu_object_occlusion_cull_) {
+  if (gpu_object_occlusion_cull) {
     if (late) {
       *instance_vis_current_rg = p.rw_buf(*instance_vis_current_rg, PipelineStage::ComputeShader);
       p.sample_tex(*final_depth_pyramid_rg, rhi::PipelineStage::ComputeShader,
@@ -826,8 +831,8 @@ void GenerateTaskCmdComputePass::bake(
   const RGResourceId instance_vis_current_id =
       instance_vis_current_rg != nullptr ? *instance_vis_current_rg : RGResourceId{};
   p.set_ex([this, task_cmd_rg, indirect_args_rg, visible_object_count_rg, max_draws,
-            view_cb_suballoc, cull_cb, late, final_depth_pyramid_tex,
-            instance_vis_current_id](CmdEncoder* enc) {
+            gpu_object_frustum_cull, gpu_object_occlusion_cull, view_cb_suballoc, cull_cb, late,
+            final_depth_pyramid_tex, instance_vis_current_id](CmdEncoder* enc) {
     enc->bind_pipeline(late ? prepare_meshlets_late_pso_ : prepare_meshlets_pso_);
     DebugMeshletPreparePC pc{
         .dst_task_cmd_buf_idx = device_.get_buf(rg_.get_buf(task_cmd_rg))->bindless_idx(),
@@ -839,15 +844,15 @@ void GenerateTaskCmdComputePass::bake(
                 ->bindless_idx(),
         .max_draws = max_draws,
         .flags =
-            (gpu_object_frustum_cull_ ? MESHLET_PREPARE_OBJECT_FRUSTUM_CULL_ENABLED_BIT : 0u) |
-            (gpu_object_occlusion_cull_ ? MESHLET_PREPARE_OBJECT_OCCLUSION_CULL_ENABLED_BIT : 0u),
+            (gpu_object_frustum_cull ? MESHLET_PREPARE_OBJECT_FRUSTUM_CULL_ENABLED_BIT : 0u) |
+            (gpu_object_occlusion_cull ? MESHLET_PREPARE_OBJECT_OCCLUSION_CULL_ENABLED_BIT : 0u),
         .visible_obj_cnt_buf_idx =
             device_.get_buf(rg_.get_buf(visible_object_count_rg))->bindless_idx(),
         .instance_vis_buf_idx =
-            gpu_object_occlusion_cull_
+            gpu_object_occlusion_cull
                 ? device_.get_buf(rg_.get_buf(instance_vis_current_id))->bindless_idx()
                 : UINT32_MAX,
-        .depth_pyramid_tex_idx = gpu_object_occlusion_cull_ && late
+        .depth_pyramid_tex_idx = gpu_object_occlusion_cull && late
                                      ? device_.get_tex(final_depth_pyramid_tex)->bindless_idx()
                                      : UINT32_MAX,
     };

@@ -22,7 +22,8 @@ class GenerateTaskCmdComputePass {
   GenerateTaskCmdComputePass(rhi::Device& device, RenderGraph& rg, ModelGPUMgr& model_gpu_mgr,
                              ShaderManager& shader_mgr);
 
-  void bake(uint32_t max_draws, bool late, const BufferSuballoc& view_cb_suballoc,
+  void bake(uint32_t max_draws, bool late, bool gpu_object_frustum_cull,
+            bool gpu_object_occlusion_cull, const BufferSuballoc& view_cb_suballoc,
             const BufferSuballoc& cull_cb, RGResourceId& task_cmd_rg,
             RGResourceId& indirect_args_rg, RGResourceId& visible_object_count_rg,
             RGResourceId* instance_vis_current_rg, RGResourceId* final_depth_pyramid_rg,
@@ -31,8 +32,6 @@ class GenerateTaskCmdComputePass {
  private:
   rhi::PipelineHandleHolder prepare_meshlets_pso_;
   rhi::PipelineHandleHolder prepare_meshlets_late_pso_;
-  bool gpu_object_occlusion_cull_{true};
-  bool gpu_object_frustum_cull_{true};
   rhi::Device& device_;
   RenderGraph& rg_;
   ModelGPUMgr& model_gpu_mgr_;
