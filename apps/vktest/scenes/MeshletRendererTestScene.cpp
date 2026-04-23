@@ -415,6 +415,25 @@ void MeshletRendererScene::on_imgui() {
   ImGui::SliderFloat("Shadow bias min", &shadow_cfg_.bias_min, 0.0f, 0.01f, "%.5f");
   ImGui::SliderFloat("Shadow bias max", &shadow_cfg_.bias_max, 0.0f, 0.02f, "%.5f");
   ImGui::Checkbox("Visualize shadow cascades", &visualize_shadow_cascades_);
+  ImGui::SeparatorText("CSM debug");
+  {
+    const int last_cascade = static_cast<int>(shadow_cfg_.cascade_count) - 1;
+    if (last_cascade >= 0) {
+      debug_csm_cascade_layer_ = std::clamp(debug_csm_cascade_layer_, 0, last_cascade);
+    }
+    ImGui::SliderInt("View cascade (depth)", &debug_csm_cascade_layer_, 0,
+                     std::max(0, last_cascade));
+    if (cached_shadow_depth_tex_.is_valid() && shadow_cfg_.cascade_count > 0) {
+      const uint32_t array_b = ctx_.device->get_tex(cached_shadow_depth_tex_)->bindless_idx();
+      const uint32_t layer = static_cast<uint32_t>(std::max(0, debug_csm_cascade_layer_));
+      const float disp_w = 240.f;
+      const float disp_h = disp_w;  // square shadow map
+      ImGui::Image(MakeImGuiTexRefCsmArraySlice(array_b, layer), ImVec2(disp_w, disp_h),
+                   ImVec2(0, 0), ImVec2(1, 1));
+    } else {
+      ImGui::TextUnformatted("CSM depth preview (not ready or no CSM this frame)");
+    }
+  }
   uint32_t visible_meshlet_task_groups = 0;
   uint32_t visible_objects = 0;
   MeshletDrawStats visible_meshlet_stats{};

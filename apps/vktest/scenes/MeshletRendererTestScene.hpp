@@ -120,6 +120,7 @@ class MeshletRendererScene final : public ITestScene {
   std::array<rhi::TextureViewHandle, CSM_MAX_CASCADES> shadow_depth_layer_views_{-1, -1, -1, -1};
   rhi::TextureHandle cached_shadow_depth_tex_;
   bool visualize_shadow_cascades_{false};
+  int debug_csm_cascade_layer_{0};
   uint32_t frame_num_{0};
 
   static constexpr size_t k_meshlet_draw_stats_bytes = sizeof(uint32_t) * 4;

@@ -15,10 +15,20 @@ namespace gfx {
 // Packed ImTextureRef / ImTextureID for ImGui::Image: bindless index of a single-mip
 // Texture2D<float> view (see Device::get_tex_view_bindless_idx). Decoded in ImGuiRenderer::render.
 constexpr uint64_t kImGuiTexRefBindlessFloatViewMagic = 0xA11CE000000000ull;
+// CSM: low 32 = default bindless for shadow depth2DArray, high 32 = (0x0A11CEB << 8) | cascade.
+constexpr uint32_t kImGuiCsmArrayHighPrefix = 0x0A11CEB;  // (tid>>40) == 0x0A11CEB in decode
 
 [[nodiscard]] inline ImTextureRef MakeImGuiTexRefBindlessFloatView(uint32_t bindless_view_idx) {
   const uint64_t packed =
       kImGuiTexRefBindlessFloatViewMagic | static_cast<uint64_t>(bindless_view_idx);
+  return ImTextureRef{static_cast<ImTextureID>(packed)};
+}
+
+[[nodiscard]] inline ImTextureRef MakeImGuiTexRefCsmArraySlice(uint32_t array_bindless_idx,
+                                                               uint32_t cascade_layer) {
+  const uint32_t high32 = (kImGuiCsmArrayHighPrefix << 8) | (cascade_layer & 0xFFu);
+  const uint64_t packed =
+      (static_cast<uint64_t>(high32) << 32) | static_cast<uint64_t>(array_bindless_idx);
   return ImTextureRef{static_cast<ImTextureID>(packed)};
 }
 

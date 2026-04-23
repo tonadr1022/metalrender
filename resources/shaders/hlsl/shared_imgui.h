@@ -6,6 +6,9 @@
 // Fragment: use bindless_textures_float when sampling R32F (e.g. depth pyramid mip views).
 #define IMGUI_TEX_FLAG_FLOAT_BINDLESS (1 << 0)
 #define IMGUI_FLAG_SRGB_COLOR (1 << 1)
+// Fragment: sample bindless_textures2DArray; cascade / slice in bits 8-15 of flags.
+#define IMGUI_TEX_FLAG_CSM_DEPTH_ARRAY (1 << 2)
+#define IMGUI_CSM_LAYER_MASK 0xFF00
 
 struct ImGuiPC {
   float4x4 proj;

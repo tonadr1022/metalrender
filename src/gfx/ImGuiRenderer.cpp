@@ -108,14 +108,22 @@ void ImGuiRenderer::render(rhi::CmdEncoder* enc, glm::uvec2 fb_size, size_t fram
         enc->set_scissor(glm::uvec2{clip_min.x, clip_min.y},
                          glm::uvec2{clip_max.x - clip_min.x, clip_max.y - clip_min.y});
 
-        pc.flags &= ~IMGUI_TEX_FLAG_FLOAT_BINDLESS;
+        pc.flags &= ~(IMGUI_TEX_FLAG_FLOAT_BINDLESS | IMGUI_TEX_FLAG_CSM_DEPTH_ARRAY |
+                      IMGUI_CSM_LAYER_MASK);
         if (ImTextureID tex_id = pcmd->GetTexID()) {
           const auto tid = static_cast<uint64_t>(tex_id);
           if ((tid & 0xFFFFFFFF00000000ull) == kImGuiTexRefBindlessFloatViewMagic) {
             pc.tex_idx = static_cast<uint32_t>(tid & 0xFFFFFFFFull);
             pc.flags |= IMGUI_TEX_FLAG_FLOAT_BINDLESS;
           } else {
-            pc.tex_idx = device_->get_tex(rhi::TextureHandle{tex_id})->bindless_idx();
+            const auto tid_hi = static_cast<uint32_t>(tid >> 32);
+            if ((tid_hi >> 8) == kImGuiCsmArrayHighPrefix) {
+              pc.tex_idx = static_cast<uint32_t>(tid & 0xFFFFFFFFull);
+              const uint32_t csm_layer = tid_hi & 0xFFu;
+              pc.flags |= IMGUI_TEX_FLAG_CSM_DEPTH_ARRAY | (csm_layer << 8);
+            } else {
+              pc.tex_idx = device_->get_tex(rhi::TextureHandle{tex_id})->bindless_idx();
+            }
           }
         }
         pc.vert_buf_idx = vert_buf->bindless_idx();
