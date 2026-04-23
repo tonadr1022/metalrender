@@ -51,9 +51,7 @@ struct BufferInfo {
   size_t size{};
   // When true, the physical `BufferHandle` is not returned to the pool until after the next
   // `execute()` finishes (one execution boundary), so reuse on a later `bake()` cannot race
-  // in-flight GPU reads. This is pool lifetime only: it does not allocate a second buffer, add an
-  // RG version for "previous frame" reads, or implement temporal attachment/buffer history in the
-  // graph.
+  // in-flight GPU reads. This is pool lifetime only: it does not allocate a second buffer.
   bool defer_reuse{};
   bool temporal{};
   TemporalSlotMode temporal_slot_mode{TemporalSlotMode::DoubleBuffered};

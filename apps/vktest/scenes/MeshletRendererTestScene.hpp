@@ -82,7 +82,6 @@ class MeshletRendererScene final : public ITestScene {
   rhi::PipelineHandleHolder depth_reduce_pso_;
   rhi::TexAndViewHolder depth_pyramid_tex_;
   rhi::BufferHandleHolder meshlet_vis_buf_;
-  rhi::BufferHandleHolder instance_vis_buf_;
   int debug_depth_pyramid_mip_{0};
   FpsCameraController fps_camera_;
   std::vector<ModelHandle> models_;
