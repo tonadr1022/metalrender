@@ -47,6 +47,8 @@ struct GlobalData {
   uint frame_num;
   uint meshlet_stats_enabled;
   uint _padding;
+  // World-space unit vector toward the directional light (xyz); w unused.
+  float4 diffuse_light_dir_world;
 };
 
 struct ViewData {

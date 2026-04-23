@@ -495,6 +495,8 @@ void MeshletRendererScene::add_render_graph_passes() {
     gd.frame_num = 0;
     gd.meshlet_stats_enabled = 1;
     gd._padding = 0;
+    const glm::vec3 toward_light = glm::normalize(glm::vec3(0.35f, 1.f, 0.4f));
+    gd.diffuse_light_dir_world = glm::vec4(toward_light, 0.f);
     globals_cb_buf = frame_uniform_gpu_allocator_.alloc2(sizeof(GlobalData), &gd);
   }
 
