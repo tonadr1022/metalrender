@@ -47,6 +47,7 @@ float calculate_shadow_factor(float3 world_pos, in CSMData csm_data, SamplerStat
   float4 shadow_pos = mul(csm_data.light_vp_matrices[cascade_idx], float4(world_pos, 1.0));
   shadow_pos.xyz /= shadow_pos.w;
   shadow_pos.xy = shadow_pos.xy * 0.5 + 0.5;
+  shadow_pos.y = 1.0 - shadow_pos.y;
   if (shadow_pos.x < 0.0 || shadow_pos.x > 1.0 || shadow_pos.y < 0.0 || shadow_pos.y > 1.0 ||
       shadow_pos.z < 0.0 || shadow_pos.z > 1.0) {
     return 1.0f;

@@ -92,6 +92,15 @@ class MeshletRendererScene final : public ITestScene {
 
   void make_depth_pyramid_tex();
 
+  void update_toward_light_effective(const TestSceneContext& ctx);
+
+  glm::vec3 toward_light_manual_{0.35f, 1.f, 0.4f};
+  glm::vec3 toward_light_effective_{0.35f, 1.f, 0.4f};
+  bool day_night_cycle_{false};
+  bool day_night_cycle_paused_{false};
+  float day_cycle_time_sec_{0.f};
+  float day_cycle_period_sec_{120.f};
+
   bool reverse_z_{true};
   std::optional<GenerateTaskCmdComputePass> generate_task_cmd_compute_pass_;
   rhi::PipelineHandleHolder shade_pso_;

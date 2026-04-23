@@ -7,6 +7,7 @@
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <limits>
+#include <numbers>
 #include <span>
 #include <string>
 
@@ -184,7 +185,36 @@ void encode_meshlet_test_draw_pass(
   }
 }
 
+glm::vec3 safe_normalize_toward_light(const glm::vec3& v) {
+  const float s2 = glm::dot(v, v);
+  if (s2 < 1e-12f) {
+    return glm::normalize(glm::vec3(0.35f, 1.f, 0.4f));
+  }
+  return v * (1.f / std::sqrt(s2));
+}
+
 }  // namespace
+
+void MeshletRendererScene::update_toward_light_effective(const TestSceneContext& ctx) {
+  if (day_night_cycle_ && !day_night_cycle_paused_) {
+    const float period = std::max(1e-4f, day_cycle_period_sec_);
+    day_cycle_time_sec_ = std::fmodf(day_cycle_time_sec_ + ctx.delta_time_sec, period);
+    if (day_cycle_time_sec_ < 0.f) {
+      day_cycle_time_sec_ += period;
+    }
+  }
+
+  if (day_night_cycle_) {
+    const float period = std::max(1e-4f, day_cycle_period_sec_);
+    const float phase_wrapped = std::fmodf(day_cycle_time_sec_, period);
+    const float t = 2.0f * std::numbers::pi_v<float> * (phase_wrapped / period) -
+                    0.5f * std::numbers::pi_v<float>;  // 2pi * f - pi/2
+    const glm::vec3 raw(0.35f * std::cos(t), std::sin(t), 0.4f * std::cos(t * 0.5f));
+    toward_light_effective_ = safe_normalize_toward_light(raw);
+  } else {
+    toward_light_effective_ = safe_normalize_toward_light(toward_light_manual_);
+  }
+}
 
 MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
     : ITestScene(ctx), frame_uniform_gpu_allocator_(ctx_.device, true) {
@@ -254,6 +284,7 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
   load_scene_presets();
 
   make_depth_pyramid_tex();
+  toward_light_effective_ = safe_normalize_toward_light(toward_light_manual_);
 }
 
 void MeshletRendererScene::load_scene_presets() {
@@ -359,6 +390,7 @@ void MeshletRendererScene::shutdown() {
 }
 
 void MeshletRendererScene::on_frame(const TestSceneContext& ctx) {
+  update_toward_light_effective(ctx);
   const bool imgui_blocks =
       ctx.imgui_ui_active && (ImGui::GetIO().WantTextInput || ImGui::GetIO().WantCaptureKeyboard);
   if (ctx.window) {
@@ -402,6 +434,23 @@ void MeshletRendererScene::on_imgui() {
       apply_preset(static_cast<size_t>(scene_preset_selection));
     }
     ImGui::Separator();
+  }
+  ImGui::SeparatorText("Lighting");
+  {
+    const bool was_day_night = day_night_cycle_;
+    ImGui::BeginDisabled(day_night_cycle_);
+    ImGui::DragFloat3("Toward light (world)", &toward_light_manual_.x, 0.01f);
+    ImGui::EndDisabled();
+    ImGui::Checkbox("Day / night cycle", &day_night_cycle_);
+    if (was_day_night && !day_night_cycle_) {
+      toward_light_manual_ = toward_light_effective_;
+    }
+    ImGui::BeginDisabled(!day_night_cycle_);
+    ImGui::Checkbox("Pause cycle", &day_night_cycle_paused_);
+    ImGui::SliderFloat("Day length (s)", &day_cycle_period_sec_, 10.0f, 600.0f);
+    ImGui::EndDisabled();
+    ImGui::Text("Effective (normalized): %.3f, %.3f, %.3f", toward_light_effective_.x,
+                toward_light_effective_.y, toward_light_effective_.z);
   }
   ImGui::Checkbox("GPU object frustum cull", &gpu_object_frustum_cull_);
   ImGui::Checkbox("GPU object occlusion cull", &gpu_object_occlusion_cull_);
@@ -550,7 +599,10 @@ MeshletRendererScene::ShadowFrameData MeshletRendererScene::build_shadow_frame_d
       glm::vec4(shadow_cfg_.bias_min, shadow_cfg_.bias_max, 0.0f, shadow_cfg_.z_far);
   out.csm_data.cascade_levels = glm::vec4(shadow_cfg_.z_far);
 
-  const glm::vec3 light_dir_ws = -glm::normalize(toward_light);
+  // `toward_light` points from surface -> light. Shadow camera must look along
+  // light rays (light -> surface), which `lookAt(center + dir, center)` achieves
+  // when `dir` is surface -> light.
+  const glm::vec3 light_dir_ws = glm::normalize(toward_light);
   const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
                        std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height));
   constexpr float k_fov_deg = 60.f;
@@ -665,7 +717,7 @@ void MeshletRendererScene::add_render_graph_passes() {
 
   BufferSuballoc globals_cb_buf;
   BufferSuballoc shadow_globals_cb_buf;
-  const glm::vec3 toward_light = glm::normalize(glm::vec3(0.35f, 1.f, 0.4f));
+  const glm::vec3& toward_light = toward_light_effective_;
   {
     GlobalData gd{};
     gd.render_mode =

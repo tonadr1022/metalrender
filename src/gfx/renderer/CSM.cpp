@@ -220,7 +220,9 @@ void CSMRenderer::load_pipelines(ShaderManager& shader_mgr) {
 void CSMRenderer::update(const glm::mat4& cam_view, glm::vec3 cam_pos, glm::vec3 light_dir,
                          float fov_deg, float aspect_ratio) {
   (void)cam_pos;
-  glm::vec3 light_dir_ws = -glm::normalize(light_dir);
+  // `light_dir` is passed as surface -> light; keep the same convention so
+  // shadow cascades are generated from the same light direction as shading.
+  glm::vec3 light_dir_ws = glm::normalize(light_dir);
   float shadow_z_near_ = 0.1f;
   float shadow_z_far_ = 200.0f;
   float cascade_linear_factor_ = 0.95f;
