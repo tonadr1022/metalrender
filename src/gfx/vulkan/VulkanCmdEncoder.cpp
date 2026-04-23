@@ -743,13 +743,16 @@ void VulkanCmdEncoder::barrier(rhi::TextureHandle tex, rhi::PipelineStage src_st
                                       : array_layer_count;
 
   // Prefer tracked layouts when known so oldLayout matches validation / GPU reality.
+  // Note: layout tracking is per-mip (not per-layer). For single-layer subresource barriers,
+  // forcing oldLayout from mip tracking can produce invalid transitions on untouched layers.
+  const bool targets_all_layers = (base_array_layer < 0 || array_layer_count == UINT32_MAX);
   if (old_layout == VK_IMAGE_LAYOUT_UNDEFINED) {
-    if (base_mip_level < 0) {
+    if (targets_all_layers && base_mip_level < 0) {
       VkImageLayout uniform = texture->uniform_mip_layout_or_undefined();
       if (uniform != VK_IMAGE_LAYOUT_UNDEFINED) {
         old_layout = uniform;
       }
-    } else {
+    } else if (targets_all_layers) {
       VkImageLayout ml = texture->mip_layout(base_mip_u);
       if (ml != VK_IMAGE_LAYOUT_UNDEFINED) {
         old_layout = ml;

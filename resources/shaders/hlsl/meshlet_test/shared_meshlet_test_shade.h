@@ -5,6 +5,9 @@
 
 struct MeshletShadePC {
   uint gbuffer_a_idx;
+  uint gbuffer_b_idx;
+  uint depth_idx;
+  uint shadow_depth_array_idx;
   uint depth_pyramid_view_idx;
   uint swap_w;
   uint swap_h;

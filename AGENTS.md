@@ -22,6 +22,18 @@ metalrender
 ./build/Debug/bin/<target_name>
 ```
 
+Smoke test (bounded run; avoids leaving the app open in automation):
+
+```bash
+./build/Debug/bin/vktest --quit-after-frames 30
+```
+
+Run without a frame limit (interactive, until the window is closed):
+
+```bash
+./build/Debug/bin/vktest
+```
+
 ### Shader compiler (single files or ad hoc)
 
 `./build/Debug/bin/teng-shaderc (--all | <path/to/file.comp.hlsl> [...])`  

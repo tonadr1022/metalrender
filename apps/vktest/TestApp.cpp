@@ -20,7 +20,8 @@
 using namespace teng;
 using namespace teng::gfx;
 
-TestApp::TestApp() {
+TestApp::TestApp(TestAppOptions options)
+    : quit_after_frames_(std::move(options.quit_after_frames)) {
   ZoneScoped;
   resource_dir_ = get_resource_dir();
   std::filesystem::current_path(resource_dir_.parent_path());
@@ -111,6 +112,11 @@ void TestApp::run() {
 
     if (imgui_enabled_) {
       ImGui::EndFrame();
+    }
+
+    ++completed_frames_;
+    if (quit_after_frames_.has_value() && completed_frames_ >= *quit_after_frames_) {
+      break;
     }
   }
 

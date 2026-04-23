@@ -9,6 +9,7 @@
 #include "gfx/RendererTypes.hpp"
 #include "gfx/renderer/AlphaMaskType.hpp"
 #include "gfx/rhi/Texture.hpp"
+#include "hlsl/shared_csm.h"
 #include "hlsl/shared_cull_data.h"
 #include "hlsl/shared_globals.h"
 
@@ -55,9 +56,31 @@ class MeshletRendererScene final : public ITestScene {
 
   void apply_demo_scene_preset(size_t index) override;
 
-  ViewData prepare_view_data();
-  CullData prepare_cull_data(const ViewData& vd);
-  CullData prepare_cull_data_late(const ViewData& vd);
+  [[nodiscard]] ViewData prepare_view_data();
+  [[nodiscard]] CullData prepare_cull_data(const ViewData& vd) const;
+  [[nodiscard]] CullData prepare_cull_data_late(const ViewData& vd) const;
+  [[nodiscard]] CullData prepare_cull_data_for_proj(const glm::mat4& proj, float z_near,
+                                                    float z_far) const;
+
+  struct ShadowCascadeConfig {
+    uint32_t max_cascades{CSM_MAX_CASCADES};
+    uint32_t cascade_count{3};
+    uint32_t shadow_map_resolution{2048};
+    float z_near{0.1f};
+    float z_far{200.f};
+    float split_lambda{0.95f};
+    float bias_min{0.0004f};
+    float bias_max{0.0025f};
+  };
+
+  struct ShadowFrameData {
+    uint32_t cascade_count{};
+    CSMData csm_data{};
+    std::array<ViewData, CSM_MAX_CASCADES> view_data{};
+    std::array<CullData, CSM_MAX_CASCADES> cull_data{};
+  };
+  [[nodiscard]] ShadowFrameData build_shadow_frame_data(const ViewData& camera_view,
+                                                        const glm::vec3& toward_light) const;
 
   void render();
   void add_render_graph_passes() override;
@@ -76,6 +99,8 @@ class MeshletRendererScene final : public ITestScene {
       meshlet_pso_early_;
   std::array<rhi::PipelineHandleHolder, static_cast<size_t>(AlphaMaskType::Count)>
       meshlet_pso_late_;
+  std::array<rhi::PipelineHandleHolder, static_cast<size_t>(AlphaMaskType::Count)>
+      meshlet_pso_shadow_;
   rhi::PipelineHandleHolder prepare_meshlets_pso_;
   rhi::PipelineHandleHolder prepare_meshlets_late_pso_;
   rhi::PipelineHandleHolder clear_mesh_indirect_pso_;
@@ -91,6 +116,10 @@ class MeshletRendererScene final : public ITestScene {
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> task_cmd_group_count_readback_;
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> visible_object_count_readback_;
   GPUFrameAllocator3 frame_uniform_gpu_allocator_;
+  ShadowCascadeConfig shadow_cfg_{};
+  std::array<rhi::TextureViewHandle, CSM_MAX_CASCADES> shadow_depth_layer_views_{-1, -1, -1, -1};
+  rhi::TextureHandle cached_shadow_depth_tex_;
+  bool visualize_shadow_cascades_{false};
   uint32_t frame_num_{0};
 
   static constexpr size_t k_meshlet_draw_stats_bytes = sizeof(uint32_t) * 4;
