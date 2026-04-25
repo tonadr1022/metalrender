@@ -32,6 +32,28 @@ RWStructuredBuffer<uint> meshlet_draw_stats : register(u2);
 Texture2D depth_pyramid_tex : register(t3);
 #endif
 
+bool sphere_visible_perspective_frustum(float3 center, float radius, CullData cd) {
+  // Ref:
+  // https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
+  return ((-center.z + radius) > cd.z_near && (-center.z - radius) < cd.z_far) &&
+         (center.z * cd.frustum[3] - abs(center.y) * cd.frustum[2]) > -radius &&
+         (center.z * cd.frustum[1] - abs(center.x) * cd.frustum[0]) > -radius;
+}
+
+bool sphere_visible_ortho_frustum(float3 center, float radius, CullData cd) {
+  return (center.x + radius) > cd.ortho_bounds.x && (center.x - radius) < cd.ortho_bounds.y &&
+         (center.y + radius) > cd.ortho_bounds.z && (center.y - radius) < cd.ortho_bounds.w &&
+         (center.z + radius) > cd.z_near && (center.z - radius) < cd.z_far;
+}
+
+bool sphere_visible_frustum(float3 center, float radius, CullData cd) {
+  if (cd.projection_type == CULL_PROJECTION_ORTHOGRAPHIC) {
+    return sphere_visible_ortho_frustum(center, radius, cd);
+  }
+
+  return sphere_visible_perspective_frustum(center, radius, cd);
+}
+
 [NumThreads(K_TASK_TG_SIZE, 1, 1)] void main(uint gtid
                                              : SV_GroupThreadID, uint dtid
                                              : SV_DispatchThreadID, uint gid
@@ -87,16 +109,8 @@ Texture2D depth_pyramid_tex : register(t3);
           instance_data.translation;
       float radius = meshlet.center_radius.w * instance_data.scale;
       float3 center = mul(view_data.view, float4(world_center, 1.0)).xyz;
-      // Ref:
-      // https://github.com/zeux/niagara/blob/master/src/shaders/clustercull.comp.glsl#L101C1-L102C102
-      // frustum cull, plane symmetry
       if ((pc.flags & MESHLET_FRUSTUM_CULL_ENABLED_BIT) != 0) {
-        visible = visible && ((-center.z + radius) > cull_data.z_near &&
-                              (-center.z - radius) < cull_data.z_far);
-        visible = visible && (center.z * cull_data.frustum[3] -
-                              abs(center.y) * cull_data.frustum[2]) > -radius;
-        visible = visible && (center.z * cull_data.frustum[1] -
-                              abs(center.x) * cull_data.frustum[0]) > -radius;
+        visible = visible && sphere_visible_frustum(center, radius, cull_data);
       }
 
       // normal cone culling

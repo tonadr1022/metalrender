@@ -76,7 +76,8 @@ void calc_frustum_corners_world_space(std::span<glm::vec4> corners, const glm::m
 
 glm::mat4 calc_light_space_vp(const glm::mat4& cam_view, const glm::mat4& cam_proj,
                               const glm::vec3& light_dir, float shadow_map_res,
-                              glm::mat4& light_proj, glm::mat4& light_view) {
+                              glm::mat4& light_proj, glm::mat4& light_view, glm::vec3& light_min,
+                              glm::vec3& light_max) {
   glm::vec3 center{0.f};
   std::array<glm::vec4, 8> corners;
   calc_frustum_corners_world_space(corners, cam_proj * cam_view);
@@ -116,8 +117,19 @@ glm::mat4 calc_light_space_vp(const glm::mat4& cam_view, const glm::mat4& cam_pr
     max.y = snapped_center.y + extent_y * 0.5f;
   }
 
+  light_min = min;
+  light_max = max;
   light_proj = glm::orthoRH_ZO(min.x, max.x, max.y, min.y, min.z, max.z);
   return light_proj * light_view;
+}
+
+CullData prepare_ortho_cull_data(const glm::vec3& min, const glm::vec3& max) {
+  CullData cd{};
+  cd.ortho_bounds = glm::vec4(min.x, max.x, min.y, max.y);
+  cd.z_near = min.z;
+  cd.z_far = max.z;
+  cd.projection_type = CULL_PROJECTION_ORTHOGRAPHIC;
+  return cd;
 }
 
 void add_buffer_readback_copy2(RenderGraph& rg, std::string_view pass_name, RGResourceId& src_buf,
@@ -569,6 +581,7 @@ CullData MeshletRendererScene::prepare_cull_data_for_proj(const glm::mat4& proj,
   cd.pyramid_height = 0;
   cd.pyramid_mip_count = 0;
   cd.paused = 0;
+  cd.projection_type = CULL_PROJECTION_PERSPECTIVE;
   return cd;
 }
 
@@ -628,9 +641,12 @@ MeshletRendererScene::ShadowFrameData MeshletRendererScene::build_shadow_frame_d
                                 : out.csm_data.cascade_levels[cascade_i];
     glm::mat4 light_proj{};
     glm::mat4 light_view{};
-    const glm::mat4 light_vp = calc_light_space_vp(
-        camera_view.view, get_proj(split_near, split_far), light_dir_ws,
-        static_cast<float>(shadow_cfg_.shadow_map_resolution), light_proj, light_view);
+    glm::vec3 light_min{};
+    glm::vec3 light_max{};
+    const glm::mat4 light_vp =
+        calc_light_space_vp(camera_view.view, get_proj(split_near, split_far), light_dir_ws,
+                            static_cast<float>(shadow_cfg_.shadow_map_resolution), light_proj,
+                            light_view, light_min, light_max);
     out.csm_data.light_vp_matrices[cascade_i] = light_vp;
     ViewData& cascade_vd = out.view_data[cascade_i];
     cascade_vd.vp = light_vp;
@@ -639,7 +655,7 @@ MeshletRendererScene::ShadowFrameData MeshletRendererScene::build_shadow_frame_d
     cascade_vd.proj = light_proj;
     cascade_vd.inv_proj = glm::inverse(light_proj);
     cascade_vd.camera_pos = glm::vec4(0.f, 0.f, 0.f, 1.f);
-    out.cull_data[cascade_i] = prepare_cull_data_for_proj(light_proj, split_near, split_far);
+    out.cull_data[cascade_i] = prepare_ortho_cull_data(light_min, light_max);
   }
 
   return out;
@@ -881,7 +897,7 @@ void MeshletRendererScene::add_render_graph_passes() {
     meshlet_flags |= MESHLET_FRUSTUM_CULL_ENABLED_BIT;
   }
   // Temporary debug path: disable shadow-pass culling to isolate artifacts.
-  const uint32_t shadow_meshlet_flags = 0u;
+  const uint32_t shadow_meshlet_flags = MESHLET_FRUSTUM_CULL_ENABLED_BIT;
 
   if (shadow_frame_data.cascade_count > 0) {
     auto& p = ctx_.rg->add_graphics_pass("meshlet_shadow_cascades");
