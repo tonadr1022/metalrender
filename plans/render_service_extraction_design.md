@@ -1,185 +1,240 @@
 # Render Service Extraction Design
 
-Status: design note for the renderer migration phase. This is planning-only and does not prescribe an implementation patch.
+Status: decision-complete design note for Phase 3 implementation. This is planning-only; do not implement code from this note unless an implementation task explicitly asks for it.
 
-## Scope
+Scope: prepare the renderer migration after the completed Phase 2 Flecs scene foundation. The next implementation phase should introduce a renderer-neutral `RenderScene` snapshot, ECS extraction from the active `engine::Scene`, and an engine-owned `RenderService`/renderer boundary while preserving the current `vktest` meshlet demo.
 
-This note narrows the renderer portion of `plans/engine_runtime_migration_plan.md` into a concrete extraction path from the current `apps/vktest` renderer harness toward:
+Read with:
 
-- `engine::RenderService` as the engine-owned render frame service.
-- A renderer-neutral `RenderScene` snapshot extracted from data-first Flecs scenes.
-- `IRenderer` implementations that own render-graph pass construction.
-- A first migrated implementation based on the current meshlet renderer behavior.
+- `plans/engine_runtime_migration_plan.md`
+- `plans/flecs_scene_foundation_design.md`
 
-The current `TestRenderer`, `ITestScene`, `MeshletRendererScene`, and global `ResourceManager` usage remain compatibility scaffolding until the new runtime can preserve the existing meshlet demo behavior.
+## Current Decisions
+
+- `RenderScene` is a plain per-frame snapshot extracted from Flecs scene data. It is not a live ECS wrapper and not a meshlet GPU state container.
+- Gameplay, editor, scene loaders, and ECS systems must not receive `gfx::RenderGraph`, RHI objects, `ModelGPUMgr`, bindless IDs, buffer handles, or texture handles.
+- Render graph pass construction belongs to renderer code behind `RenderService`/`IRenderer`.
+- The first implementation must preserve `vktest` and may keep `TestRenderer`, `ITestScene`, `TestSceneContext`, `MeshletRendererScene`, and global `ResourceManager` as compatibility scaffolding.
+- Do not create a separate asset service / `ResourceManager` retirement note yet. Keep a short deferral note here until the first `RenderScene` extraction creates real adapter names and call sites worth tracking separately.
+- Keep Vulkan and Metal viable by making new engine-facing renderer APIs backend-neutral and routing backend details through existing RHI/gfx abstractions.
+- Put the engine-facing owner and frame boundary in `src/engine/render`; keep low-level, reusable renderer services in `src/gfx`; avoid putting `SceneManager` or Flecs knowledge into `gfx`.
+- Move ImGui renderer ownership out of the compatibility meshlet final pass now, into a shared overlay/debug service path.
+- Use a simple clear/debug renderer as the first diagnostic renderer for extracted data, with optional logging/inspection of `RenderScene`.
+- Diff renderer instance allocation by stable `EntityGuid` from the start, rather than rebuilding instance buffers every frame when scene data has not changed.
+- After path-derived scaffolding, durable `AssetId`s should come from a registry with generated stable IDs; importer metadata and source paths belong inside registry entries.
 
 ## Relevant Current Code
 
-### `apps/vktest/TestRenderer.*`
+Phase 2 scene foundation is present under `src/engine/scene`:
 
-`gfx::TestRenderer` currently combines several roles that should separate:
+- `Scene` owns a `flecs::world`, registers core components, and ticks the world.
+- `SceneManager` owns scenes, tracks the active scene, and is owned by `Engine`.
+- `Engine::tick()` computes engine time, ticks the active scene, runs layer update/UI, and calls layer render.
+- `engine_scene_smoke` validates scene creation, GUID lookup, `Transform` to `LocalToWorld`, entity destruction, and path-derived `AssetId`s.
 
-- Renderer service ownership: `ShaderManager`, `RenderGraph`, `ImGuiRenderer`, `GPUFrameAllocator3`, `BufferCopyMgr`, `ModelGPUMgr`, `InstanceMgr`, `GeometryBatch`, material storage, and default samplers.
-- Frame orchestration: time delta calculation, dirty pipeline replacement, model texture upload flushing, render graph bake/execute, swapchain acquire/submit, and frame-in-flight advancement.
-- Debug-scene orchestration: `ITestScene` lifetime, debug scene switching, cursor/key forwarding, scene presets, and scene ImGui.
-- Temporary render pass wiring: `add_render_graph_passes()` forwards directly into `ITestScene::add_render_graph_passes()` after flushing pending instance frees.
+Current core scene components are:
 
-The useful extraction source is the renderer service/frame orchestration code. The debug-scene host behavior should not become engine architecture.
+- `EntityGuidComponent { EntityGuid guid }`
+- `Name { std::string value }`
+- `Transform { translation, rotation, scale }`
+- `LocalToWorld { glm::mat4 value }`
+- `Camera { fov_y, z_near, z_far, primary }`
+- `DirectionalLight { direction, color, intensity }`
+- `MeshRenderable { AssetId model }`
+- `SpriteRenderable { AssetId texture, tint, sorting_layer }`
 
-### `apps/vktest/scenes/MeshletRendererTestScene.*`
+Current `vktest` rendering still flows through compatibility scaffolding:
 
-`MeshletRendererScene` currently mixes:
-
-- Scene data: model handles, camera, light direction, day/night settings, preset selection, CSM scene defaults.
-- Tooling behavior: FPS camera input and debug ImGui.
-- GPU residency assumptions: direct `ResourceManager::get().load_model/free_model()` calls and `ModelHandle` storage.
-- Meshlet renderer state: pipelines, meshlet visibility buffer, draw stats readbacks, depth pyramid, CSM, draw prep, per-frame uniform allocator.
-- RenderGraph pass construction: early and late meshlet passes, depth pyramid, CSM, shade pass, stats readbacks, and ImGui rendering into the final pass.
-
-This class is the behavior reference for the first migrated renderer, but it should be split rather than promoted.
-
-### `src/gfx/ModelGPUManager.*` And `src/ResourceManager.*`
-
-`ModelGPUMgr` owns GPU model resources and instance allocations over `InstanceMgr`, `GeometryBatch`, `BufferCopyMgr`, and material storage. It loads CPU model data, uploads geometry/material/texture resources, creates instance GPU data, tracks pending texture uploads, and frees GPU allocations.
-
-`ResourceManager` is a global singleton facade. It caches loaded models by path hash, creates per-instance `ModelInstance` copies, calls `ModelGPUMgr::add_model_instance()`, and returns runtime `ModelHandle`s.
-
-Long term, scene data should not store `ModelHandle`s or depend on this singleton. Scene data should store stable asset IDs and transforms. `RenderService` and renderer-owned resource services should resolve those IDs into CPU assets and GPU residency.
-
-### RenderGraph And Renderer Helpers
-
-`src/gfx/RenderGraph.*` is already a renderer-side scheduling and resource lifetime primitive. Scene, gameplay, editor, and ECS extraction code should not receive it directly.
-
-The newer `src/gfx/renderer` helpers already point toward a cleaner renderer internals layer:
-
-- `GBufferRenderer` bakes render graph passes from `DrawPassSceneBindings` and view bindings.
-- `DrawPassSceneBindings` separates draw batch/material/frame globals from pass-specific view state.
-- `RenderView` packages view GPU resources such as cull data, depth pyramid, visibility buffers, and meshlet visibility.
-- `ModelGPUUploader`, `InstanceMgr`, `BufferResize`, `CSM`, and renderer CVars are renderer-owned utilities.
-
-The migration should reuse these helpers where practical, but they are still below `RenderScene`. They are not the scene schema.
+- `apps/vktest/TestApp.cpp` installs `CompatibilityVktestLayer` into `Engine`.
+- `CompatibilityVktestLayer` creates `gfx::TestRenderer`, initializes global `ResourceManager` from `renderer_->get_model_gpu_mgr()`, forwards input/UI, and calls `TestRenderer::render()` from `on_render()`.
+- `TestRenderer` owns `ShaderManager`, `RenderGraph`, `ImGuiRenderer`, frame upload allocator, `BufferCopyMgr`, `ModelGPUMgr`, `InstanceMgr`, `GeometryBatch`, material buffer, samplers, active `ITestScene`, and `TestSceneContext`.
+- `TestSceneContext` exposes renderer internals directly to `ITestScene`.
+- `MeshletRendererScene` owns demo model handles, FPS camera, directional light/day-night state, meshlet PSOs, CSM, depth pyramid, draw prep, readbacks, per-frame uniforms, debug UI, and render graph pass construction.
+- `ResourceManager` is a global singleton facade that maps model paths to cached CPU-ish `ModelInstance` data and `ModelGPUMgr` GPU resources, then returns runtime `ModelHandle`s to scene code.
 
 ## Target Architecture
 
-Frame flow should become:
+Target frame flow:
 
-1. `Engine::tick()` advances time, input, layers, and the active Flecs scene.
-2. A render extraction step reads ECS components and builds a renderer-neutral `RenderScene`.
-3. `RenderService` prepares frame services and calls the active `IRenderer`.
-4. The active renderer builds render graph passes, handles renderer-specific GPU data, and presents.
+```text
+Engine::tick()
+  poll events and update EngineTime
+  tick active SceneManager scene
+  update layers and ImGui state
+  RenderService extracts RenderScene from active Flecs scene
+  RenderService prepares frame services
+  active IRenderer builds renderer-owned RenderGraph work
+  RenderService bakes/executes graph and presents
+```
+
+The implementation may reach this flow incrementally. The important Phase 3 boundary is that extracted data becomes renderer-neutral before render graph work starts.
 
 Ownership target:
 
-- `engine::RenderService` owns frame-level renderer services: shader manager, render graph, upload allocators, copy manager, model GPU manager or its successor, default renderer resources, frame index, and active renderer.
-- `IRenderer` owns renderer-specific persistent state and render graph pass construction.
-- `RenderScene` is immutable for the render frame after extraction.
-- Gameplay/editor/Flecs scene code never receives `RenderGraph`, `ModelGPUMgr`, `InstanceMgr`, or backend-specific RHI objects.
-- ImGui rendering is a layer/service concern. Renderer debug panels may be exposed through a debug interface, but scene data UI should not live inside renderer pass wiring.
-
-## What Moves Out Of `TestRenderer`
-
-Move to `engine::RenderService` or a renderer service package:
-
-- `ShaderManager` initialization, dirty pipeline replacement, and shutdown.
-- `RenderGraph` initialization, debug dump request, bake, execute, and shutdown.
-- Per-frame upload/copy services: `GPUFrameAllocator3`, `BufferCopyMgr`, pending buffer copies, pending texture upload flushing.
-- `ModelGPUMgr`, `InstanceMgr`, `GeometryBatch`, material buffer, and default sampler creation while the current meshlet path still needs them.
-- Swapchain-facing render frame orchestration: acquire image, bake graph for current window size, encode graph, submit frame, and advance frame-in-flight.
-- Resize notification plumbing that tells renderers to recreate size-dependent resources.
-- Renderer device info panel, if retained, as a generic debug panel.
-
-Move to an ImGui/debug layer or debug service:
-
-- ImGui context creation and font loading if the engine owns ImGui globally.
-- `ImGuiRenderer` ownership if ImGui is treated as a shared engine overlay.
-- Renderer debug panel dispatch.
-
-Stay in `vktest` scaffolding:
-
-- `TestDebugScene` selection and cycling.
-- `ITestScene` lifetime and input forwarding.
-- `apply_demo_scene_preset()` as a compatibility action.
-- Direct scene overlay dispatch through `ITestScene::on_imgui()`.
-
-Delete or reduce once migrated:
-
-- `TestRenderer::scene_`, `active_scene_`, `set_scene()`, `cycle_debug_scene()`, and `create_test_scene()` usage in the runtime path.
-- `TestSceneContext` as the way scenes access renderer internals.
+- `engine::RenderService` owns renderer frame orchestration and shared renderer services: shader manager, render graph, frame upload allocator, copy manager, model GPU manager or temporary adapter, default samplers/resources, frame index, active renderer, resize handling, and presentation.
+- The engine-facing `RenderService`, `RenderScene`, extraction, `IRenderer`, and `RenderFrameContext` boundary lives under `src/engine/render`.
+- Low-level reusable graphics machinery stays under `src/gfx`, including `RenderGraph`, shader management, model GPU residency, RHI-backed helpers, and renderer internals.
+- `IRenderer` owns renderer-specific persistent resources and render graph pass construction.
+- `RenderFrameContext` is renderer-facing and may include `rhi::Device`, `rhi::Swapchain`, `RenderGraph`, shader manager, upload/copy services, and temporary residency adapters.
+- `RenderScene` is extracted before `IRenderer::render()` and treated as immutable for that frame.
+- `Scene`, ECS systems, gameplay/editor code, and scene loaders only see scene components and stable IDs.
 
 ## RenderScene Schema
 
-`RenderScene` should be a plain frame snapshot, not a live ECS wrapper and not a meshlet-specific GPU state container.
+Create the first schema under engine-owned render/extraction code, not under `apps/vktest`. The exact file names are implementation choices, but the types should live with the engine/render service boundary rather than with meshlet test scenes.
 
-Recommended first schema categories:
+Recommended shape:
 
-- Frame metadata: frame index, delta time if renderer effects need it, output extent, optional debug flags.
-- Cameras: stable entity ID, local-to-world or world-to-view inputs, projection description, near/far, viewport, primary flag, render layer mask.
-- Directional lights: stable entity ID, direction, color, intensity, optional shadow request/settings.
-- Mesh renderables: stable entity ID, stable asset ID, local-to-world, visibility mask, material override handle or ID, renderer flags such as casts shadows.
-- Sprite renderables: stable entity ID, texture asset ID, local-to-world or 2D transform, tint, sorting layer/order, material/blend mode.
-- Extension blocks: typed optional payloads for renderer-specific data that is still sourced from scene components, not from renderer-owned GPU state.
+```cpp
+namespace teng::engine {
 
-Important boundaries:
+struct RenderSceneFrame {
+  uint64_t frame_index{};
+  float delta_seconds{};
+  glm::uvec2 output_extent{};
+};
 
-- Store stable `AssetId` values, not `ModelHandle`, `ModelGPUHandle`, buffer handles, texture handles, or bindless indices.
-- Store world-space or final extraction-space transforms so renderers do not need to query Flecs.
-- Store semantic shadow settings, not CSM render resources.
-- Keep meshlet-specific details out of the base mesh entry. A meshlet renderer can resolve a mesh asset to meshlet-capable GPU resources internally.
-- Keep room for 2D from the start so the schema does not become "meshlet scene with extras."
+struct RenderCamera {
+  EntityGuid entity;
+  glm::mat4 local_to_world{1.f};
+  float fov_y{};
+  float z_near{};
+  float z_far{};
+  bool primary{};
+  uint32_t render_layer_mask{0xffffffffu};
+};
 
-Initial extraction can be simple and single-threaded. It should produce vectors with stable ordering, preferably by stable entity ID or explicit sort keys where deterministic rendering/debugging matters.
+struct RenderDirectionalLight {
+  EntityGuid entity;
+  glm::mat4 local_to_world{1.f};
+  glm::vec3 direction{0.f, -1.f, 0.f};
+  glm::vec3 color{1.f};
+  float intensity{1.f};
+  bool casts_shadows{true};
+};
 
-## RenderService API Shape
+struct RenderMesh {
+  EntityGuid entity;
+  AssetId model;
+  glm::mat4 local_to_world{1.f};
+  uint32_t visibility_mask{0xffffffffu};
+  bool casts_shadows{true};
+};
 
-The design intent is a service boundary, not a new RHI abstraction.
+struct RenderSprite {
+  EntityGuid entity;
+  AssetId texture;
+  glm::mat4 local_to_world{1.f};
+  glm::vec4 tint{1.f};
+  int sorting_layer{};
+  int sorting_order{};
+};
 
-Core responsibilities:
+struct RenderScene {
+  RenderSceneFrame frame;
+  std::vector<RenderCamera> cameras;
+  std::vector<RenderDirectionalLight> directional_lights;
+  std::vector<RenderMesh> meshes;
+  std::vector<RenderSprite> sprites;
+};
 
-- Initialize and shut down renderer-global services from engine context.
-- Own or reference `rhi::Device`, `rhi::Swapchain`, and platform window through engine context.
-- Begin frame: update frame index, reset per-frame allocators, process pending renderer resource work.
-- Extract or receive `RenderScene` from the active scene.
-- Invoke `IRenderer::render(RenderFrameContext, const RenderScene&)`.
-- Bake/execute `RenderGraph`, flush uploads, submit frame.
-- Route swapchain resize events to the active renderer.
-- Surface renderer debug UI without exposing `RenderGraph` to scenes.
+}  // namespace teng::engine
+```
 
-`RenderFrameContext` should be renderer-facing and may include `rhi::Device`, `rhi::Swapchain`, `RenderGraph`, shader manager, upload allocators, copy manager, and resource residency services. It should not be passed to ECS gameplay systems.
+Schema decisions:
 
-## Path To MeshletRenderer
+- Store stable `EntityGuid` and `AssetId`, not Flecs entity IDs or runtime GPU/model handles.
+- Treat `EntityGuid` as the stable identity for one renderable model instance in the first mesh path. If a future entity expands into multiple renderer instances, that fan-out belongs in renderer/resource code keyed back to the source `EntityGuid`.
+- Store final extraction-space transforms from `LocalToWorld`, so renderers do not query Flecs.
+- Camera aspect and viewport come from `RenderSceneFrame::output_extent` for the first slice. Add explicit viewport fields later when multi-view/editor viewports require them.
+- Directional light direction comes from `DirectionalLight::direction` for the first slice. `LocalToWorld` is included so a later transform-derived rule can be added without changing renderer ownership.
+- Shadow data starts as semantic booleans/defaults, not CSM resources. Meshlet CSM defaults are scene-specific, so scene metadata should grow renderer-feature settings for them before migrated presets rely on CSM tuning.
+- Sprite data is included now even if the first renderer ignores it, so the base schema does not become meshlet-shaped.
+- Keep meshlet-specific data out of base entries. Meshlet renderers resolve `AssetId` to meshlet-capable GPU resources internally.
+- Add renderer extension blocks only after a concrete renderer needs them; do not begin Phase 3 with an open-ended variant container.
 
-The first real renderer should be a `MeshletRenderer` that consumes `RenderScene` cameras, directional lights, and mesh renderables.
+## ECS Extraction Flow
 
-Migration target:
+Extraction reads the active `Scene` after `SceneManager::tick_active_scene()` has run, so `LocalToWorld` is current.
 
-- Move `MeshletDrawPrep`, `MeshletDepthPyramid`, `MeshletCsmRenderer`, meshlet pipelines, meshlet visibility buffer, draw stats readbacks, and shade pass wiring behind `MeshletRenderer`.
-- Reuse `GBufferRenderer`, `DrawPassSceneBindings`, and `RenderView` where they fit the migrated pass structure.
-- Keep `ModelGPUMgr` as the temporary GPU residency backend, but hide it behind renderer/resource service calls.
-- Convert mesh entries from `AssetId` plus transform into renderer-owned GPU instances before pass baking.
-- Move camera view/projection creation from `FpsCameraController` into ECS camera extraction. The FPS controller can remain as tooling that updates a camera entity.
-- Move directional light and day/night state into ECS components or tooling systems; CSM renderer receives extracted light data and renderer shadow settings.
-- Split debug UI into renderer debug UI (culling, CSM, depth pyramid, draw stats) and scene/tooling UI (preset loading, camera controls, day/night authoring).
+Initial queries:
 
-Compatibility bridge:
+- Cameras: `EntityGuidComponent`, `LocalToWorld`, `Camera`
+- Directional lights: `EntityGuidComponent`, `LocalToWorld`, `DirectionalLight`
+- Meshes: `EntityGuidComponent`, `LocalToWorld`, `MeshRenderable`
+- Sprites: `EntityGuidComponent`, `LocalToWorld`, `SpriteRenderable`
 
-- A temporary meshlet adapter may still ask `MeshletRendererScene` to add render graph passes while `RenderService` is being introduced.
-- That adapter must be named as compatibility scaffolding and should not receive new feature work beyond preserving behavior.
-- The bridge should shrink in this order: frame orchestration first, scene data second, meshlet pass ownership last.
+Extraction rules:
 
-## Migration Scaffolding And Retirement Criteria
+- Prefer `EntityGuidComponent` from the entity over any side lookup. Future loaded scenes may not have been created through `Scene::create_entity()`.
+- Skip entities missing a valid `EntityGuidComponent`.
+- Skip mesh/sprite entries with invalid `AssetId`, but keep a debug counter/log path so bad data is visible.
+- Copy `LocalToWorld::value` directly. Transform hierarchy remains deferred.
+- If multiple cameras are marked primary, choose deterministic ordering and let the renderer pick the first primary. If no primary exists, renderers may choose the first camera or produce a clear/no-camera frame.
+- Sort each extracted vector by `EntityGuid::value` for deterministic debugging and future editor behavior. Sprite render order should sort by `sorting_layer`, then `sorting_order`, then `EntityGuid`.
+- Extraction must not allocate GPU resources, load models, mutate `ResourceManager`, build render graph passes, or call RHI.
+- Renderer/resource residency should diff extracted renderables by `EntityGuid` so unchanged model instances do not rewrite instance buffers every frame. This diff belongs after extraction, inside renderer-owned resource code, not in ECS extraction.
+
+The first extraction implementation should be directly testable without a device. Add smoke coverage that creates a scene with camera, light, mesh, and sprite components, ticks it, extracts a `RenderScene`, and verifies stable IDs, asset IDs, transforms, primary camera data, light data, sprite tint/sort data, and deterministic ordering.
+
+## RenderService Fit
+
+`RenderService` should be introduced as an engine-facing service under `src/engine/render`. It can be driven from the current layer model before `Engine::tick()` itself is reshaped, as long as layers above the render layer can access it through engine context/service access.
+
+First integration shape:
+
+- `Engine` should own `RenderService` once custom renderer selection needs to be engine-wide, such as voxel/custom render implementations. Before that, the first slice may host it from a render layer to reduce `vktest` churn if the service is still exposed to layers above it.
+- `RenderService` gets `EngineContext` references to `Window`, `rhi::Device`, `rhi::Swapchain`, resource paths, `SceneManager`, `EngineTime`, and ImGui enabled state.
+- `CompatibilityVktestLayer` remains the bridge for current debug scenes while `RenderService` takes over frame services.
+- New engine/data scene rendering uses `RenderScene` extraction; legacy `ITestScene` rendering remains explicitly compatibility-named.
+- The first diagnostic renderer should be a simple clear/debug renderer that can optionally log or inspect the extracted `RenderScene`.
+
+Renderer-facing API intent:
+
+```cpp
+class IRenderer {
+ public:
+  virtual ~IRenderer() = default;
+  virtual void on_resize(RenderFrameContext& frame) {}
+  virtual void render(RenderFrameContext& frame, const RenderScene& scene) = 0;
+  virtual void on_imgui(RenderFrameContext& frame) {}
+};
+```
+
+`RenderFrameContext` may expose renderer internals. It must not be passed to ECS systems, gameplay/editor scene code, or scene loaders.
+
+`RenderService` responsibilities:
+
+- Initialize and shut down renderer-global services.
+- Update frame index and per-frame allocators.
+- Replace dirty pipelines.
+- Extract or receive `RenderScene` for the active scene.
+- Let the active renderer build graph passes.
+- Bake the render graph for the current output extent.
+- Acquire swapchain image, flush pending buffer copies and texture uploads, execute graph, submit frame, and advance frame-in-flight.
+- Route resize events to active renderer and size-dependent shared resources.
+- Provide renderer debug UI without exposing `RenderGraph` outside renderer code.
+
+ImGui rule:
+
+- Move ImGui renderer ownership now from the compatibility meshlet final pass into a shared overlay/debug service path.
+- Preserve the existing `Engine` ImGui frame lifecycle while moving the renderer object and final overlay composition out of `MeshletRendererScene`.
+- Scene code must not own the ImGui render pass. Renderer debug panels may contribute UI, but final composition belongs to the overlay/debug service path coordinated by `RenderService`.
+
+## Compatibility Scaffolding
 
 ### `gfx::TestRenderer`
 
 Scaffolding role:
 
 - Existing renderer harness for `vktest`.
-- Source for extracting `RenderService` responsibilities.
-- Temporary host for legacy debug scenes.
+- Source for extracting `RenderService` services and frame orchestration.
+- Temporary host for legacy `ITestScene` debug scenes.
 
 Retire from runtime path when:
 
-- `RenderService` owns frame renderer services and active renderer dispatch.
-- `IRenderer` can render the meshlet demo path.
+- `RenderService` owns shared frame services and active renderer dispatch.
+- Meshlet rendering can run through `IRenderer`.
 - Debug scene switching is test-only and no engine runtime code depends on `ITestScene`.
 
 ### `ITestScene`, `TestDebugScene`, And `TestSceneContext`
@@ -187,13 +242,13 @@ Retire from runtime path when:
 Scaffolding role:
 
 - Legacy graphics test harness.
-- Convenient way to keep existing small render experiments alive.
+- Temporary compatibility bridge that can still receive `RenderGraph` while existing scenes are being migrated.
 
 Retire from engine runtime when:
 
 - Active runtime scenes are Flecs worlds.
-- Render extraction produces `RenderScene`.
-- Scenes no longer receive `RenderGraph`, RHI device, `ModelGPUMgr`, or `ShaderManager`.
+- New render paths consume `RenderScene`.
+- Scenes no longer receive `RenderGraph`, RHI device, `ModelGPUMgr`, `ShaderManager`, upload allocators, or ImGui renderer.
 
 They may remain in a separate graphics test executable if useful.
 
@@ -202,14 +257,14 @@ They may remain in a separate graphics test executable if useful.
 Scaffolding role:
 
 - Reference behavior for the meshlet renderer.
-- Temporary owner of demo presets, camera/light data, meshlet pass wiring, and debug UI.
+- Temporary owner of demo presets, FPS camera, light/day-night controls, model handles, CSM, depth pyramid, draw prep, meshlet pass wiring, and meshlet debug UI.
 
 Retire when:
 
 - Meshlet pass construction lives in `MeshletRenderer`.
 - Demo presets create Flecs entities with stable IDs and asset references.
 - Camera, light, and mesh data flow through `RenderScene`.
-- Renderer debug UI is separated from scene/preset UI.
+- Renderer debug UI is separated from scene/preset/tooling UI.
 
 ### Global `ResourceManager`
 
@@ -219,146 +274,102 @@ Scaffolding role:
 
 Retire or wrap when:
 
-- Scene components store stable `AssetId`s.
-- Engine asset service resolves `AssetId` to CPU asset data.
-- Renderer resource service owns GPU residency and model instance allocation.
+- Scene components store stable `AssetId`s only.
+- An engine asset service resolves `AssetId` to CPU/source asset data.
+- A renderer resource service owns GPU residency and model instance allocation.
 - Runtime scene code no longer calls `ResourceManager::get()`.
 
-## Phased Implementation Sequence
+## Asset Service Deferral
 
-### Phase 0: Guardrail Plan
+Do not create a separate asset service / `ResourceManager` retirement plan before the first `RenderScene` extraction. The current design already has enough retirement criteria, and a separate note would mostly duplicate this file until implementation creates concrete compatibility adapters.
 
-Deliverables:
+For Phase 3:
 
-- Land this note.
-- Keep `./scripts/agent_verify.sh` and `vktest --quit-after-frames 30` as behavior guardrails for later code slices.
+- `RenderScene` carries `AssetId` only.
+- Path-derived `AssetId` remains acceptable scaffolding for demos and tests.
+- The long-term durable source is an asset registry with generated stable IDs. Source paths, importer type/version, import settings, and source content hashes are metadata on registry entries, not the identity itself.
+- `ResourceManager`, `ModelGPUMgr`, material allocation, texture upload queues, and instance allocation diffing remain behind compatibility or renderer-owned code.
+- ECS extraction must not call `ResourceManager`.
+- Any temporary `AssetId` to model-path or model-handle bridge must be named as compatibility scaffolding and kept out of scene components.
 
-Exit criteria:
+Create a separate asset/resource service design note after one of these happens:
 
-- Agreement that `RenderService`, `RenderScene`, and `IRenderer` are the migration target.
+- A `RenderService` compatibility adapter owns real `AssetId` resolution call sites.
+- A migrated Flecs demo preset needs an `AssetId` to source path registry beyond path-derived IDs.
+- Multiple renderer/resource adapters need coordinated retirement criteria.
 
-### Phase 1: Extract RenderService Without Changing Scene Model
+## First Implementation Slice Boundaries
 
-Deliverables:
+Slice 1: `RenderScene` types and extraction.
 
-- Move frame service ownership from `TestRenderer` into a new render service while preserving the current `ITestScene` path.
-- Keep `TestRenderer` as a thin compatibility shell or adapter.
-- Keep `TestSceneContext` populated from the new service for legacy scenes.
+- Add renderer-neutral snapshot types.
+- Add extraction from active Flecs scene components.
+- Add extraction smoke tests.
+- No `RenderService` ownership changes required in this slice.
+- No `vktest` behavior changes.
 
-Exit criteria:
+Slice 2: `RenderService` shell and compatibility renderer.
 
-- Existing debug scenes still run.
-- Render graph debug dump, ImGui rendering, uploads, swapchain resize, and frame submission still work.
-- `TestRenderer` no longer directly owns most renderer-global services.
+- Move or wrap `TestRenderer` frame services behind `RenderService` without changing legacy scene behavior.
+- Keep `TestSceneContext` populated for existing `ITestScene` code, but name the bridge as compatibility.
+- Add `IRenderer` with a compatibility implementation that delegates to the existing graph-pass path.
+- Move ImGui renderer ownership into the shared overlay/debug service path while preserving current overlay behavior.
+- Preserve scene cycling, preset loading, render graph debug dump, uploads, resize handling, and swapchain submission.
 
-### Phase 2: Introduce IRenderer And Compatibility Renderer
+Slice 3: Render from extracted data in a minimal path.
 
-Deliverables:
+- Let `RenderService` extract a `RenderScene` from the active `Scene`.
+- Add the simple clear/debug renderer and optional `RenderScene` logging/inspection path without moving meshlet pass ownership all at once.
+- Keep meshlet demo rendering through the compatibility path until a migrated preset exists.
 
-- Add an `IRenderer` boundary below `RenderService`.
-- Create a compatibility renderer that delegates to the existing scene pass path.
-- Route renderer debug UI through the active renderer instead of direct scene calls where possible.
+Slice 4: Migrate one demo preset into ECS data.
 
-Exit criteria:
+- Convert one meshlet preset into Flecs entities with `Transform`, `LocalToWorld`, `Camera`, `DirectionalLight`, and `MeshRenderable`.
+- Use stable `AssetId` for model references.
+- Keep FPS camera/day-night behavior as tooling systems or compatibility layer behavior that mutates ECS components.
+- Do not store `ModelHandle` or GPU handles in ECS.
 
-- `RenderService` can select an active renderer.
-- Render graph pass construction is invoked through renderer code, even if the first renderer is still a bridge.
-- Legacy scenes are clearly marked test-only.
+Slice 5: Extract `MeshletRenderer`.
 
-### Phase 3: Define RenderScene And ECS Extraction
-
-Deliverables:
-
-- Add `RenderScene` snapshot types for cameras, directional lights, mesh renderables, and sprites.
-- Add extraction from Flecs core components into `RenderScene`.
-- Keep extraction independent from `RenderGraph`, RHI, and GPU model handles.
-
-Exit criteria:
-
-- A data scene can produce a `RenderScene` without invoking renderer internals.
-- The schema can represent the current meshlet demo camera/light/mesh needs and a simple 2D scene.
-
-### Phase 4: Move Demo Scene Data Out Of MeshletRendererScene
-
-Deliverables:
-
-- Convert at least one meshlet scene preset into Flecs entities.
-- Store model references as stable asset IDs and transforms as ECS data.
-- Move camera and directional light state to ECS components.
-- Keep FPS camera and day/night as tooling/systems that update ECS data.
-
-Exit criteria:
-
-- The migrated preset renders from `RenderScene` data.
-- `MeshletRendererScene::models_`, camera ownership, and light ownership are removed for the migrated path.
-
-### Phase 5: Extract MeshletRenderer
-
-Deliverables:
-
-- Move meshlet pass construction and persistent renderer resources into `MeshletRenderer`.
-- Consume `RenderScene` data and resolve assets through renderer resource services.
-- Move CSM, depth pyramid, draw prep, stats readback, and shade pass ownership into the renderer.
+- Move meshlet pass construction, CSM, depth pyramid, draw prep, readbacks, and shade pass ownership into an `IRenderer` implementation.
+- Consume `RenderScene` camera/light/mesh data.
+- Resolve assets through renderer-owned compatibility/resource services.
+- Diff renderer instance allocation by `EntityGuid` so unchanged model instances do not rewrite instance buffers every frame.
 - Split renderer debug UI from scene/preset UI.
-
-Exit criteria:
-
-- Meshlet rendering no longer depends on `ITestScene`.
-- `MeshletRendererScene` is deleted or remains only as a test adapter outside the engine runtime.
-- Current meshlet demo behavior is preserved through data scenes.
-
-### Phase 6: Replace ResourceManager Singleton Boundary
-
-Deliverables:
-
-- Add or formalize an engine asset service and renderer GPU residency service.
-- Replace direct `ResourceManager::get()` scene calls.
-- Keep `ModelGPUMgr` as an internal renderer implementation detail until a fuller resource system replaces it.
-
-Exit criteria:
-
-- Scene data and extraction use stable asset IDs.
-- Renderer code can load/resident models without a global singleton visible to scene code.
 
 ## Risks And Tradeoffs
 
-- Extracting `RenderService` too aggressively could break existing demo behavior. Keep early slices behavior-preserving and compatibility-named.
-- A meshlet-shaped `RenderScene` would block 2D and simple 3D goals. Keep the base schema renderer-neutral, with extension points for specialized renderers.
-- `ModelGPUMgr` currently combines loading and GPU residency. Wrapping it too early may create churn, but exposing it to ECS would deepen the wrong dependency.
-- RenderGraph lambdas capture pointers and references that must stay valid until execution. Moving pass construction into `IRenderer` should preserve clear ownership and frame lifetime rules.
-- ImGui is currently intertwined with the renderer final pass. Moving ImGui to a layer/service requires care so overlays still render after scene color output.
-- CSM defaults currently come from scene presets. The migration needs a data representation for shadow settings so renderer defaults remain predictable.
-- Stable ordering of extracted renderables matters for reproducible debugging and future editor behavior. Avoid relying on incidental Flecs iteration order if that becomes unstable.
+- `RenderGraph` is deeply exposed to `ITestScene`; early slices can accidentally rename the old architecture. Keep graph access inside renderer or explicitly compatibility-named bridge code.
+- `MeshletRendererScene` mixes scene data, tooling, resource lifetime, GPU resources, pass wiring, and debug UI. Split it by data flow, not by file size.
+- `RenderScene` could accidentally mirror `ModelGPUMgr` or meshlet draw buffers. Keep GPU residency, draw batches, material buffers, bindless IDs, and meshlet visibility out of the schema.
+- ImGui composition is currently coupled to the final meshlet shade pass. Move ownership to the shared overlay/debug service path now while preserving the current overlay behavior.
+- Camera data currently lacks viewport/aspect policy. Use output extent first; add explicit viewport fields when editor/multi-view work needs them.
+- Directional light has both a direction component and a transform. Use component direction first and keep transform available for future policy changes.
+- `ResourceManager` uses path hashing and runtime handles that are not durable scene data. Treat it as scaffolding until an asset registry exists.
+- Instance lifetime is nontrivial. Diff by stable `EntityGuid` from the start, and keep that state inside renderer-owned resource code so ECS extraction remains a snapshot operation.
+- Empty scenes currently may produce no render graph passes in the meshlet path. `RenderService` should eventually define a clear/no-camera/no-renderables presentation behavior.
+- Metal viability depends on keeping engine-level APIs RHI-neutral and avoiding Vulkan-specific assumptions in `RenderService`.
 
 ## Validation Strategy
 
-For planning-only changes, no build is required.
+For this planning-only change, no build is required.
 
-For later implementation slices, run:
+For Phase 3 implementation slices:
 
 ```bash
 ./scripts/agent_verify.sh
 ```
 
-For runtime smoke testing, run:
+Runtime smoke:
 
 ```bash
 ./build/Debug/bin/vktest --quit-after-frames 30
 ```
 
-Additional validation checkpoints for implementation phases:
+Additional implementation checkpoints:
 
-- Compare the meshlet preset visual output before and after each bridge removal.
-- Exercise scene preset loading, swapchain resize, render graph debug dump, ImGui overlay, and culling toggles.
-- Verify shader compilation with `teng-shaderc --all` through `agent_verify.sh` after renderer/shader changes.
-- Add small extraction tests once Flecs scene foundations exist: camera extraction, light extraction, mesh renderable extraction, sprite extraction, and deterministic ordering.
-
-## Open Questions
-
-- Should `RenderService` live under `src/engine` with engine context ownership, or under `src/gfx` with a narrow engine-facing wrapper?
-- Is ImGui renderer ownership part of `RenderService`, an `ImGuiLayer`, or a shared debug overlay service?
-- What is the first stable `AssetId` source: path-derived temporary IDs, a registry file, or an asset database stub?
-- Should the first `IRenderer` interface own presentation, or should `RenderService` always own the final swapchain write and ImGui composition?
-- How should renderer-specific extension data be represented in `RenderScene` without turning the base schema into a variant of every future renderer?
-- Do meshlet CSM defaults belong in light components, renderer settings, or preset/tooling data?
-- When `ModelGPUMgr` resolves multiple entities using the same mesh asset, should instance allocation be rebuilt every extraction or diffed incrementally from stable entity IDs?
+- Add extraction tests for camera, directional light, mesh, sprite, invalid asset skipping, missing GUID skipping, and deterministic ordering.
+- Confirm `engine_scene_smoke` remains in `agent_verify`.
+- Exercise `vktest` scene cycling, preset loading, swapchain resize, render graph debug dump, ImGui overlay, culling toggles, and quit-after-frames after any compatibility bridge change.
+- Run `teng-shaderc --all` through `agent_verify` after renderer/shader changes.
+- Compare meshlet preset visual output before and after each bridge removal.

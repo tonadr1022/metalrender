@@ -12,6 +12,9 @@ add_library(${target_name} SHARED
     UI.cpp
 
     engine/Engine.cpp
+    engine/render/DebugClearRenderer.cpp
+    engine/render/RenderSceneExtractor.cpp
+    engine/render/RenderService.cpp
     engine/scene/Scene.cpp
     engine/scene/SceneComponents.cpp
     engine/scene/SceneIds.cpp

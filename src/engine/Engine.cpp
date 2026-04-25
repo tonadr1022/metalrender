@@ -13,6 +13,7 @@
 #include "core/CVar.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
+#include "engine/render/RenderService.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "imgui.h"
@@ -153,6 +154,17 @@ void Engine::init() {
   context_.scenes_ = &scenes_;
   context_.time_ = &time_;
   context_.imgui_enabled_ = &imgui_enabled_;
+
+  renderer_ = std::make_unique<RenderService>(RenderService::CreateInfo{
+      .device = device_.get(),
+      .swapchain = context_.swapchain_,
+      .window = window_.get(),
+      .scenes = &scenes_,
+      .time = &time_,
+      .resource_dir = resource_dir_,
+      .imgui_ui_active = imgui_enabled_,
+  });
+  context_.renderer_ = renderer_.get();
   layers_.set_context(&context_);
 
   initialized_ = true;
@@ -271,6 +283,8 @@ void Engine::shutdown() {
   shutting_down_ = true;
   CVarSystem::get().save_to_file((local_resource_dir_ / "cvars.txt").string());
   layers_.clear();
+  renderer_->shutdown();
+  renderer_.reset();
   swapchain_ = {};
   window_->shutdown();
   device_->shutdown();

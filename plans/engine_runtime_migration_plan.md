@@ -393,6 +393,14 @@ Renderer implementations choose what they consume:
 
 Avoid passing `RenderGraph` into gameplay/editor scenes. Only renderer implementations should add render graph passes.
 
+Render service ownership direction:
+
+- Put the engine-facing owner and frame boundary in `src/engine/render`.
+- Keep low-level reusable renderer services under `src/gfx`, including `RenderGraph`, shader management, model GPU residency, RHI-backed helpers, and renderer internals.
+- Avoid putting `SceneManager` or Flecs knowledge into `gfx`.
+- `Engine` should own `RenderService` once renderer selection needs to be engine-wide, such as custom voxel or other specialized renderer implementations. Before that, a render layer may host the first service slice if it remains accessible to layers above it.
+- The first diagnostic renderer for extracted data should be a simple clear/debug renderer, with optional `RenderScene` logging or inspection.
+
 ## Resource And Asset Direction
 
 `ResourceManager` is currently a global singleton tied to `ModelGPUMgr`. That is practical for the current demos, but it is not a good final editor/runtime boundary.
@@ -404,6 +412,7 @@ Target direction:
 - Runtime resolves `AssetId` to loaded CPU asset data.
 - Renderer resolves loaded assets to GPU residency.
 - GPU handles are not serialized scene data.
+- The long-term durable `AssetId` source is an asset registry with generated stable IDs. Source paths, importer type/version, import settings, and source content hashes are metadata on registry entries, not the identity itself.
 
 Compatibility rule: keep `ResourceManager` as a temporary facade until meshlet rendering is migrated. Mark call sites that are expected to disappear.
 
@@ -560,6 +569,8 @@ Deliverables:
 - Move renderer-owned frame services out of `TestRenderer` where practical.
 - Add `IRenderer` interface.
 - Add a compatibility renderer implementation that can still delegate to current `TestRenderer` or meshlet scene code while extraction matures.
+- Move ImGui renderer ownership out of the compatibility meshlet final pass into a shared overlay/debug service path while preserving the existing overlay behavior.
+- Add a simple clear/debug renderer that can optionally log or inspect extracted `RenderScene` data.
 
 Scaffolding kept:
 
@@ -580,6 +591,7 @@ Deliverables:
 - Replace `MeshletRendererScene::models_` ownership with ECS `MeshRenderable` plus `Transform`.
 - Move camera and directional light state to ECS components.
 - Keep FPS camera as a controller/tooling system operating on a camera entity.
+- Extend scene metadata for scene-specific renderer feature settings such as meshlet CSM defaults before migrated presets rely on those defaults.
 
 Scaffolding reduced:
 
@@ -599,6 +611,7 @@ Deliverables:
 - Create `MeshletRenderer` implementing `IRenderer`.
 - Move CSM, depth pyramid, draw prep, and meshlet pass wiring into renderer-owned code.
 - Consume `RenderScene` mesh/camera/light data.
+- Diff renderer instance allocation by stable `EntityGuid` from the start so unchanged model instances do not rewrite instance buffers every frame. The first mesh path treats one `EntityGuid` as one model instance.
 - Split debug UI into renderer debug UI and scene/editor UI.
 
 Scaffolding retired:
@@ -616,7 +629,7 @@ Exit criteria:
 Deliverables:
 
 - Add engine-owned asset/resource service.
-- Define stable asset registry format or temporary registry file.
+- Define stable asset registry format with generated durable asset IDs plus source path, importer metadata, import settings, and source content hash metadata.
 - Resolve `AssetId` to CPU asset data.
 - Let renderer service handle GPU residency for assets.
 - Wrap or replace `ResourceManager` singleton.
@@ -704,10 +717,12 @@ migrating meshlet demo data or renderer ownership.
    path-derived `AssetId`s.
 
 Next implementation slice: define and implement the first renderer-facing scene
-bridge. The lowest-risk path is to update `plans/render_service_extraction_design.md`
-with the exact `RenderScene` schema and first extraction boundary, then implement
-Phase 3 against the now-existing Flecs scene types. Demo preset ECS loading and
-the resource bridge should follow once the render snapshot contract is clear.
+bridge from `plans/render_service_extraction_design.md`. Phase 3 should use the
+engine-facing `src/engine/render` boundary, introduce the concrete `RenderScene`
+schema and extraction path, move ImGui renderer ownership into the shared
+overlay/debug service path, and add the simple clear/debug diagnostic renderer.
+Demo preset ECS loading and the resource bridge should follow once the render
+snapshot contract is clear.
 
 ## Validation Strategy
 
@@ -731,8 +746,8 @@ These should become small plans before the related implementation phase. Current
 triage after Phase 2:
 
 1. Flecs submodule/CMake integration plan: done. Covered by `plans/flecs_scene_foundation_design.md` and the completed Phase 2 implementation. No new doc needed unless the Flecs version/pin policy changes.
-2. Stable ID and asset handle design note: partially done. `SceneId`, `EntityGuid`, and path-derived `AssetId` exist, but asset registry/handle policy is still open. Do not create a standalone stable-ID doc now; fold the remaining questions into the asset service boundary doc before Phase 5 or Phase 6.
+2. Stable ID and asset handle design note: partially done. `SceneId`, `EntityGuid`, and path-derived `AssetId` exist. The long-term answer is an asset registry with generated durable IDs plus source/import metadata; fold the detailed registry/resource-service design into the asset service boundary doc before Phase 5 or Phase 6.
 3. Editor play-mode semantics: not needed yet. Write this before Phase 8, after runtime scenes and renderer extraction are usable.
-4. RenderScene schema for 2D plus 3D: needed now. Refresh `plans/render_service_extraction_design.md` before Phase 3 so implementation has a concrete snapshot schema, extraction order, and compatibility boundary.
+4. RenderScene schema for 2D plus 3D: done for Phase 3 in `plans/render_service_extraction_design.md`. Keep it updated as implementation reveals naming or ownership changes.
 5. Asset service boundary and `ResourceManager` retirement plan: needed soon, but not before the first RenderScene extraction. Write before demo preset/resource bridge work starts in Phase 4/5.
 6. Metal validation plan for `EngineConfig` backend selection: useful but not blocking Phase 3. Write before backend-specific renderer/service changes or before any migration slice that claims Metal parity.

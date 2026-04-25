@@ -50,6 +50,7 @@ struct SpriteRenderable {
   AssetId texture;
   glm::vec4 tint{1.f};
   int sorting_layer{};
+  int sorting_order{};
 };
 
 [[nodiscard]] glm::mat4 transform_to_matrix(const Transform& transform);
