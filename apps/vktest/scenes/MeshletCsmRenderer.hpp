@@ -28,6 +28,13 @@ enum class MeshletShadowMode {
 
 class MeshletCsmRenderer {
  public:
+  struct SceneDefaults {
+    float z_near{0.1f};
+    float z_far{200.f};
+    uint32_t cascade_count{3};
+    float split_lambda{0.95f};
+  };
+
   struct Output {
     MeshletShadowMode mode{MeshletShadowMode::None};
     bool valid{};
@@ -60,6 +67,11 @@ class MeshletCsmRenderer {
     return enabled() && visualize_shadow_cascades_;
   }
 
+  void set_scene_defaults(float z_near, float z_far, uint32_t cascade_count, float split_lambda);
+  void set_scene_defaults(const SceneDefaults& d) {
+    set_scene_defaults(d.z_near, d.z_far, d.cascade_count, d.split_lambda);
+  }
+
   Output bake(const BakeRequest& req);
 
  private:
@@ -70,6 +82,7 @@ class MeshletCsmRenderer {
     float z_near{0.1f};
     float z_far{200.f};
     float split_lambda{0.95f};
+    float min_light_depth_padding{10.f};
     float bias_min{0.0004f};
     float bias_max{0.0025f};
   };

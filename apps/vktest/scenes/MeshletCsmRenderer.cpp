@@ -40,8 +40,8 @@ void calc_frustum_corners_world_space(std::span<glm::vec4> corners, const glm::m
 
 glm::mat4 calc_light_space_vp(const glm::mat4& cam_view, const glm::mat4& cam_proj,
                               const glm::vec3& light_dir, float shadow_map_res,
-                              glm::mat4& light_proj, glm::mat4& light_view, glm::vec3& light_min,
-                              glm::vec3& light_max) {
+                              float min_light_depth_padding, glm::mat4& light_proj,
+                              glm::mat4& light_view, glm::vec3& light_min, glm::vec3& light_max) {
   glm::vec3 center{0.f};
   std::array<glm::vec4, 8> corners;
   calc_frustum_corners_world_space(corners, cam_proj * cam_view);
@@ -63,24 +63,26 @@ glm::mat4 calc_light_space_vp(const glm::mat4& cam_view, const glm::mat4& cam_pr
     max.z = glm::max(max.z, c.z);
   }
 
-  const float z_padding = (max.z - min.z) * 1.5f;
-  min.z -= z_padding;
-  max.z += z_padding;
-
   if (shadow_map_res > 0.0f) {
     const float extent_x = max.x - min.x;
     const float extent_y = max.y - min.y;
-    const float texel_size_x = extent_x / shadow_map_res;
-    const float texel_size_y = extent_y / shadow_map_res;
-    glm::vec3 snapped_center = (min + max) * 0.5f;
-    snapped_center.x = std::floor(snapped_center.x / texel_size_x) * texel_size_x;
-    snapped_center.y = std::floor(snapped_center.y / texel_size_y) * texel_size_y;
-    min.x = snapped_center.x - extent_x * 0.5f;
-    max.x = snapped_center.x + extent_x * 0.5f;
-    min.y = snapped_center.y - extent_y * 0.5f;
-    max.y = snapped_center.y + extent_y * 0.5f;
+    if (extent_x > 0.f && extent_y > 0.f) {
+      const float texel_size_x = extent_x / shadow_map_res;
+      const float texel_size_y = extent_y / shadow_map_res;
+      glm::vec3 snapped_center = (min + max) * 0.5f;
+      snapped_center.x = std::floor(snapped_center.x / texel_size_x) * texel_size_x;
+      snapped_center.y = std::floor(snapped_center.y / texel_size_y) * texel_size_y;
+      min.x = snapped_center.x - extent_x * 0.5f;
+      max.x = snapped_center.x + extent_x * 0.5f;
+      min.y = snapped_center.y - extent_y * 0.5f;
+      max.y = snapped_center.y + extent_y * 0.5f;
+    }
   }
 
+  const float relative_z_padding = (max.z - min.z) * 1.5f;
+  const float z_padding = std::max(relative_z_padding, min_light_depth_padding);
+  min.z -= z_padding;
+  max.z += z_padding;
   light_min = min;
   light_max = max;
   light_proj = glm::orthoRH_ZO(min.x, max.x, max.y, min.y, min.z, max.z);
@@ -117,6 +119,18 @@ MeshletCsmRenderer::MeshletCsmRenderer(rhi::Device& device, RenderGraph& rg,
         .name = std::string("meshlet_test_shadow_") + std::to_string(a),
     });
   }
+}
+
+void MeshletCsmRenderer::set_scene_defaults(float z_near, float z_far, uint32_t cascade_count,
+                                            float split_lambda) {
+  constexpr float k_min_z_near = 1e-4f;
+  const float near_v = std::max(z_near, k_min_z_near);
+  const float far_v = std::max(z_far, near_v + k_min_z_near);
+
+  cfg_.z_near = near_v;
+  cfg_.z_far = far_v;
+  cfg_.cascade_count = std::clamp(cascade_count, 1u, cfg_.max_cascades);
+  cfg_.split_lambda = std::clamp(split_lambda, 0.0f, 1.0f);
 }
 
 void MeshletCsmRenderer::shutdown() {
@@ -162,6 +176,13 @@ void MeshletCsmRenderer::on_imgui() {
         std::clamp(shadow_cascade_count, 1, static_cast<int>(cfg_.max_cascades)));
   }
   ImGui::SliderFloat("Shadow split lambda", &cfg_.split_lambda, 0.0f, 1.0f);
+  ImGui::DragFloat("Shadow depth padding", &cfg_.min_light_depth_padding, 0.1f, 0.0f, 1000.0f,
+                   "%.1f");
+  cfg_.min_light_depth_padding = std::max(cfg_.min_light_depth_padding, 0.f);
+  ImGui::DragFloat("Shadow z near", &cfg_.z_near, 1.0f, 0.0f, 10000.0f, "%.1f");
+  cfg_.z_near = std::max(cfg_.z_near, 0.0001f);
+  ImGui::DragFloat("Shadow z far", &cfg_.z_far, 1.0f, 0.0f, 10000.0f, "%.1f");
+  cfg_.z_far = std::max(cfg_.z_far, cfg_.z_near + 0.0001f);
   ImGui::SliderFloat("Shadow bias min", &cfg_.bias_min, 0.0f, 0.01f, "%.5f");
   ImGui::SliderFloat("Shadow bias max", &cfg_.bias_max, 0.0f, 0.02f, "%.5f");
   ImGui::Checkbox("Visualize shadow cascades", &visualize_shadow_cascades_);
@@ -222,10 +243,10 @@ MeshletCsmRenderer::FrameData MeshletCsmRenderer::build_frame_data(
     glm::mat4 light_view{};
     glm::vec3 light_min{};
     glm::vec3 light_max{};
-    const glm::mat4 light_vp =
-        calc_light_space_vp(camera_view.view, get_proj(split_near, split_far), light_dir_ws,
-                            static_cast<float>(cfg_.shadow_map_resolution), light_proj, light_view,
-                            light_min, light_max);
+    const glm::mat4 light_vp = calc_light_space_vp(
+        camera_view.view, get_proj(split_near, split_far), light_dir_ws,
+        static_cast<float>(cfg_.shadow_map_resolution), cfg_.min_light_depth_padding, light_proj,
+        light_view, light_min, light_max);
     out.csm_data.light_vp_matrices[cascade_i] = light_vp;
     ViewData& cascade_vd = out.view_data[cascade_i];
     cascade_vd.vp = light_vp;

@@ -176,6 +176,14 @@ void MeshletRendererScene::apply_preset(size_t idx) {
   auto& preset = scene_presets_[idx];
   fps_camera_.camera() = preset.cam;
   fps_camera_.camera().calc_vectors();
+
+  if (preset.csm_defaults.has_value()) {
+    const auto& d = *preset.csm_defaults;
+    csm_renderer_.set_scene_defaults(d.z_near, d.z_far, d.cascade_count, d.split_lambda);
+  } else {
+    csm_renderer_.set_scene_defaults(MeshletCsmRenderer::SceneDefaults{});
+  }
+
   clear_all_models();
   preset.load_fn();
 }

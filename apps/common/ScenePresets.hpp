@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <glm/mat4x4.hpp>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -30,9 +32,17 @@ struct ScenePresetLoaders {
 };
 
 struct ScenePreset {
+  struct CsmDefaults {
+    float z_near{0.1f};
+    float z_far{200.f};
+    uint32_t cascade_count{3};
+    float split_lambda{0.95f};
+  };
+
   std::function<void()> load_fn;
   std::string name;
   Camera cam;
+  std::optional<CsmDefaults> csm_defaults;
 };
 
 void append_default_scene_presets(std::vector<ScenePreset>& out,

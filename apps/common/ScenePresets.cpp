@@ -84,6 +84,9 @@ void append_default_scene_presets(std::vector<ScenePreset>& out,
           },
       .name = "chessboard",
       .cam = Camera{.pos = {0.4, 0.4, 0.4}, .pitch = -30, .yaw = -130, .move_speed = .25f},
+      .csm_defaults =
+          ScenePreset::CsmDefaults{
+              .z_near = 0.02f, .z_far = 10.0f, .cascade_count = 2, .split_lambda = 0.8f},
   });
 
   out.push_back(ScenePreset{
@@ -105,6 +108,9 @@ void append_default_scene_presets(std::vector<ScenePreset>& out,
           },
       .name = "chessboard grid",
       .cam = Camera{.pos = {-30, 10, -20}, .pitch = -25, .yaw = 40, .move_speed = 2.f},
+      .csm_defaults =
+          ScenePreset::CsmDefaults{
+              .z_near = 0.02f, .z_far = 20.0f, .cascade_count = 3, .split_lambda = 0.8f},
   });
 
   out.push_back(ScenePreset{
