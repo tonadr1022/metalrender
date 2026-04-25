@@ -810,13 +810,13 @@ void RenderGraph::bake_allocate_temporal_resources_(glm::uvec2 fb_size) {
             .array_length = temporal.info.array_layers,
             .name = "render_graph_temporal_texture",
         });
-        temporal.slot_states[slot].per_mip.assign(std::max(1u, temporal.info.mip_levels), {});
+        temporal.slot_states[slot].per_mip.assign(temporal.info.mip_levels, {});
       }
     } else {
       for (uint32_t slot = 0; slot < slot_count; ++slot) {
         auto& state = temporal.slot_states[slot];
-        if (state.per_mip.size() != std::max(1u, temporal.info.mip_levels)) {
-          state.per_mip.assign(std::max(1u, temporal.info.mip_levels), {});
+        if (state.per_mip.size() != temporal.info.mip_levels) {
+          state.per_mip.assign(temporal.info.mip_levels, {});
         }
       }
     }
@@ -1197,9 +1197,9 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
       }
     } else {
       auto& slot_state = temporal.slot_states[slot];
-      slot_state.per_mip.assign(std::max(1u, temporal.info.mip_levels), {});
+      slot_state.per_mip.assign(temporal.info.mip_levels, {});
       for (uint32_t mip = 0; mip < slot_state.per_mip.size(); ++mip) {
-        for (uint32_t slice = 0; slice < std::max(1u, temporal.info.array_layers); ++slice) {
+        for (uint32_t slice = 0; slice < temporal.info.array_layers; ++slice) {
           const RgSubresourceStateKey key{.type = RGResourceType::ExternalTexture,
                                           .idx = r.physical_idx,
                                           .mip = static_cast<int32_t>(mip),
@@ -1353,12 +1353,12 @@ void RenderGraph::bake_validate_() {
         if (barrier.resource.type == RGResourceType::ExternalTexture) {
           rhi::Texture* t = device_->get_tex(external_textures_[barrier.resource.idx]);
           ALWAYS_ASSERT(t);
-          max_mips = std::max(1u, t->desc().mip_levels);
-          max_layers = std::max(1u, t->desc().array_length);
+          max_mips = t->desc().mip_levels;
+          max_layers = t->desc().array_length;
         } else {
           ALWAYS_ASSERT(barrier.resource.idx < tex_att_infos_.size());
-          max_mips = std::max(1u, tex_att_infos_[barrier.resource.idx].mip_levels);
-          max_layers = std::max(1u, tex_att_infos_[barrier.resource.idx].array_layers);
+          max_mips = tex_att_infos_[barrier.resource.idx].mip_levels;
+          max_layers = tex_att_infos_[barrier.resource.idx].array_layers;
         }
         ALWAYS_ASSERT(barrier.subresource.mip_count != RgSubresourceRange::k_all_mips);
         ALWAYS_ASSERT(barrier.subresource.slice_count != RgSubresourceRange::k_all_slices);

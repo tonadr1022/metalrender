@@ -260,10 +260,7 @@ void RenderService::init_imgui() {
 
 void RenderService::update_frame_context() {
   const glm::ivec2 window_size = window_->get_window_size();
-  frame_.output_extent = {
-      static_cast<uint32_t>(std::max(window_size.x, 0)),
-      static_cast<uint32_t>(std::max(window_size.y, 0)),
-  };
+  frame_.output_extent = window_size;
   frame_.frame_index = time_ ? time_->frame_index : 0;
   frame_.time = time_;
   frame_.device = device_;
