@@ -10,11 +10,11 @@ namespace {
 std::atomic_uint64_t next_scene_id{1};
 std::atomic_uint64_t next_entity_guid{1};
 
-constexpr std::uint64_t k_fnv_offset_basis = 14695981039346656037ull;
-constexpr std::uint64_t k_fnv_prime = 1099511628211ull;
+constexpr uint64_t k_fnv_offset_basis = 14695981039346656037ull;
+constexpr uint64_t k_fnv_prime = 1099511628211ull;
 
-std::uint64_t fnv1a_64(std::string_view text) {
-  std::uint64_t hash = k_fnv_offset_basis;
+uint64_t fnv1a_64(std::string_view text) {
+  uint64_t hash = k_fnv_offset_basis;
   for (const char c : text) {
     hash ^= static_cast<unsigned char>(c);
     hash *= k_fnv_prime;

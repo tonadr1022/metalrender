@@ -41,13 +41,13 @@ struct EngineConfig {
   bool floating_window{false};
   bool vsync{true};
   bool enable_imgui{true};
-  std::optional<std::uint32_t> quit_after_frames;
+  std::optional<uint32_t> quit_after_frames;
 };
 
 struct EngineTime {
   double total_seconds{};
   float delta_seconds{};
-  std::uint64_t frame_index{};
+  uint64_t frame_index{};
 };
 
 class EngineContext {
@@ -169,7 +169,7 @@ class Engine {
   bool shutting_down_{false};
   bool have_prev_time_{false};
   double prev_time_seconds_{};
-  std::uint32_t completed_frames_{};
+  uint32_t completed_frames_{};
   std::vector<KeyEvent> pending_key_events_;
   std::vector<CursorEvent> pending_cursor_events_;
 };

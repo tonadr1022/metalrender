@@ -7,21 +7,21 @@
 namespace teng::engine {
 
 struct SceneId {
-  std::uint64_t value{};
+  uint64_t value{};
 
   [[nodiscard]] bool is_valid() const { return value != 0; }
   explicit operator bool() const { return is_valid(); }
 };
 
 struct EntityGuid {
-  std::uint64_t value{};
+  uint64_t value{};
 
   [[nodiscard]] bool is_valid() const { return value != 0; }
   explicit operator bool() const { return is_valid(); }
 };
 
 struct AssetId {
-  std::uint64_t value{};
+  uint64_t value{};
 
   [[nodiscard]] bool is_valid() const { return value != 0; }
   explicit operator bool() const { return is_valid(); }
@@ -49,20 +49,20 @@ struct AssetId {
 template <>
 struct std::hash<teng::engine::SceneId> {
   std::size_t operator()(teng::engine::SceneId id) const noexcept {
-    return std::hash<std::uint64_t>{}(id.value);
+    return std::hash<uint64_t>{}(id.value);
   }
 };
 
 template <>
 struct std::hash<teng::engine::EntityGuid> {
   std::size_t operator()(teng::engine::EntityGuid id) const noexcept {
-    return std::hash<std::uint64_t>{}(id.value);
+    return std::hash<uint64_t>{}(id.value);
   }
 };
 
 template <>
 struct std::hash<teng::engine::AssetId> {
   std::size_t operator()(teng::engine::AssetId id) const noexcept {
-    return std::hash<std::uint64_t>{}(id.value);
+    return std::hash<uint64_t>{}(id.value);
   }
 };

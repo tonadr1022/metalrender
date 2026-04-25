@@ -2,7 +2,6 @@
 
 #include <cstdint>
 #include <filesystem>
-
 #include <glm/ext/vector_uint2.hpp>
 
 namespace teng::gfx {
@@ -27,8 +26,8 @@ struct RenderFrameContext {
   const std::filesystem::path* resource_dir{};
   const EngineTime* time{};
   glm::uvec2 output_extent{};
-  std::uint64_t frame_index{};
-  std::uint32_t curr_frame_in_flight_idx{};
+  uint64_t frame_index{};
+  uint32_t curr_frame_in_flight_idx{};
   bool imgui_ui_active{};
 };
 

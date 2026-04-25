@@ -7,8 +7,8 @@ namespace teng::engine {
 class Scene;
 
 struct RenderSceneExtractStats {
-  std::uint32_t skipped_meshes_missing_asset{};
-  std::uint32_t skipped_sprites_missing_asset{};
+  uint32_t skipped_meshes_missing_asset{};
+  uint32_t skipped_sprites_missing_asset{};
 };
 
 struct RenderSceneExtractOptions {

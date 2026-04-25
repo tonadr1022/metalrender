@@ -83,16 +83,18 @@ void RenderService::render_active_scene() {
   update_frame_context();
   Scene* active_scene = scenes_->active_scene();
   last_extracted_scene_ =
-      active_scene ? extract_render_scene(*active_scene, {.frame = RenderSceneFrame{
-                                                     .frame_index = frame_.frame_index,
-                                                     .delta_seconds = time_->delta_seconds,
-                                                     .output_extent = frame_.output_extent,
-                                                 }})
-                   : RenderScene{.frame = RenderSceneFrame{
-                                      .frame_index = frame_.frame_index,
-                                      .delta_seconds = time_->delta_seconds,
-                                      .output_extent = frame_.output_extent,
-                                  }};
+      active_scene
+          ? extract_render_scene(*active_scene, {.frame =
+                                                     RenderSceneFrame{
+                                                         .frame_index = frame_.frame_index,
+                                                         .delta_seconds = time_->delta_seconds,
+                                                         .output_extent = frame_.output_extent,
+                                                     }})
+          : RenderScene{.frame = RenderSceneFrame{
+                            .frame_index = frame_.frame_index,
+                            .delta_seconds = time_->delta_seconds,
+                            .output_extent = frame_.output_extent,
+                        }};
   render_scene(last_extracted_scene_);
 }
 
@@ -106,7 +108,7 @@ void RenderService::render_scene(const RenderScene& scene) {
   render_graph_.bake(frame_.output_extent, false);
   execute_graph();
   frame_.curr_frame_in_flight_idx =
-      (frame_.curr_frame_in_flight_idx + 1) % std::max<std::uint32_t>(1, device_->frames_in_flight());
+      (frame_.curr_frame_in_flight_idx + 1) % std::max<uint32_t>(1, device_->frames_in_flight());
 }
 
 void RenderService::request_render_graph_debug_dump() { render_graph_.request_debug_dump_once(); }
@@ -121,8 +123,8 @@ void RenderService::recreate_resources_on_swapchain_resize() {
 void RenderService::update_frame_context() {
   const glm::ivec2 window_size = window_->get_window_size();
   frame_.output_extent = {
-      static_cast<std::uint32_t>(std::max(window_size.x, 0)),
-      static_cast<std::uint32_t>(std::max(window_size.y, 0)),
+      static_cast<uint32_t>(std::max(window_size.x, 0)),
+      static_cast<uint32_t>(std::max(window_size.y, 0)),
   };
   frame_.frame_index = time_ ? time_->frame_index : 0;
   frame_.time = time_;
