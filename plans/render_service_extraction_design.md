@@ -1,8 +1,8 @@
 # Render Service Extraction Design
 
-Status: decision-complete design note for Phase 3 implementation. This is planning-only; do not implement code from this note unless an implementation task explicitly asks for it.
+Status: Phase 3 foundation partially implemented. `RenderScene` schema, ECS extraction, smoke coverage, engine-owned `RenderService` shell, `IRenderer`, `RenderFrameContext`, and `DebugClearRenderer` exist. Compatibility meshlet rendering still flows through `gfx::TestRenderer`/`ITestScene`, and ImGui final composition has not yet been moved out of `MeshletRendererScene`.
 
-Scope: prepare the renderer migration after the completed Phase 2 Flecs scene foundation. The next implementation phase should introduce a renderer-neutral `RenderScene` snapshot, ECS extraction from the active `engine::Scene`, and an engine-owned `RenderService`/renderer boundary while preserving the current `vktest` meshlet demo.
+Scope: track the renderer migration after the completed Phase 2 Flecs scene foundation. The first Phase 3 implementation introduced a renderer-neutral `RenderScene` snapshot, ECS extraction from `engine::Scene`, and an engine-owned `RenderService`/renderer boundary while preserving the current `vktest` meshlet demo.
 
 Read with:
 
@@ -23,6 +23,29 @@ Read with:
 - Diff renderer instance allocation by stable `EntityGuid` from the start, rather than rebuilding instance buffers every frame when scene data has not changed.
 - After path-derived scaffolding, durable `AssetId`s should come from a registry with generated stable IDs; importer metadata and source paths belong inside registry entries.
 
+## Completed So Far
+
+Implemented in the first Phase 3 slice:
+
+- Added `src/engine/render/RenderScene.hpp` with renderer-neutral frame, camera, directional light, mesh, sprite, and aggregate `RenderScene` types.
+- Added `src/engine/render/RenderSceneExtractor.*` to extract cameras, directional lights, meshes, and sprites from Flecs scene components.
+- Extraction copies `LocalToWorld`, stores stable `EntityGuid`/`AssetId`, skips invalid entity GUIDs, skips invalid mesh/sprite asset IDs with counters, and sorts extracted vectors deterministically.
+- Added `SpriteRenderable::sorting_order` so sprite extraction can sort by layer, order, then entity GUID.
+- Added `src/engine/render/IRenderer.hpp` and `RenderFrameContext.hpp` as the renderer-facing boundary.
+- Added `src/engine/render/RenderService.*` as an engine-owned shell that can extract the active scene, call an active `IRenderer`, bake/execute its `RenderGraph`, and present.
+- Added `src/engine/render/DebugClearRenderer.*` as the first minimal renderer implementation for extracted-data diagnostics.
+- `Engine` now owns `RenderService` and exposes it through `Engine::renderer()` and `EngineContext::renderer()`.
+- Expanded `engine_scene_smoke` with device-free render extraction coverage for camera, light, mesh, sprite, invalid asset skipping, missing GUID skipping, transforms, IDs, tint/sort data, and deterministic ordering.
+- Validation passed with `./scripts/agent_verify.sh` and `./build/Debug/bin/vktest --quit-after-frames 30`.
+
+Not implemented yet:
+
+- Moving `TestRenderer` frame upload/copy/model GPU services behind `RenderService`.
+- A compatibility `IRenderer` that delegates to the existing meshlet/debug scene path.
+- Moving ImGui renderer ownership/final composition out of the meshlet final pass.
+- Rendering the existing meshlet demo from extracted `RenderScene`.
+- ECS-authored demo presets or `AssetId` to resource-resolution adapters.
+
 ## Relevant Current Code
 
 Phase 2 scene foundation is present under `src/engine/scene`:
@@ -41,7 +64,16 @@ Current core scene components are:
 - `Camera { fov_y, z_near, z_far, primary }`
 - `DirectionalLight { direction, color, intensity }`
 - `MeshRenderable { AssetId model }`
-- `SpriteRenderable { AssetId texture, tint, sorting_layer }`
+- `SpriteRenderable { AssetId texture, tint, sorting_layer, sorting_order }`
+
+Current Phase 3 engine/render code is present under `src/engine/render`:
+
+- `RenderScene.hpp` defines the neutral snapshot schema.
+- `RenderSceneExtractor.*` reads Flecs scene components into `RenderScene`.
+- `RenderFrameContext.hpp` and `IRenderer.hpp` define the renderer-facing API.
+- `RenderService.*` owns the first engine-facing render service shell.
+- `DebugClearRenderer.*` provides a minimal clear renderer that consumes the new renderer boundary.
+- `Engine` owns `RenderService`; `EngineContext` exposes it to layers.
 
 Current `vktest` rendering still flows through compatibility scaffolding:
 
@@ -81,7 +113,7 @@ Ownership target:
 
 ## RenderScene Schema
 
-Create the first schema under engine-owned render/extraction code, not under `apps/vktest`. The exact file names are implementation choices, but the types should live with the engine/render service boundary rather than with meshlet test scenes.
+The first schema now lives in `src/engine/render/RenderScene.hpp`, under the engine-owned render boundary rather than under `apps/vktest`.
 
 Recommended shape:
 
@@ -175,7 +207,7 @@ Extraction rules:
 - Extraction must not allocate GPU resources, load models, mutate `ResourceManager`, build render graph passes, or call RHI.
 - Renderer/resource residency should diff extracted renderables by `EntityGuid` so unchanged model instances do not rewrite instance buffers every frame. This diff belongs after extraction, inside renderer-owned resource code, not in ECS extraction.
 
-The first extraction implementation should be directly testable without a device. Add smoke coverage that creates a scene with camera, light, mesh, and sprite components, ticks it, extracts a `RenderScene`, and verifies stable IDs, asset IDs, transforms, primary camera data, light data, sprite tint/sort data, and deterministic ordering.
+The first extraction implementation is directly testable without a device. `engine_scene_smoke` creates a scene with camera, light, mesh, and sprite components, ticks it, extracts a `RenderScene`, and verifies stable IDs, asset IDs, transforms, primary camera data, light data, sprite tint/sort data, invalid asset skipping, missing GUID skipping, and deterministic ordering.
 
 ## RenderService Fit
 
@@ -183,11 +215,11 @@ The first extraction implementation should be directly testable without a device
 
 First integration shape:
 
-- `Engine` should own `RenderService` once custom renderer selection needs to be engine-wide, such as voxel/custom render implementations. Before that, the first slice may host it from a render layer to reduce `vktest` churn if the service is still exposed to layers above it.
-- `RenderService` gets `EngineContext` references to `Window`, `rhi::Device`, `rhi::Swapchain`, resource paths, `SceneManager`, `EngineTime`, and ImGui enabled state.
+- `Engine` owns `RenderService` now and exposes it through both `Engine::renderer()` and `EngineContext::renderer()`.
+- `RenderService` gets references to `Window`, `rhi::Device`, `rhi::Swapchain`, resource paths, `SceneManager`, `EngineTime`, and ImGui enabled state.
 - `CompatibilityVktestLayer` remains the bridge for current debug scenes while `RenderService` takes over frame services.
 - New engine/data scene rendering uses `RenderScene` extraction; legacy `ITestScene` rendering remains explicitly compatibility-named.
-- The first diagnostic renderer should be a simple clear/debug renderer that can optionally log or inspect the extracted `RenderScene`.
+- The first diagnostic renderer is `DebugClearRenderer`; it consumes `RenderFrameContext`/`RenderScene` and builds a simple clear pass.
 
 Renderer-facing API intent:
 
@@ -302,13 +334,25 @@ Create a separate asset/resource service design note after one of these happens:
 
 Slice 1: `RenderScene` types and extraction.
 
+Status: complete.
+
 - Add renderer-neutral snapshot types.
 - Add extraction from active Flecs scene components.
 - Add extraction smoke tests.
-- No `RenderService` ownership changes required in this slice.
-- No `vktest` behavior changes.
+- `vktest` behavior remains unchanged.
 
 Slice 2: `RenderService` shell and compatibility renderer.
+
+Status: partially complete.
+
+Completed:
+
+- Add engine-owned `RenderService` shell.
+- Expose it through `Engine` and `EngineContext`.
+- Add `IRenderer` and `RenderFrameContext`.
+- Add basic render graph bake/execute/present orchestration for renderers owned by `RenderService`.
+
+Remaining:
 
 - Move or wrap `TestRenderer` frame services behind `RenderService` without changing legacy scene behavior.
 - Keep `TestSceneContext` populated for existing `ITestScene` code, but name the bridge as compatibility.
@@ -318,8 +362,16 @@ Slice 2: `RenderService` shell and compatibility renderer.
 
 Slice 3: Render from extracted data in a minimal path.
 
+Status: partially complete.
+
+Completed:
+
 - Let `RenderService` extract a `RenderScene` from the active `Scene`.
-- Add the simple clear/debug renderer and optional `RenderScene` logging/inspection path without moving meshlet pass ownership all at once.
+- Add the simple clear/debug renderer without moving meshlet pass ownership all at once.
+
+Remaining:
+
+- Add optional `RenderScene` logging/inspection UI/path if useful.
 - Keep meshlet demo rendering through the compatibility path until a migrated preset exists.
 
 Slice 4: Migrate one demo preset into ECS data.
@@ -352,7 +404,7 @@ Slice 5: Extract `MeshletRenderer`.
 
 ## Validation Strategy
 
-For this planning-only change, no build is required.
+For documentation-only changes, no build is required.
 
 For Phase 3 implementation slices:
 
@@ -368,7 +420,7 @@ Runtime smoke:
 
 Additional implementation checkpoints:
 
-- Add extraction tests for camera, directional light, mesh, sprite, invalid asset skipping, missing GUID skipping, and deterministic ordering.
+- Extraction smoke coverage for camera, directional light, mesh, sprite, invalid asset skipping, missing GUID skipping, and deterministic ordering is present in `engine_scene_smoke`.
 - Confirm `engine_scene_smoke` remains in `agent_verify`.
 - Exercise `vktest` scene cycling, preset loading, swapchain resize, render graph debug dump, ImGui overlay, culling toggles, and quit-after-frames after any compatibility bridge change.
 - Run `teng-shaderc --all` through `agent_verify` after renderer/shader changes.

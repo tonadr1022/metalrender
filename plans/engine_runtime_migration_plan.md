@@ -561,16 +561,23 @@ Exit criteria:
 
 ### Phase 3: RenderService And RenderScene Extraction
 
-Deliverables:
+Status: partially complete.
 
-- Add `RenderService`.
-- Add `RenderScene` snapshot types for cameras, lights, meshes, and sprites.
+Delivered:
+
+- Add `RenderScene` snapshot types for cameras, lights, meshes, and sprites under `src/engine/render`.
 - Add ECS render extraction from core components into `RenderScene`.
+- Add device-free extraction smoke coverage to `engine_scene_smoke`.
+- Add `RenderService` as an engine-owned shell exposed through `Engine` and `EngineContext`.
+- Add `IRenderer` and `RenderFrameContext`.
+- Add a simple clear/debug renderer for extracted-data diagnostics.
+
+Remaining:
+
 - Move renderer-owned frame services out of `TestRenderer` where practical.
-- Add `IRenderer` interface.
 - Add a compatibility renderer implementation that can still delegate to current `TestRenderer` or meshlet scene code while extraction matures.
 - Move ImGui renderer ownership out of the compatibility meshlet final pass into a shared overlay/debug service path while preserving the existing overlay behavior.
-- Add a simple clear/debug renderer that can optionally log or inspect extracted `RenderScene` data.
+- Add optional `RenderScene` logging/inspection if needed.
 
 Scaffolding kept:
 
@@ -579,9 +586,10 @@ Scaffolding kept:
 
 Exit criteria:
 
-- Engine frame flow is `tick layers -> update scene -> extract RenderScene -> render`.
-- Gameplay/data scenes do not receive `RenderGraph`.
-- Existing meshlet demo remains functional.
+- Engine-owned `RenderService` can extract `RenderScene` from the active Flecs scene.
+- New data-scene render paths can consume `RenderScene` without receiving `RenderGraph`.
+- Existing meshlet demo remains functional through the compatibility path.
+- Full exit is still pending until meshlet/debug rendering can run through `IRenderer`/`RenderService` and ImGui composition is no longer owned by `MeshletRendererScene`.
 
 ### Phase 4: Migrate Demo Presets Into ECS Data
 
@@ -716,13 +724,27 @@ migrating meshlet demo data or renderer ownership.
    transform-to-local-to-world updates, entity destroy, and normalized
    path-derived `AssetId`s.
 
-Next implementation slice: define and implement the first renderer-facing scene
-bridge from `plans/render_service_extraction_design.md`. Phase 3 should use the
-engine-facing `src/engine/render` boundary, introduce the concrete `RenderScene`
-schema and extraction path, move ImGui renderer ownership into the shared
-overlay/debug service path, and add the simple clear/debug diagnostic renderer.
-Demo preset ECS loading and the resource bridge should follow once the render
-snapshot contract is clear.
+### Slice 3: RenderScene Extraction And RenderService Shell
+
+The third implementation slice added the renderer-facing scene bridge without
+migrating the current meshlet demo off the compatibility path.
+
+1. `engine::RenderScene` snapshot schema under `src/engine/render`.
+2. ECS extraction from `Camera`, `DirectionalLight`, `MeshRenderable`,
+   `SpriteRenderable`, `EntityGuidComponent`, and `LocalToWorld`.
+3. Deterministic extraction ordering and invalid asset skip counters.
+4. `SpriteRenderable::sorting_order`.
+5. `engine::IRenderer` and `engine::RenderFrameContext`.
+6. Engine-owned `engine::RenderService` exposed through `Engine` and
+   `EngineContext`.
+7. `engine::DebugClearRenderer` as the first minimal diagnostic renderer.
+8. `engine_scene_smoke` coverage for render extraction.
+
+Current next implementation work: keep Phase 3 moving by putting the remaining
+compatibility bridge behind `RenderService`, moving ImGui final composition out
+of `MeshletRendererScene`, and then migrating one demo preset into ECS data.
+`TestRenderer`, `ITestScene`, `MeshletRendererScene`, and global
+`ResourceManager` remain compatibility scaffolding.
 
 ## Validation Strategy
 
@@ -743,11 +765,11 @@ For shader or shared HLSL changes, rely on `agent_verify.sh` because it runs `te
 ## Open Follow-Up Design Notes
 
 These should become small plans before the related implementation phase. Current
-triage after Phase 2:
+triage after the first Phase 3 slice:
 
 1. Flecs submodule/CMake integration plan: done. Covered by `plans/flecs_scene_foundation_design.md` and the completed Phase 2 implementation. No new doc needed unless the Flecs version/pin policy changes.
 2. Stable ID and asset handle design note: partially done. `SceneId`, `EntityGuid`, and path-derived `AssetId` exist. The long-term answer is an asset registry with generated durable IDs plus source/import metadata; fold the detailed registry/resource-service design into the asset service boundary doc before Phase 5 or Phase 6.
 3. Editor play-mode semantics: not needed yet. Write this before Phase 8, after runtime scenes and renderer extraction are usable.
-4. RenderScene schema for 2D plus 3D: done for Phase 3 in `plans/render_service_extraction_design.md`. Keep it updated as implementation reveals naming or ownership changes.
-5. Asset service boundary and `ResourceManager` retirement plan: needed soon, but not before the first RenderScene extraction. Write before demo preset/resource bridge work starts in Phase 4/5.
+4. RenderScene schema for 2D plus 3D: first implementation done for Phase 3 in `src/engine/render/RenderScene.hpp`; keep `plans/render_service_extraction_design.md` updated as implementation reveals naming or ownership changes.
+5. Asset service boundary and `ResourceManager` retirement plan: needed soon now that first RenderScene extraction exists. Write before demo preset/resource bridge work starts in Phase 4/5.
 6. Metal validation plan for `EngineConfig` backend selection: useful but not blocking Phase 3. Write before backend-specific renderer/service changes or before any migration slice that claims Metal parity.
