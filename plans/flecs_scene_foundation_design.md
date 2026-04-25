@@ -1,8 +1,28 @@
 # Flecs Scene Foundation Design
 
-Status: planning note. No implementation in this file.
+Status: complete. Phase 2 implemented the initial Flecs scene foundation; this note now records the intended design and what landed.
 
 Scope: integrate Flecs as the engine scene ECS foundation, introduce stable scene/entity/asset identifiers, define the first `Scene` and `SceneManager` responsibilities, and provide a migration path away from C++ gameplay scene subclasses. This note is specific to the current `metalrender` layout and should be read with `plans/engine_runtime_migration_plan.md`.
+
+## Implemented Phase 2 Slice
+
+Delivered:
+
+- `third_party/flecs` submodule added and wired through `third_party/CMakeLists.txt`.
+- Flecs is built static-only and linked privately into the shared `teng` library while Flecs headers are exposed for public engine scene APIs. This avoids duplicate Flecs runtime state in app executables.
+- `src/engine/scene` now contains stable ID types, core scene components, `Scene`, `SceneManager`, and scene smoke coverage.
+- `Engine` owns `SceneManager`, exposes it through `Engine::scenes()` and `EngineContext::scenes()`, and ticks the active scene from `Engine::tick()`.
+- `engine_scene_smoke` validates scene creation, GUID lookup, transform-to-`LocalToWorld`, entity destruction, and normalized path-derived `AssetId`s.
+- `./scripts/agent_verify.sh` builds and runs `engine_scene_smoke`.
+
+Deferred:
+
+- Transform hierarchy/parent relationships.
+- Scene serialization.
+- Demo preset conversion into ECS entities.
+- Resource bridge from `MeshRenderable{AssetId}` to `ResourceManager`/`ModelGPUMgr`.
+- Renderer-neutral `RenderScene` extraction.
+- Editor component metadata and play/edit world semantics.
 
 ## Relevant Current Code
 
@@ -51,17 +71,19 @@ RenderService
 
 ## Flecs Submodule Integration
 
-Flecs should be added as a git submodule at `third_party/flecs` and recorded in `.gitmodules`, matching the repo's current dependency pattern.
+Flecs has been added as a git submodule at `third_party/flecs` and recorded in `.gitmodules`, matching the repo's current dependency pattern.
 
-Recommended CMake shape:
+Implemented CMake shape:
 
-- Add Flecs setup in `third_party/CMakeLists.txt` near other general-purpose libraries, after any Flecs cache options are set.
-- Prefer linking the engine library to the Flecs C++ target exported by the Flecs CMake project rather than vendoring Flecs sources into `src/CMakeLists.txt`.
-- Keep Flecs linked by `teng`, not by `vktest`, so engine scene code is available to future app/editor targets.
+- Flecs setup lives in `third_party/CMakeLists.txt` near other general-purpose libraries, after Flecs cache options are set.
+- The engine library links against `flecs::flecs_static`; Flecs sources are not vendored into `src/CMakeLists.txt`.
+- Flecs is owned by `teng`, not by `vktest`, so engine scene code is available to future app/editor targets.
 - Avoid adding Vulkan, Metal, renderer, or app-specific compile definitions to Flecs integration.
 - Keep warning treatment for third-party code consistent with the surrounding file. If Flecs emits warnings under `project_warnings`, isolate it as a third-party target instead of weakening warnings on engine code.
 
-Initial implementation should not add a custom wrapper that hides Flecs. Engine code can expose `flecs::world&` from `Scene` while still providing stable-ID helpers for creation, lookup, and serialization boundaries.
+Implementation note: `teng` currently builds as a shared library. Flecs is linked privately into `teng` while `third_party/flecs/include` is exposed publicly, because public static linkage caused app executables to instantiate separate Flecs runtime state when using inline C++ APIs.
+
+The implementation does not add a custom wrapper that hides Flecs. Engine code exposes `flecs::world&` from `Scene` while still providing stable-ID helpers for creation, lookup, and serialization boundaries.
 
 ## IDs And Handles
 
@@ -75,9 +97,9 @@ Do not reuse `GenerationalHandle<T>` for these IDs. Existing handles are runtime
 
 Do not serialize `ModelHandle`, `ModelGPUHandle`, `ModelInstanceGPUHandle`, `rhi::*Handle`, or `RGResourceId` into scene data. Those remain runtime or frame-local identities.
 
-Phase-one ID implementation can be a small strongly typed `uint64_t` value for each ID. The final generation policy can evolve, but the type boundary should exist before scene/render/resource code starts depending on it.
+Phase 2 implemented small strongly typed `uint64_t` values for each ID. `SceneId` and `EntityGuid` use a monotonic runtime generator. The final generation policy can evolve, but the type boundary now exists before scene/render/resource code starts depending on it.
 
-`AssetId` should initially support a deterministic mapping from source path to an ID for imported model assets, because current model identity is effectively path-based through `ResourceManager`. The plan should still leave room for a later asset registry file that stores canonical IDs, import metadata, labels, and source paths.
+`AssetId` initially supports deterministic mapping from normalized source paths through a fixed FNV-1a hash, because current model identity is effectively path-based through `ResourceManager`. The plan still leaves room for a later asset registry file that stores canonical IDs, import metadata, labels, and source paths.
 
 ## Core Scene Components
 
@@ -86,12 +108,15 @@ Register the first engine-owned component module once per scene world:
 - `EntityGuidComponent { EntityGuid guid; }`
 - `Name { std::string value; }`
 - `Transform { translation, rotation, scale }`
-- `Parent` or a relationship-based parent model using Flecs relationships
 - `LocalToWorld { glm::mat4 value; }`
 - `Camera { projection settings, clipping planes, primary flag }`
 - `DirectionalLight { direction or transform-derived direction, color, intensity }`
 - `MeshRenderable { AssetId model; }`
 - `SpriteRenderable { AssetId texture, tint, sorting layer }`
+
+Deferred component:
+
+- `Parent` or a relationship-based parent model using Flecs relationships.
 
 The exact component names can change during implementation, but these responsibilities should stay separate:
 
@@ -231,6 +256,8 @@ Global `ResourceManager`
 
 ### Phase 0: Dependency And Design Guardrails
 
+Status: complete.
+
 Deliverables:
 
 - Add Flecs as `third_party/flecs` submodule.
@@ -245,6 +272,8 @@ Exit criteria:
 
 ### Phase 1: Stable ID Types
 
+Status: complete.
+
 Deliverables:
 
 - Add strongly typed `SceneId`, `EntityGuid`, and `AssetId`.
@@ -257,6 +286,8 @@ Exit criteria:
 - No scene-facing component or API requires `ModelHandle` for authored identity.
 
 ### Phase 2: Scene World Foundation
+
+Status: complete.
 
 Deliverables:
 
@@ -274,6 +305,8 @@ Exit criteria:
 
 ### Phase 3: SceneManager
 
+Status: complete.
+
 Deliverables:
 
 - Add `SceneManager` with loaded scene storage and active scene tracking.
@@ -287,6 +320,8 @@ Exit criteria:
 - Scene lifetime is not owned by `TestRenderer`.
 
 ### Phase 4: Demo Preset Compatibility Loader
+
+Status: planned.
 
 Deliverables:
 
@@ -302,6 +337,8 @@ Exit criteria:
 
 ### Phase 5: Resource Bridge For Mesh Renderables
 
+Status: planned.
+
 Deliverables:
 
 - Add an adapter that resolves `MeshRenderable{AssetId}` through a temporary asset map into the current `ResourceManager`/`ModelGPUMgr` flow.
@@ -314,6 +351,8 @@ Exit criteria:
 - Resource bridge ownership is explicit and can be deleted later.
 
 ### Phase 6: Render Extraction Preparation
+
+Status: planned. This should now move into the Phase 3 renderer migration work and be reconciled with `plans/render_service_extraction_design.md`.
 
 Deliverables:
 
@@ -339,12 +378,13 @@ Exit criteria:
 
 ## Validation Strategy
 
-Planning-only validation for this note:
+Completed implementation validation:
 
-- Review the note against `plans/engine_runtime_migration_plan.md`.
-- Confirm no implementation code was changed.
+- `./scripts/agent_verify.sh --format`
+- `./scripts/agent_verify.sh`
+- `cmake --build build/Debug --target vktest && ./build/Debug/bin/vktest --quit-after-frames 30`
 
-Implementation validation after future code phases:
+Validation after future code phases:
 
 - Run `./scripts/agent_verify.sh` from repo root after each implementation slice.
 - Run `./build/Debug/bin/vktest --quit-after-frames 30` after runtime/app integration slices.
@@ -354,8 +394,8 @@ Implementation validation after future code phases:
 
 ## Open Questions
 
-- Which Flecs version or branch should the submodule pin to?
-- Should `SceneId`, `EntityGuid`, and `AssetId` use a custom `uint64_t` generator first, a UUID library, or a deterministic content/path strategy per ID kind?
+- Which Flecs version or branch should the submodule pin to long term?
+- When should `SceneId` and `EntityGuid` move from monotonic runtime IDs to imported/persistent IDs?
 - Where should the first asset registry live: under `resources/`, under a future project directory, or generated into `resources/local` for experiments?
 - Should transform hierarchy use Flecs relationships immediately, or start with an explicit parent component and migrate once editor requirements are clearer?
 - How much editor metadata should be included in the first component registration pass?

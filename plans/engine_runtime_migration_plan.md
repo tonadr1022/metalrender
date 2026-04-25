@@ -1,6 +1,6 @@
 # Engine Runtime Migration Plan
 
-Status: Phase 1 runtime shell implemented; later Flecs, render service, asset, and editor phases remain planned.
+Status: Phase 2 Flecs scene foundation implemented; render service, demo ECS migration, asset, 2D, editor, and scripting phases remain planned.
 
 This plan treats the engine as a long-term runtime/editor foundation, not as a cleaned-up version of the current demo harness. The current `vktest`, `TestRenderer`, `ITestScene`, and `MeshletRendererScene` code should keep working during migration, but they are scaffolding. The destination is a tick-driven, layer-composed engine with data-first Flecs scenes, stable IDs, renderer services, and an editor layer on top of the same runtime.
 
@@ -523,26 +523,32 @@ Exit criteria:
 
 ### Phase 2: Flecs Submodule And Data Scene Foundation
 
-Deliverables:
+Status: complete.
+
+Delivered:
 
 - Add Flecs as `third_party/flecs` git submodule.
-- Add CMake integration.
+- Add CMake integration with static Flecs linked privately into `teng` while exposing Flecs headers publicly. This avoids duplicate Flecs runtime state across the current shared-library boundary.
 - Add `engine::Scene` containing `flecs::world`.
-- Register initial core components.
-- Add `SceneManager`.
+- Register initial core components: stable entity GUID, name, transform, local-to-world, camera, directional light, mesh renderable, and sprite renderable.
+- Add `SceneManager` with scene creation, lookup, active-scene tracking, and active-scene ticking.
 - Add stable `SceneId`, `EntityGuid`, and `AssetId` types.
-- Add basic transform/local-to-world system.
+- Add basic flat transform/local-to-world system.
+- Add `engine_scene_smoke` and include it in `./scripts/agent_verify.sh`.
+- Expose `SceneManager` from `Engine` and `EngineContext`, and tick the active scene from `Engine::tick()`.
 
 Scaffolding kept:
 
 - Existing debug scenes still render through compatibility path.
 - Demo scene data can initially be created by a temporary C++ demo loader.
+- `TestRenderer`, `ITestScene`, `MeshletRendererScene`, and global `ResourceManager` remain unchanged compatibility scaffolding.
 
 Exit criteria:
 
 - A minimal Flecs scene can be created, ticked, and inspected/debug-logged.
 - Entities have stable GUID components.
 - Transform system updates `LocalToWorld`.
+- `./scripts/agent_verify.sh` and `vktest --quit-after-frames 30` pass.
 
 ### Phase 3: RenderService And RenderScene Extraction
 
@@ -667,10 +673,12 @@ Exit criteria:
 
 - Lua can be added without replacing scene, entity, component, or layer architecture.
 
-## Completed First Code Slice
+## Completed Implementation Slices
+
+### Slice 1: Tick-Driven Runtime Shell
 
 The first implementation slice created the runtime control surface without
-touching meshlet internals, Flecs, stable IDs, or renderer extraction:
+touching meshlet internals, Flecs, stable IDs, or renderer extraction.
 
 1. `engine::EngineTime`.
 2. `engine::EngineConfig`.
@@ -680,9 +688,26 @@ touching meshlet internals, Flecs, stable IDs, or renderer extraction:
 6. `TestApp` as a compatibility host over `Engine`.
 7. `CompatibilityVktestLayer` as the explicit bridge to current debug rendering.
 
-Next implementation slice: start the Flecs scene foundation or, if smaller
-runtime cleanup is preferred first, move `CompatibilityVktestLayer` into a named
-app source/header and add focused smoke coverage for manual `Engine::tick()`.
+### Slice 2: Flecs Scene Foundation
+
+The second implementation slice added the first data-scene foundation without
+migrating meshlet demo data or renderer ownership.
+
+1. Flecs submodule and static CMake integration.
+2. `engine::SceneId`, `engine::EntityGuid`, and `engine::AssetId`.
+3. Core ECS components under `src/engine/scene`.
+4. `engine::Scene` wrapping one `flecs::world`.
+5. `engine::SceneManager` with active-scene access.
+6. Active-scene ticking from `Engine::tick()`.
+7. `engine_scene_smoke` coverage for scene creation, entity GUID lookup,
+   transform-to-local-to-world updates, entity destroy, and normalized
+   path-derived `AssetId`s.
+
+Next implementation slice: define and implement the first renderer-facing scene
+bridge. The lowest-risk path is to update `plans/render_service_extraction_design.md`
+with the exact `RenderScene` schema and first extraction boundary, then implement
+Phase 3 against the now-existing Flecs scene types. Demo preset ECS loading and
+the resource bridge should follow once the render snapshot contract is clear.
 
 ## Validation Strategy
 
@@ -702,11 +727,12 @@ For shader or shared HLSL changes, rely on `agent_verify.sh` because it runs `te
 
 ## Open Follow-Up Design Notes
 
-These should become small plans before the related implementation phase:
+These should become small plans before the related implementation phase. Current
+triage after Phase 2:
 
-1. Flecs submodule/CMake integration plan.
-2. Stable ID and asset handle design note.
-3. Editor play-mode semantics on top of the implemented layer/tick order.
-4. RenderScene schema for 2D plus 3D.
-5. Asset service boundary and `ResourceManager` retirement plan.
-6. Metal validation plan for the implemented `EngineConfig` backend selection.
+1. Flecs submodule/CMake integration plan: done. Covered by `plans/flecs_scene_foundation_design.md` and the completed Phase 2 implementation. No new doc needed unless the Flecs version/pin policy changes.
+2. Stable ID and asset handle design note: partially done. `SceneId`, `EntityGuid`, and path-derived `AssetId` exist, but asset registry/handle policy is still open. Do not create a standalone stable-ID doc now; fold the remaining questions into the asset service boundary doc before Phase 5 or Phase 6.
+3. Editor play-mode semantics: not needed yet. Write this before Phase 8, after runtime scenes and renderer extraction are usable.
+4. RenderScene schema for 2D plus 3D: needed now. Refresh `plans/render_service_extraction_design.md` before Phase 3 so implementation has a concrete snapshot schema, extraction order, and compatibility boundary.
+5. Asset service boundary and `ResourceManager` retirement plan: needed soon, but not before the first RenderScene extraction. Write before demo preset/resource bridge work starts in Phase 4/5.
+6. Metal validation plan for `EngineConfig` backend selection: useful but not blocking Phase 3. Write before backend-specific renderer/service changes or before any migration slice that claims Metal parity.
