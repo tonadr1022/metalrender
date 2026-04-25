@@ -16,8 +16,9 @@ changed_paths() {
 PRESET="${CMAKE_PRESET:-Debug}"
 BUILD_DIR="$REPO_ROOT/build/$PRESET"
 BIN_DIR="$BUILD_DIR/bin"
-TARGETS=(metalrender teng-shaderc)
+TARGETS=(metalrender teng-shaderc engine_scene_smoke)
 DO_FORMAT=0
+DO_TIDY=1
 
 usage() {
 	cat <<'EOF'
@@ -27,9 +28,11 @@ Usage: scripts/agent_verify.sh [options]
   resources/shaders/hlsl (entry points only), or --all if includes/shared headers changed.
   Optional: clang-format on changed first-party C/C++ headers/sources under apps/, src/, cmake/
   (unstaged + staged; not .mm/.m). Skips when the worktree is clean.
+  Runs clang-tidy on changed first-party C/C++ sources/headers under apps/ and src/.
 
 Options:
   --format          Run clang-format -Werror (needs clang-format on PATH, or CLANG_FORMAT)
+  --skip-tidy       Skip clang-tidy (enabled by default)
   --preset NAME     CMake preset (default: Debug, or CMAKE_PRESET env)
   --skip-configure  Only build and shader compile (CMake must already be configured)
   -h, --help        This message
@@ -37,6 +40,8 @@ Options:
 Environment:
   CMAKE_PRESET      Same as --preset
   CLANG_FORMAT      clang-format binary (default: clang-format)
+  CLANG_TIDY        clang-tidy binary (default: clang-tidy)
+  RUN_CLANG_TIDY    run-clang-tidy binary (default: run-clang-tidy, optional)
   VERIFY_TARGETS    Space-separated extra cmake --target names after defaults
 EOF
 }
@@ -46,6 +51,10 @@ while [[ $# -gt 0 ]]; do
 	case "$1" in
 	--format)
 		DO_FORMAT=1
+		shift
+		;;
+	--skip-tidy)
+		DO_TIDY=0
 		shift
 		;;
 	--preset)
@@ -83,6 +92,57 @@ if [[ -n "${VERIFY_TARGETS:-}" ]]; then
 fi
 
 cmake --build "$BUILD_DIR" --target "${TARGETS[@]}" "${extra_targets[@]}"
+
+"$BIN_DIR/engine_scene_smoke"
+
+# clang-tidy on changed first-party sources/headers (apps/, src/). Uses compile_commands.json from build.
+if [[ "$DO_TIDY" -eq 1 ]]; then
+	CT="${CLANG_TIDY:-clang-tidy}"
+	if ! command -v "$CT" >/dev/null 2>&1; then
+		echo "agent_verify.sh: $CT not found; skipping clang-tidy (install clang-tidy or set CLANG_TIDY)" >&2
+		DO_TIDY=0
+	fi
+fi
+
+if [[ "$DO_TIDY" -eq 1 ]]; then
+	if [[ ! -f "$BUILD_DIR/compile_commands.json" ]]; then
+		echo "agent_verify.sh: missing $BUILD_DIR/compile_commands.json (re-run without --skip-configure)" >&2
+		exit 1
+	fi
+
+	TIDY_FILES=()
+	while IFS= read -r f; do
+		[[ -n "$f" ]] || continue
+		case "$f" in
+		apps/*|src/*) ;;
+		*) continue ;;
+		esac
+		case "$f" in
+		*.c|*.cc|*.cpp|*.cxx|*.h|*.hh|*.hpp|*.hxx|*.inl) ;;
+		*) continue ;;
+		esac
+		[[ -f "$REPO_ROOT/$f" ]] || continue
+		TIDY_FILES+=("$REPO_ROOT/$f")
+	done < <(
+		{
+			git -C "$REPO_ROOT" diff --name-only --diff-filter=d
+			git -C "$REPO_ROOT" diff --cached --name-only --diff-filter=d
+		} | LC_ALL=C sort -u
+	)
+
+	if [[ "${#TIDY_FILES[@]}" -gt 0 ]]; then
+		RCT="${RUN_CLANG_TIDY:-run-clang-tidy}"
+		if command -v "$RCT" >/dev/null 2>&1; then
+			# run-clang-tidy understands compile_commands.json and parallelizes by default.
+			"$RCT" -p "$BUILD_DIR" "${TIDY_FILES[@]}"
+		else
+			# Fallback: invoke clang-tidy per file (slower, but avoids extra dependency).
+			for f in "${TIDY_FILES[@]}"; do
+				"$CT" -p "$BUILD_DIR" "$f"
+			done
+		fi
+	fi
+fi
 
 # Match apps/shaderc/main.cpp: only *.vert|frag|comp|mesh|task.hlsl are entry points; .hlsli/.h/etc. need --all.
 SHADER_NEED_ALL=0

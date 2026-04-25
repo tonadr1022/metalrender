@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "engine/scene/SceneManager.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
@@ -56,6 +57,7 @@ class EngineContext {
   [[nodiscard]] const std::filesystem::path& local_resource_dir() const {
     return *local_resource_dir_;
   }
+  [[nodiscard]] SceneManager& scenes() const { return *scenes_; }
   [[nodiscard]] const EngineTime& time() const { return *time_; }
   [[nodiscard]] bool imgui_enabled() const { return *imgui_enabled_; }
   void set_imgui_enabled(bool enabled) { *imgui_enabled_ = enabled; }
@@ -69,6 +71,7 @@ class EngineContext {
   gfx::rhi::Swapchain* swapchain_{};
   const std::filesystem::path* resource_dir_{};
   const std::filesystem::path* local_resource_dir_{};
+  SceneManager* scenes_{};
   const EngineTime* time_{};
   bool* imgui_enabled_{};
 };
@@ -124,6 +127,8 @@ class Engine {
   [[nodiscard]] EngineContext& context() { return context_; }
   [[nodiscard]] const EngineContext& context() const { return context_; }
   [[nodiscard]] LayerStack& layers() { return layers_; }
+  [[nodiscard]] SceneManager& scenes() { return scenes_; }
+  [[nodiscard]] const SceneManager& scenes() const { return scenes_; }
   [[nodiscard]] const EngineConfig& config() const { return config_; }
 
  private:
@@ -148,6 +153,7 @@ class Engine {
   std::unique_ptr<Window> window_;
   std::unique_ptr<gfx::rhi::Device> device_;
   gfx::rhi::SwapchainHandleHolder swapchain_;
+  SceneManager scenes_;
   EngineContext context_;
   LayerStack layers_;
   EngineTime time_;

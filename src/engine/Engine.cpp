@@ -4,12 +4,16 @@
 
 #include <cstdlib>
 #include <filesystem>
+#include <memory>
+#include <ranges>
 #include <tracy/Tracy.hpp>
+#include <utility>
 
 #include "Window.hpp"
 #include "core/CVar.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
+#include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -45,8 +49,8 @@ void LayerStack::push_layer(std::unique_ptr<Layer> layer) {
 
 void LayerStack::clear() {
   if (ctx_) {
-    for (auto it = layers_.rbegin(); it != layers_.rend(); ++it) {
-      (*it)->on_detach(*ctx_);
+    for (auto& layer : std::views::reverse(layers_)) {
+      layer->on_detach(*ctx_);
     }
   }
   layers_.clear();
@@ -146,6 +150,7 @@ void Engine::init() {
   context_.swapchain_ = device_->get_swapchain(swapchain_);
   context_.resource_dir_ = &resource_dir_;
   context_.local_resource_dir_ = &local_resource_dir_;
+  context_.scenes_ = &scenes_;
   context_.time_ = &time_;
   context_.imgui_enabled_ = &imgui_enabled_;
   layers_.set_context(&context_);
@@ -222,6 +227,10 @@ bool Engine::tick() {
   time_.frame_index = completed_frames_;
   prev_time_seconds_ = curr_time;
   have_prev_time_ = true;
+
+  if (!scenes_.tick_active_scene(time_.delta_seconds)) {
+    return false;
+  }
 
   if (imgui_enabled_) {
     ZoneScopedN("imgui_new_frame");

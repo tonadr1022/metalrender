@@ -12,6 +12,11 @@ add_library(${target_name} SHARED
     UI.cpp
 
     engine/Engine.cpp
+    engine/scene/Scene.cpp
+    engine/scene/SceneComponents.cpp
+    engine/scene/SceneIds.cpp
+    engine/scene/SceneManager.cpp
+    engine/scene/SceneSmokeTest.cpp
 
     core/FileUtil.cpp
     core/Util.cpp
@@ -93,6 +98,7 @@ endif()
 target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/resources/shaders)
 target_include_directories(${target_name} PUBLIC ${CMAKE_SOURCE_DIR}/third_party/vendored)
 target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(${target_name} PUBLIC ${CMAKE_SOURCE_DIR}/third_party/flecs/include)
 
 target_link_libraries(${target_name} PUBLIC
     teng_shader_compiler
@@ -109,6 +115,8 @@ target_link_libraries(${target_name} PUBLIC
     ktx
     fts_fuzzy_match
 )
+
+target_link_libraries(${target_name} PRIVATE flecs::flecs_static)
 
 
 if (BUILD_VULKAN)

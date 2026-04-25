@@ -2,17 +2,30 @@
 
 #include <GLFW/glfw3.h>
 
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <memory>
 #include <tracy/Tracy.hpp>
 #include <vector>
 
 #include "../common/ScenePresets.hpp"
 #include "ResourceManager.hpp"
+#include "TestDebugScenes.hpp"
 #include "UI.hpp"
 #include "Window.hpp"
+#include "core/EAssert.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
+#include "gfx/DrawBatch.hpp"
+#include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
+#include "gfx/RenderGraph.hpp"
 #include "gfx/ShaderManager.hpp"
+#include "gfx/renderer/ModelGPUUploader.hpp"
+#include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
+#include "gfx/rhi/Queue.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "hlsl/material.h"
 #include "hlsl/shader_constants.h"
@@ -155,7 +168,7 @@ void TestRenderer::render(bool imgui_ui_active) {
 
   add_render_graph_passes();
   static int i = 0;
-  bool verbose = i++ == 0;
+  const bool verbose = i++ == -1;
   rg_.bake(window_->get_window_size(), verbose);
 
   device_->acquire_next_swapchain_image(swapchain_);

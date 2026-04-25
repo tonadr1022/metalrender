@@ -38,6 +38,12 @@ target_compile_definitions(glm INTERFACE VK_NO_PROTOTYPES)
 
 add_subdirectory(concurrentqueue)
 
+set(FLECS_STATIC ON CACHE BOOL "" FORCE)
+set(FLECS_SHARED OFF CACHE BOOL "" FORCE)
+set(FLECS_PIC ON CACHE BOOL "" FORCE)
+set(FLECS_TESTS OFF CACHE BOOL "" FORCE)
+add_subdirectory(flecs)
+
 set(FASTNOISE2_NOISETOOL OFF CACHE BOOL "Build Noise Tool" FORCE)
 add_subdirectory(FastNoise2)
 
