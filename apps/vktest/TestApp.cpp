@@ -2,13 +2,18 @@
 
 #include <GLFW/glfw3.h>
 
+#include <cstddef>
 #include <memory>
 #include <tracy/Tracy.hpp>
+#include <utility>
 
 #include "ResourceManager.hpp"
+#include "TestDebugScenes.hpp"
 #include "TestRenderer.hpp"
 #include "Util.hpp"
 #include "core/EAssert.hpp"
+#include "engine/Engine.hpp"
+#include "engine/render/RenderService.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/RendererCVars.hpp"
 #include "imgui.h"
@@ -25,15 +30,13 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
     ALWAYS_ASSERT(RenderGraph::run_barrier_coalesce_self_tests());
     gfx::apply_renderer_cvar_device_constraints(true);
 
-    renderer_ = std::make_unique<gfx::TestRenderer>(gfx::TestRenderer::CreateInfo{
-        .device = &ctx.device(),
-        .swapchain = &ctx.swapchain(),
-        .window = &ctx.window(),
-        .resource_dir = ctx.resource_dir(),
+    auto renderer = std::make_unique<gfx::TestRenderer>(gfx::TestRenderer::CreateInfo{
         .initial_scene = TestDebugScene::MeshletRenderer,
     });
+    renderer_ = renderer.get();
+    ctx.renderer().set_renderer(std::move(renderer));
     ResourceManager::init(
-        ResourceManager::CreateInfo{.model_gpu_mgr = renderer_->get_model_gpu_mgr()});
+        ResourceManager::CreateInfo{.model_gpu_mgr = ctx.renderer().model_gpu_mgr()});
     renderer_->set_scene(TestDebugScene::MeshletRenderer);
   }
 
@@ -43,7 +46,7 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
     }
     renderer_->shutdown();
     ResourceManager::shutdown();
-    renderer_.reset();
+    renderer_ = nullptr;
   }
 
   void on_key_event(teng::engine::EngineContext& ctx, int key, int action, int mods) override {
@@ -72,7 +75,7 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
       ImGui::Separator();
       ImGui::TextWrapped("dump_dir: %s", renderer_cv::developer_render_graph_dump_dir.get());
       if (ImGui::Button("Dump render graph (JSON+DOT)")) {
-        renderer_->request_render_graph_debug_dump();
+        ctx.renderer().request_render_graph_debug_dump();
       }
     }
     ImGui::End();
@@ -80,11 +83,12 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
   }
 
   void on_render(teng::engine::EngineContext& ctx) override {
-    renderer_->render(ctx.imgui_enabled());
+    ctx.renderer().set_imgui_ui_active(ctx.imgui_enabled());
+    ctx.renderer().render_active_scene();
   }
 
  private:
-  std::unique_ptr<gfx::TestRenderer> renderer_;
+  gfx::TestRenderer* renderer_{};
 };
 
 }  // namespace

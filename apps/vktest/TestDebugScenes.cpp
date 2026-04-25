@@ -1,4 +1,5 @@
 #include "TestDebugScenes.hpp"
+// NOLINTBEGIN(misc-include-cleaner, misc-const-correctness)
 
 #include <GLFW/glfw3.h>
 
@@ -329,9 +330,7 @@ class TexturedCubeProceduralScene final : public ITestScene {
 
       enc->draw_mesh_threadgroups({1, 1, 1}, {1, 1, 1}, {128, 1, 1});
 
-      ctx_.imgui_renderer->render(enc, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height},
-                                  ctx_.curr_frame_in_flight_idx);
-
+      ctx_.render_imgui_overlay(enc);
       enc->end_rendering();
     });
   }
@@ -384,3 +383,4 @@ std::unique_ptr<ITestScene> create_test_scene(TestDebugScene s, const TestSceneC
 }
 
 }  // namespace teng::gfx
+// NOLINTEND(misc-include-cleaner, misc-const-correctness)

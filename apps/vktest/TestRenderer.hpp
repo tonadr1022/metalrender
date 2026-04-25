@@ -4,82 +4,42 @@
 #include <memory>
 
 #include "TestDebugScenes.hpp"
-#include "gfx/BackedGPUAllocator.hpp"
-#include "gfx/DrawBatch.hpp"
-#include "gfx/GPUFrameAllocator2.hpp"
-#include "gfx/ImGuiRenderer.hpp"
-#include "gfx/RenderGraph.hpp"
-#include "gfx/renderer/BufferResize.hpp"
-#include "gfx/renderer/InstanceMgr.hpp"
-#include "gfx/rhi/GFXTypes.hpp"
+#include "engine/render/IRenderer.hpp"
+#include "engine/render/RenderFrameContext.hpp"
 
 namespace teng {
 class Window;
 
 namespace gfx {
-class ShaderManager;
 
-namespace rhi {
-
-class CmdEncoder;
-class Device;
-class Swapchain;
-
-}  // namespace rhi
-
-}  // namespace gfx
-
-namespace gfx {
-
-class TestRenderer {
+class TestRenderer final : public engine::IRenderer {
  public:
   struct CreateInfo {
-    rhi::Device* device;
-    rhi::Swapchain* swapchain;
-    Window* window;
-    std::filesystem::path resource_dir;
     TestDebugScene initial_scene{TestDebugScene::MeshletRenderer};
   };
   explicit TestRenderer(const CreateInfo& cinfo);
-  void render(bool imgui_ui_active);
+  void render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) override;
   void imgui_scene_overlay();
-  void request_render_graph_debug_dump();
   void on_cursor_pos(double x, double y);
   void on_key_event(int key, int action, int mods);
   void shutdown();
-  void recreate_resources_on_swapchain_resize();
+  void on_resize(engine::RenderFrameContext& frame) override;
   void cycle_debug_scene();
   void set_scene(TestDebugScene id);
   void apply_demo_scene_preset(size_t index);
-  ModelGPUMgr* get_model_gpu_mgr() { return model_gpu_mgr_.get(); }
-  ~TestRenderer();
+  ~TestRenderer() override;
 
  private:
+  void populate_compatibility_context(engine::RenderFrameContext& frame);
   void add_render_graph_passes();
-  void init_imgui();
-  void update_ctx();
-  void imgui_device_info();
+  void imgui_device_info() const;
 
   std::unique_ptr<ITestScene> scene_;
   TestDebugScene active_scene_{TestDebugScene::TexturedCubeProcedural};
 
   TestSceneContext ctx_;
-  std::unique_ptr<gfx::ShaderManager> shader_mgr_;
-  std::unique_ptr<ModelGPUMgr> model_gpu_mgr_;
-  rhi::Device* device_;
-  rhi::Swapchain* swapchain_;
-  GPUFrameAllocator3 frame_gpu_upload_allocator_;
-  std::unique_ptr<ImGuiRenderer> imgui_renderer_;
-  std::filesystem::path resource_dir_;
-  BufferCopyMgr buffer_copy_mgr_;
-  RenderGraph rg_;
-  Window* window_{};
-  InstanceMgr static_instance_mgr_;
-  GeometryBatch static_draw_batch_;
-  BackedGPUAllocator materials_buf_;
   float prev_time_sec_{};
   bool have_prev_time_{};
-  std::vector<rhi::SamplerHandleHolder> samplers_;
 };
 
 }  // namespace gfx

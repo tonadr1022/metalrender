@@ -7,31 +7,21 @@
 #include <filesystem>
 #include <memory>
 #include <tracy/Tracy.hpp>
-#include <vector>
 
 #include "../common/ScenePresets.hpp"
-#include "ResourceManager.hpp"
 #include "TestDebugScenes.hpp"
-#include "UI.hpp"
-#include "Window.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
-#include "gfx/DrawBatch.hpp"
+#include "engine/Engine.hpp"
+#include "engine/render/RenderFrameContext.hpp"
+#include "engine/render/RenderScene.hpp"
 #include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
 #include "gfx/RenderGraph.hpp"
-#include "gfx/ShaderManager.hpp"
-#include "gfx/renderer/ModelGPUUploader.hpp"
-#include "gfx/rhi/Config.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
-#include "gfx/rhi/Queue.hpp"
 #include "gfx/rhi/Swapchain.hpp"
-#include "hlsl/material.h"
-#include "hlsl/shader_constants.h"
 #include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "implot.h"
 
 using namespace teng;
 using namespace teng::gfx;
@@ -39,76 +29,33 @@ using namespace teng::gfx::rhi;
 
 namespace teng::gfx {
 
-TestRenderer::TestRenderer(const CreateInfo& cinfo)
-    : active_scene_(cinfo.initial_scene),
-      device_(cinfo.device),
-      swapchain_(cinfo.swapchain),
-      frame_gpu_upload_allocator_(device_, false),
-      resource_dir_(cinfo.resource_dir),
-      buffer_copy_mgr_(device_, frame_gpu_upload_allocator_),
-      window_(cinfo.window),
-      static_instance_mgr_(*device_, buffer_copy_mgr_, device_->get_info().frames_in_flight, true),
-      static_draw_batch_(GeometryBatchType::Static, *device_, buffer_copy_mgr_,
-                         GeometryBatch::CreateInfo{
-                             .initial_vertex_capacity = 1'000'000,
-                             .initial_index_capacity = 1'000'000,
-                             .initial_meshlet_capacity = 1'000'000,
-                             .initial_mesh_capacity = 100'000,
-                             .initial_meshlet_triangle_capacity = 1'000'000,
-                             .initial_meshlet_vertex_capacity = 1'000'000,
-                         }),
-      materials_buf_(*device_, buffer_copy_mgr_,
-                     {.usage = rhi::BufferUsage::Storage,
-                      .size = k_max_materials * sizeof(M4Material),
-                      // .flags = rhi::BufferDescFlags::DisableCPUAccessOnUMA,
-                      .name = "all materials buf"},
-                     sizeof(M4Material)) {
-  shader_mgr_ = std::make_unique<gfx::ShaderManager>();
-  shader_mgr_->init(
-      device_, gfx::ShaderManager::Options{.targets = device_->get_supported_shader_targets()});
-  imgui_renderer_ = std::make_unique<ImGuiRenderer>(*shader_mgr_, device_);
-  rg_.init(device_);
-  model_gpu_mgr_ = std::make_unique<ModelGPUMgr>(*device_, static_instance_mgr_, static_draw_batch_,
-                                                 buffer_copy_mgr_, materials_buf_);
-  ctx_ = {
-      .device = device_,
-      .swapchain = swapchain_,
-      .window = window_,
-      .shader_mgr = shader_mgr_.get(),
-      .rg = &rg_,
-      .buffer_copy = &buffer_copy_mgr_,
-      .frame_staging = &frame_gpu_upload_allocator_,
-      .imgui_renderer = imgui_renderer_.get(),
-      .model_gpu_mgr = model_gpu_mgr_.get(),
-      .resource_dir = resource_dir_,
+TestRenderer::TestRenderer(const CreateInfo& cinfo) : active_scene_(cinfo.initial_scene) {}
+
+void TestRenderer::populate_compatibility_context(engine::RenderFrameContext& frame) {
+  ctx_.device = frame.device;
+  ctx_.swapchain = frame.swapchain;
+  ctx_.window = frame.window;
+  ctx_.shader_mgr = frame.shader_mgr;
+  ctx_.rg = frame.render_graph;
+  ctx_.buffer_copy = frame.buffer_copy;
+  ctx_.frame_staging = frame.frame_staging;
+  ctx_.imgui_renderer = nullptr;
+  ctx_.render_imgui_overlay = [imgui_renderer = frame.imgui_renderer, swapchain = frame.swapchain,
+                               frame_in_flight = frame.curr_frame_in_flight_idx,
+                               imgui_ui_active = frame.imgui_ui_active](rhi::CmdEncoder* enc) {
+    if (!imgui_ui_active || imgui_renderer == nullptr || swapchain == nullptr) {
+      return;
+    }
+    imgui_renderer->render(enc, {swapchain->desc_.width, swapchain->desc_.height}, frame_in_flight);
   };
-  update_ctx();
-  init_imgui();
-
-  {
-    LINFO("making samplers");
-    samplers_.emplace_back(device_->create_sampler_h({
-        .min_filter = rhi::FilterMode::Nearest,
-        .mag_filter = rhi::FilterMode::Nearest,
-        .mipmap_mode = rhi::FilterMode::Nearest,
-        .address_mode = rhi::AddressMode::Repeat,
-    }));
-    samplers_.emplace_back(device_->create_sampler_h({
-        .min_filter = rhi::FilterMode::Linear,
-        .mag_filter = rhi::FilterMode::Linear,
-        .mipmap_mode = rhi::FilterMode::Linear,
-        .address_mode = rhi::AddressMode::Repeat,
-    }));
-    samplers_.emplace_back(device_->create_sampler_h({
-        .min_filter = rhi::FilterMode::Nearest,
-        .mag_filter = rhi::FilterMode::Nearest,
-        .mipmap_mode = rhi::FilterMode::Nearest,
-        .address_mode = rhi::AddressMode::ClampToEdge,
-    }));
-  }
+  ctx_.model_gpu_mgr = frame.model_gpu_mgr;
+  ctx_.curr_frame_in_flight_idx = frame.curr_frame_in_flight_idx;
+  ctx_.resource_dir = frame.resource_dir ? *frame.resource_dir : std::filesystem::path{};
+  ctx_.time_sec = frame.time ? static_cast<float>(frame.time->total_seconds)
+                             : static_cast<float>(glfwGetTime());
+  ctx_.delta_time_sec = frame.time ? frame.time->delta_seconds : 0.f;
+  ctx_.imgui_ui_active = frame.imgui_ui_active;
 }
-
-void TestRenderer::update_ctx() { ctx_.time_sec = static_cast<float>(glfwGetTime()); }
 
 void TestRenderer::set_scene(TestDebugScene id) {
   if (scene_) {
@@ -147,9 +94,9 @@ void TestRenderer::on_key_event(int key, int action, int mods) {
   }
 }
 
-void TestRenderer::render(bool imgui_ui_active) {
+void TestRenderer::render(engine::RenderFrameContext& frame, const engine::RenderScene&) {
   ZoneScoped;
-  update_ctx();
+  populate_compatibility_context(frame);
   if (!have_prev_time_) {
     ctx_.delta_time_sec = 0.f;
     have_prev_time_ = true;
@@ -157,67 +104,14 @@ void TestRenderer::render(bool imgui_ui_active) {
     ctx_.delta_time_sec = ctx_.time_sec - prev_time_sec_;
   }
   prev_time_sec_ = ctx_.time_sec;
-  ctx_.imgui_ui_active = imgui_ui_active;
 
   if (scene_) {
     scene_->on_frame(ctx_);
   }
 
-  model_gpu_mgr_->set_curr_frame_idx(ctx_.curr_frame_in_flight_idx);
-  shader_mgr_->replace_dirty_pipelines();
+  ctx_.model_gpu_mgr->set_curr_frame_idx(ctx_.curr_frame_in_flight_idx);
 
   add_render_graph_passes();
-  static int i = 0;
-  const bool verbose = i++ == -1;
-  rg_.bake(window_->get_window_size(), verbose);
-
-  device_->acquire_next_swapchain_image(swapchain_);
-
-  if (!buffer_copy_mgr_.get_copies().empty()) {
-    ZoneScopedN("buffer_upload_copies");
-    auto* copy_enc = device_->begin_cmd_encoder(QueueType::Graphics);
-    for (const auto& copy : buffer_copy_mgr_.get_copies()) {
-      if (!copy.src_buf.is_valid() || !device_->get_buf(copy.src_buf)) {
-        continue;
-      }
-      if (!copy.dst_buf.is_valid() || !device_->get_buf(copy.dst_buf)) {
-        continue;
-      }
-      copy_enc->barrier(copy.src_buf, PipelineStage::AllCommands, AccessFlags::AnyWrite,
-                        PipelineStage::AllTransfer, AccessFlags::TransferRead);
-      copy_enc->barrier(copy.dst_buf, PipelineStage::AllCommands,
-                        AccessFlags::AnyRead | AccessFlags::AnyWrite, PipelineStage::AllTransfer,
-                        AccessFlags::TransferWrite);
-      copy_enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
-                                      copy.size);
-      copy_enc->barrier(copy.dst_buf, PipelineStage::AllTransfer, AccessFlags::TransferWrite,
-                        copy.dst_stage, copy.dst_access);
-    }
-    buffer_copy_mgr_.clear_copies();
-    copy_enc->end_encoding();
-  }
-
-  {
-    ZoneScopedN("execute");
-    auto* enc = device_->begin_cmd_encoder();
-    imgui_renderer_->flush_pending_texture_uploads(enc, frame_gpu_upload_allocator_);
-    {
-      const auto& pending = model_gpu_mgr_->get_pending_texture_uploads();
-      if (!pending.empty()) {
-        for (const auto& upload : pending) {
-          upload_texture_data(upload, device_->get_tex(upload.tex), frame_gpu_upload_allocator_,
-                              enc);
-        }
-        model_gpu_mgr_->clear_pending_texture_uploads();
-      }
-    }
-    rg_.execute(enc);
-    enc->end_encoding();
-  }
-
-  device_->submit_frame();
-
-  ctx_.curr_frame_in_flight_idx = (ctx_.curr_frame_in_flight_idx + 1) % k_max_frames_in_flight;
 }
 
 void TestRenderer::shutdown() {
@@ -225,14 +119,12 @@ void TestRenderer::shutdown() {
     scene_->shutdown();
     scene_.reset();
   }
-  rg_.shutdown();
-  imgui_renderer_->shutdown();
-  shader_mgr_->shutdown();
 }
 
 TestRenderer::~TestRenderer() = default;
 
-void TestRenderer::recreate_resources_on_swapchain_resize() {
+void TestRenderer::on_resize(engine::RenderFrameContext& frame) {
+  populate_compatibility_context(frame);
   if (scene_) {
     scene_->on_swapchain_resize();
   }
@@ -240,15 +132,17 @@ void TestRenderer::recreate_resources_on_swapchain_resize() {
 
 void TestRenderer::add_render_graph_passes() {
   ZoneScoped;
-  if (static_instance_mgr_.has_pending_frees(ctx_.curr_frame_in_flight_idx)) {
-    auto instance_data_id = rg_.import_external_buffer(
-        static_instance_mgr_.get_instance_data_buf(),
+  ASSERT(ctx_.model_gpu_mgr != nullptr);
+  auto& static_instance_mgr = ctx_.model_gpu_mgr->instance_mgr();
+  if (static_instance_mgr.has_pending_frees(ctx_.curr_frame_in_flight_idx)) {
+    auto instance_data_id = ctx_.rg->import_external_buffer(
+        static_instance_mgr.get_instance_data_buf(),
         RGState{.stage = PipelineStage::TopOfPipe, .layout = ResourceLayout::General},
         "instance_data_buf");
-    auto& p = rg_.add_transfer_pass("free_instance_data");
+    auto& p = ctx_.rg->add_transfer_pass("free_instance_data");
     p.write_buf(instance_data_id, PipelineStage::AllTransfer);
-    p.set_ex([this](CmdEncoder* enc) {
-      static_instance_mgr_.flush_pending_frees(ctx_.curr_frame_in_flight_idx, enc);
+    p.set_ex([this, &static_instance_mgr](CmdEncoder* enc) {
+      static_instance_mgr.flush_pending_frees(ctx_.curr_frame_in_flight_idx, enc);
     });
   }
   scene_->add_render_graph_passes();
@@ -283,8 +177,11 @@ const char* gpu_adapter_kind_str(rhi::GpuAdapterKind k) {
 
 }  // namespace
 
-void TestRenderer::imgui_device_info() {
-  const rhi::GpuAdapterInfo info = device_->query_gpu_adapter_info();
+void TestRenderer::imgui_device_info() const {
+  if (ctx_.device == nullptr) {
+    return;
+  }
+  const rhi::GpuAdapterInfo info = ctx_.device->query_gpu_adapter_info();
   ImGui::Separator();
   ImGui::TextUnformatted("GPU / adapter");
   if (!info.name.empty()) {
@@ -302,28 +199,6 @@ void TestRenderer::imgui_device_info() {
   if (info.vendor_id != 0 || info.device_id != 0) {
     ImGui::Text("Vendor ID: 0x%08X  Device ID: 0x%08X", info.vendor_id, info.device_id);
   }
-}
-
-void TestRenderer::request_render_graph_debug_dump() { rg_.request_debug_dump_once(); }
-
-void TestRenderer::init_imgui() {
-  IMGUI_CHECKVERSION();
-  ImGui::CreateContext();
-  ImPlot::CreateContext();
-
-  ImGuiIO& io = ImGui::GetIO();
-  for (const auto& entry : std::filesystem::directory_iterator(resource_dir_ / "fonts")) {
-    if (entry.path().extension() == ".ttf") {
-      auto* font = io.Fonts->AddFontFromFileTTF(entry.path().string().c_str(), 16, nullptr,
-                                                io.Fonts->GetGlyphRangesDefault());
-      add_font(entry.path().stem().string(), font);
-    }
-  }
-
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-  io.BackendRendererName = "imgui_impl_memes";
-  io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_RendererHasTextures;
-  ImGui_ImplGlfw_InitForOther(window_->get_handle(), true);
 }
 
 }  // namespace teng::gfx

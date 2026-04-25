@@ -1,4 +1,5 @@
 #include "MeshletRendererTestScene.hpp"
+// NOLINTBEGIN(misc-include-cleaner, misc-const-correctness)
 
 #include <GLFW/glfw3.h>
 
@@ -12,6 +13,7 @@
 #include "MeshletTestRenderUtil.hpp"
 #include "ResourceManager.hpp"
 #include "Window.hpp"
+#include "core/Logger.hpp"
 #include "gfx/DrawBatch.hpp"
 #include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
@@ -145,6 +147,7 @@ void MeshletRendererScene::load_scene_presets() {
   ScenePresetLoaders loaders{
       .add_model =
           [this](const std::filesystem::path& p, const glm::mat4& t) {
+            LINFO("LOADING MODEL: {}", p.string());
             models_.emplace_back(ResourceManager::get().load_model(p, t));
           },
       .add_instanced =
@@ -711,14 +714,11 @@ void MeshletRendererScene::add_render_graph_passes() {
       enc->push_constants(&shade_pc, sizeof(shade_pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
 
-      if (ctx_.imgui_ui_active && ctx_.imgui_renderer != nullptr) {
-        ctx_.imgui_renderer->render(enc,
-                                    {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height},
-                                    ctx_.curr_frame_in_flight_idx);
-      }
+      ctx_.render_imgui_overlay(enc);
       enc->end_rendering();
     });
   }
 }
 
 }  // namespace teng::gfx
+// NOLINTEND(misc-include-cleaner, misc-const-correctness)

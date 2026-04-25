@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <functional>
 #include <memory>
 
 #include "gfx/GPUFrameAllocator2.hpp"
@@ -22,6 +23,7 @@ namespace rhi {
 
 class Device;
 class Swapchain;
+class CmdEncoder;
 
 }  // namespace rhi
 
@@ -34,6 +36,7 @@ struct TestSceneContext {
   BufferCopyMgr* buffer_copy{};
   GPUFrameAllocator3* frame_staging{};
   ImGuiRenderer* imgui_renderer{};
+  std::function<void(rhi::CmdEncoder*)> render_imgui_overlay;
   ModelGPUMgr* model_gpu_mgr{};
   uint32_t curr_frame_in_flight_idx{};
   std::filesystem::path resource_dir{};
