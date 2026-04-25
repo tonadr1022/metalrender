@@ -25,11 +25,11 @@ Usage: scripts/agent_verify.sh [options]
 
   Configures CMake, builds default targets, runs teng-shaderc on changed HLSL under
   resources/shaders/hlsl (entry points only), or --all if includes/shared headers changed.
-  Optional: clang-format --dry-run on changed first-party C/C++ headers/sources under apps/, src/, cmake/
+  Optional: clang-format on changed first-party C/C++ headers/sources under apps/, src/, cmake/
   (unstaged + staged; not .mm/.m). Skips when the worktree is clean.
 
 Options:
-  --format          Run clang-format --dry-run -Werror (needs clang-format on PATH, or CLANG_FORMAT)
+  --format          Run clang-format -Werror (needs clang-format on PATH, or CLANG_FORMAT)
   --preset NAME     CMake preset (default: Debug, or CMAKE_PRESET env)
   --skip-configure  Only build and shader compile (CMake must already be configured)
   -h, --help        This message
@@ -125,6 +125,7 @@ if [[ "$DO_FORMAT" -eq 1 ]]; then
 		exit 1
 	fi
 	# Only paths with unstaged or staged edits (agent/PR scope); not whole-repo ls-files.
+	NEED_FORMAT=()
 	while IFS= read -r f; do
 		[[ -n "$f" ]] || continue
 		case "$f" in
@@ -137,13 +138,22 @@ if [[ "$DO_FORMAT" -eq 1 ]]; then
 		*) continue ;;
 		esac
 		[[ -f "$REPO_ROOT/$f" ]] || continue
-		"$CF" --dry-run -Werror "$REPO_ROOT/$f"
+		if ! "$CF" --dry-run --Werror "$REPO_ROOT/$f" >/dev/null 2>&1; then
+			NEED_FORMAT+=("$REPO_ROOT/$f")
+		fi
 	done < <(
 		{
 			git -C "$REPO_ROOT" diff --name-only --diff-filter=d
 			git -C "$REPO_ROOT" diff --cached --name-only --diff-filter=d
 		} | LC_ALL=C sort -u
 	)
+
+	if [[ "${#NEED_FORMAT[@]}" -gt 0 ]]; then
+		echo "agent_verify.sh: clang-format fixing ${#NEED_FORMAT[@]} file(s)"
+		"$CF" -i "${NEED_FORMAT[@]}"
+		# Re-check to catch tool/config errors deterministically.
+		"$CF" --dry-run --Werror "${NEED_FORMAT[@]}"
+	fi
 fi
 
 echo "agent_verify.sh: OK"

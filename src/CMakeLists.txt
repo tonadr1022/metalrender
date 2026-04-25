@@ -11,6 +11,8 @@ add_library(${target_name} SHARED
     Window.cpp
     UI.cpp
 
+    engine/Engine.cpp
+
     core/FileUtil.cpp
     core/Util.cpp
     core/StringUtil.cpp

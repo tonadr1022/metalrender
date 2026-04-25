@@ -1,6 +1,7 @@
 # Engine Tick And Layer Design
 
-Status: planning-only design note. No implementation code is proposed as final API here.
+Status: Phase 1 runtime shell implemented. The remaining sections describe the
+target direction and the next migration slices.
 
 This note refines the phase-one runtime direction from
 `plans/engine_runtime_migration_plan.md`: make `Engine::tick()` the primary
@@ -30,7 +31,7 @@ Out of scope:
 
 ## Relevant Current Code
 
-`apps/vktest/TestApp.cpp` currently owns most process/runtime concerns:
+Before Phase 1, `apps/vktest/TestApp.cpp` owned most process/runtime concerns:
 
 - Discovers `resources`, sets current working directory, creates `resources/local`,
   and loads/saves CVars.
@@ -41,6 +42,12 @@ Out of scope:
   main loop.
 - Owns the ImGui frame lifecycle and top-level debug shortcuts such as scene
   cycling, demo preset selection, and ImGui toggling.
+
+After Phase 1, `src/engine/Engine.*` owns resource path setup, CVar lifecycle,
+window/device/swapchain creation, backend selection, frame timing, queued input
+dispatch, ImGui frame begin/end, `Engine::tick()`, and `Engine::run()`.
+`apps/vktest/TestApp.*` is now a thin host that builds `EngineConfig`, installs
+`CompatibilityVktestLayer`, and calls `Engine::run()`.
 
 `apps/vktest/TestRenderer.cpp` currently combines renderer services with debug
 scene orchestration:
@@ -188,9 +195,9 @@ Target flow:
 11. Advance frame counters and frame-in-flight state.
 12. Run deferred cleanup and return `true` unless a quit condition was reached.
 
-Smoke-test quitting should remain outside the core tick decision or be expressed
-as an engine run policy. `--quit-after-frames 30` should still count completed
-frames and exit cleanly after rendering the requested number of frames.
+Smoke-test quitting is an `EngineConfig` run policy. `--quit-after-frames 30`
+counts completed frames and exits cleanly after rendering the requested number
+of frames.
 
 ## TestApp As Migration Scaffolding
 
@@ -205,14 +212,13 @@ Temporary role:
 
 Migration path:
 
-1. Extract resource path setup, CVar lifecycle, window/device/swapchain creation,
-   frame timing, and quit-after-frame handling into `Engine`.
-2. Convert `TestApp::run()` into either `Engine::run()` delegation or a thin
-   manual tick loop for compatibility.
-3. Move current key/cursor callback forwarding into engine input events plus
+1. Done: resource path setup, CVar lifecycle, window/device/swapchain creation,
+   frame timing, and quit-after-frame handling live in `Engine`.
+2. Done: `TestApp::run()` delegates to `Engine::run()`.
+3. Done: key/cursor callback forwarding flows through engine input events into
    `CompatibilityVktestLayer`.
-4. Move ImGui lifecycle to engine/ImGui service while allowing `TestApp`'s debug
-   panel to become a temporary layer panel.
+4. Done for Phase 1: ImGui frame begin/end lives in `Engine`; the vktest debug
+   panel lives in the compatibility layer.
 5. Move renderer-owned services from `TestRenderer` into `RenderService` in later
    phases.
 
@@ -254,14 +260,13 @@ Current state:
 - CMake builds Metal on Apple through `BUILD_METAL`.
 - `gfx::rhi::create_device(GfxAPI)` already returns a Vulkan or Metal device when
   the corresponding backend is compiled.
-- `TestApp` currently hard-codes `GfxAPI::Vulkan`, so the executable does not yet
-  exercise backend selection.
+- `EngineConfig` now exposes platform default, Vulkan, and Metal choices.
+- `vktest` currently requests Vulkan explicitly to preserve local behavior.
 
-Target direction:
+Implemented direction:
 
-- Add backend choice to `EngineConfig`, with values such as explicit Vulkan,
-  explicit Metal, and platform default.
-- Resolve platform default centrally:
+- Backend choice is centralized in `EngineConfig`.
+- Platform default resolves centrally:
   - Apple: prefer Metal when `METAL_BACKEND` is available, optionally allow
     Vulkan when built and requested.
   - Non-Apple: prefer Vulkan when `VULKAN_BACKEND` is available.
@@ -291,12 +296,14 @@ Validation:
 
 ### Phase 1: Engine Shell And Config
 
-Deliverables:
+Status: complete.
+
+Delivered:
 
 - Add `EngineConfig`, `EngineTime`, `EngineContext`, `Engine`, `Layer`, and
   `LayerStack`.
-- Move backend selection, window/device/swapchain ownership, CVar lifecycle, and
-  resource path setup toward `Engine`.
+- Move backend selection, window/device/swapchain ownership, CVar lifecycle,
+  quit-after-frame handling, and resource path setup into `Engine`.
 - Implement `Engine::tick()` as the primary primitive and `Engine::run()` as a
   helper loop.
 - Keep `TestApp` as a thin compatibility host.
@@ -306,15 +313,16 @@ Validation:
 - `./scripts/agent_verify.sh`
 - `./build/Debug/bin/vktest --quit-after-frames 30`
 
-### Phase 2: Compatibility Layer
+### Phase 2: Compatibility Layer Cleanup
 
 Deliverables:
 
-- Add `CompatibilityVktestLayer` to own the bridge to current `TestRenderer`.
-- Route cursor/key events through engine input dispatch into the compatibility
-  layer.
-- Preserve Tab scene cycling, Ctrl+0..9 demo presets, Alt+G ImGui toggle, and
-  meshlet startup preset behavior.
+- Keep the current `CompatibilityVktestLayer` behavior stable while deciding
+  whether it should remain inside `TestApp.cpp` or move to a named app file.
+- Add focused smoke coverage or a small app-side harness proving manual
+  `Engine::tick()` usage.
+- Preserve Tab scene cycling, Ctrl+0..9 demo presets, Alt+G ImGui toggle,
+  render graph dump UI, and meshlet startup preset behavior.
 
 Validation:
 
@@ -384,10 +392,12 @@ Validation:
 
 ## Validation Strategy
 
-Planning-only validation for this note:
+Phase 1 implementation validation:
 
-- Confirm the note references current code accurately.
-- No build required because no implementation files changed.
+- Run `./scripts/agent_verify.sh` from repo root.
+- Run `./build/Debug/bin/vktest --quit-after-frames 30`.
+- Confirm `src/engine` does not include Vulkan or Metal concrete backend
+  headers.
 
 Validation for future code phases:
 
@@ -403,17 +413,14 @@ Validation for future code phases:
 
 ## Open Questions
 
-- Should backend selection be a command-line flag in `vktest` immediately, or
-  only an `EngineConfig` field until Metal parity is ready for app use?
-- Should ImGui frame ownership live directly in `Engine` or in an engine-owned
-  `ImGuiService` installed only when debug/editor layers are present?
-- Should `CompatibilityVktestLayer` own `gfx::TestRenderer` directly, or should
-  it call a smaller adapter so `TestRenderer` extraction can proceed with less
-  churn?
-- Should quit-after-frame counting belong to `Engine::run()` policy, the
-  executable, or a test/automation layer?
-- How much of `ResourceManager::init()` should remain in compatibility code
-  during phase one versus being wrapped immediately by an engine resource
-  service?
+- Should backend selection become a `vktest` command-line flag before Metal
+  parity work, or stay as an `EngineConfig` field for now?
+- Should ImGui frame ownership remain directly in `Engine`, or move into an
+  engine-owned `ImGuiService` before editor work starts?
+- Should `CompatibilityVktestLayer` stay in `TestApp.cpp`, move to a named
+  app-side source file, or call a smaller adapter as `TestRenderer` extraction
+  proceeds?
+- When should `ResourceManager::init()` leave compatibility code and become an
+  engine asset/resource service boundary?
 - What is the first Metal validation target: successful device/window/swapchain
   startup, or full parity with the current meshlet vktest path?

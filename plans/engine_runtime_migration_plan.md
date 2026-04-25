@@ -1,6 +1,6 @@
 # Engine Runtime Migration Plan
 
-Status: second draft after architecture answers.
+Status: Phase 1 runtime shell implemented; later Flecs, render service, asset, and editor phases remain planned.
 
 This plan treats the engine as a long-term runtime/editor foundation, not as a cleaned-up version of the current demo harness. The current `vktest`, `TestRenderer`, `ITestScene`, and `MeshletRendererScene` code should keep working during migration, but they are scaffolding. The destination is a tick-driven, layer-composed engine with data-first Flecs scenes, stable IDs, renderer services, and an editor layer on top of the same runtime.
 
@@ -490,28 +490,34 @@ Exit criteria:
 
 ### Phase 1: Tick-Driven Engine And Layer Skeleton
 
-Deliverables:
+Status: complete.
+
+Delivered:
 
 - Add `src/engine/Engine.hpp/.cpp`.
 - Add `EngineConfig`, `EngineContext`, `EngineTime`.
 - Add `Layer` and `LayerStack`.
-- Move frame timing toward `Engine::tick()`.
-- Add backend selection config that can preserve Vulkan and Metal.
-- Keep `vktest` behavior unchanged through compatibility wiring.
+- Move frame timing, resource/local-resource path setup, CVar lifecycle,
+  window/device/swapchain ownership, and quit-after-frame handling into
+  `Engine`.
+- Add backend selection config with platform default, Vulkan, and Metal choices.
+- Keep `vktest` behavior unchanged through `CompatibilityVktestLayer` in
+  `apps/vktest/TestApp.cpp`.
 
 Scaffolding kept:
 
-- `TestApp`.
+- `TestApp` as a thin executable compatibility host.
 - `TestRenderer`.
 - `ITestScene`.
 - `MeshletRendererScene`.
+- Global `ResourceManager` inside compatibility wiring.
 
 Exit criteria:
 
-- `vktest --quit-after-frames 30` works.
-- Engine can be ticked manually.
-- Standalone `run()` is implemented as a helper over `tick()`.
-- `./scripts/agent_verify.sh` passes.
+- `Engine::tick()` is public and can be driven manually.
+- `Engine::run()` is implemented as a helper loop over `tick()`.
+- `vktest --quit-after-frames 30` and `./scripts/agent_verify.sh` are the
+  validation guardrails for this completed slice.
 
 ### Phase 2: Flecs Submodule And Data Scene Foundation
 
@@ -659,19 +665,22 @@ Exit criteria:
 
 - Lua can be added without replacing scene, entity, component, or layer architecture.
 
-## First Concrete Code Slice
+## Completed First Code Slice
 
-The first implementation slice should not touch meshlet internals.
+The first implementation slice created the runtime control surface without
+touching meshlet internals, Flecs, stable IDs, or renderer extraction:
 
-1. Add `engine::EngineTime`.
-2. Add `engine::EngineConfig`.
-3. Add `engine::EngineContext`.
-4. Add `engine::Layer` and `engine::LayerStack`.
-5. Add `engine::Engine` with `tick()` and `run()` scaffolding.
-6. Keep `TestApp` as a compatibility shell until the engine can own its setup.
-7. Add comments or names that mark compatibility paths clearly.
+1. `engine::EngineTime`.
+2. `engine::EngineConfig`.
+3. `engine::EngineContext`.
+4. `engine::Layer` and `engine::LayerStack`.
+5. `engine::Engine` with public `tick()` and `run()`.
+6. `TestApp` as a compatibility host over `Engine`.
+7. `CompatibilityVktestLayer` as the explicit bridge to current debug rendering.
 
-This slice creates the future control surface without mixing in Flecs, asset IDs, or renderer surgery at the same time.
+Next implementation slice: start the Flecs scene foundation or, if smaller
+runtime cleanup is preferred first, move `CompatibilityVktestLayer` into a named
+app source/header and add focused smoke coverage for manual `Engine::tick()`.
 
 ## Validation Strategy
 
@@ -695,8 +704,7 @@ These should become small plans before the related implementation phase:
 
 1. Flecs submodule/CMake integration plan.
 2. Stable ID and asset handle design note.
-3. Layer update order and editor play-mode semantics.
+3. Editor play-mode semantics on top of the implemented layer/tick order.
 4. RenderScene schema for 2D plus 3D.
 5. Asset service boundary and `ResourceManager` retirement plan.
-6. Metal/Vulkan backend selection policy for `EngineConfig`.
-
+6. Metal validation plan for the implemented `EngineConfig` backend selection.
