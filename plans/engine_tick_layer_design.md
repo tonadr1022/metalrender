@@ -3,6 +3,8 @@
 Status: Phase 1 runtime shell implemented. The remaining sections describe the
 target direction and the next migration slices.
 
+This document is a Phase 1 design record and detailed reference note. The canonical migration roadmap (phases, sequencing, and destination architecture) lives in `plans/engine_runtime_migration_plan.md`.
+
 This note refines the phase-one runtime direction from
 `plans/engine_runtime_migration_plan.md`: make `Engine::tick()` the primary
 runtime primitive, introduce an ordered layer stack, keep current vktest behavior

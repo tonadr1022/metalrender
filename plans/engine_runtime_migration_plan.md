@@ -141,6 +141,8 @@ The important shift is that `Scene` is not a polymorphic gameplay object. It is 
 
 The engine should use layers because runtime, debug UI, editor, and future scripting need different build/run compositions without forking the architecture.
 
+For Phase 1 tick/layer ownership boundaries, layer ordering, and ImGui lifecycle constraints (captured during the runtime shell work), see `plans/engine_tick_layer_design.md`.
+
 Initial API sketch:
 
 ```cpp
