@@ -189,8 +189,8 @@ void MemeRenderer123::render([[maybe_unused]] const RenderArgs& args) {
   device_->submit_frame();
   frame_num_++;
   curr_frame_idx_ = frame_num_ % device_->get_info().frames_in_flight;
-  frame_gpu_upload_allocator_.set_frame_idx(curr_frame_idx_);
-  frame_uniform_gpu_allocator_.set_frame_idx(curr_frame_idx_);
+  frame_gpu_upload_allocator_.set_frame_idx_and_reset_bufs(curr_frame_idx_);
+  frame_uniform_gpu_allocator_.set_frame_idx_and_reset_bufs(curr_frame_idx_);
 }
 
 uint32_t MemeRenderer123::get_bindless_idx(const rhi::BufferHandleHolder& buf) const {

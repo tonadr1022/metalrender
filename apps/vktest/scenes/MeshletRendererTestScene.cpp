@@ -424,7 +424,7 @@ void MeshletRendererScene::add_render_graph_passes() {
     });
   }
 
-  frame_uniform_gpu_allocator_.set_frame_idx(ctx_.curr_frame_in_flight_idx);
+  frame_uniform_gpu_allocator_.set_frame_idx_and_reset_bufs(ctx_.curr_frame_in_flight_idx);
 
   frame_num_++;
 

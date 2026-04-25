@@ -54,7 +54,7 @@ struct GPUFrameAllocator3 {
   BufferSuballoc alloc2(uint32_t size, void* data);
   Alloc alloc(uint32_t size, void* data);
 
-  void set_frame_idx(uint32_t frame_idx);
+  void set_frame_idx_and_reset_bufs(uint32_t frame_idx);
 
   struct StagingBuffer {
     rhi::BufferHandleHolder buffer;

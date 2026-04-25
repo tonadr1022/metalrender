@@ -121,7 +121,7 @@ BufferSuballoc GPUFrameAllocator3::alloc2(uint32_t size, void* data) {
   };
 }
 
-void GPUFrameAllocator3::set_frame_idx(uint32_t frame_idx) {
+void GPUFrameAllocator3::set_frame_idx_and_reset_bufs(uint32_t frame_idx) {
   frame_idx_ = frame_idx;
   for (auto& buf : curr_frame().full_staging_buffers) {
     curr_frame().free_staging_buffers.emplace_back(std::move(buf));

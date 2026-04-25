@@ -218,10 +218,8 @@ void RenderService::render_scene(const RenderScene& scene) {
 
   frame_.curr_frame_in_flight_idx =
       (frame_.curr_frame_in_flight_idx + 1) % device_->frames_in_flight();
-  // Match MemeRenderer123 / legacy TestRenderer: reset staging ring only after copies for this
-  // frame are flushed and submitted, so pending BufferCopyMgr uploads never reference reset slots.
   if (frame_gpu_upload_allocator_) {
-    frame_gpu_upload_allocator_->set_frame_idx(frame_.curr_frame_in_flight_idx);
+    frame_gpu_upload_allocator_->set_frame_idx_and_reset_bufs(frame_.curr_frame_in_flight_idx);
   }
 }
 
