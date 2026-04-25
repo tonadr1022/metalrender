@@ -351,6 +351,7 @@ Completed:
 - Expose it through `Engine` and `EngineContext`.
 - Add `IRenderer` and `RenderFrameContext`.
 - Add basic render graph bake/execute/present orchestration for renderers owned by `RenderService`.
+- Preserve scene cycling, preset loading, render graph debug dump, uploads, resize handling, and swapchain submission.
 
 Remaining:
 
@@ -358,7 +359,6 @@ Remaining:
 - Keep `TestSceneContext` populated for existing `ITestScene` code, but name the bridge as compatibility.
 - Add `IRenderer` with a compatibility implementation that delegates to the existing graph-pass path.
 - Move ImGui renderer ownership into the shared overlay/debug service path while preserving current overlay behavior.
-- Preserve scene cycling, preset loading, render graph debug dump, uploads, resize handling, and swapchain submission.
 
 Slice 3: Render from extracted data in a minimal path.
 

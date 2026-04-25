@@ -34,6 +34,12 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo) : active_scene_(cinfo.initia
 void TestRenderer::populate_compatibility_context(engine::RenderFrameContext& frame) {
   ctx_.device = frame.device;
   ctx_.swapchain = frame.swapchain;
+  // TODO: this might cause pain on resize. if it's called on render() always, maybe don't call it
+  // on resize.
+  ctx_.curr_swapchain_rg_id = frame.render_graph->import_external_texture(
+      frame.swapchain->get_current_texture(),
+      RGState{.stage = rhi::PipelineStage::BottomOfPipe, .layout = rhi::ResourceLayout::Undefined},
+      "swapchain");
   ctx_.window = frame.window;
   ctx_.shader_mgr = frame.shader_mgr;
   ctx_.rg = frame.render_graph;

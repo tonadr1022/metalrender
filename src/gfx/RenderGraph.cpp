@@ -718,6 +718,14 @@ void RenderGraph::Pass::w_swapchain_tex(rhi::Swapchain* swapchain) {
   add_write_usage(swapchain_id, rhi::PipelineStage::ColorAttachmentOutput,
                   rhi::AccessFlags::ColorAttachmentWrite, true);
 }
+
+void RenderGraph::Pass::w_swapchain_tex_new(rhi::Swapchain* swapchain, RGResourceId swapchain_id) {
+  ASSERT(swapchain);
+  swapchain_write_ = swapchain;
+  add_write_usage(swapchain_id, rhi::PipelineStage::ColorAttachmentOutput,
+                  rhi::AccessFlags::ColorAttachmentWrite, true);
+}
+
 RenderGraph::ResourceRecord RenderGraph::create_resource_record(RGResourceType type,
                                                                 uint32_t physical_idx,
                                                                 std::string_view debug_name) {

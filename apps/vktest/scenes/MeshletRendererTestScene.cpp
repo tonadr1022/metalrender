@@ -664,7 +664,9 @@ void MeshletRendererScene::add_render_graph_passes() {
       p.sample_tex(final_depth_pyramid_rg, rhi::PipelineStage::FragmentShader,
                    RgSubresourceRange::all_mips_all_slices());
     }
-    p.w_swapchain_tex(ctx_.swapchain);
+
+    p.w_swapchain_tex_new(ctx_.swapchain, ctx_.curr_swapchain_rg_id);
+
     p.set_ex([this, gbuffer_a_id, gbuffer_b_id, depth_att_id, shadow_output, depth_reduce_ran,
               globals_cb_buf, view_cb_suballoc](CmdEncoder* enc) {
       enc->begin_rendering({

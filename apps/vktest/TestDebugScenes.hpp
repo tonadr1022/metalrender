@@ -30,6 +30,7 @@ class CmdEncoder;
 struct TestSceneContext {
   rhi::Device* device{};
   rhi::Swapchain* swapchain{};
+  RGResourceId curr_swapchain_rg_id{};
   teng::Window* window{};
   ShaderManager* shader_mgr{};
   RenderGraph* rg{};
