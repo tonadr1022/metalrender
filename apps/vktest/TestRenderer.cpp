@@ -39,6 +39,7 @@ void TestRenderer::populate_compatibility_context(engine::RenderFrameContext& fr
   ctx_.buffer_copy = frame.buffer_copy;
   ctx_.frame_staging = frame.frame_staging;
   ctx_.model_gpu_mgr = frame.model_gpu_mgr;
+  ctx_.scene_manager = frame.scenes;
   ctx_.curr_frame_in_flight_idx = frame.curr_frame_in_flight_idx;
   ctx_.resource_dir = frame.resource_dir ? *frame.resource_dir : std::filesystem::path{};
   ctx_.time_sec = frame.time ? static_cast<float>(frame.time->total_seconds)
@@ -59,6 +60,28 @@ void TestRenderer::set_scene(TestDebugScene id) {
     scene_->apply_demo_scene_preset(0);
   }
   LINFO("vktest scene: {}", to_string(id));
+}
+
+void TestRenderer::update(engine::RenderFrameContext& frame) {
+  ZoneScoped;
+  populate_compatibility_context(frame);
+  if (!have_prev_time_) {
+    ctx_.delta_time_sec = 0.f;
+    have_prev_time_ = true;
+  } else {
+    ctx_.delta_time_sec = ctx_.time_sec - prev_time_sec_;
+  }
+  prev_time_sec_ = ctx_.time_sec;
+
+  if (!scene_) {
+    return;
+  }
+  scene_->on_frame(ctx_);
+  if (ctx_.scene_manager) {
+    if (auto* active_scene = ctx_.scene_manager->active_scene()) {
+      scene_->sync_compatibility_ecs_scene(*active_scene);
+    }
+  }
 }
 
 void TestRenderer::apply_demo_scene_preset(size_t index) {
@@ -87,18 +110,6 @@ void TestRenderer::on_key_event(int key, int action, int mods) {
 void TestRenderer::render(engine::RenderFrameContext& frame, const engine::RenderScene&) {
   ZoneScoped;
   populate_compatibility_context(frame);
-  if (!have_prev_time_) {
-    ctx_.delta_time_sec = 0.f;
-    have_prev_time_ = true;
-  } else {
-    ctx_.delta_time_sec = ctx_.time_sec - prev_time_sec_;
-  }
-  prev_time_sec_ = ctx_.time_sec;
-
-  if (scene_) {
-    scene_->on_frame(ctx_);
-  }
-
   ctx_.model_gpu_mgr->set_curr_frame_idx(ctx_.curr_frame_in_flight_idx);
 
   add_render_graph_passes();

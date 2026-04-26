@@ -1,6 +1,6 @@
 #pragma once
 
-#include <utility>
+#include <variant>
 
 #include "core/Config.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -113,8 +113,8 @@ enum class PipelineType : uint8_t { Graphics, Compute };
 class Pipeline {
  public:
   Pipeline() = default;
-  explicit Pipeline(GraphicsPipelineCreateInfo ginfo) : desc_(std::move(ginfo)) {}
-  explicit Pipeline(ShaderCreateInfo cinfo) : desc_(std::move(cinfo)) {}
+  explicit Pipeline(const GraphicsPipelineCreateInfo& ginfo) : desc_(ginfo) {}
+  explicit Pipeline(const ShaderCreateInfo& cinfo) : desc_(cinfo) {}
 
   [[nodiscard]] PipelineType type() const {
     if (std::holds_alternative<GraphicsPipelineCreateInfo>(desc_)) {

@@ -1,5 +1,4 @@
 #include "MeshletRendererTestScene.hpp"
-// NOLINTBEGIN(misc-include-cleaner, misc-const-correctness)
 
 #include <GLFW/glfw3.h>
 
@@ -14,6 +13,9 @@
 #include "ResourceManager.hpp"
 #include "Window.hpp"
 #include "core/Logger.hpp"
+#include "engine/scene/Scene.hpp"
+#include "engine/scene/SceneIds.hpp"
+#include "engine/scene/SceneManager.hpp"
 #include "gfx/DrawBatch.hpp"
 #include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
@@ -34,9 +36,13 @@ using namespace rhi;
 
 namespace {
 
+constexpr engine::EntityGuid k_ecs_suzanne_camera_guid{0x73757a616e6e6501ull};
+constexpr engine::EntityGuid k_ecs_suzanne_light_guid{0x73757a616e6e6502ull};
+constexpr engine::EntityGuid k_ecs_suzanne_mesh_guid{0x73757a616e6e6503ull};
+
 glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
   // clang-format off
-  float f = 1.0f / tanf(fov_y / 2.0f);
+  const float f = 1.0f / tanf(fov_y / 2.0f);
   return {
     f / aspect, 0.0f, 0.0f, 0.0f,
     0.0f, f, 0.0f, 0.0f,
@@ -144,7 +150,7 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
 
 void MeshletRendererScene::load_scene_presets() {
   scene_presets_.clear();
-  ScenePresetLoaders loaders{
+  const ScenePresetLoaders loaders{
       .add_model =
           [this](const std::filesystem::path& p, const glm::mat4& t) {
             LINFO("LOADING MODEL: {}", p.string());
@@ -172,6 +178,56 @@ void MeshletRendererScene::clear_all_models() {
   models_.clear();
 }
 
+void MeshletRendererScene::clear_ecs_preset_entities() {
+  ecs_suzanne_preset_active_ = false;
+  if (!ctx_.scene_manager) {
+    return;
+  }
+  auto* scene = ctx_.scene_manager->active_scene();
+  if (!scene) {
+    return;
+  }
+  scene->destroy_entity(k_ecs_suzanne_camera_guid);
+  scene->destroy_entity(k_ecs_suzanne_light_guid);
+  scene->destroy_entity(k_ecs_suzanne_mesh_guid);
+}
+
+void MeshletRendererScene::author_ecs_suzanne_preset() {
+  if (!ctx_.scene_manager) {
+    return;
+  }
+  auto* scene = ctx_.scene_manager->active_scene();
+  if (!scene) {
+    scene = &ctx_.scene_manager->create_scene("vktest compatibility render scene");
+  }
+
+  scene->ensure_entity(k_ecs_suzanne_camera_guid, "suzanne camera");
+  scene->set_camera(k_ecs_suzanne_camera_guid, {
+                                                   .fov_y = 1.04719755f,
+                                                   .z_near = 0.1f,
+                                                   .z_far = 10000.f,
+                                                   .primary = true,
+                                               });
+
+  scene->ensure_entity(k_ecs_suzanne_light_guid, "suzanne directional light");
+  scene->set_directional_light(k_ecs_suzanne_light_guid, {
+                                                             .direction = toward_light_effective_,
+                                                             .color = glm::vec3{1.f},
+                                                             .intensity = 1.f,
+                                                         });
+
+  scene->ensure_entity(k_ecs_suzanne_mesh_guid, "suzanne mesh");
+  scene->set_transform(k_ecs_suzanne_mesh_guid, {});
+  scene->set_local_to_world(k_ecs_suzanne_mesh_guid, {.value = glm::mat4{1.f}});
+  scene->set_mesh_renderable(k_ecs_suzanne_mesh_guid,
+                             {
+                                 .model = engine::AssetId::from_path(k_suzanne_path),
+                             });
+
+  ecs_suzanne_preset_active_ = true;
+  sync_compatibility_ecs_scene(*scene);
+}
+
 void MeshletRendererScene::apply_preset(size_t idx) {
   if (scene_presets_.empty() || idx >= scene_presets_.size()) {
     return;
@@ -188,6 +244,10 @@ void MeshletRendererScene::apply_preset(size_t idx) {
   }
 
   clear_all_models();
+  clear_ecs_preset_entities();
+  if (idx == 0) {
+    author_ecs_suzanne_preset();
+  }
   preset.load_fn();
 }
 
@@ -226,6 +286,30 @@ void MeshletRendererScene::on_frame(const TestSceneContext& ctx) {
   }
 }
 
+void MeshletRendererScene::sync_compatibility_ecs_scene(engine::Scene& scene) {
+  if (!ecs_suzanne_preset_active_) {
+    return;
+  }
+
+  Camera& app_camera = fps_camera_.camera();
+  app_camera.calc_vectors();
+  scene.set_transform(k_ecs_suzanne_camera_guid, {.translation = app_camera.pos});
+  scene.set_local_to_world(k_ecs_suzanne_camera_guid,
+                           {.value = glm::inverse(app_camera.get_view_mat())});
+  scene.set_camera(k_ecs_suzanne_camera_guid, {
+                                                  .fov_y = 1.04719755f,
+                                                  .z_near = 0.1f,
+                                                  .z_far = 10000.f,
+                                                  .primary = true,
+                                              });
+
+  scene.set_directional_light(k_ecs_suzanne_light_guid, {
+                                                            .direction = toward_light_effective_,
+                                                            .color = glm::vec3{1.f},
+                                                            .intensity = 1.f,
+                                                        });
+}
+
 void MeshletRendererScene::on_cursor_pos(double x, double y) { fps_camera_.on_cursor_pos(x, y); }
 
 void MeshletRendererScene::on_key_event(int key, int action, int mods) {
@@ -239,19 +323,18 @@ void MeshletRendererScene::on_imgui() {
   ImGui::Begin("Meshlet renderer");
   if (!scene_presets_.empty()) {
     ImGui::SeparatorText("Scene presets");
-    static int scene_preset_selection = 0;
-    scene_preset_selection =
-        std::clamp(scene_preset_selection, 0, static_cast<int>(scene_presets_.size()) - 1);
+    static size_t scene_preset_selection = 0;
+    ASSERT(!scene_presets_.empty());
     const float list_h = ImGui::GetTextLineHeightWithSpacing() * 7.0f;
     if (ImGui::BeginListBox("##scene_presets", ImVec2(-FLT_MIN, list_h))) {
-      for (int i = 0; i < static_cast<int>(scene_presets_.size()); ++i) {
+      for (size_t i = 0; i < scene_presets_.size(); ++i) {
         ImGui::PushID(i);
         const bool selected = (scene_preset_selection == i);
-        if (ImGui::Selectable(scene_presets_[static_cast<size_t>(i)].name.c_str(), selected,
+        if (ImGui::Selectable(scene_presets_[i].name.c_str(), selected,
                               ImGuiSelectableFlags_AllowDoubleClick)) {
           scene_preset_selection = i;
           if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-            apply_preset(static_cast<size_t>(i));
+            apply_preset(i);
           }
         }
         ImGui::PopID();
@@ -259,7 +342,7 @@ void MeshletRendererScene::on_imgui() {
       ImGui::EndListBox();
     }
     if (ImGui::Button("Load preset", ImVec2(-FLT_MIN, 0))) {
-      apply_preset(static_cast<size_t>(scene_preset_selection));
+      apply_preset(scene_preset_selection);
     }
     ImGui::Separator();
   }
@@ -310,7 +393,7 @@ void MeshletRendererScene::on_imgui() {
 ViewData MeshletRendererScene::prepare_view_data() {
   const float aspect = static_cast<float>(ctx_.swapchain->desc_.width) /
                        std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height));
-  float fov = 60.f;
+  const float fov = 60.f;
   const glm::mat4 proj = infinite_perspective_proj(glm::radians(fov), aspect, 0.1f);
   fps_camera_.camera().calc_vectors();
   const glm::mat4 view = fps_camera_.camera().get_view_mat();
@@ -386,7 +469,7 @@ void MeshletRendererScene::add_render_graph_passes() {
     if (need == 0) {
       return;
     }
-    rhi::Buffer* cur =
+    const rhi::Buffer* cur =
         meshlet_vis_buf_.handle.is_valid() ? ctx_.device->get_buf(meshlet_vis_buf_) : nullptr;
     if (cur == nullptr || cur->size() < need) {
       if (meshlet_vis_buf_.handle.is_valid()) {
@@ -501,7 +584,7 @@ void MeshletRendererScene::add_render_graph_passes() {
       ctx_.rg->create_texture({.format = rhi::TextureFormat::R16G16B16A16Sfloat}, "gbuffer_a");
   RGResourceId gbuffer_b_id =
       ctx_.rg->create_texture({.format = rhi::TextureFormat::R16G16B16A16Sfloat}, "gbuffer_b");
-  RGResourceId depth_att = ctx_.rg->create_texture(
+  const RGResourceId depth_att = ctx_.rg->create_texture(
       {.format = TextureFormat::D32float, .size_class = SizeClass::Swapchain},
       "meshlet_hello_depth_att");
   RGResourceId depth_att_id{};
@@ -538,7 +621,7 @@ void MeshletRendererScene::add_render_graph_passes() {
     p.set_ex([this, early_draws, depth_att_id, view_cb_suballoc, globals_cb_buf, gbuffer_a_id,
               gbuffer_b_id, meshlet_vis_rg_id, meshlet_stats_rg, meshlet_flags,
               cull_early_cb](CmdEncoder* enc) {
-      glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
+      const glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
       const glm::uvec2 vp_dims{ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
       enc->begin_rendering({
           RenderAttInfo::color_att(ctx_.rg->get_att_img(gbuffer_a_id), LoadOp::Clear,
@@ -680,7 +763,7 @@ void MeshletRendererScene::add_render_graph_passes() {
                     sizeof(CSMData));
       enc->set_wind_order(rhi::WindOrder::CounterClockwise);
       enc->set_cull_mode(rhi::CullMode::None);
-      glm::uvec2 dims = {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
+      const glm::uvec2 dims = {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
       enc->set_viewport({0, 0}, dims);
       enc->set_scissor({0, 0}, dims);
 
@@ -721,4 +804,3 @@ void MeshletRendererScene::add_render_graph_passes() {
 }
 
 }  // namespace teng::gfx
-// NOLINTEND(misc-include-cleaner, misc-const-correctness)

@@ -1,10 +1,10 @@
 #pragma once
 
+#include <flecs.h>
+
 #include <string>
 #include <string_view>
 #include <unordered_map>
-
-#include <flecs.h>
 
 #include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/SceneIds.hpp"
@@ -26,8 +26,14 @@ class Scene {
   [[nodiscard]] const flecs::world& world() const { return world_; }
 
   flecs::entity create_entity(EntityGuid guid = make_entity_guid(), std::string_view name = {});
+  void ensure_entity(EntityGuid guid, std::string_view name = {});
   void destroy_entity(EntityGuid guid);
   [[nodiscard]] flecs::entity find_entity(EntityGuid guid) const;
+  bool set_transform(EntityGuid guid, const Transform& transform) const;
+  bool set_local_to_world(EntityGuid guid, const LocalToWorld& local_to_world) const;
+  bool set_camera(EntityGuid guid, const Camera& camera) const;
+  bool set_directional_light(EntityGuid guid, const DirectionalLight& light) const;
+  bool set_mesh_renderable(EntityGuid guid, const MeshRenderable& mesh) const;
 
   bool tick(float delta_seconds);
 

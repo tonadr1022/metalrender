@@ -25,6 +25,7 @@ class Window;
 namespace teng::engine {
 
 struct EngineTime;
+class SceneManager;
 
 struct RenderFrameContext {
   gfx::rhi::Device* device{};
@@ -35,6 +36,7 @@ struct RenderFrameContext {
   gfx::BufferCopyMgr* buffer_copy{};
   gfx::GPUFrameAllocator3* frame_staging{};
   gfx::ModelGPUMgr* model_gpu_mgr{};
+  SceneManager* scenes{};
   const std::filesystem::path* resource_dir{};
   const EngineTime* time{};
   glm::uvec2 output_extent{};

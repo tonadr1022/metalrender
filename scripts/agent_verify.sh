@@ -105,43 +105,7 @@ if [[ "$DO_TIDY" -eq 1 ]]; then
 fi
 
 if [[ "$DO_TIDY" -eq 1 ]]; then
-	if [[ ! -f "$BUILD_DIR/compile_commands.json" ]]; then
-		echo "agent_verify.sh: missing $BUILD_DIR/compile_commands.json (re-run without --skip-configure)" >&2
-		exit 1
-	fi
-
-	TIDY_FILES=()
-	while IFS= read -r f; do
-		[[ -n "$f" ]] || continue
-		case "$f" in
-		apps/*|src/*) ;;
-		*) continue ;;
-		esac
-		case "$f" in
-		*.c|*.cc|*.cpp|*.cxx|*.h|*.hh|*.hpp|*.hxx|*.inl) ;;
-		*) continue ;;
-		esac
-		[[ -f "$REPO_ROOT/$f" ]] || continue
-		TIDY_FILES+=("$REPO_ROOT/$f")
-	done < <(
-		{
-			git -C "$REPO_ROOT" diff --name-only --diff-filter=d
-			git -C "$REPO_ROOT" diff --cached --name-only --diff-filter=d
-		} | LC_ALL=C sort -u
-	)
-
-	if [[ "${#TIDY_FILES[@]}" -gt 0 ]]; then
-		RCT="${RUN_CLANG_TIDY:-run-clang-tidy}"
-		if command -v "$RCT" >/dev/null 2>&1; then
-			# run-clang-tidy understands compile_commands.json and parallelizes by default.
-			"$RCT" -p "$BUILD_DIR" "${TIDY_FILES[@]}"
-		else
-			# Fallback: invoke clang-tidy per file (slower, but avoids extra dependency).
-			for f in "${TIDY_FILES[@]}"; do
-				"$CT" -p "$BUILD_DIR" "$f"
-			done
-		fi
-	fi
+	"$SCRIPT_DIR/run_clang_tidy.sh"
 fi
 
 # Match apps/shaderc/main.cpp: only *.vert|frag|comp|mesh|task.hlsl are entry points; .hlsli/.h/etc. need --all.

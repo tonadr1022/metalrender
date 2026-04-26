@@ -67,7 +67,7 @@ struct HashedString {
   uint32_t hash_value;
 
   // explicit keyword
-  // NOLINTBEGIN
+  // NOLINTBEGIN(google-explicit-constructor)
   constexpr HashedString(uint32_t hash) noexcept : hash_value(hash) {}
   constexpr HashedString(const char* s) noexcept : hash_value(0) {
     hash_value = fnv1a_32(s, str_len(s));
@@ -80,7 +80,7 @@ struct HashedString {
   }
   constexpr operator uint32_t() const noexcept { return hash_value; }
   // explicit keyword
-  // NOLINTEND
+  // NOLINTEND(google-explicit-constructor)
 };
 
 }  // namespace util::hash

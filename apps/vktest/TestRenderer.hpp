@@ -18,6 +18,7 @@ class TestRenderer final : public engine::IRenderer {
     TestDebugScene initial_scene{TestDebugScene::MeshletRenderer};
   };
   explicit TestRenderer(const CreateInfo& cinfo);
+  void update(engine::RenderFrameContext& frame);
   void render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) override;
   void imgui_scene_overlay();
   void on_cursor_pos(double x, double y);

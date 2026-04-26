@@ -11,6 +11,11 @@ namespace teng {
 
 class Window;
 
+namespace engine {
+class Scene;
+class SceneManager;
+}  // namespace engine
+
 namespace gfx {
 
 class ShaderManager;
@@ -35,6 +40,7 @@ struct TestSceneContext {
   BufferCopyMgr* buffer_copy{};
   GPUFrameAllocator3* frame_staging{};
   ModelGPUMgr* model_gpu_mgr{};
+  engine::SceneManager* scene_manager{};
   uint32_t curr_frame_in_flight_idx{};
   std::filesystem::path resource_dir{};
   float time_sec{};
@@ -62,6 +68,7 @@ class ITestScene {
   virtual void on_key_event(int, int, int) {}
   virtual void on_imgui() {}
   virtual void apply_demo_scene_preset(size_t) {}
+  virtual void sync_compatibility_ecs_scene(engine::Scene&) {}
 
  protected:
   [[maybe_unused]] const TestSceneContext& ctx_;

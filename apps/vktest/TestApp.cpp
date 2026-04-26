@@ -83,6 +83,11 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
     renderer_->imgui_scene_overlay();
   }
 
+  void on_update(teng::engine::EngineContext& ctx,
+                 const teng::engine::EngineTime&) override {
+    renderer_->update(ctx.renderer().frame_context());
+  }
+
   void on_render(teng::engine::EngineContext& ctx) override {
     ctx.renderer().enqueue_active_scene();
   }

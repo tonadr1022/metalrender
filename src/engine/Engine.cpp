@@ -203,9 +203,9 @@ gfx::rhi::GfxAPI Engine::resolve_gfx_api() const {
     default:
 #if defined(__APPLE__) && defined(METAL_BACKEND)
       return gfx::rhi::GfxAPI::Metal;
-#elif defined(VULKAN_BACKEND)
+#elifdef VULKAN_BACKEND
       return gfx::rhi::GfxAPI::Vulkan;
-#elif defined(METAL_BACKEND)
+#elifdef METAL_BACKEND
       return gfx::rhi::GfxAPI::Metal;
 #else
       LCRITICAL("No graphics backend compiled");

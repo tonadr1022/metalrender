@@ -4,6 +4,7 @@
 #include <cmath>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/vec4.hpp>
 #include <limits>
 #include <span>
 #include <string>
@@ -30,7 +31,7 @@ void calc_frustum_corners_world_space(std::span<glm::vec4> corners, const glm::m
   for (uint32_t z = 0, i = 0; z < 2; z++) {
     for (uint32_t y = 0; y < 2; y++) {
       for (uint32_t x = 0; x < 2; x++, i++) {
-        glm::vec4 pt =
+        const glm::vec4 pt =
             inv_vp * glm::vec4((2.f * x) - 1.f, (2.f * y) - 1.f, static_cast<float>(z), 1.f);
         corners[i] = pt / pt.w;
       }
@@ -273,7 +274,8 @@ MeshletCsmRenderer::Output MeshletCsmRenderer::bake(const BakeRequest& req) {
   }
 
   FrameData frame = build_frame_data(req.camera_view, req.toward_light);
-  BufferSuballoc csm_cb = req.frame_uniform_allocator.alloc2(sizeof(CSMData), &frame.csm_data);
+  const BufferSuballoc csm_cb =
+      req.frame_uniform_allocator.alloc2(sizeof(CSMData), &frame.csm_data);
 
   std::array<BufferSuballoc, CSM_MAX_CASCADES> view_cbs{};
   std::array<BufferSuballoc, CSM_MAX_CASCADES> cull_cbs{};
@@ -314,7 +316,7 @@ MeshletCsmRenderer::Output MeshletCsmRenderer::bake(const BakeRequest& req) {
     visible_count = cascade_draws[cascade_i].visible_object_count_rg;
   }
 
-  RGResourceId shadow_depth =
+  const RGResourceId shadow_depth =
       rg_.create_texture({.format = TextureFormat::D32float,
                           .dims = {cfg_.shadow_map_resolution, cfg_.shadow_map_resolution},
                           .array_layers = cfg_.max_cascades,

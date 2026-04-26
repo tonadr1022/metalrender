@@ -37,6 +37,7 @@ class MeshletRendererScene final : public ITestScene {
   void on_swapchain_resize() override;
 
   void apply_demo_scene_preset(size_t index) override;
+  void sync_compatibility_ecs_scene(teng::engine::Scene& scene) override;
 
   [[nodiscard]] ViewData prepare_view_data();
   [[nodiscard]] CullData prepare_cull_data(const ViewData& vd) const;
@@ -51,6 +52,8 @@ class MeshletRendererScene final : public ITestScene {
   void load_scene_presets();
   void clear_all_models();
   void apply_preset(size_t idx);
+  void clear_ecs_preset_entities();
+  void author_ecs_suzanne_preset();
 
   void make_depth_pyramid_tex();
 
@@ -76,6 +79,7 @@ class MeshletRendererScene final : public ITestScene {
   FpsCameraController fps_camera_;
   std::vector<ModelHandle> models_;
   std::vector<teng::demo_scenes::ScenePreset> scene_presets_;
+  bool ecs_suzanne_preset_active_{false};
   bool gpu_object_frustum_cull_{true};
   bool gpu_object_occlusion_cull_{true};
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> task_cmd_group_count_readback_;

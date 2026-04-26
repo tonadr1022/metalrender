@@ -93,6 +93,7 @@ void RenderService::init(const CreateInfo& cinfo) {
   frame_.buffer_copy = buffer_copy_mgr_.get();
   frame_.frame_staging = frame_gpu_upload_allocator_.get();
   frame_.model_gpu_mgr = model_gpu_mgr_.get();
+  frame_.scenes = scenes_;
   frame_.resource_dir = &resource_dir_;
   frame_.time = time_;
   frame_.imgui_ui_active = cinfo.imgui_ui_active;
@@ -279,6 +280,7 @@ void RenderService::update_frame_context() {
   frame_.buffer_copy = buffer_copy_mgr_.get();
   frame_.frame_staging = frame_gpu_upload_allocator_.get();
   frame_.model_gpu_mgr = model_gpu_mgr_.get();
+  frame_.scenes = scenes_;
   frame_.resource_dir = &resource_dir_;
 }
 

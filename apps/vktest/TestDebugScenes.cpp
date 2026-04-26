@@ -1,5 +1,4 @@
 #include "TestDebugScenes.hpp"
-// NOLINTBEGIN(misc-include-cleaner, misc-const-correctness)
 
 #include <GLFW/glfw3.h>
 
@@ -101,7 +100,7 @@ class ComputePlusVertexScene final : public ITestScene {
       p.sample_tex(test_full_screen_tex_id);
       p.w_swapchain_tex(ctx_.swapchain);
       p.set_ex([this](CmdEncoder* enc) {
-        glm::vec4 clear_color{0.5, 0.5, 0, 1};
+        const glm::vec4 clear_color{0.5, 0.5, 0, 1};
         enc->begin_rendering({
             RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::Clear,
                                      ClearValue{.color = clear_color}),
@@ -186,10 +185,10 @@ static_assert(sizeof(CubePush) == 72);
 }
 
 [[nodiscard]] std::vector<uint32_t> make_checker_rgba(uint32_t dim, uint32_t cell_px) {
-  std::vector<uint32_t> px((size_t)dim * dim);
+  std::vector<uint32_t> px(static_cast<size_t>(dim) * dim);
   for (uint32_t y = 0; y < dim; y++) {
     for (uint32_t x = 0; x < dim; x++) {
-      bool white = (((x / cell_px) + (y / cell_px)) & 1u) == 0;
+      const bool white = (((x / cell_px) + (y / cell_px)) & 1u) == 0;
       px[y * dim + x] = white ? 0xFFFFFFFFu : 0xFF202020u;
     }
   }
@@ -222,7 +221,7 @@ class MeshHelloTriangleScene final : public ITestScene {
     auto& p = ctx_.rg->add_graphics_pass("mesh_hello");
     p.w_swapchain_tex(ctx_.swapchain);
     p.set_ex([this](CmdEncoder* enc) {
-      glm::vec4 clear_color{0.1f, 0.1f, 0.15f, 1.f};
+      const glm::vec4 clear_color{0.1f, 0.1f, 0.15f, 1.f};
       enc->begin_rendering({
           RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::Clear,
                                    ClearValue{.color = clear_color}),
@@ -310,7 +309,7 @@ class TexturedCubeProceduralScene final : public ITestScene {
         checker_upload_done_ = true;
       }
 
-      glm::vec4 clear_color{0.08f, 0.08f, 0.1f, 1.f};
+      const glm::vec4 clear_color{0.08f, 0.08f, 0.1f, 1.f};
       enc->begin_rendering({
           RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::Clear,
                                    ClearValue{.color = clear_color}),
@@ -390,4 +389,3 @@ std::unique_ptr<ITestScene> create_test_scene(TestDebugScene s, const TestSceneC
 }
 
 }  // namespace teng::gfx
-// NOLINTEND(misc-include-cleaner, misc-const-correctness)

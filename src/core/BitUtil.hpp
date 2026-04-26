@@ -11,7 +11,7 @@ namespace util {
 constexpr size_t align_256(size_t n) { return (n + 255) & ~size_t(255); }
 
 // using this to avoid templates everywhere
-// NOLINTBEGIN (for bugprone-macro-parentheses)
+// NOLINTBEGIN(bugprone-macro-parentheses)
 #define AUGMENT_ENUM_CLASS(classname)                                         \
   constexpr classname operator|(classname lhs, classname rhs) {               \
     using T = std::underlying_type_t<classname>;                              \
@@ -46,7 +46,7 @@ constexpr size_t align_256(size_t n) { return (n + 255) & ~size_t(255); }
     return (static_cast<T>(value & flag) != 0ull);                            \
   }
 
-// NOLINTEND
+// NOLINTEND(bugprone-macro-parentheses)
 
 }  // namespace util
 

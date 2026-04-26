@@ -64,10 +64,10 @@ struct BufferInfo {
 // Custom hash functors defined in your own namespace
 struct AttachmentInfoHash {
   size_t operator()(const AttachmentInfo& att_info) const {
-    auto h = std::make_tuple((uint32_t)att_info.size_class, att_info.array_layers,
+    auto h = std::make_tuple(static_cast<uint32_t>(att_info.size_class), att_info.array_layers,
                              att_info.mip_levels, att_info.dims.x, att_info.dims.y,
-                             (uint32_t)att_info.format, att_info.is_swapchain_tex,
-                             att_info.temporal, (uint32_t)att_info.temporal_slot_mode);
+                             static_cast<uint32_t>(att_info.format), att_info.is_swapchain_tex,
+                             att_info.temporal, static_cast<uint32_t>(att_info.temporal_slot_mode));
     return util::hash::tuple_hash<decltype(h)>{}(h);
   }
 };
@@ -75,7 +75,7 @@ struct AttachmentInfoHash {
 struct BufferInfoHash {
   size_t operator()(const BufferInfo& buff_info) const {
     auto h = std::make_tuple(buff_info.size, buff_info.defer_reuse, buff_info.temporal,
-                             (uint32_t)buff_info.temporal_slot_mode);
+                             static_cast<uint32_t>(buff_info.temporal_slot_mode));
     return util::hash::tuple_hash<decltype(h)>{}(h);
   }
 };

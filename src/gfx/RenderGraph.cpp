@@ -12,7 +12,6 @@
 
 #include "core/Config.hpp"
 #include "core/EAssert.hpp"
-#include "core/Logger.hpp"
 #include "gfx/rhi/Barrier.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
@@ -351,7 +350,7 @@ RGResourceId RenderGraph::import_external_texture_(rhi::TextureHandle tex_handle
                                                    std::span<const RGState> per_mip_initial) {
   const bool per_mip = !per_mip_initial.empty();
   if (per_mip) {
-    rhi::Texture* tex = device_->get_tex(tex_handle);
+    const rhi::Texture* tex = device_->get_tex(tex_handle);
     ALWAYS_ASSERT(tex != nullptr);
     ALWAYS_ASSERT(per_mip_initial.size() == tex->desc().mip_levels);
   }
