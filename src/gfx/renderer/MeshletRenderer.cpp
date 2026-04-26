@@ -389,6 +389,21 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
     resource_compat_.sync(scene, resolve_model_path_);
   }
 
+  {
+    auto& static_instance_mgr = frame.model_gpu_mgr->instance_mgr();
+    const uint32_t curr_frame_in_flight_idx = frame.curr_frame_in_flight_idx;
+    if (static_instance_mgr.has_pending_frees(curr_frame_in_flight_idx)) {
+      auto instance_data_id = frame.render_graph->import_external_buffer(
+          static_instance_mgr.get_instance_data_buf(),
+          RGState{.stage = PipelineStage::TopOfPipe, .layout = ResourceLayout::General},
+          "instance_data_buf");
+      auto& p = frame.render_graph->add_transfer_pass("free_instance_data");
+      p.write_buf(instance_data_id, PipelineStage::AllTransfer);
+      p.set_ex([&static_instance_mgr, curr_frame_in_flight_idx](CmdEncoder* enc) {
+        static_instance_mgr.flush_pending_frees(curr_frame_in_flight_idx, enc);
+      });
+    }
+  }
   ASSERT(frame.model_gpu_mgr != nullptr);
   frame.model_gpu_mgr->set_curr_frame_idx(frame.curr_frame_in_flight_idx);
 

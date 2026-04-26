@@ -35,7 +35,6 @@ class TestRenderer final : public engine::IRenderer {
   void populate_compatibility_context(engine::RenderFrameContext& frame);
   void sync_resource_compatibility_models(const engine::RenderScene& scene);
   void clear_resource_compatibility_models();
-  void add_render_graph_passes();
 
   struct RuntimeModel {
     ModelHandle handle;

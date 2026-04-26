@@ -58,8 +58,6 @@ class ITestScene {
   virtual ~ITestScene() = default;
   explicit ITestScene(const TestSceneContext& ctx) : ctx_(ctx) {}
   virtual void shutdown() {}
-  virtual void on_swapchain_resize() = 0;
-  virtual void add_render_graph_passes() = 0;
   virtual void on_frame(const TestSceneContext&) {}
   virtual void on_imgui() {}
   virtual void apply_demo_scene_preset(size_t) {}

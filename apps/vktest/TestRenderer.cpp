@@ -21,8 +21,6 @@
 #include "gfx/ModelGPUManager.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/MeshletRenderer.hpp"
-#include "gfx/rhi/Device.hpp"
-#include "gfx/rhi/GFXTypes.hpp"
 #include "scenes/MeshletRendererTestScene.hpp"
 
 using namespace teng;
@@ -196,7 +194,6 @@ void TestRenderer::render(engine::RenderFrameContext& frame, const engine::Rende
   }
   ctx_.model_gpu_mgr->set_curr_frame_idx(ctx_.curr_frame_in_flight_idx);
   sync_resource_compatibility_models(scene);
-  add_render_graph_passes();
 }
 
 void TestRenderer::shutdown() {
@@ -213,27 +210,6 @@ void TestRenderer::on_resize(engine::RenderFrameContext& frame) {
   if (meshlet_path_renderer_) {
     meshlet_path_renderer_->on_resize(frame);
   }
-  if (scene_) {
-    scene_->on_swapchain_resize();
-  }
-}
-
-void TestRenderer::add_render_graph_passes() {
-  ZoneScoped;
-  ASSERT(ctx_.model_gpu_mgr != nullptr);
-  auto& static_instance_mgr = ctx_.model_gpu_mgr->instance_mgr();
-  if (static_instance_mgr.has_pending_frees(ctx_.curr_frame_in_flight_idx)) {
-    auto instance_data_id = ctx_.rg->import_external_buffer(
-        static_instance_mgr.get_instance_data_buf(),
-        RGState{.stage = PipelineStage::TopOfPipe, .layout = ResourceLayout::General},
-        "instance_data_buf");
-    auto& p = ctx_.rg->add_transfer_pass("free_instance_data");
-    p.write_buf(instance_data_id, PipelineStage::AllTransfer);
-    p.set_ex([this, &static_instance_mgr](CmdEncoder* enc) {
-      static_instance_mgr.flush_pending_frees(ctx_.curr_frame_in_flight_idx, enc);
-    });
-  }
-  scene_->add_render_graph_passes();
 }
 
 void TestRenderer::imgui_scene_overlay() { scene_->on_imgui(); }

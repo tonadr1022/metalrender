@@ -6,11 +6,6 @@
 #include <cmath>
 #include <string>
 
-#include "Window.hpp"
-#include "engine/scene/Scene.hpp"
-#include "engine/scene/SceneIds.hpp"
-#include "engine/scene/SceneManager.hpp"
-#include "gfx/rhi/Swapchain.hpp"
 #include "imgui.h"
 
 namespace teng::gfx {

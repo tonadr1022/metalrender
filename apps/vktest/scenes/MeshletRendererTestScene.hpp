@@ -15,13 +15,9 @@ class MeshletRendererScene final : public ITestScene {
 
   void on_imgui() override;
 
-  void on_swapchain_resize() override {}
-
   void apply_demo_scene_preset(size_t index) override;
 
   void set_meshlet_renderer(MeshletRenderer* renderer) { meshlet_gpu_ = renderer; }
-
-  void add_render_graph_passes() override {}
 
  private:
   void load_scene_presets();

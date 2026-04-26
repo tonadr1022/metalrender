@@ -51,9 +51,6 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
   }
 
   void on_key_event(teng::engine::EngineContext& ctx, int key, int action, int mods) override {
-    if (action == GLFW_PRESS && key == GLFW_KEY_TAB) {
-      renderer_->cycle_debug_scene();
-    }
     if (action == GLFW_PRESS && key >= GLFW_KEY_0 && key <= GLFW_KEY_9 &&
         (mods & GLFW_MOD_CONTROL) != 0) {
       renderer_->apply_demo_scene_preset(static_cast<size_t>(key - GLFW_KEY_0));
