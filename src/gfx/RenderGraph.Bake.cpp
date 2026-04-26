@@ -943,6 +943,10 @@ void RenderGraph::bake_schedule_barriers_(bool verbose) {
       uint32_t tex_array_layers{};
       if (use.type == RGResourceType::ExternalTexture) {
         rhi::Texture* tex = device_->get_tex(get_external_tex(rg_resource_handle));
+        if (!tex) {
+          LERROR("pass {}: texture not found: {} {}", pass.get_name(), rg_resource_handle.idx,
+                 (int)rg_resource_handle.type);
+        }
         ALWAYS_ASSERT(tex != nullptr);
         tex_mip_levels = tex->desc().mip_levels;
         tex_array_layers = tex->desc().array_length;

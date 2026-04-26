@@ -1014,11 +1014,12 @@ void CmdEncoderBase<UseMTL4>::bind_uav(rhi::TextureHandle texture, uint32_t slot
 }
 
 template <bool UseMTL4>
-void CmdEncoderBase<UseMTL4>::bind_cbv(rhi::BufferHandle buffer, uint32_t slot,
-                                       size_t offset_bytes) {
+void CmdEncoderBase<UseMTL4>::bind_cbv(rhi::BufferHandle buffer, uint32_t slot, size_t offset_bytes,
+                                       size_t size_bytes) {
   ASSERT(slot < ARRAY_SIZE(binding_table_.SRV));
   binding_table_.CBV[slot] = buffer;
   binding_table_.CBV_offsets[slot] = offset_bytes;
+  binding_table_.CBV_sizes[slot] = size_bytes;
   binding_table_dirty_ = true;
 }
 

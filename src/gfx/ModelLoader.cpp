@@ -2,6 +2,7 @@
 
 #include <ktx.h>
 
+#include <filesystem>
 #include <fstream>
 #include <future>
 #include <tracy/Tracy.hpp>
@@ -40,6 +41,9 @@ void load_stb_image(const void *data, size_t data_size, const std::filesystem::p
                     rhi::TextureFormat format, TextureUpload &upload) {
   int w{}, h{}, comp{};
   uint8_t *img_data{};
+  if (!std::filesystem::exists(path)) {
+    LINFO("path doesn't exist: {}", path.string());
+  }
   if (data) {
     img_data = stbi_load_from_memory((const stbi_uc *)data, data_size, &w, &h, &comp, 4);
   } else {

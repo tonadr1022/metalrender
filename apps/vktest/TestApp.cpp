@@ -83,8 +83,7 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
     renderer_->imgui_scene_overlay();
   }
 
-  void on_update(teng::engine::EngineContext& ctx,
-                 const teng::engine::EngineTime&) override {
+  void on_update(teng::engine::EngineContext& ctx, const teng::engine::EngineTime&) override {
     renderer_->update(ctx.renderer().frame_context());
   }
 
@@ -102,7 +101,7 @@ TestApp::TestApp(TestAppOptions options)
     : engine_(std::make_unique<teng::engine::Engine>(teng::engine::EngineConfig{
           .resource_dir = get_resource_dir(),
           .app_name = "vktest",
-          .preferred_gfx_api = teng::engine::EngineGfxApi::Vulkan,
+          .preferred_gfx_api = teng::engine::EngineGfxApi::PlatformDefault,
           .initial_window_width = -1,
           .initial_window_height = -1,
           .initial_window_position = {500, 0},

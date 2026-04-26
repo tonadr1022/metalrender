@@ -234,9 +234,9 @@ bool Device::init(const InitInfo& init_info, const DeviceInitInfo& metal_init_in
 
   init_bindless();
 
-  push_constant_allocator_.emplace(this);
-  test_allocator_.emplace(this);
-  arg_buf_allocator_.emplace(this);
+  push_constant_allocator_.emplace(this, false);
+  test_allocator_.emplace(this, false);
+  arg_buf_allocator_.emplace(this, false);
 
   psos_.dispatch_indirect_pso =
       compile_mtl_compute_pipeline(shader_lib_dir_ / "dispatch_indirect.metallib");
@@ -869,9 +869,9 @@ void Device::submit_frame() {
   icb_mgr_draw_indexed_.reset_for_frame();
   icb_mgr_draw_mesh_threadgroups_.reset_for_frame();
 
-  push_constant_allocator_->set_frame_idx(frame_idx());
-  test_allocator_->set_frame_idx(frame_idx());
-  arg_buf_allocator_->set_frame_idx(frame_idx());
+  push_constant_allocator_->set_frame_idx_and_reset_bufs(frame_idx());
+  test_allocator_->set_frame_idx_and_reset_bufs(frame_idx());
+  arg_buf_allocator_->set_frame_idx_and_reset_bufs(frame_idx());
 }
 
 void Device::init_bindless() {
