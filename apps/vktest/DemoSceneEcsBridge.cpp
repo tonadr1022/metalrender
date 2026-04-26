@@ -163,9 +163,18 @@ bool run_demo_scene_authoring_smoke_test() {
   }
 
   engine::RenderScene grid_render_scene = engine::extract_render_scene(*scene);
-  if (grid_render_scene.cameras.size() != 1 ||
-      grid_render_scene.directional_lights.size() != 1 || grid_render_scene.meshes.size() <= 1 ||
-      !grid_render_scene.meshes.front().model.is_valid()) {
+  if (grid_render_scene.cameras.size() != 1 || grid_render_scene.directional_lights.size() != 1 ||
+      grid_render_scene.meshes.size() <= 1 || !grid_render_scene.meshes.front().model.is_valid()) {
+    return false;
+  }
+  const engine::AssetId first_model = grid_render_scene.meshes.front().model;
+  size_t first_model_count = 0;
+  for (const engine::RenderMesh& mesh : grid_render_scene.meshes) {
+    if (mesh.model == first_model) {
+      ++first_model_count;
+    }
+  }
+  if (first_model_count <= 1) {
     return false;
   }
   if (!resolve_model_path(grid_render_scene.meshes.front().model).has_value()) {

@@ -28,7 +28,6 @@
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
-#include "gfx/rhi/Queue.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "hlsl/material.h"
 #include "hlsl/shader_constants.h"
@@ -162,6 +161,7 @@ void RenderService::set_renderer(std::unique_ptr<IRenderer> renderer) {
 }
 
 void RenderService::begin_frame() {
+  ZoneScoped;
   ASSERT(initialized_);
   ASSERT(!frame_open_);
 
@@ -176,6 +176,7 @@ void RenderService::begin_frame() {
 }
 
 void RenderService::enqueue_active_scene() {
+  ZoneScoped;
   ASSERT(initialized_);
   ASSERT(frame_open_);
   ASSERT(renderer_ != nullptr);
@@ -198,6 +199,7 @@ void RenderService::enqueue_active_scene() {
 }
 
 void RenderService::enqueue_imgui_overlay_pass() {
+  ZoneScoped;
   ASSERT(initialized_);
   ASSERT(frame_open_);
   ASSERT(imgui_renderer_);
@@ -219,6 +221,7 @@ void RenderService::enqueue_imgui_overlay_pass() {
 }
 
 void RenderService::end_frame() {
+  ZoneScoped;
   ASSERT(initialized_);
   ASSERT(frame_open_);
 
@@ -226,10 +229,10 @@ void RenderService::end_frame() {
   const bool verbose = i++ == -1;
   device_->acquire_next_swapchain_image(swapchain_);
   render_graph_.bake(frame_.output_extent, verbose);
-
-  flush_pending_buffer_copies();
-
   auto* enc = device_->begin_cmd_encoder();
+  // Upload and resize migration copies are encoded in-order with render work so visibility
+  // is explicit and backend-independent.
+  flush_pending_buffer_copies(enc);
 
   flush_pending_texture_uploads(enc);
 
@@ -248,6 +251,7 @@ void RenderService::end_frame() {
 }
 
 void RenderService::render_scene(const RenderScene& scene) {
+  ZoneScoped;
   ASSERT(initialized_);
   ASSERT(renderer_ != nullptr);
 
@@ -284,13 +288,12 @@ void RenderService::update_frame_context() {
   frame_.resource_dir = &resource_dir_;
 }
 
-void RenderService::flush_pending_buffer_copies() {
+void RenderService::flush_pending_buffer_copies(gfx::rhi::CmdEncoder* enc) {
+  ZoneScoped;
   if (buffer_copy_mgr_->get_copies().empty()) {
     return;
   }
 
-  ZoneScopedN("buffer_upload_copies");
-  auto* copy_enc = device_->begin_cmd_encoder(gfx::rhi::QueueType::Graphics);
   for (const auto& copy : buffer_copy_mgr_->get_copies()) {
     if (!copy.src_buf.is_valid() || !device_->get_buf(copy.src_buf)) {
       continue;
@@ -298,19 +301,18 @@ void RenderService::flush_pending_buffer_copies() {
     if (!copy.dst_buf.is_valid() || !device_->get_buf(copy.dst_buf)) {
       continue;
     }
-    copy_enc->barrier(copy.src_buf, gfx::rhi::PipelineStage::AllCommands,
-                      gfx::rhi::AccessFlags::AnyWrite, gfx::rhi::PipelineStage::AllTransfer,
-                      gfx::rhi::AccessFlags::TransferRead);
-    copy_enc->barrier(copy.dst_buf, gfx::rhi::PipelineStage::AllCommands,
-                      gfx::rhi::AccessFlags::AnyRead | gfx::rhi::AccessFlags::AnyWrite,
-                      gfx::rhi::PipelineStage::AllTransfer, gfx::rhi::AccessFlags::TransferWrite);
-    copy_enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
-                                    copy.size);
-    copy_enc->barrier(copy.dst_buf, gfx::rhi::PipelineStage::AllTransfer,
-                      gfx::rhi::AccessFlags::TransferWrite, copy.dst_stage, copy.dst_access);
+    enc->barrier(copy.src_buf, gfx::rhi::PipelineStage::AllCommands,
+                 gfx::rhi::AccessFlags::AnyWrite, gfx::rhi::PipelineStage::AllTransfer,
+                 gfx::rhi::AccessFlags::TransferRead);
+    enc->barrier(copy.dst_buf, gfx::rhi::PipelineStage::AllCommands,
+                 gfx::rhi::AccessFlags::AnyRead | gfx::rhi::AccessFlags::AnyWrite,
+                 gfx::rhi::PipelineStage::AllTransfer, gfx::rhi::AccessFlags::TransferWrite);
+    enc->copy_buffer_to_buffer(copy.src_buf, copy.src_offset, copy.dst_buf, copy.dst_offset,
+                               copy.size);
+    enc->barrier(copy.dst_buf, gfx::rhi::PipelineStage::AllTransfer,
+                 gfx::rhi::AccessFlags::TransferWrite, copy.dst_stage, copy.dst_access);
   }
   buffer_copy_mgr_->clear_copies();
-  copy_enc->end_encoding();
 }
 
 void RenderService::flush_pending_texture_uploads(gfx::rhi::CmdEncoder* enc) {

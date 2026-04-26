@@ -62,6 +62,7 @@ class InstanceMgr {
 
  private:
   OffsetAllocator::Allocation allocate_instance_data(uint32_t element_count);
+  void ensure_instance_capacity(uint32_t min_capacity);
   // returns true if resize occured
   std::vector<IndexedIndirectDrawCmd> cpu_draw_cmds_;
   bool need_cpu_draws_{true};

@@ -1,5 +1,6 @@
 #pragma once
 #include <cassert>
+#include <cstdint>
 #include <filesystem>
 #include <glm/mat4x4.hpp>
 #include <span>
@@ -59,6 +60,13 @@ class ResourceManager {
     std::vector<glm::mat4> instance_transforms;
   };
 
+  struct ModelInstanceReserveRequest {
+    std::filesystem::path path;
+    uint32_t instance_count{1};
+  };
+
+  void reserve_model_instances(
+      const std::span<const ModelInstanceReserveRequest> &models_to_reserve);
   std::vector<std::vector<ModelHandle>> load_instanced_models(
       const std::span<const InstancedModelLoadRequest> &models_to_load);
   void free_model(ModelHandle handle);

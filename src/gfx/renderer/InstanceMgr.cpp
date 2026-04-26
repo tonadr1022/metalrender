@@ -52,6 +52,7 @@ bool InstanceMgr::ensure_buffer_space(size_t element_count) {
   if (element_count == 0) return resized;
   if (!instance_data_buf_.is_valid() ||
       device_.get_buf(instance_data_buf_)->size() < element_count * sizeof(InstanceData)) {
+    auto old_buf = std::move(instance_data_buf_);
     auto new_buf = device_.create_buf_h({
         .usage = rhi::BufferUsage::Storage,
         .size = sizeof(InstanceData) * element_count,
@@ -62,11 +63,13 @@ bool InstanceMgr::ensure_buffer_space(size_t element_count) {
         .name = "intance_data_buf",
     });
 
-    if (instance_data_buf_.is_valid()) {
-      buffer_copy_mgr_.add_copy(instance_data_buf_.handle, 0, new_buf.handle, 0,
-                                device_.get_buf(instance_data_buf_)->size(),
+    if (old_buf.is_valid()) {
+      buffer_copy_mgr_.add_copy(old_buf.handle, 0, new_buf.handle, 0,
+                                device_.get_buf(old_buf)->size(),
                                 rhi::PipelineStage::ComputeShader | rhi::PipelineStage::AllGraphics,
                                 rhi::AccessFlags::ShaderRead);
+      // Keep the old buffer alive until queued migration copies are submitted.
+      buffer_copy_mgr_.defer_release(std::move(old_buf));
       resized = true;
     }
     instance_data_buf_ = std::move(new_buf);
@@ -124,16 +127,16 @@ InstanceMgr::InstanceMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr,
       mesh_shaders_enabled_(mesh_shaders_enabled) {}
 
 OffsetAllocator::Allocation InstanceMgr::allocate_instance_data(uint32_t element_count) {
-  // TODO: this is cursed go back to recursion or something pls
-  const OffsetAllocator::Allocation alloc = allocator_.allocate(element_count);
-  if (alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
-    auto old_capacity = allocator_.capacity();
-    auto new_capacity = std::max(old_capacity * 2, element_count * 2);
-    allocator_.grow(new_capacity - old_capacity);
-    ASSERT(new_capacity <= allocator_.capacity());
-    ensure_buffer_space(allocator_.capacity());
-    return allocate_instance_data(element_count);
+  if (element_count == 0) {
+    return {};
   }
+  OffsetAllocator::Allocation alloc = allocator_.allocate(element_count);
+  while (alloc.offset == OffsetAllocator::Allocation::NO_SPACE) {
+    const auto curr_capacity = static_cast<uint32_t>(allocator_.capacity());
+    ensure_instance_capacity(curr_capacity + element_count);
+    alloc = allocator_.allocate(element_count);
+  }
+
   ensure_buffer_space(allocator_.capacity());
   curr_element_count_ += element_count;
   stats_.max_instance_data_count =
@@ -142,10 +145,20 @@ OffsetAllocator::Allocation InstanceMgr::allocate_instance_data(uint32_t element
 }
 
 void InstanceMgr::reserve_space(uint32_t instance_data_count) {
-  // TODO: consolidate capacity logic
-  auto old_capacity = allocator_.capacity();
-  auto new_capacity = std::max(old_capacity * 2, instance_data_count * 2);
-  ensure_buffer_space(new_capacity);
+  if (instance_data_count == 0) {
+    return;
+  }
+  ensure_instance_capacity(curr_element_count_ + instance_data_count);
+}
+
+void InstanceMgr::ensure_instance_capacity(uint32_t min_capacity) {
+  const auto old_capacity = static_cast<uint32_t>(allocator_.capacity());
+  if (old_capacity < min_capacity) {
+    const uint32_t doubled_capacity = old_capacity == 0 ? min_capacity : old_capacity * 2;
+    const uint32_t target_capacity = std::max(next_pow2(min_capacity), doubled_capacity);
+    allocator_.grow(target_capacity - old_capacity);
+  }
+  ensure_buffer_space(allocator_.capacity());
 }
 
 }  // namespace gfx

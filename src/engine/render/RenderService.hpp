@@ -73,7 +73,7 @@ class RenderService {
 
  private:
   void update_frame_context();
-  void flush_pending_buffer_copies();
+  void flush_pending_buffer_copies(gfx::rhi::CmdEncoder* enc);
   void flush_pending_texture_uploads(gfx::rhi::CmdEncoder* enc);
 
   gfx::rhi::Device* device_{};

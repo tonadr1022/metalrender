@@ -6,12 +6,13 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
-#include <unordered_set>
 #include <tracy/Tracy.hpp>
+#include <unordered_set>
+#include <vector>
 
+#include "../common/ScenePresets.hpp"
 #include "DemoSceneEcsBridge.hpp"
 #include "ResourceManager.hpp"
-#include "../common/ScenePresets.hpp"
 #include "TestDebugScenes.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
@@ -33,6 +34,7 @@ namespace teng::gfx {
 TestRenderer::TestRenderer(const CreateInfo& cinfo) : active_scene_(cinfo.initial_scene) {}
 
 void TestRenderer::populate_compatibility_context(engine::RenderFrameContext& frame) {
+  ZoneScoped;
   ctx_.device = frame.device;
   ctx_.swapchain = frame.swapchain;
   ctx_.curr_swapchain_rg_id = frame.curr_swapchain_rg_id;
@@ -95,9 +97,20 @@ void TestRenderer::apply_demo_scene_preset(size_t index) {
   scene_->apply_demo_scene_preset(index);
 }
 
+// TODO: this is very slow and horrible.
 void TestRenderer::sync_resource_compatibility_models(const engine::RenderScene& scene) {
+  ZoneScoped;
+  struct PendingLoad {
+    engine::EntityGuid entity;
+    engine::AssetId asset;
+    std::filesystem::path path;
+    glm::mat4 local_to_world{1.f};
+  };
+
   std::unordered_set<engine::EntityGuid> live_meshes;
   live_meshes.reserve(scene.meshes.size());
+  std::vector<PendingLoad> pending_loads;
+  pending_loads.reserve(scene.meshes.size());
 
   for (const engine::RenderMesh& mesh : scene.meshes) {
     live_meshes.insert(mesh.entity);
@@ -112,18 +125,38 @@ void TestRenderer::sync_resource_compatibility_models(const engine::RenderScene&
       if (!resolved_path.has_value()) {
         continue;
       }
-      runtime_models_.emplace(mesh.entity,
-                              RuntimeModel{
-                                  .handle = ResourceManager::get().load_model(*resolved_path,
-                                                                               mesh.local_to_world),
-                                  .asset = mesh.model,
-                              });
+      pending_loads.push_back(PendingLoad{
+          .entity = mesh.entity,
+          .asset = mesh.model,
+          .path = *resolved_path,
+          .local_to_world = mesh.local_to_world,
+      });
       continue;
     }
 
     if (ModelInstance* model = ResourceManager::get().get_model(existing->second.handle)) {
       model->set_transform(0, mesh.local_to_world);
       model->update_transforms();
+    }
+  }
+
+  if (!pending_loads.empty()) {
+    std::vector<ResourceManager::ModelInstanceReserveRequest> reserve_requests;
+    reserve_requests.reserve(pending_loads.size());
+    for (const PendingLoad& load : pending_loads) {
+      reserve_requests.push_back(ResourceManager::ModelInstanceReserveRequest{
+          .path = load.path,
+          .instance_count = 1,
+      });
+    }
+    ResourceManager::get().reserve_model_instances(reserve_requests);
+
+    for (const PendingLoad& load : pending_loads) {
+      runtime_models_.emplace(load.entity, RuntimeModel{
+                                               .handle = ResourceManager::get().load_model(
+                                                   load.path, load.local_to_world),
+                                               .asset = load.asset,
+                                           });
     }
   }
 
