@@ -6,8 +6,11 @@
 #include <cstdint>
 #include <filesystem>
 #include <memory>
+#include <unordered_set>
 #include <tracy/Tracy.hpp>
 
+#include "DemoSceneEcsBridge.hpp"
+#include "ResourceManager.hpp"
 #include "../common/ScenePresets.hpp"
 #include "TestDebugScenes.hpp"
 #include "core/EAssert.hpp"
@@ -53,6 +56,7 @@ void TestRenderer::set_scene(TestDebugScene id) {
     scene_->shutdown();
     scene_.reset();
   }
+  clear_resource_compatibility_models();
   active_scene_ = id;
   scene_ = create_test_scene(id, ctx_);
   if (id == TestDebugScene::MeshletRenderer) {
@@ -78,15 +82,67 @@ void TestRenderer::update(engine::RenderFrameContext& frame) {
   }
   scene_->on_frame(ctx_);
   if (ctx_.scene_manager) {
-    if (auto* active_scene = ctx_.scene_manager->active_scene()) {
-      scene_->sync_compatibility_ecs_scene(*active_scene);
+    auto* active_scene = ctx_.scene_manager->active_scene();
+    if (!active_scene) {
+      active_scene = &ctx_.scene_manager->create_scene("vktest compatibility render scene");
     }
+    scene_->sync_compatibility_ecs_scene(*active_scene);
   }
 }
 
 void TestRenderer::apply_demo_scene_preset(size_t index) {
   ASSERT(scene_);
   scene_->apply_demo_scene_preset(index);
+}
+
+void TestRenderer::sync_resource_compatibility_models(const engine::RenderScene& scene) {
+  std::unordered_set<engine::EntityGuid> live_meshes;
+  live_meshes.reserve(scene.meshes.size());
+
+  for (const engine::RenderMesh& mesh : scene.meshes) {
+    live_meshes.insert(mesh.entity);
+
+    const auto existing = runtime_models_.find(mesh.entity);
+    if (existing == runtime_models_.end() || existing->second.asset != mesh.model) {
+      if (existing != runtime_models_.end()) {
+        ResourceManager::get().free_model(existing->second.handle);
+        runtime_models_.erase(existing);
+      }
+      const auto resolved_path = demo_scene_compat::resolve_model_path(mesh.model);
+      if (!resolved_path.has_value()) {
+        continue;
+      }
+      runtime_models_.emplace(mesh.entity,
+                              RuntimeModel{
+                                  .handle = ResourceManager::get().load_model(*resolved_path,
+                                                                               mesh.local_to_world),
+                                  .asset = mesh.model,
+                              });
+      continue;
+    }
+
+    if (ModelInstance* model = ResourceManager::get().get_model(existing->second.handle)) {
+      model->set_transform(0, mesh.local_to_world);
+      model->update_transforms();
+    }
+  }
+
+  for (auto it = runtime_models_.begin(); it != runtime_models_.end();) {
+    if (live_meshes.contains(it->first)) {
+      ++it;
+      continue;
+    }
+    ResourceManager::get().free_model(it->second.handle);
+    it = runtime_models_.erase(it);
+  }
+}
+
+void TestRenderer::clear_resource_compatibility_models() {
+  for (auto& [entity, model] : runtime_models_) {
+    (void)entity;
+    ResourceManager::get().free_model(model.handle);
+  }
+  runtime_models_.clear();
 }
 
 void TestRenderer::cycle_debug_scene() {
@@ -107,10 +163,11 @@ void TestRenderer::on_key_event(int key, int action, int mods) {
   }
 }
 
-void TestRenderer::render(engine::RenderFrameContext& frame, const engine::RenderScene&) {
+void TestRenderer::render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) {
   ZoneScoped;
   populate_compatibility_context(frame);
   ctx_.model_gpu_mgr->set_curr_frame_idx(ctx_.curr_frame_in_flight_idx);
+  sync_resource_compatibility_models(scene);
 
   add_render_graph_passes();
 }
@@ -120,6 +177,7 @@ void TestRenderer::shutdown() {
     scene_->shutdown();
     scene_.reset();
   }
+  clear_resource_compatibility_models();
 }
 
 TestRenderer::~TestRenderer() = default;

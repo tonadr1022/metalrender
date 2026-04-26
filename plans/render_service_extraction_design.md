@@ -1,6 +1,6 @@
 # Render Service Extraction Design
 
-Status: Phase 3 foundation partially implemented. `RenderScene` schema, ECS extraction, smoke coverage, engine-owned `RenderService` shell, `IRenderer`, `RenderFrameContext`, and `DebugClearRenderer` exist. Compatibility meshlet rendering still flows through `gfx::TestRenderer`/`ITestScene`, and ImGui final composition has not yet been moved out of `MeshletRendererScene`.
+Status: Phase 3 foundation and Phase 4 demo ECS data migration are implemented. `RenderScene` schema, ECS extraction, smoke coverage, engine-owned `RenderService` shell, `IRenderer`, `RenderFrameContext`, `DebugClearRenderer`, ECS-authored demo presets, and a temporary renderer/resource compatibility bridge exist. Compatibility meshlet rendering still flows through `gfx::TestRenderer`/`ITestScene`; the next step is to move meshlet rendering out of `MeshletRendererScene` and into a real `IRenderer` implementation.
 
 Scope: track the renderer migration after the completed Phase 2 Flecs scene foundation. The first Phase 3 implementation introduced a renderer-neutral `RenderScene` snapshot, ECS extraction from `engine::Scene`, and an engine-owned `RenderService`/renderer boundary while preserving the current `vktest` meshlet demo.
 
@@ -36,15 +36,21 @@ Implemented in the first Phase 3 slice:
 - Added `src/engine/render/DebugClearRenderer.*` as the first minimal renderer implementation for extracted-data diagnostics.
 - `Engine` now owns `RenderService` and exposes it through `Engine::renderer()` and `EngineContext::renderer()`.
 - Expanded `engine_scene_smoke` with device-free render extraction coverage for camera, light, mesh, sprite, invalid asset skipping, missing GUID skipping, transforms, IDs, tint/sort data, and deterministic ordering.
+- Added data-first demo presets in `apps/common/ScenePresets.*`.
+- Added `apps/vktest/DemoSceneEcsBridge.*` to author demo camera, directional light, mesh renderables, transforms, local-to-world matrices, names, and stable entity GUIDs into the active `engine::Scene`.
+- Added a temporary demo `AssetId` to source-path registry for compatibility resource code.
+- Moved preset world/model data ownership out of `MeshletRendererScene`; it now keeps meshlet controls, CSM/debug UI, and temporary camera/light tooling hooks.
+- Added renderer/resource compatibility syncing in `TestRenderer`: extracted ECS mesh renderables are diffed by `EntityGuid`, resolved through the demo asset map, loaded/freed through `ResourceManager`, and updated from `RenderScene` transforms.
+- Expanded `engine_scene_smoke` with procedural demo authoring coverage for valid assets, extraction, and stale entity cleanup.
 - Validation passed with `./scripts/agent_verify.sh` and `./build/Debug/bin/vktest --quit-after-frames 30`.
 
 Not implemented yet:
 
 - Moving `TestRenderer` frame upload/copy/model GPU services behind `RenderService`.
-- A compatibility `IRenderer` that delegates to the existing meshlet/debug scene path.
+- A production meshlet `IRenderer` implementation that owns the current meshlet pass path.
 - Moving ImGui renderer ownership/final composition out of the meshlet final pass.
-- Rendering the existing meshlet demo from extracted `RenderScene`.
-- ECS-authored demo presets or `AssetId` to resource-resolution adapters.
+- Removing the normal meshlet demo dependency on `ITestScene`/`MeshletRendererScene`.
+- Replacing the temporary `AssetId -> source path -> ResourceManager` bridge with an engine asset/resource service.
 
 ## Relevant Current Code
 
@@ -81,8 +87,10 @@ Current `vktest` rendering still flows through compatibility scaffolding:
 - `CompatibilityVktestLayer` creates `gfx::TestRenderer`, initializes global `ResourceManager` from `renderer_->get_model_gpu_mgr()`, forwards input/UI, and calls `TestRenderer::render()` from `on_render()`.
 - `TestRenderer` owns `ShaderManager`, `RenderGraph`, `ImGuiRenderer`, frame upload allocator, `BufferCopyMgr`, `ModelGPUMgr`, `InstanceMgr`, `GeometryBatch`, material buffer, samplers, active `ITestScene`, and `TestSceneContext`.
 - `TestSceneContext` exposes renderer internals directly to `ITestScene`.
-- `MeshletRendererScene` owns demo model handles, FPS camera, directional light/day-night state, meshlet PSOs, CSM, depth pyramid, draw prep, readbacks, per-frame uniforms, debug UI, and render graph pass construction.
-- `ResourceManager` is a global singleton facade that maps model paths to cached CPU-ish `ModelInstance` data and `ModelGPUMgr` GPU resources, then returns runtime `ModelHandle`s to scene code.
+- `MeshletRendererScene` owns FPS camera tooling, directional light/day-night controls, meshlet PSOs, CSM, depth pyramid, draw prep, readbacks, per-frame uniforms, debug UI, and render graph pass construction. It no longer owns preset model handles or the demo world data.
+- `apps/vktest/DemoSceneEcsBridge.*` converts demo preset data into ECS camera/light/mesh entities and tracks authored demo entities for cleanup on preset reapply.
+- `TestRenderer` contains a temporary renderer/resource bridge that maps extracted `RenderMesh{EntityGuid, AssetId, LocalToWorld}` entries to runtime `ResourceManager` `ModelHandle`s.
+- `ResourceManager` is a global singleton facade that maps model paths to cached CPU-ish `ModelInstance` data and `ModelGPUMgr` GPU resources, then returns runtime `ModelHandle`s to renderer/resource compatibility code.
 
 ## Target Architecture
 
@@ -289,13 +297,13 @@ They may remain in a separate graphics test executable if useful.
 Scaffolding role:
 
 - Reference behavior for the meshlet renderer.
-- Temporary owner of demo presets, FPS camera, light/day-night controls, model handles, CSM, depth pyramid, draw prep, meshlet pass wiring, and meshlet debug UI.
+- Temporary owner of FPS camera tooling, light/day-night controls, CSM, depth pyramid, draw prep, meshlet pass wiring, and meshlet debug UI.
 
 Retire when:
 
 - Meshlet pass construction lives in `MeshletRenderer`.
-- Demo presets create Flecs entities with stable IDs and asset references.
-- Camera, light, and mesh data flow through `RenderScene`.
+- Demo presets continue to create Flecs entities with stable IDs and asset references.
+- Camera, light, and mesh data continue to flow through `RenderScene`.
 - Renderer debug UI is separated from scene/preset/tooling UI.
 
 ### Global `ResourceManager`
@@ -313,7 +321,7 @@ Retire or wrap when:
 
 ## Asset Service Deferral
 
-Do not create a separate asset service / `ResourceManager` retirement plan before the first `RenderScene` extraction. The current design already has enough retirement criteria, and a separate note would mostly duplicate this file until implementation creates concrete compatibility adapters.
+Do not create a separate asset service / `ResourceManager` retirement plan before the meshlet `IRenderer` extraction clarifies final renderer/resource ownership. The current design has a concrete temporary adapter, but replacing it before the meshlet renderer leaves `ITestScene` would mostly churn compatibility code.
 
 For Phase 3:
 
@@ -326,8 +334,7 @@ For Phase 3:
 
 Create a separate asset/resource service design note after one of these happens:
 
-- A `RenderService` compatibility adapter owns real `AssetId` resolution call sites.
-- A migrated Flecs demo preset needs an `AssetId` to source path registry beyond path-derived IDs.
+- The meshlet `IRenderer` owns the render path and still needs `AssetId` resolution beyond the temporary demo map.
 - Multiple renderer/resource adapters need coordinated retirement criteria.
 
 ## First Implementation Slice Boundaries
@@ -368,20 +375,29 @@ Completed:
 - Not done but optional: Add `RenderScene` logging/inspection UI/path if useful.
 - Keep meshlet demo rendering through the compatibility path until a migrated preset exists.
 
-Slice 4: Migrate one demo preset into ECS data.
+Slice 4: Migrate demo presets into ECS data.
 
-- Convert one meshlet preset into Flecs entities with `Transform`, `LocalToWorld`, `Camera`, `DirectionalLight`, and `MeshRenderable`.
-- Use stable `AssetId` for model references.
-- Keep FPS camera/day-night behavior as tooling systems or compatibility layer behavior that mutates ECS components.
-- Do not store `ModelHandle` or GPU handles in ECS.
+Status: complete.
+
+Completed:
+
+- Converted the default meshlet demo presets into data-first `DemoScenePresetData`.
+- Authored presets into Flecs entities with `Transform`, `LocalToWorld`, `Camera`, `DirectionalLight`, `MeshRenderable`, `Name`, and `EntityGuidComponent`.
+- Used path-derived `AssetId` for model references and a temporary demo asset path registry for compatibility loading.
+- Kept FPS camera/day-night behavior as compatibility tooling that mutates ECS camera/light components.
+- Kept `ModelHandle`, GPU handles, bindless IDs, buffers, and meshlet resources out of ECS.
+- Added smoke coverage for authoring, extraction, valid asset IDs, and stale entity cleanup.
 
 Slice 5: Extract `MeshletRenderer`.
+
+Status: next.
 
 - Move meshlet pass construction, CSM, depth pyramid, draw prep, readbacks, and shade pass ownership into an `IRenderer` implementation.
 - Consume `RenderScene` camera/light/mesh data.
 - Resolve assets through renderer-owned compatibility/resource services.
 - Diff renderer instance allocation by `EntityGuid` so unchanged model instances do not rewrite instance buffers every frame.
 - Split renderer debug UI from scene/preset UI.
+- Remove normal meshlet demo rendering from the `ITestScene`/`MeshletRendererScene` path once parity is preserved.
 
 ## Risks And Tradeoffs
 

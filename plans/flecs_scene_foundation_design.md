@@ -19,9 +19,9 @@ Deferred:
 
 - Transform hierarchy/parent relationships.
 - Scene serialization.
-- Demo preset conversion into ECS entities.
-- Resource bridge from `MeshRenderable{AssetId}` to `ResourceManager`/`ModelGPUMgr`.
-- Renderer-neutral `RenderScene` extraction.
+- Demo preset conversion into ECS entities is now implemented as vktest compatibility authoring.
+- Resource bridge from `MeshRenderable{AssetId}` to `ResourceManager`/`ModelGPUMgr` is now implemented as renderer/resource compatibility code in `TestRenderer`.
+- Renderer-neutral `RenderScene` extraction is now implemented under `src/engine/render`.
 - Editor component metadata and play/edit world semantics.
 
 ## Relevant Current Code
@@ -31,8 +31,9 @@ Deferred:
 - `apps/vktest/TestApp.cpp` currently owns runtime bootstrap: resource directory setup, CVar load/save, window/device/swapchain creation, `gfx::TestRenderer` creation, global `ResourceManager` init/shutdown, input callbacks, ImGui frame setup, and the main loop.
 - `apps/vktest/TestRenderer.*` currently owns renderer services plus debug scene selection. It constructs `ModelGPUMgr`, `RenderGraph`, ImGui renderer, upload/copy helpers, static instance data, material storage, and the active `ITestScene`.
 - `apps/vktest/TestDebugScenes.hpp` defines `ITestScene`, a C++ virtual scene interface whose methods receive `TestSceneContext` and can add render graph passes directly.
-- `apps/vktest/scenes/MeshletRendererTestScene.*` is the main working meshlet demo. It mixes preset scene loading, camera/controller state, light/day-night state, model instance handles, render graph pass wiring, CSM, depth pyramid, draw prep, and debug ImGui.
-- `apps/common/ScenePresets.*` provides reusable demo preset data today, but its loader callbacks call directly into the current `ResourceManager` path rather than producing reusable scene data.
+- `apps/vktest/scenes/MeshletRendererTestScene.*` is the main working meshlet demo. It still mixes camera/controller tooling, light/day-night controls, render graph pass wiring, CSM, depth pyramid, draw prep, and debug ImGui, but preset world/model data now comes from ECS authoring.
+- `apps/common/ScenePresets.*` provides data-first demo presets as plain camera defaults, optional CSM defaults, source model paths, and per-instance transforms. The older callback-based loader wrapper remains for compatibility.
+- `apps/vktest/DemoSceneEcsBridge.*` converts demo presets into Flecs entities and owns the temporary demo `AssetId` to source-path registry.
 - `src/core/Handle.hpp` and `src/core/Pool.hpp` provide runtime generational handles. They are good for in-process object lifetime, but they are not stable serialized IDs.
 - `src/ResourceManager.*` is a global singleton that caches models by `std::hash<std::string>` of the path, stores CPU `ModelInstance` data, creates per-instance GPU handles through `ModelGPUMgr`, and returns runtime `ModelHandle`s.
 - `src/gfx/ModelGPUManager.*` owns model GPU residency and per-instance GPU allocation through `ModelGPUHandle` and `ModelInstanceGPUHandle`. It loads model files, uploads model resources, allocates instance data, and frees GPU resources.
@@ -321,7 +322,7 @@ Exit criteria:
 
 ### Phase 4: Demo Preset Compatibility Loader
 
-Status: planned.
+Status: complete.
 
 Deliverables:
 
@@ -331,13 +332,13 @@ Deliverables:
 
 Exit criteria:
 
-- A Sponza/Suzanne/chessboard preset can exist as ECS data.
+- Sponza, Suzanne, chessboard, grid, random, and mixed default presets can exist as ECS data.
 - The loader does not create a new C++ scene subclass.
 - The loader does not expose `RenderGraph` or GPU handles to scene data.
 
 ### Phase 5: Resource Bridge For Mesh Renderables
 
-Status: planned.
+Status: complete as compatibility scaffolding.
 
 Deliverables:
 
@@ -352,7 +353,7 @@ Exit criteria:
 
 ### Phase 6: Render Extraction Preparation
 
-Status: planned. This should now move into the Phase 3 renderer migration work and be reconciled with `plans/render_service_extraction_design.md`.
+Status: complete. This moved into the Phase 3 renderer migration work and is tracked in `plans/render_service_extraction_design.md`.
 
 Deliverables:
 

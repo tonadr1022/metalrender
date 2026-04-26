@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "../../common/ScenePresets.hpp"
+#include "../DemoSceneEcsBridge.hpp"
 #include "../TestDebugScenes.hpp"
 #include "FpsCameraController.hpp"
 #include "MeshletCsmRenderer.hpp"
@@ -50,10 +51,8 @@ class MeshletRendererScene final : public ITestScene {
 
  private:
   void load_scene_presets();
-  void clear_all_models();
   void apply_preset(size_t idx);
-  void clear_ecs_preset_entities();
-  void author_ecs_suzanne_preset();
+  void author_current_demo_preset();
 
   void make_depth_pyramid_tex();
 
@@ -77,9 +76,11 @@ class MeshletRendererScene final : public ITestScene {
       meshlet_pso_late_;
   rhi::BufferHandleHolder meshlet_vis_buf_;
   FpsCameraController fps_camera_;
-  std::vector<ModelHandle> models_;
-  std::vector<teng::demo_scenes::ScenePreset> scene_presets_;
-  bool ecs_suzanne_preset_active_{false};
+  std::vector<teng::demo_scenes::DemoScenePresetData> scene_presets_;
+  teng::gfx::demo_scene_compat::DemoSceneEntityGuids demo_entity_guids_{};
+  size_t current_preset_index_{0};
+  bool demo_preset_authoring_pending_{false};
+  bool demo_preset_authored_{false};
   bool gpu_object_frustum_cull_{true};
   bool gpu_object_occlusion_cull_{true};
   std::array<rhi::BufferHandleHolder, k_max_frames_in_flight> task_cmd_group_count_readback_;

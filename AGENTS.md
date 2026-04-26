@@ -85,6 +85,12 @@ For design-note tasks:
 - Include phased implementation steps, risks, validation, and unresolved questions.
 - Keep plans specific to this repository.
 
+### Cpp Coding Tips
+
+- const correctness
+- don't cast when you don't need to.
+- don't use min/max, null checks when you don't need to. Many times invariants are true about these things.
+
 ### Mindset
 
 No shortcuts. Changes need to consider long term maintainability. Be thorough

@@ -9,6 +9,7 @@ add_executable(${target_name}
     ${COMMON_SOURCE_DIR}/ScenePresets.cpp
     ${METALRENDER_APP_DIR}/Camera.cpp
     ${METALRENDER_APP_DIR}/FpsCameraController.cpp
+    DemoSceneEcsBridge.cpp
     TestDebugScenes.cpp
     TestRenderer.cpp
     TestApp.cpp
@@ -20,4 +21,4 @@ add_executable(${target_name}
 )
 
 target_include_directories(${target_name} PRIVATE ${COMMON_SOURCE_DIR} ${METALRENDER_APP_DIR})
-target_link_libraries(${target_name} PUBLIC teng)
+target_link_libraries(${target_name} PUBLIC teng flecs::flecs_static)

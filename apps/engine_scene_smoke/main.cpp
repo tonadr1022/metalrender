@@ -1,5 +1,6 @@
 #include <iostream>
 
+#include "DemoSceneEcsBridge.hpp"
 #include "engine/scene/SceneSmokeTest.hpp"
 
 int main() {
@@ -9,6 +10,10 @@ int main() {
   }
   if (!teng::engine::run_render_scene_extraction_smoke_test()) {
     std::cerr << "engine_scene_smoke: render scene extraction smoke test failed\n";
+    return 1;
+  }
+  if (!teng::gfx::demo_scene_compat::run_demo_scene_authoring_smoke_test()) {
+    std::cerr << "engine_scene_smoke: demo scene authoring smoke test failed\n";
     return 1;
   }
   return 0;

@@ -10,7 +10,6 @@
 #include <string>
 
 #include "MeshletTestRenderUtil.hpp"
-#include "ResourceManager.hpp"
 #include "Window.hpp"
 #include "core/Logger.hpp"
 #include "engine/scene/Scene.hpp"
@@ -35,10 +34,6 @@ using namespace teng::demo_scenes;
 using namespace rhi;
 
 namespace {
-
-constexpr engine::EntityGuid k_ecs_suzanne_camera_guid{0x73757a616e6e6501ull};
-constexpr engine::EntityGuid k_ecs_suzanne_light_guid{0x73757a616e6e6502ull};
-constexpr engine::EntityGuid k_ecs_suzanne_mesh_guid{0x73757a616e6e6503ull};
 
 glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
   // clang-format off
@@ -150,82 +145,23 @@ MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx)
 
 void MeshletRendererScene::load_scene_presets() {
   scene_presets_.clear();
-  const ScenePresetLoaders loaders{
-      .add_model =
-          [this](const std::filesystem::path& p, const glm::mat4& t) {
-            LINFO("LOADING MODEL: {}", p.string());
-            models_.emplace_back(ResourceManager::get().load_model(p, t));
-          },
-      .add_instanced =
-          [this](const std::filesystem::path& p, std::vector<glm::mat4>&& tf) {
-            ResourceManager::InstancedModelLoadRequest req{.path = p,
-                                                           .instance_transforms = std::move(tf)};
-            auto result = ResourceManager::get().load_instanced_models(std::span(&req, 1));
-            for (auto& r : result) {
-              models_.reserve(models_.size() + r.size());
-              models_.insert(models_.end(), std::make_move_iterator(r.begin()),
-                             std::make_move_iterator(r.end()));
-            }
-          },
-  };
-  append_default_scene_presets(scene_presets_, ctx_.resource_dir, loaders);
+  append_default_scene_preset_data(scene_presets_, ctx_.resource_dir);
 }
 
-void MeshletRendererScene::clear_all_models() {
-  for (auto& m : models_) {
-    ResourceManager::get().free_model(m);
-  }
-  models_.clear();
-}
-
-void MeshletRendererScene::clear_ecs_preset_entities() {
-  ecs_suzanne_preset_active_ = false;
+void MeshletRendererScene::author_current_demo_preset() {
   if (!ctx_.scene_manager) {
     return;
   }
-  auto* scene = ctx_.scene_manager->active_scene();
-  if (!scene) {
+  if (scene_presets_.empty() || current_preset_index_ >= scene_presets_.size()) {
     return;
   }
-  scene->destroy_entity(k_ecs_suzanne_camera_guid);
-  scene->destroy_entity(k_ecs_suzanne_light_guid);
-  scene->destroy_entity(k_ecs_suzanne_mesh_guid);
-}
-
-void MeshletRendererScene::author_ecs_suzanne_preset() {
-  if (!ctx_.scene_manager) {
-    return;
+  demo_entity_guids_ = demo_scene_compat::apply_demo_preset_to_scene(
+      *ctx_.scene_manager, scene_presets_[current_preset_index_], ctx_.resource_dir);
+  demo_preset_authoring_pending_ = false;
+  demo_preset_authored_ = true;
+  if (auto* scene = ctx_.scene_manager->active_scene()) {
+    sync_compatibility_ecs_scene(*scene);
   }
-  auto* scene = ctx_.scene_manager->active_scene();
-  if (!scene) {
-    scene = &ctx_.scene_manager->create_scene("vktest compatibility render scene");
-  }
-
-  scene->ensure_entity(k_ecs_suzanne_camera_guid, "suzanne camera");
-  scene->set_camera(k_ecs_suzanne_camera_guid, {
-                                                   .fov_y = 1.04719755f,
-                                                   .z_near = 0.1f,
-                                                   .z_far = 10000.f,
-                                                   .primary = true,
-                                               });
-
-  scene->ensure_entity(k_ecs_suzanne_light_guid, "suzanne directional light");
-  scene->set_directional_light(k_ecs_suzanne_light_guid, {
-                                                             .direction = toward_light_effective_,
-                                                             .color = glm::vec3{1.f},
-                                                             .intensity = 1.f,
-                                                         });
-
-  scene->ensure_entity(k_ecs_suzanne_mesh_guid, "suzanne mesh");
-  scene->set_transform(k_ecs_suzanne_mesh_guid, {});
-  scene->set_local_to_world(k_ecs_suzanne_mesh_guid, {.value = glm::mat4{1.f}});
-  scene->set_mesh_renderable(k_ecs_suzanne_mesh_guid,
-                             {
-                                 .model = engine::AssetId::from_path(k_suzanne_path),
-                             });
-
-  ecs_suzanne_preset_active_ = true;
-  sync_compatibility_ecs_scene(*scene);
 }
 
 void MeshletRendererScene::apply_preset(size_t idx) {
@@ -243,12 +179,10 @@ void MeshletRendererScene::apply_preset(size_t idx) {
     csm_renderer_.set_scene_defaults(MeshletCsmRenderer::SceneDefaults{});
   }
 
-  clear_all_models();
-  clear_ecs_preset_entities();
-  if (idx == 0) {
-    author_ecs_suzanne_preset();
-  }
-  preset.load_fn();
+  current_preset_index_ = idx;
+  demo_preset_authoring_pending_ = true;
+  demo_preset_authored_ = false;
+  author_current_demo_preset();
 }
 
 void MeshletRendererScene::apply_demo_scene_preset(size_t index) {
@@ -274,7 +208,6 @@ void MeshletRendererScene::shutdown() {
   }
   csm_renderer_.shutdown();
   depth_pyramid_.shutdown();
-  clear_all_models();
 }
 
 void MeshletRendererScene::on_frame(const TestSceneContext& ctx) {
@@ -287,27 +220,22 @@ void MeshletRendererScene::on_frame(const TestSceneContext& ctx) {
 }
 
 void MeshletRendererScene::sync_compatibility_ecs_scene(engine::Scene& scene) {
-  if (!ecs_suzanne_preset_active_) {
+  if (demo_preset_authoring_pending_) {
+    author_current_demo_preset();
+  }
+  if (!demo_preset_authored_) {
     return;
   }
 
   Camera& app_camera = fps_camera_.camera();
   app_camera.calc_vectors();
-  scene.set_transform(k_ecs_suzanne_camera_guid, {.translation = app_camera.pos});
-  scene.set_local_to_world(k_ecs_suzanne_camera_guid,
-                           {.value = glm::inverse(app_camera.get_view_mat())});
-  scene.set_camera(k_ecs_suzanne_camera_guid, {
-                                                  .fov_y = 1.04719755f,
-                                                  .z_near = 0.1f,
-                                                  .z_far = 10000.f,
-                                                  .primary = true,
-                                              });
-
-  scene.set_directional_light(k_ecs_suzanne_light_guid, {
-                                                            .direction = toward_light_effective_,
-                                                            .color = glm::vec3{1.f},
-                                                            .intensity = 1.f,
-                                                        });
+  demo_scene_compat::sync_demo_camera_tooling(scene, demo_entity_guids_.camera, app_camera);
+  demo_scene_compat::sync_demo_light_tooling(scene, demo_entity_guids_.light,
+                                             {
+                                                 .direction = toward_light_effective_,
+                                                 .color = glm::vec3{1.f},
+                                                 .intensity = 1.f,
+                                             });
 }
 
 void MeshletRendererScene::on_cursor_pos(double x, double y) { fps_camera_.on_cursor_pos(x, y); }

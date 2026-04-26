@@ -45,6 +45,21 @@ struct ScenePreset {
   std::optional<CsmDefaults> csm_defaults;
 };
 
+struct DemoSceneModelInstances {
+  std::string source_path;
+  std::vector<glm::mat4> instance_transforms;
+};
+
+struct DemoScenePresetData {
+  std::string name;
+  Camera cam;
+  std::optional<ScenePreset::CsmDefaults> csm_defaults;
+  std::vector<DemoSceneModelInstances> models;
+};
+
+void append_default_scene_preset_data(std::vector<DemoScenePresetData>& out,
+                                      const std::filesystem::path& resource_dir);
+
 void append_default_scene_presets(std::vector<ScenePreset>& out,
                                   const std::filesystem::path& resource_dir,
                                   const ScenePresetLoaders& loaders);

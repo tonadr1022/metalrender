@@ -1,6 +1,6 @@
 # Engine Runtime Migration Plan
 
-Status: Phase 2 Flecs scene foundation implemented; render service, demo ECS migration, asset, 2D, editor, and scripting phases remain planned.
+Status: Phase 4 demo ECS migration implemented. Flecs scene foundation, RenderScene extraction, RenderService shell, ECS-authored demo presets, and the temporary renderer/resource compatibility bridge exist. The next major step is extracting the meshlet renderer out of the `ITestScene`/`MeshletRendererScene` test harness into a real `IRenderer` implementation.
 
 This plan treats the engine as a long-term runtime/editor foundation, not as a cleaned-up version of the current demo harness. The current `vktest`, `TestRenderer`, `ITestScene`, and `MeshletRendererScene` code should keep working during migration, but they are scaffolding. The destination is a tick-driven, layer-composed engine with data-first Flecs scenes, stable IDs, renderer services, and an editor layer on top of the same runtime.
 
@@ -77,18 +77,13 @@ Long term, renderer services belong in `engine::RenderService` or lower-level `g
 
 `apps/vktest/scenes/MeshletRendererTestScene.cpp` currently mixes:
 
-- Demo scene data.
-- Model instance lifetime.
-- Camera state.
-- Light/day-night state.
-- Transform synchronization.
 - Meshlet draw prep.
 - Depth pyramid.
 - CSM.
 - Render graph pass wiring.
 - Debug ImGui.
 
-Long term, scene data belongs in Flecs, render extraction belongs in the engine render bridge, and meshlet-specific passes belong in a meshlet renderer implementation. This class should be split gradually, then deleted.
+Demo preset scene data has moved into ECS authoring. `MeshletRendererScene` still owns meshlet-specific controls, pass wiring, CSM/depth-pyramid/draw-prep resources, and temporary camera/light tooling hooks. The next migration should move those meshlet renderer responsibilities into a renderer-owned `IRenderer` implementation, then delete or sharply reduce this class to test-only adapter code.
 
 ## Destination Architecture
 
@@ -465,13 +460,13 @@ They may remain in a graphics test executable, but they should not define engine
 Scaffolding role:
 
 - Working reference implementation for meshlet rendering behavior.
-- Temporary bridge for CSM, depth pyramid, draw prep, camera, light, and model preset behavior.
+- Temporary bridge for CSM, depth pyramid, draw prep, meshlet pass wiring, renderer debug UI, and camera/light tooling.
 
 Retire when:
 
 - Meshlet-specific render code lives in `MeshletRenderer`.
-- Camera/light/model data comes from ECS and `RenderScene`.
-- Demo presets instantiate Flecs entities.
+- Camera/light/model data continues to come from ECS and `RenderScene`.
+- Demo presets continue to instantiate Flecs entities.
 - Debug UI is split into scene data UI and meshlet renderer debug UI.
 
 ### `ResourceManager` Singleton
@@ -593,38 +588,47 @@ Exit criteria:
 
 ### Phase 4: Migrate Demo Presets Into ECS Data
 
+Status: complete.
+
 Deliverables:
 
 - Convert current meshlet demo presets into entity creation against `engine::Scene`.
 - Replace `MeshletRendererScene::models_` ownership with ECS `MeshRenderable` plus `Transform`.
 - Move camera and directional light state to ECS components.
-- Keep FPS camera as a controller/tooling system operating on a camera entity.
-- Extend scene metadata for scene-specific renderer feature settings such as meshlet CSM defaults before migrated presets rely on those defaults.
+- Keep FPS camera as compatibility/tooling code that mutates the active ECS camera entity.
+- Add a temporary `AssetId` to source-path registry for renderer/resource compatibility code.
+- Add a renderer-side compatibility bridge that diffs extracted `RenderMesh` entries by stable `EntityGuid` and owns runtime `ModelHandle` lifetime.
 
 Scaffolding reduced:
 
-- `MeshletRendererScene` should stop owning world data.
-- `ModelHandle` should become runtime resource state, not scene state.
+- `MeshletRendererScene` no longer owns demo world/model data.
+- `ModelHandle` is runtime renderer/resource compatibility state, not scene state.
+- Global `ResourceManager` remains compatibility scaffolding behind the renderer-side bridge.
 
 Exit criteria:
 
-- At least one current meshlet preset is represented as Flecs entities.
+- All default meshlet demo presets are represented as Flecs entities.
+- Reapplying presets clears previously authored demo entities.
 - Transform updates flow from ECS to renderer extraction.
-- Camera/light data comes from ECS for the migrated preset.
+- Camera/light data comes from ECS for migrated presets.
+- `engine_scene_smoke`, `./scripts/agent_verify.sh`, and `vktest --quit-after-frames 30` cover the bridge.
 
 ### Phase 5: Extract Meshlet Renderer Properly
 
+Status: next.
+
 Deliverables:
 
-- Create `MeshletRenderer` implementing `IRenderer`.
+- Create `MeshletRenderer` implementing `IRenderer`; it should be the owner of the meshlet runtime path instead of `apps/vktest/scenes/MeshletRendererTestScene.*`.
 - Move CSM, depth pyramid, draw prep, and meshlet pass wiring into renderer-owned code.
 - Consume `RenderScene` mesh/camera/light data.
-- Diff renderer instance allocation by stable `EntityGuid` from the start so unchanged model instances do not rewrite instance buffers every frame. The first mesh path treats one `EntityGuid` as one model instance.
+- Keep renderer instance allocation diffed by stable `EntityGuid` so unchanged model instances do not rewrite instance buffers every frame. The first mesh path treats one `EntityGuid` as one model instance.
 - Split debug UI into renderer debug UI and scene/editor UI.
 
 Scaffolding retired:
 
 - `MeshletRendererScene` should be deleted or reduced to a test-only adapter.
+- `ITestScene` should no longer be required for normal meshlet demo rendering.
 
 Exit criteria:
 
@@ -740,11 +744,34 @@ migrating the current meshlet demo off the compatibility path.
 7. `engine::DebugClearRenderer` as the first minimal diagnostic renderer.
 8. `engine_scene_smoke` coverage for render extraction.
 
-Current next implementation work: keep Phase 3 moving by putting the remaining
-compatibility bridge behind `RenderService`, moving ImGui final composition out
-of `MeshletRendererScene`, and then migrating one demo preset into ECS data.
-`TestRenderer`, `ITestScene`, `MeshletRendererScene`, and global
-`ResourceManager` remain compatibility scaffolding.
+### Slice 4: Demo Preset ECS Authoring And Resource Compatibility Bridge
+
+The fourth implementation slice moved demo scene data out of
+`MeshletRendererScene` and into ECS authoring while preserving the current
+meshlet demo visuals through an explicit compatibility bridge.
+
+1. `apps/common/ScenePresets.*` now exposes plain `DemoScenePresetData`
+   containing camera defaults, optional CSM defaults, model source paths, and
+   per-instance transforms.
+2. `apps/vktest/DemoSceneEcsBridge.*` authors camera, directional light, mesh
+   renderable, transform, local-to-world, name, and stable GUID components into
+   the active `engine::Scene`.
+3. Preset reapplication clears previously authored demo entities by tracked
+   `EntityGuid`.
+4. `MeshletRendererScene` no longer owns `ModelHandle`s or authors one-off
+   Suzanne ECS data. It keeps meshlet controls, CSM/debug UI, and temporary
+   camera/light tooling hooks.
+5. `TestRenderer` owns the renderer/resource compatibility bridge that resolves
+   extracted `AssetId`s to demo source paths, loads/frees `ResourceManager`
+   runtime models, and updates runtime transforms from `RenderScene` meshes.
+6. `engine_scene_smoke` covers procedural demo authoring, valid asset IDs,
+   deterministic extraction, and stale entity cleanup.
+
+Current next implementation work: move the meshlet renderer out of the
+`ITestScene`/`MeshletRendererScene` test harness and into a real
+`IRenderer` implementation that consumes `RenderScene`. `TestRenderer`,
+`ITestScene`, `MeshletRendererScene`, and global `ResourceManager` remain
+compatibility scaffolding until that extraction is complete.
 
 ## Validation Strategy
 
@@ -771,5 +798,5 @@ triage after the first Phase 3 slice:
 2. Stable ID and asset handle design note: partially done. `SceneId`, `EntityGuid`, and path-derived `AssetId` exist. The long-term answer is an asset registry with generated durable IDs plus source/import metadata; fold the detailed registry/resource-service design into the asset service boundary doc before Phase 5 or Phase 6.
 3. Editor play-mode semantics: not needed yet. Write this before Phase 8, after runtime scenes and renderer extraction are usable.
 4. RenderScene schema for 2D plus 3D: first implementation done for Phase 3 in `src/engine/render/RenderScene.hpp`; keep `plans/render_service_extraction_design.md` updated as implementation reveals naming or ownership changes.
-5. Asset service boundary and `ResourceManager` retirement plan: needed soon now that first RenderScene extraction exists. Write before demo preset/resource bridge work starts in Phase 4/5.
+5. Asset service boundary and `ResourceManager` retirement plan: needed after the meshlet `IRenderer` extraction clarifies final renderer/resource ownership. The current `AssetId -> path -> ResourceManager` bridge is temporary compatibility code.
 6. Metal validation plan for `EngineConfig` backend selection: useful but not blocking Phase 3. Write before backend-specific renderer/service changes or before any migration slice that claims Metal parity.

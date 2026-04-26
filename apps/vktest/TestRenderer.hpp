@@ -2,10 +2,13 @@
 
 #include <filesystem>
 #include <memory>
+#include <unordered_map>
 
 #include "TestDebugScenes.hpp"
 #include "engine/render/IRenderer.hpp"
 #include "engine/render/RenderFrameContext.hpp"
+#include "engine/scene/SceneIds.hpp"
+#include "gfx/RendererTypes.hpp"
 
 namespace teng {
 class Window;
@@ -32,9 +35,17 @@ class TestRenderer final : public engine::IRenderer {
 
  private:
   void populate_compatibility_context(engine::RenderFrameContext& frame);
+  void sync_resource_compatibility_models(const engine::RenderScene& scene);
+  void clear_resource_compatibility_models();
   void add_render_graph_passes();
   void imgui_device_info() const;
 
+  struct RuntimeModel {
+    ModelHandle handle;
+    engine::AssetId asset;
+  };
+
+  std::unordered_map<engine::EntityGuid, RuntimeModel> runtime_models_;
   std::unique_ptr<ITestScene> scene_;
   TestDebugScene active_scene_{TestDebugScene::TexturedCubeProcedural};
 
