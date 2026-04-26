@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <numbers>
 #include <string>
 
 #include "Window.hpp"
@@ -18,42 +17,8 @@ namespace teng::gfx {
 
 using namespace teng::demo_scenes;
 
-namespace {
-
-glm::vec3 safe_normalize_toward_light(const glm::vec3& v) {
-  const float s2 = glm::dot(v, v);
-  if (s2 < 1e-12f) {
-    return glm::normalize(glm::vec3(0.35f, 1.f, 0.4f));
-  }
-  return v * (1.f / std::sqrt(s2));
-}
-
-}  // namespace
-
-void MeshletRendererScene::update_toward_light_effective(const TestSceneContext& ctx) {
-  if (day_night_cycle_ && !day_night_cycle_paused_) {
-    const float period = std::max(1e-4f, day_cycle_period_sec_);
-    day_cycle_time_sec_ = std::fmodf(day_cycle_time_sec_ + ctx.delta_time_sec, period);
-    if (day_cycle_time_sec_ < 0.f) {
-      day_cycle_time_sec_ += period;
-    }
-  }
-
-  if (day_night_cycle_) {
-    const float period = std::max(1e-4f, day_cycle_period_sec_);
-    const float phase_wrapped = std::fmodf(day_cycle_time_sec_, period);
-    const float t = 2.0f * std::numbers::pi_v<float> * (phase_wrapped / period) -
-                    0.5f * std::numbers::pi_v<float>;
-    const glm::vec3 raw(0.35f * std::cos(t), std::sin(t), 0.4f * std::cos(t * 0.5f));
-    toward_light_effective_ = safe_normalize_toward_light(raw);
-  } else {
-    toward_light_effective_ = safe_normalize_toward_light(toward_light_manual_);
-  }
-}
-
 MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx) : ITestScene(ctx) {
   load_scene_presets();
-  toward_light_effective_ = safe_normalize_toward_light(toward_light_manual_);
 }
 
 void MeshletRendererScene::load_scene_presets() {
@@ -113,8 +78,6 @@ void MeshletRendererScene::apply_demo_scene_preset(size_t index) {
   apply_preset(idx);
 }
 
-void MeshletRendererScene::on_swapchain_resize() {}
-
 void MeshletRendererScene::shutdown() {
   if (ctx_.window) {
     fps_camera_.set_mouse_captured(ctx_.window->get_handle(), false);
@@ -122,7 +85,6 @@ void MeshletRendererScene::shutdown() {
 }
 
 void MeshletRendererScene::on_frame(const TestSceneContext& ctx) {
-  update_toward_light_effective(ctx);
   const bool imgui_blocks =
       ctx.imgui_ui_active && (ImGui::GetIO().WantTextInput || ImGui::GetIO().WantCaptureKeyboard);
   if (ctx.window) {
@@ -143,7 +105,7 @@ void MeshletRendererScene::sync_compatibility_ecs_scene(engine::Scene& scene) {
   demo_scene_compat::sync_demo_camera_tooling(scene, demo_entity_guids_.camera, app_camera);
   demo_scene_compat::sync_demo_light_tooling(scene, demo_entity_guids_.light,
                                              {
-                                                 .direction = toward_light_effective_,
+                                                 .direction = glm::vec3{0.35f, 1.f, 0.4f},
                                                  .color = glm::vec3{1.f},
                                                  .intensity = 1.f,
                                              });
@@ -184,23 +146,6 @@ void MeshletRendererScene::on_imgui() {
       apply_preset(scene_preset_selection);
     }
     ImGui::Separator();
-  }
-  ImGui::SeparatorText("Lighting");
-  {
-    const bool was_day_night = day_night_cycle_;
-    ImGui::BeginDisabled(day_night_cycle_);
-    ImGui::DragFloat3("Toward light (world)", &toward_light_manual_.x, 0.01f);
-    ImGui::EndDisabled();
-    ImGui::Checkbox("Day / night cycle", &day_night_cycle_);
-    if (was_day_night && !day_night_cycle_) {
-      toward_light_manual_ = toward_light_effective_;
-    }
-    ImGui::BeginDisabled(!day_night_cycle_);
-    ImGui::Checkbox("Pause cycle", &day_night_cycle_paused_);
-    ImGui::SliderFloat("Day length (s)", &day_cycle_period_sec_, 10.0f, 600.0f);
-    ImGui::EndDisabled();
-    ImGui::Text("Effective (normalized): %.3f, %.3f, %.3f", toward_light_effective_.x,
-                toward_light_effective_.y, toward_light_effective_.z);
   }
   if (meshlet_gpu_) {
     meshlet_gpu_->imgui_gpu_panels();

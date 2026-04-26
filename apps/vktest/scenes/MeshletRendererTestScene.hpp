@@ -24,7 +24,7 @@ class MeshletRendererScene final : public ITestScene {
 
   void on_imgui() override;
 
-  void on_swapchain_resize() override;
+  void on_swapchain_resize() override {}
 
   void apply_demo_scene_preset(size_t index) override;
   void sync_compatibility_ecs_scene(teng::engine::Scene& scene) override;
@@ -38,16 +38,7 @@ class MeshletRendererScene final : public ITestScene {
   void apply_preset(size_t idx);
   void author_current_demo_preset();
 
-  void update_toward_light_effective(const TestSceneContext& ctx);
-
   MeshletRenderer* meshlet_gpu_{};
-
-  glm::vec3 toward_light_manual_{0.35f, 1.f, 0.4f};
-  glm::vec3 toward_light_effective_{0.35f, 1.f, 0.4f};
-  bool day_night_cycle_{false};
-  bool day_night_cycle_paused_{false};
-  float day_cycle_time_sec_{0.f};
-  float day_cycle_period_sec_{120.f};
 
   FpsCameraController fps_camera_;
   std::vector<teng::demo_scenes::DemoScenePresetData> scene_presets_;
