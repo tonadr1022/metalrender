@@ -424,7 +424,8 @@ rhi::BufferHandle Device::create_buf(const rhi::BufferDesc& desc) {
   main_res_set_->commit();
   req_alloc_sizes_.total_buffer_space_allocated += desc.size;
 
-  return buffer_pool_.alloc(desc, mtl_buf, resource_opts, idx);
+  auto handle = buffer_pool_.alloc(desc, mtl_buf, resource_opts, idx);
+  return handle;
 }
 
 namespace {
@@ -1256,6 +1257,8 @@ void Device::DeleteQueues::enqueue_deletion(rhi::BufferHandle handle, size_t cur
 void Device::destroy_actual(rhi::BufferHandle handle) {
   auto* buf = buffer_pool_.get(handle);
   if (!buf) {
+    LWARN("destroy_actual: no pool entry for buffer handle idx={} gen={} packed={}",
+          handle.get_idx(), handle.get_gen(), handle.to64());
     return;
   }
 

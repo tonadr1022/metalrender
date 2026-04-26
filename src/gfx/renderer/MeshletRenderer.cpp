@@ -210,26 +210,14 @@ void MeshletRenderer::shutdown_gpu() {
     shutdown_subsystems();
   }
   if (device != nullptr) {
-    if (meshlet_vis_buf_.handle.is_valid()) {
-      device->destroy(meshlet_vis_buf_.handle);
-      meshlet_vis_buf_ = {};
-    }
+    meshlet_vis_buf_ = {};
     for (auto& b : task_cmd_group_count_readback_) {
-      if (b.handle.is_valid()) {
-        device->destroy(b.handle);
-      }
       b = {};
     }
     for (auto& b : visible_object_count_readback_) {
-      if (b.handle.is_valid()) {
-        device->destroy(b.handle);
-      }
       b = {};
     }
     for (auto& b : meshlet_stats_buf_readback_) {
-      if (b.handle.is_valid()) {
-        device->destroy(b.handle);
-      }
       b = {};
     }
   }
@@ -421,7 +409,6 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
         meshlet_vis_buf_.handle.is_valid() ? frame.device->get_buf(meshlet_vis_buf_) : nullptr;
     if (cur == nullptr || cur->size() < need) {
       if (meshlet_vis_buf_.handle.is_valid()) {
-        frame.device->destroy(meshlet_vis_buf_.handle);
         meshlet_vis_buf_ = {};
       }
       meshlet_vis_buf_ = frame.device->create_buf_h({
