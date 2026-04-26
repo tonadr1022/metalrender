@@ -9,10 +9,7 @@ add_executable(${target_name}
     ${COMMON_SOURCE_DIR}/ScenePresets.cpp
     ${METALRENDER_APP_DIR}/Camera.cpp
     DemoSceneEcsBridge.cpp
-    TestDebugScenes.cpp
-    TestRenderer.cpp
     TestApp.cpp
-    scenes/MeshletRendererTestScene.cpp
 )
 
 target_include_directories(${target_name} PRIVATE ${COMMON_SOURCE_DIR} ${METALRENDER_APP_DIR})

@@ -24,6 +24,7 @@
 #include "gfx/ShaderManager.hpp"
 #include "gfx/renderer/BufferResize.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
+#include "gfx/renderer/MeshletRenderer.hpp"
 #include "gfx/renderer/ModelGPUUploader.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -95,12 +96,14 @@ void RenderService::init(const CreateInfo& cinfo) {
       .address_mode = gfx::rhi::AddressMode::ClampToEdge,
   }));
   initialized_ = true;
+  set_renderer(std::make_unique<gfx::MeshletRenderer>());
 }
 
 void RenderService::shutdown() {
   if (!initialized_) {
     return;
   }
+  meshlet_renderer_ = nullptr;
   renderer_.reset();
   samplers_.clear();
   model_gpu_mgr_.reset();
@@ -129,6 +132,7 @@ void RenderService::shutdown_imgui_renderer() {
 
 void RenderService::set_renderer(std::unique_ptr<IRenderer> renderer) {
   renderer_ = std::move(renderer);
+  meshlet_renderer_ = dynamic_cast<gfx::MeshletRenderer*>(renderer_.get());
   if (renderer_ && initialized_) {
     renderer_->on_resize(frame_);
   }
@@ -235,6 +239,12 @@ void RenderService::render_scene(const RenderScene& scene) {
 }
 
 void RenderService::set_imgui_ui_active(bool active) { frame_.imgui_ui_active = active; }
+
+void RenderService::on_imgui() {
+  if (renderer_) {
+    renderer_->on_imgui(frame_);
+  }
+}
 
 void RenderService::request_render_graph_debug_dump() { render_graph_.request_debug_dump_once(); }
 

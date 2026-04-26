@@ -19,6 +19,7 @@ class Window;
 
 namespace gfx {
 class ImGuiRenderer;
+class MeshletRenderer;
 class ModelGPUMgr;
 class ShaderManager;
 
@@ -62,6 +63,7 @@ class RenderService {
   void end_frame();
   void render_scene(const RenderScene& scene);
   void set_imgui_ui_active(bool active);
+  void on_imgui();
   void request_render_graph_debug_dump();
   void recreate_resources_on_swapchain_resize();
 
@@ -70,6 +72,7 @@ class RenderService {
   [[nodiscard]] const RenderScene& last_extracted_scene() const { return last_extracted_scene_; }
   [[nodiscard]] gfx::RenderGraph& render_graph() { return render_graph_; }
   [[nodiscard]] gfx::ModelGPUMgr* model_gpu_mgr() const { return model_gpu_mgr_.get(); }
+  [[nodiscard]] gfx::MeshletRenderer* meshlet_renderer() const { return meshlet_renderer_; }
 
  private:
   void update_frame_context();
@@ -88,6 +91,7 @@ class RenderService {
   std::unique_ptr<gfx::ImGuiRenderer> imgui_renderer_;
   std::unique_ptr<gfx::ModelGPUMgr> model_gpu_mgr_;
   std::unique_ptr<IRenderer> renderer_;
+  gfx::MeshletRenderer* meshlet_renderer_{};
   gfx::RenderGraph render_graph_;
   RenderFrameContext frame_;
   RenderScene last_extracted_scene_;

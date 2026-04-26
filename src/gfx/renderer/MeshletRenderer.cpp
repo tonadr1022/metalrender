@@ -264,6 +264,8 @@ void MeshletRenderer::on_resize(engine::RenderFrameContext& frame) {
   make_depth_pyramid_tex(frame);
 }
 
+void MeshletRenderer::on_imgui(engine::RenderFrameContext&) { imgui_gpu_panels(); }
+
 void MeshletRenderer::bake_swapchain_clear(engine::RenderFrameContext& frame,
                                            std::string_view pass_name) {
   ASSERT(frame.swapchain != nullptr);

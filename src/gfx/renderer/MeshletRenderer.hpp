@@ -43,6 +43,7 @@ class MeshletRenderer final : public engine::IRenderer {
 
   void render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) override;
   void on_resize(engine::RenderFrameContext& frame) override;
+  void on_imgui(engine::RenderFrameContext& frame) override;
 
   void shutdown_gpu();
   void imgui_gpu_panels();

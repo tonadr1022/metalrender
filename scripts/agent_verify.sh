@@ -16,7 +16,7 @@ changed_paths() {
 PRESET="${CMAKE_PRESET:-Debug}"
 BUILD_DIR="$REPO_ROOT/build/$PRESET"
 BIN_DIR="$BUILD_DIR/bin"
-TARGETS=(teng-shaderc engine_scene_smoke)
+TARGETS=(vktest teng-shaderc engine_scene_smoke)
 DO_FORMAT=0
 DO_TIDY=1
 
@@ -83,7 +83,7 @@ cd "$REPO_ROOT"
 
 if [[ "$SKIP_CONFIGURE" -eq 0 ]]; then
 	# cmake --preset "$PRESET"
-    cmake --preset "$PRESET" 1>/dev/null
+	cmake --preset "$PRESET" 1>/dev/null
 fi
 
 extra_targets=()
@@ -122,7 +122,7 @@ while IFS= read -r f; do
 		continue
 	fi
 	case "$f" in
-	*.vert.hlsl|*.frag.hlsl|*.comp.hlsl|*.mesh.hlsl|*.task.hlsl)
+	*.vert.hlsl | *.frag.hlsl | *.comp.hlsl | *.mesh.hlsl | *.task.hlsl)
 		SHADER_ENTRIES+=("$f")
 		;;
 	*)
@@ -153,12 +153,12 @@ if [[ "$DO_FORMAT" -eq 1 ]]; then
 	while IFS= read -r f; do
 		[[ -n "$f" ]] || continue
 		case "$f" in
-		apps/*|src/*|cmake/*) ;;
+		apps/* | src/* | cmake/*) ;;
 		*) continue ;;
 		esac
 		# Skip .mm/.m: root .clang-format is C++-only; clang-format errors on ObjC++.
 		case "$f" in
-		*.cpp|*.h|*.hpp|*.cc|*.cxx|*.inl) ;;
+		*.cpp | *.h | *.hpp | *.cc | *.cxx | *.inl) ;;
 		*) continue ;;
 		esac
 		[[ -f "$REPO_ROOT/$f" ]] || continue
