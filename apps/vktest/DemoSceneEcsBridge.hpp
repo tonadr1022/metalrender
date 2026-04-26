@@ -29,6 +29,8 @@ void sync_demo_camera_tooling(engine::Scene& scene, engine::EntityGuid camera_gu
                               const ::Camera& camera);
 void sync_demo_light_tooling(engine::Scene& scene, engine::EntityGuid light_guid,
                              engine::DirectionalLight light);
+void sync_loaded_model_transforms(engine::Scene& scene);
+void clear_loaded_models(engine::SceneManager& scenes);
 
 void register_asset_path(engine::AssetId asset_id, std::filesystem::path path);
 [[nodiscard]] std::optional<std::filesystem::path> resolve_model_path(engine::AssetId asset_id);

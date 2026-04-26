@@ -6,6 +6,7 @@
 #include <cmath>
 #include <string>
 
+#include "engine/scene/SceneManager.hpp"
 #include "imgui.h"
 
 namespace teng::gfx {
@@ -14,6 +15,21 @@ using namespace teng::demo_scenes;
 
 MeshletRendererScene::MeshletRendererScene(const TestSceneContext& ctx) : ITestScene(ctx) {
   load_scene_presets();
+}
+
+void MeshletRendererScene::shutdown() {
+  if (ctx_.scene_manager) {
+    demo_scene_compat::clear_loaded_models(*ctx_.scene_manager);
+  }
+}
+
+void MeshletRendererScene::on_frame(const TestSceneContext& ctx) {
+  if (!ctx.scene_manager) {
+    return;
+  }
+  if (engine::Scene* scene = ctx.scene_manager->active_scene()) {
+    demo_scene_compat::sync_loaded_model_transforms(*scene);
+  }
 }
 
 void MeshletRendererScene::load_scene_presets() {

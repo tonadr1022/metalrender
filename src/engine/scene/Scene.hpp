@@ -30,6 +30,7 @@ class Scene {
   void destroy_entity(EntityGuid guid);
   [[nodiscard]] bool has_entity(EntityGuid guid) const;
   [[nodiscard]] flecs::entity find_entity(EntityGuid guid) const;
+  [[nodiscard]] const LocalToWorld* get_local_to_world(EntityGuid guid) const;
   [[nodiscard]] const FpsCameraController* get_fps_camera_controller(EntityGuid guid) const;
   bool set_transform(EntityGuid guid, const Transform& transform) const;
   bool set_local_to_world(EntityGuid guid, const LocalToWorld& local_to_world) const;

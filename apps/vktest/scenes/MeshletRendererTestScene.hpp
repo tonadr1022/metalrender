@@ -13,6 +13,8 @@ class MeshletRendererScene final : public ITestScene {
  public:
   explicit MeshletRendererScene(const TestSceneContext& ctx);
 
+  void shutdown() override;
+  void on_frame(const TestSceneContext& ctx) override;
   void on_imgui() override;
 
   void apply_demo_scene_preset(size_t index) override;

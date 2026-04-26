@@ -41,6 +41,7 @@ void ResourceManager::free_model(ModelHandle handle) {
   entry.use_count--;
   model_gpu_mgr_->free_instance(model->instance.instance_gpu_handle);
   tot_instances_loaded_--;
+  model_instance_pool_.destroy(handle);
 
   if (entry.use_count == 0 && should_release_unused_models_) {
     model_gpu_mgr_->free_model(entry.gpu_resource_handle);

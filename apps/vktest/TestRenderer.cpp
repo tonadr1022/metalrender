@@ -6,12 +6,9 @@
 #include <filesystem>
 #include <memory>
 #include <tracy/Tracy.hpp>
-#include <unordered_set>
-#include <vector>
 
 #include "../common/ScenePresets.hpp"
 #include "DemoSceneEcsBridge.hpp"
-#include "ResourceManager.hpp"
 #include "TestDebugScenes.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
@@ -60,13 +57,10 @@ void TestRenderer::set_scene(TestDebugScene id) {
     scene_.reset();
   }
   meshlet_path_renderer_.reset();
-  clear_resource_compatibility_models();
   active_scene_ = id;
   scene_ = create_test_scene(id, ctx_);
   if (id == TestDebugScene::MeshletRenderer) {
     meshlet_path_renderer_ = std::make_unique<MeshletRenderer>();
-    meshlet_path_renderer_->set_model_path_resolver(
-        [](engine::AssetId asset_id) { return demo_scene_compat::resolve_model_path(asset_id); });
     if (auto* mrs = dynamic_cast<MeshletRendererScene*>(scene_.get())) {
       mrs->set_meshlet_renderer(meshlet_path_renderer_.get());
     }
@@ -104,87 +98,6 @@ void TestRenderer::apply_demo_scene_preset(size_t index) {
   scene_->apply_demo_scene_preset(index);
 }
 
-// TODO: this is very slow and horrible.
-void TestRenderer::sync_resource_compatibility_models(const engine::RenderScene& scene) {
-  ZoneScoped;
-  struct PendingLoad {
-    engine::EntityGuid entity;
-    engine::AssetId asset;
-    std::filesystem::path path;
-    glm::mat4 local_to_world{1.f};
-  };
-
-  std::unordered_set<engine::EntityGuid> live_meshes;
-  live_meshes.reserve(scene.meshes.size());
-  std::vector<PendingLoad> pending_loads;
-  pending_loads.reserve(scene.meshes.size());
-
-  for (const engine::RenderMesh& mesh : scene.meshes) {
-    live_meshes.insert(mesh.entity);
-
-    const auto existing = runtime_models_.find(mesh.entity);
-    if (existing == runtime_models_.end() || existing->second.asset != mesh.model) {
-      if (existing != runtime_models_.end()) {
-        ResourceManager::get().free_model(existing->second.handle);
-        runtime_models_.erase(existing);
-      }
-      const auto resolved_path = demo_scene_compat::resolve_model_path(mesh.model);
-      if (!resolved_path.has_value()) {
-        continue;
-      }
-      pending_loads.push_back(PendingLoad{
-          .entity = mesh.entity,
-          .asset = mesh.model,
-          .path = *resolved_path,
-          .local_to_world = mesh.local_to_world,
-      });
-      continue;
-    }
-
-    if (ModelInstance* model = ResourceManager::get().get_model(existing->second.handle)) {
-      model->set_transform(0, mesh.local_to_world);
-      model->update_transforms();
-    }
-  }
-
-  if (!pending_loads.empty()) {
-    std::vector<ResourceManager::ModelInstanceReserveRequest> reserve_requests;
-    reserve_requests.reserve(pending_loads.size());
-    for (const PendingLoad& load : pending_loads) {
-      reserve_requests.push_back(ResourceManager::ModelInstanceReserveRequest{
-          .path = load.path,
-          .instance_count = 1,
-      });
-    }
-    ResourceManager::get().reserve_model_instances(reserve_requests);
-
-    for (const PendingLoad& load : pending_loads) {
-      runtime_models_.emplace(load.entity, RuntimeModel{
-                                               .handle = ResourceManager::get().load_model(
-                                                   load.path, load.local_to_world),
-                                               .asset = load.asset,
-                                           });
-    }
-  }
-
-  for (auto it = runtime_models_.begin(); it != runtime_models_.end();) {
-    if (live_meshes.contains(it->first)) {
-      ++it;
-      continue;
-    }
-    ResourceManager::get().free_model(it->second.handle);
-    it = runtime_models_.erase(it);
-  }
-}
-
-void TestRenderer::clear_resource_compatibility_models() {
-  for (auto& [entity, model] : runtime_models_) {
-    (void)entity;
-    ResourceManager::get().free_model(model.handle);
-  }
-  runtime_models_.clear();
-}
-
 void TestRenderer::render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) {
   ZoneScoped;
   populate_compatibility_context(frame);
@@ -193,14 +106,12 @@ void TestRenderer::render(engine::RenderFrameContext& frame, const engine::Rende
     return;
   }
   ctx_.model_gpu_mgr->set_curr_frame_idx(ctx_.curr_frame_in_flight_idx);
-  sync_resource_compatibility_models(scene);
 }
 
 void TestRenderer::shutdown() {
   scene_->shutdown();
   scene_.reset();
   meshlet_path_renderer_.reset();
-  clear_resource_compatibility_models();
 }
 
 TestRenderer::~TestRenderer() = default;

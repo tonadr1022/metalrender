@@ -11,7 +11,6 @@
 #include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/renderer/AlphaMaskType.hpp"
 #include "gfx/renderer/MeshletCsmRenderer.hpp"
-#include "gfx/renderer/MeshletResourceCompatibility.hpp"
 #include "gfx/rhi/Config.hpp"
 #include "hlsl/shared_cull_data.h"
 #include "hlsl/shared_globals.h"
@@ -40,7 +39,6 @@ class MeshletRenderer final : public engine::IRenderer {
   MeshletRenderer();
   ~MeshletRenderer() override;
 
-  void set_model_path_resolver(MeshletResourceCompatibility::ResolveModelPathFn fn);
   void set_csm_scene_defaults(const MeshletCsmRenderer::SceneDefaults& defaults);
 
   void render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) override;
@@ -59,9 +57,6 @@ class MeshletRenderer final : public engine::IRenderer {
                                                     float z_far) const;
   [[nodiscard]] CullData prepare_cull_data_late(const ViewData& vd, float z_near,
                                                 float z_far) const;
-
-  MeshletResourceCompatibility resource_compat_;
-  MeshletResourceCompatibility::ResolveModelPathFn resolve_model_path_;
 
   bool gpu_initialized_{false};
   std::optional<MeshletCsmRenderer::SceneDefaults> pending_csm_defaults_;

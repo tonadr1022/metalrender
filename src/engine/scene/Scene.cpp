@@ -1,8 +1,13 @@
 #include "engine/scene/Scene.hpp"
 
 #include <GLFW/glfw3.h>
+
 #include <flecs/addons/cpp/entity.hpp>
 #include <flecs/addons/cpp/mixins/pipeline/decl.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/trigonometric.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -11,10 +16,6 @@
 #include "engine/Input.hpp"
 #include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/SceneIds.hpp"
-#include <glm/ext/matrix_transform.hpp>
-#include <glm/geometric.hpp>
-#include <glm/gtc/quaternion.hpp>
-#include <glm/trigonometric.hpp>
 
 namespace teng::engine {
 
@@ -120,9 +121,8 @@ void Scene::register_systems() {
           }
 
           if (accelerating && glm::length(acceleration) > 0.0001f) {
-            transform.translation +=
-                glm::normalize(acceleration) * controller.move_speed * controller.max_velocity *
-                input->delta_seconds;
+            transform.translation += glm::normalize(acceleration) * controller.move_speed *
+                                     controller.max_velocity * input->delta_seconds;
           }
         }
 
@@ -176,6 +176,11 @@ bool Scene::has_entity(EntityGuid guid) const { return entities_by_guid_.contain
 flecs::entity Scene::find_entity(EntityGuid guid) const {
   const auto it = entities_by_guid_.find(guid);
   return it == entities_by_guid_.end() ? flecs::entity{} : it->second;
+}
+
+const LocalToWorld* Scene::get_local_to_world(EntityGuid guid) const {
+  const flecs::entity entity = find_entity(guid);
+  return entity.is_valid() ? entity.try_get<LocalToWorld>() : nullptr;
 }
 
 const FpsCameraController* Scene::get_fps_camera_controller(EntityGuid guid) const {

@@ -39,6 +39,7 @@ class ResourceManager {
     assert(instance_);
     return *instance_;
   }
+  [[nodiscard]] static bool is_initialized() { return instance_ != nullptr; }
 
   [[nodiscard]] size_t get_tot_models_loaded() const { return tot_models_loaded_; }
   [[nodiscard]] size_t get_tot_instances_loaded() const { return tot_instances_loaded_; }

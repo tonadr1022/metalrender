@@ -131,10 +131,6 @@ MeshletRenderer::MeshletRenderer() = default;
 
 MeshletRenderer::~MeshletRenderer() { shutdown_gpu(); }
 
-void MeshletRenderer::set_model_path_resolver(MeshletResourceCompatibility::ResolveModelPathFn fn) {
-  resolve_model_path_ = std::move(fn);
-}
-
 void MeshletRenderer::set_csm_scene_defaults(const MeshletCsmRenderer::SceneDefaults& defaults) {
   pending_csm_defaults_ = defaults;
   if (csm_renderer_) {
@@ -222,7 +218,6 @@ void MeshletRenderer::shutdown_subsystems() {
 }
 
 void MeshletRenderer::shutdown_gpu() {
-  resource_compat_.clear();
   rhi::Device* device = gpu_device_;
   if (gpu_initialized_) {
     shutdown_subsystems();
@@ -384,10 +379,6 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
       .curr_frame_in_flight_idx = frame.curr_frame_in_flight_idx,
       .frames_in_flight = static_cast<uint32_t>(frame.device->get_info().frames_in_flight),
   };
-
-  if (resolve_model_path_) {
-    resource_compat_.sync(scene, resolve_model_path_);
-  }
 
   {
     auto& static_instance_mgr = frame.model_gpu_mgr->instance_mgr();
