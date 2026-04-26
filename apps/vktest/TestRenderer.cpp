@@ -21,9 +21,11 @@
 #include "engine/render/RenderScene.hpp"
 #include "gfx/ModelGPUManager.hpp"
 #include "gfx/RenderGraph.hpp"
+#include "gfx/renderer/MeshletRenderer.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "imgui.h"
+#include "scenes/MeshletRendererTestScene.hpp"
 
 using namespace teng;
 using namespace teng::gfx;
@@ -55,13 +57,23 @@ void TestRenderer::populate_compatibility_context(engine::RenderFrameContext& fr
 
 void TestRenderer::set_scene(TestDebugScene id) {
   if (scene_) {
+    if (auto* mrs = dynamic_cast<MeshletRendererScene*>(scene_.get())) {
+      mrs->set_meshlet_renderer(nullptr);
+    }
     scene_->shutdown();
     scene_.reset();
   }
+  meshlet_path_renderer_.reset();
   clear_resource_compatibility_models();
   active_scene_ = id;
   scene_ = create_test_scene(id, ctx_);
   if (id == TestDebugScene::MeshletRenderer) {
+    meshlet_path_renderer_ = std::make_unique<MeshletRenderer>();
+    meshlet_path_renderer_->set_model_path_resolver(
+        [](engine::AssetId asset_id) { return demo_scene_compat::resolve_model_path(asset_id); });
+    if (auto* mrs = dynamic_cast<MeshletRendererScene*>(scene_.get())) {
+      mrs->set_meshlet_renderer(meshlet_path_renderer_.get());
+    }
     teng::demo_scenes::seed_demo_scene_rng(10000000);
     scene_->apply_demo_scene_preset(0);
   }
@@ -199,17 +211,29 @@ void TestRenderer::on_key_event(int key, int action, int mods) {
 void TestRenderer::render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) {
   ZoneScoped;
   populate_compatibility_context(frame);
+  if (meshlet_path_renderer_) {
+    if (auto* mrs = dynamic_cast<MeshletRendererScene*>(scene_.get())) {
+      MeshletSceneRenderTooling tooling{};
+      mrs->fill_render_tooling(tooling);
+      meshlet_path_renderer_->set_next_frame_tooling(tooling);
+    }
+    meshlet_path_renderer_->render(frame, scene);
+    return;
+  }
   ctx_.model_gpu_mgr->set_curr_frame_idx(ctx_.curr_frame_in_flight_idx);
   sync_resource_compatibility_models(scene);
-
   add_render_graph_passes();
 }
 
 void TestRenderer::shutdown() {
   if (scene_) {
+    if (auto* mrs = dynamic_cast<MeshletRendererScene*>(scene_.get())) {
+      mrs->set_meshlet_renderer(nullptr);
+    }
     scene_->shutdown();
     scene_.reset();
   }
+  meshlet_path_renderer_.reset();
   clear_resource_compatibility_models();
 }
 
@@ -217,6 +241,9 @@ TestRenderer::~TestRenderer() = default;
 
 void TestRenderer::on_resize(engine::RenderFrameContext& frame) {
   populate_compatibility_context(frame);
+  if (meshlet_path_renderer_) {
+    meshlet_path_renderer_->on_resize(frame);
+  }
   if (scene_) {
     scene_->on_swapchain_resize();
   }

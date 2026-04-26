@@ -53,6 +53,8 @@ add_library(${target_name} SHARED
     gfx/renderer/MeshletDepthPyramid.cpp
     gfx/renderer/MeshletDrawPrep.cpp
     gfx/renderer/MeshletTestRenderUtil.cpp
+    gfx/renderer/MeshletRenderer.cpp
+    gfx/renderer/MeshletResourceCompatibility.cpp
 
     gfx/texture/KtxLoad.cpp
     gfx/rhi/Pipeline.cpp

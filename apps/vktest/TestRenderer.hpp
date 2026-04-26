@@ -15,6 +15,8 @@ class Window;
 
 namespace gfx {
 
+class MeshletRenderer;
+
 class TestRenderer final : public engine::IRenderer {
  public:
   struct CreateInfo {
@@ -46,6 +48,7 @@ class TestRenderer final : public engine::IRenderer {
   };
 
   std::unordered_map<engine::EntityGuid, RuntimeModel> runtime_models_;
+  std::unique_ptr<MeshletRenderer> meshlet_path_renderer_;
   std::unique_ptr<ITestScene> scene_;
   TestDebugScene active_scene_{TestDebugScene::TexturedCubeProcedural};
 
