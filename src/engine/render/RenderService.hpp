@@ -88,7 +88,6 @@ class RenderService {
   std::unique_ptr<gfx::ImGuiRenderer> imgui_renderer_;
   std::unique_ptr<gfx::InstanceMgr> static_instance_mgr_;
   std::unique_ptr<gfx::GeometryBatch> static_draw_batch_;
-  std::unique_ptr<gfx::BackedGPUAllocator> materials_buf_;
   std::unique_ptr<gfx::ModelGPUMgr> model_gpu_mgr_;
   std::unique_ptr<IRenderer> renderer_;
   gfx::RenderGraph render_graph_;

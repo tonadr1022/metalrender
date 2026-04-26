@@ -29,7 +29,6 @@ add_library(${target_name} SHARED
     core/Console.cpp
 
     gfx/ModelLoader.cpp
-    gfx/MemeRenderer123.cpp
     gfx/ModelInstance.cpp
     gfx/ShaderManager.cpp
     gfx/ImGuiRenderer.cpp
@@ -44,9 +43,6 @@ add_library(${target_name} SHARED
     gfx/ModelGPUManager.cpp
     gfx/renderer/BufferResize.cpp
     gfx/renderer/InstanceMgr.cpp
-    gfx/renderer/old_dont_use_pls/GBufferRenderer.cpp
-    gfx/renderer/old_dont_use_pls/CSM.cpp
-    gfx/renderer/old_dont_use_pls/DrawPassSceneBindings.cpp
     gfx/renderer/RendererCVars.cpp
     gfx/renderer/ModelGPUUploader.cpp
     gfx/renderer/MeshletCsmRenderer.cpp

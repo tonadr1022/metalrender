@@ -72,16 +72,8 @@ void RenderService::init(const CreateInfo& cinfo) {
           .initial_meshlet_triangle_capacity = 1'000'000,
           .initial_meshlet_vertex_capacity = 1'000'000,
       });
-  materials_buf_ =
-      std::make_unique<gfx::BackedGPUAllocator>(*device_, *buffer_copy_mgr_,
-                                                gfx::rhi::BufferDesc{
-                                                    .usage = gfx::rhi::BufferUsage::Storage,
-                                                    .size = k_max_materials * sizeof(M4Material),
-                                                    .name = "all materials buf",
-                                                },
-                                                sizeof(M4Material));
-  model_gpu_mgr_ = std::make_unique<gfx::ModelGPUMgr>(
-      *device_, *static_instance_mgr_, *static_draw_batch_, *buffer_copy_mgr_, *materials_buf_);
+  model_gpu_mgr_ = std::make_unique<gfx::ModelGPUMgr>(*device_, *static_instance_mgr_,
+                                                      *static_draw_batch_, *buffer_copy_mgr_);
 
   frame_ = {};
   frame_.device = device_;
@@ -127,7 +119,6 @@ void RenderService::shutdown() {
   renderer_.reset();
   samplers_.clear();
   model_gpu_mgr_.reset();
-  materials_buf_.reset();
   static_draw_batch_.reset();
   static_instance_mgr_.reset();
   render_graph_.shutdown();

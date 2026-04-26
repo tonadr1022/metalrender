@@ -1247,8 +1247,8 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
                              .initial_meshlet_triangle_capacity = 1'000'000,
                              .initial_meshlet_vertex_capacity = 1'000'000,
                          }),
-      model_gpu_mgr_(std::make_unique<ModelGPUMgr>(
-          *device_, static_instance_mgr_, static_draw_batch_, buffer_copy_mgr_, materials_buf_)) {
+      model_gpu_mgr_(std::make_unique<ModelGPUMgr>(*device_, static_instance_mgr_,
+                                                   static_draw_batch_, buffer_copy_mgr_)) {
   ZoneScoped;
   window_ = cinfo.window;
   resource_dir_ = cinfo.resource_dir;

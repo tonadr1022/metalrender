@@ -3,19 +3,26 @@
 #include <tracy/Tracy.hpp>
 
 #include "gfx/renderer/RendererCVars.hpp"
+#include "hlsl/material.h"
+#include "hlsl/shader_constants.h"
 
 namespace TENG_NAMESPACE {
 
 namespace gfx {
 
 ModelGPUMgr::ModelGPUMgr(rhi::Device& device, InstanceMgr& static_instance_mgr,
-                         GeometryBatch& static_draw_batch, BufferCopyMgr& buffer_copy_mgr,
-                         BackedGPUAllocator& materials_buf)
+                         GeometryBatch& static_draw_batch, BufferCopyMgr& buffer_copy_mgr)
     : device_(&device),
       static_instance_mgr_(static_instance_mgr),
       static_draw_batch_(static_draw_batch),
       buffer_copy_mgr_(buffer_copy_mgr),
-      materials_buf_(materials_buf) {}
+      materials_buf_(device, buffer_copy_mgr,
+                     gfx::rhi::BufferDesc{
+                         .usage = gfx::rhi::BufferUsage::Storage,
+                         .size = k_max_materials * sizeof(M4Material),
+                         .name = "all materials buf",
+                     },
+                     sizeof(M4Material)) {}
 
 bool ModelGPUMgr::load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
                              ModelInstance& model, ModelGPUHandle& out_handle) {

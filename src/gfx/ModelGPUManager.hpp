@@ -28,8 +28,7 @@ struct ModelInstanceGPUResources {
 class ModelGPUMgr {
  public:
   explicit ModelGPUMgr(rhi::Device& device, InstanceMgr& static_instance_mgr,
-                       GeometryBatch& static_draw_batch, BufferCopyMgr& buffer_copy_mgr,
-                       BackedGPUAllocator& materials_buf);
+                       GeometryBatch& static_draw_batch, BufferCopyMgr& buffer_copy_mgr);
   ~ModelGPUMgr() = default;
   ModelGPUMgr(const ModelGPUMgr&) = delete;
   ModelGPUMgr(ModelGPUMgr&&) = delete;
@@ -80,7 +79,7 @@ class ModelGPUMgr {
   InstanceMgr& static_instance_mgr_;
   GeometryBatch& static_draw_batch_;
   BufferCopyMgr& buffer_copy_mgr_;
-  BackedGPUAllocator& materials_buf_;
+  BackedGPUAllocator materials_buf_;
   std::vector<GPUTexUpload> pending_texture_uploads_;
   uint32_t curr_frame_idx_{UINT32_MAX};
   BlockPool<ModelGPUHandle, ModelGPUResources> model_gpu_resource_pool_{20, 1, true};
