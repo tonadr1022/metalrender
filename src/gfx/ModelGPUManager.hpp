@@ -27,8 +27,7 @@ struct ModelInstanceGPUResources {
 
 class ModelGPUMgr {
  public:
-  explicit ModelGPUMgr(rhi::Device& device, InstanceMgr& static_instance_mgr,
-                       GeometryBatch& static_draw_batch, BufferCopyMgr& buffer_copy_mgr);
+  explicit ModelGPUMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr);
   ~ModelGPUMgr() = default;
   ModelGPUMgr(const ModelGPUMgr&) = delete;
   ModelGPUMgr(ModelGPUMgr&&) = delete;
@@ -76,8 +75,8 @@ class ModelGPUMgr {
  private:
   Stats stats_{};
   rhi::Device* device_{};
-  InstanceMgr& static_instance_mgr_;
-  GeometryBatch& static_draw_batch_;
+  InstanceMgr static_instance_mgr_;
+  GeometryBatch static_draw_batch_;
   BufferCopyMgr& buffer_copy_mgr_;
   BackedGPUAllocator materials_buf_;
   std::vector<GPUTexUpload> pending_texture_uploads_;

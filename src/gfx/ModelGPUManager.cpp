@@ -10,11 +10,18 @@ namespace TENG_NAMESPACE {
 
 namespace gfx {
 
-ModelGPUMgr::ModelGPUMgr(rhi::Device& device, InstanceMgr& static_instance_mgr,
-                         GeometryBatch& static_draw_batch, BufferCopyMgr& buffer_copy_mgr)
+ModelGPUMgr::ModelGPUMgr(rhi::Device& device, BufferCopyMgr& buffer_copy_mgr)
     : device_(&device),
-      static_instance_mgr_(static_instance_mgr),
-      static_draw_batch_(static_draw_batch),
+      static_instance_mgr_(*device_, buffer_copy_mgr, device_->get_info().frames_in_flight, true),
+      static_draw_batch_(gfx::GeometryBatchType::Static, device, buffer_copy_mgr,
+                         gfx::GeometryBatch::CreateInfo{
+                             .initial_vertex_capacity = 1'000'000,
+                             .initial_index_capacity = 1'000'000,
+                             .initial_meshlet_capacity = 1'000'000,
+                             .initial_mesh_capacity = 100'000,
+                             .initial_meshlet_triangle_capacity = 1'000'000,
+                             .initial_meshlet_vertex_capacity = 1'000'000,
+                         }),
       buffer_copy_mgr_(buffer_copy_mgr),
       materials_buf_(device, buffer_copy_mgr,
                      gfx::rhi::BufferDesc{

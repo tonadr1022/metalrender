@@ -29,8 +29,6 @@
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Swapchain.hpp"
-#include "hlsl/material.h"
-#include "hlsl/shader_constants.h"
 
 namespace teng::engine {
 
@@ -60,20 +58,7 @@ void RenderService::init(const CreateInfo& cinfo) {
   buffer_copy_mgr_ = std::make_unique<gfx::BufferCopyMgr>(device_, *frame_gpu_upload_allocator_);
   imgui_renderer_ = std::make_unique<gfx::ImGuiRenderer>(*shader_mgr_, device_);
   render_graph_.init(device_);
-  static_instance_mgr_ = std::make_unique<gfx::InstanceMgr>(
-      *device_, *buffer_copy_mgr_, device_->get_info().frames_in_flight, true);
-  static_draw_batch_ = std::make_unique<gfx::GeometryBatch>(
-      gfx::GeometryBatchType::Static, *device_, *buffer_copy_mgr_,
-      gfx::GeometryBatch::CreateInfo{
-          .initial_vertex_capacity = 1'000'000,
-          .initial_index_capacity = 1'000'000,
-          .initial_meshlet_capacity = 1'000'000,
-          .initial_mesh_capacity = 100'000,
-          .initial_meshlet_triangle_capacity = 1'000'000,
-          .initial_meshlet_vertex_capacity = 1'000'000,
-      });
-  model_gpu_mgr_ = std::make_unique<gfx::ModelGPUMgr>(*device_, *static_instance_mgr_,
-                                                      *static_draw_batch_, *buffer_copy_mgr_);
+  model_gpu_mgr_ = std::make_unique<gfx::ModelGPUMgr>(*device_, *buffer_copy_mgr_);
 
   frame_ = {};
   frame_.device = device_;
@@ -119,8 +104,6 @@ void RenderService::shutdown() {
   renderer_.reset();
   samplers_.clear();
   model_gpu_mgr_.reset();
-  static_draw_batch_.reset();
-  static_instance_mgr_.reset();
   render_graph_.shutdown();
   shutdown_imgui_renderer();
   buffer_copy_mgr_.reset();

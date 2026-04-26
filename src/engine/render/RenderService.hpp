@@ -86,8 +86,6 @@ class RenderService {
   std::unique_ptr<gfx::GPUFrameAllocator3> frame_gpu_upload_allocator_;
   std::unique_ptr<gfx::BufferCopyMgr> buffer_copy_mgr_;
   std::unique_ptr<gfx::ImGuiRenderer> imgui_renderer_;
-  std::unique_ptr<gfx::InstanceMgr> static_instance_mgr_;
-  std::unique_ptr<gfx::GeometryBatch> static_draw_batch_;
   std::unique_ptr<gfx::ModelGPUMgr> model_gpu_mgr_;
   std::unique_ptr<IRenderer> renderer_;
   gfx::RenderGraph render_graph_;
