@@ -212,11 +212,6 @@ void TestRenderer::render(engine::RenderFrameContext& frame, const engine::Rende
   ZoneScoped;
   populate_compatibility_context(frame);
   if (meshlet_path_renderer_) {
-    if (auto* mrs = dynamic_cast<MeshletRendererScene*>(scene_.get())) {
-      MeshletSceneRenderTooling tooling{};
-      mrs->fill_render_tooling(tooling);
-      meshlet_path_renderer_->set_next_frame_tooling(tooling);
-    }
     meshlet_path_renderer_->render(frame, scene);
     return;
   }

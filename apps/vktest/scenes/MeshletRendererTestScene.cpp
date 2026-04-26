@@ -12,7 +12,6 @@
 #include "engine/scene/SceneIds.hpp"
 #include "engine/scene/SceneManager.hpp"
 #include "gfx/rhi/Swapchain.hpp"
-#include "hlsl/shared_globals.h"
 #include "imgui.h"
 
 namespace teng::gfx {
@@ -20,17 +19,6 @@ namespace teng::gfx {
 using namespace teng::demo_scenes;
 
 namespace {
-
-glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
-  // clang-format off
-  const float f = 1.0f / tanf(fov_y / 2.0f);
-  return {
-    f / aspect, 0.0f, 0.0f, 0.0f,
-    0.0f, f, 0.0f, 0.0f,
-    0.0f, 0.0f, 0.0f, -1.0f,
-    0.0f, 0.0f, z_near, 0.0f};
-  // clang-format on
-}
 
 glm::vec3 safe_normalize_toward_light(const glm::vec3& v) {
   const float s2 = glm::dot(v, v);
@@ -218,32 +206,6 @@ void MeshletRendererScene::on_imgui() {
     meshlet_gpu_->imgui_gpu_panels();
   }
   ImGui::End();
-}
-
-ViewData MeshletRendererScene::prepare_view_data() {
-  const float aspect = ctx_.swapchain != nullptr
-                           ? static_cast<float>(ctx_.swapchain->desc_.width) /
-                                 std::max(1.f, static_cast<float>(ctx_.swapchain->desc_.height))
-                           : 1.f;
-  const float fov = 60.f;
-  const glm::mat4 proj = infinite_perspective_proj(glm::radians(fov), aspect, 0.1f);
-  fps_camera_.camera().calc_vectors();
-  const glm::mat4 view = fps_camera_.camera().get_view_mat();
-  const glm::mat4 vp = proj * view;
-
-  ViewData vd{};
-  vd.vp = vp;
-  vd.inv_vp = glm::inverse(vp);
-  vd.view = view;
-  vd.proj = proj;
-  vd.inv_proj = glm::inverse(proj);
-  vd.camera_pos = glm::vec4(fps_camera_.camera().pos, 1.f);
-  return vd;
-}
-
-void MeshletRendererScene::fill_render_tooling(MeshletSceneRenderTooling& out) {
-  out.view = prepare_view_data();
-  out.toward_light_effective = toward_light_effective_;
 }
 
 }  // namespace teng::gfx

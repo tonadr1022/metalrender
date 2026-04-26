@@ -35,11 +35,6 @@ struct MeshletImguiFrameSnapshot {
 class MeshletDrawPrep;
 class MeshletDepthPyramid;
 
-struct MeshletSceneRenderTooling {
-  ViewData view{};
-  glm::vec3 toward_light_effective{0.35f, 1.f, 0.4f};
-};
-
 class MeshletRenderer final : public engine::IRenderer {
  public:
   MeshletRenderer();
@@ -47,8 +42,6 @@ class MeshletRenderer final : public engine::IRenderer {
 
   void set_model_path_resolver(MeshletResourceCompatibility::ResolveModelPathFn fn);
   void set_csm_scene_defaults(const MeshletCsmRenderer::SceneDefaults& defaults);
-
-  void set_next_frame_tooling(const MeshletSceneRenderTooling& tooling) { next_tooling_ = tooling; }
 
   void render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) override;
   void on_resize(engine::RenderFrameContext& frame) override;
@@ -64,8 +57,8 @@ class MeshletRenderer final : public engine::IRenderer {
 
   [[nodiscard]] CullData prepare_cull_data_for_proj(const glm::mat4& proj, float z_near,
                                                     float z_far) const;
-  [[nodiscard]] CullData prepare_cull_data(const ViewData& vd) const;
-  [[nodiscard]] CullData prepare_cull_data_late(const ViewData& vd) const;
+  [[nodiscard]] CullData prepare_cull_data_late(const ViewData& vd, float z_near,
+                                                float z_far) const;
 
   MeshletResourceCompatibility resource_compat_;
   MeshletResourceCompatibility::ResolveModelPathFn resolve_model_path_;
@@ -93,7 +86,6 @@ class MeshletRenderer final : public engine::IRenderer {
   bool gpu_object_frustum_cull_{true};
   bool gpu_object_occlusion_cull_{true};
   uint32_t frame_num_{0};
-  MeshletSceneRenderTooling next_tooling_{};
 
   std::optional<MeshletImguiFrameSnapshot> last_imgui_frame_;
 

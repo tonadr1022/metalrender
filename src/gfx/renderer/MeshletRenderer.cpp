@@ -1,6 +1,7 @@
 #include "gfx/renderer/MeshletRenderer.hpp"
 
 #include <cmath>
+#include <optional>
 #include <span>
 #include <string>
 
@@ -26,6 +27,72 @@ namespace teng::gfx {
 using namespace teng::gfx::rhi;
 
 namespace {
+
+glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
+  // clang-format off
+  const float f = 1.0f / tanf(fov_y / 2.0f);
+  return {
+    f / aspect, 0.0f, 0.0f, 0.0f,
+    0.0f, f, 0.0f, 0.0f,
+    0.0f, 0.0f, 0.0f, -1.0f,
+    0.0f, 0.0f, z_near, 0.0f};
+  // clang-format on
+}
+
+glm::vec3 safe_normalize_toward_light(const glm::vec3& v) {
+  const float s2 = glm::dot(v, v);
+  if (s2 < 1e-12f) {
+    return glm::normalize(glm::vec3(0.35f, 1.f, 0.4f));
+  }
+  return v * (1.f / std::sqrt(s2));
+}
+
+const engine::RenderCamera* pick_camera(const engine::RenderScene& scene) {
+  for (const auto& c : scene.cameras) {
+    if (c.primary) {
+      return &c;
+    }
+  }
+  if (!scene.cameras.empty()) {
+    return &scene.cameras.front();
+  }
+  return nullptr;
+}
+
+glm::vec3 directional_toward_light_unit_ws(const engine::RenderScene& scene) {
+  glm::vec3 raw(0.35f, 1.f, 0.4f);
+  if (!scene.directional_lights.empty()) {
+    raw = scene.directional_lights.front().direction;
+  }
+  return safe_normalize_toward_light(raw);
+}
+
+std::optional<ViewData> build_view_data_for_camera(const engine::RenderCamera& cam,
+                                                   glm::uvec2 extent_primary,
+                                                   glm::uvec2 extent_fallback) {
+  glm::uvec2 ext = extent_primary;
+  if (ext.x == 0 || ext.y == 0) {
+    ext = extent_fallback;
+  }
+  if (ext.x == 0 || ext.y == 0) {
+    return std::nullopt;
+  }
+  const float aspect = static_cast<float>(ext.x) / std::max(1.f, static_cast<float>(ext.y));
+  const float fov_y = cam.fov_y > 1e-6f ? cam.fov_y : glm::radians(60.f);
+  const float z_near = cam.z_near > 0.f ? cam.z_near : 0.1f;
+  const glm::mat4 proj = infinite_perspective_proj(fov_y, aspect, z_near);
+  const glm::mat4 view = glm::inverse(cam.local_to_world);
+  const glm::mat4 vp = proj * view;
+
+  ViewData vd{};
+  vd.vp = vp;
+  vd.inv_vp = glm::inverse(vp);
+  vd.view = view;
+  vd.proj = proj;
+  vd.inv_proj = glm::inverse(proj);
+  vd.camera_pos = cam.local_to_world * glm::vec4(0.f, 0.f, 0.f, 1.f);
+  return vd;
+}
 
 void add_buffer_readback_copy2(RenderGraph& rg, std::string_view pass_name, RGResourceId& src_buf,
                                RGResourceId dst_rg_id, size_t src_offset, size_t dst_offset,
@@ -236,12 +303,9 @@ CullData MeshletRenderer::prepare_cull_data_for_proj(const glm::mat4& proj, floa
   return cd;
 }
 
-CullData MeshletRenderer::prepare_cull_data(const ViewData& vd) const {
-  return prepare_cull_data_for_proj(vd.proj, 0.1f, 10'000.f);
-}
-
-CullData MeshletRenderer::prepare_cull_data_late(const ViewData& vd) const {
-  CullData cd = prepare_cull_data(vd);
+CullData MeshletRenderer::prepare_cull_data_late(const ViewData& vd, float z_near,
+                                                 float z_far) const {
+  CullData cd = prepare_cull_data_for_proj(vd.proj, z_near, z_far);
   if (depth_pyramid_ && depth_pyramid_->is_valid()) {
     const auto dims = depth_pyramid_->dims();
     cd.pyramid_width = dims.x;
@@ -321,6 +385,25 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
     return;
   }
 
+  const engine::RenderCamera* active_cam = pick_camera(scene);
+  if (active_cam == nullptr) {
+    bake_swapchain_clear(frame, "meshlet_no_camera_clear");
+    return;
+  }
+
+  const glm::uvec2 extent_primary = scene.frame.output_extent;
+  const glm::uvec2 extent_fallback = frame.output_extent;
+  const std::optional<ViewData> view_opt =
+      build_view_data_for_camera(*active_cam, extent_primary, extent_fallback);
+  if (!view_opt.has_value()) {
+    bake_swapchain_clear(frame, "meshlet_bad_extent_clear");
+    return;
+  }
+
+  const float z_near = active_cam->z_near > 0.f ? active_cam->z_near : 0.1f;
+  const float z_far = active_cam->z_far > z_near ? active_cam->z_far : 10'000.f;
+  const glm::vec3 toward_light = directional_toward_light_unit_ws(scene);
+
   if (frame.swapchain != nullptr) {
     make_depth_pyramid_tex(frame);
   }
@@ -378,17 +461,16 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
 
   frame_num_++;
 
-  ViewData vd = next_tooling_.view;
+  ViewData vd = *view_opt;
   auto view_cb_suballoc = frame_uniform_gpu_allocator_->alloc2(sizeof(ViewData), &vd);
 
-  auto cd_early = prepare_cull_data(vd);
+  auto cd_early = prepare_cull_data_for_proj(vd.proj, z_near, z_far);
   auto cull_early_cb = frame_uniform_gpu_allocator_->alloc2(sizeof(CullData), &cd_early);
-  auto cd_late = prepare_cull_data_late(vd);
+  auto cd_late = prepare_cull_data_late(vd, z_near, z_far);
   auto cull_late_cb = frame_uniform_gpu_allocator_->alloc2(sizeof(CullData), &cd_late);
 
   BufferSuballoc globals_cb_buf;
   BufferSuballoc shadow_globals_cb_buf;
-  const glm::vec3 toward_light = next_tooling_.toward_light_effective;
   {
     GlobalData gd{};
     gd.render_mode = csm_renderer_->visualize_cascade_colors()

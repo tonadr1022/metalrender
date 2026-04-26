@@ -31,11 +31,7 @@ class MeshletRendererScene final : public ITestScene {
 
   void set_meshlet_renderer(MeshletRenderer* renderer) { meshlet_gpu_ = renderer; }
 
-  void fill_render_tooling(MeshletSceneRenderTooling& out);
-
   void add_render_graph_passes() override {}
-
-  [[nodiscard]] ViewData prepare_view_data();
 
  private:
   void load_scene_presets();
