@@ -117,7 +117,7 @@ MeshletCsmRenderer::MeshletCsmRenderer(rhi::Device& device, RenderGraph& rg,
                       ShaderType::Fragment}}},
         .rendering = {.depth_format = TextureFormat::D32float},
         .depth_stencil = GraphicsPipelineCreateInfo::depth_enable(true, CompareOp::Less),
-        .name = std::string("meshlet_test_shadow_") + std::to_string(a),
+        .name = std::string("meshlet_shadow_pso_") + std::to_string(a),
     });
   }
 }
@@ -359,7 +359,8 @@ MeshletCsmRenderer::Output MeshletCsmRenderer::bake(const BakeRequest& req) {
           false, false, shadow_meshlet_flags, &device_, rg_, geo_batch,
           model_gpu_mgr_.materials_allocator().get_buffer_handle(), shadow_globals_cb,
           local_view_cbs[cascade_i], local_cull_cbs[cascade_i], rhi::TextureHandle{},
-          shadow_vp_dims, meshlet_vis_rg, meshlet_stats_rg, local_draws[cascade_i].task_cmd_rg,
+          glm::ivec2{static_cast<int>(shadow_vp_dims.x), static_cast<int>(shadow_vp_dims.y)},
+          meshlet_vis_rg, meshlet_stats_rg, local_draws[cascade_i].task_cmd_rg,
           rg_.get_buf(local_draws[cascade_i].indirect_args_rg), model_gpu_mgr_.instance_mgr(),
           std::span(shadow_psos_), enc);
       enc->end_rendering();

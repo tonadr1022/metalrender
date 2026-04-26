@@ -5,9 +5,9 @@
 #include "core/Config.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/AlphaMaskType.hpp"
-#include "gfx/renderer/DrawPassSceneBindings.hpp"
 #include "gfx/renderer/RenderView.hpp"
-#include "gfx/renderer/TaskCmdBufRgIds.hpp"
+#include "gfx/renderer/old_dont_use_pls/DrawPassSceneBindings.hpp"
+#include "gfx/renderer/old_dont_use_pls/TaskCmdBufRgIds.hpp"
 
 namespace TENG_NAMESPACE {
 

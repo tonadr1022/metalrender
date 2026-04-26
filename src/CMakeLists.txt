@@ -44,11 +44,15 @@ add_library(${target_name} SHARED
     gfx/ModelGPUManager.cpp
     gfx/renderer/BufferResize.cpp
     gfx/renderer/InstanceMgr.cpp
-    gfx/renderer/GBufferRenderer.cpp
+    gfx/renderer/old_dont_use_pls/GBufferRenderer.cpp
+    gfx/renderer/old_dont_use_pls/CSM.cpp
+    gfx/renderer/old_dont_use_pls/DrawPassSceneBindings.cpp
     gfx/renderer/RendererCVars.cpp
-    gfx/renderer/CSM.cpp
     gfx/renderer/ModelGPUUploader.cpp
-    gfx/renderer/DrawPassSceneBindings.cpp
+    gfx/renderer/MeshletCsmRenderer.cpp
+    gfx/renderer/MeshletDepthPyramid.cpp
+    gfx/renderer/MeshletDrawPrep.cpp
+    gfx/renderer/MeshletTestRenderUtil.cpp
 
     gfx/texture/KtxLoad.cpp
     gfx/rhi/Pipeline.cpp

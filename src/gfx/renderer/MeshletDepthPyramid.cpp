@@ -51,7 +51,7 @@ void MeshletDepthPyramid::resize(glm::uvec2 source_dims) {
           rhi::TextureUsage::Storage | rhi::TextureUsage::ShaderWrite | rhi::TextureUsage::Sample,
       .dims = size,
       .mip_levels = mip_levels,
-      .name = "meshlet_test_depth_pyramid",
+      .name = "meshlet_depth_pyramid",
   })};
   tex_.views.reserve(mip_levels);
   for (uint32_t i = 0; i < mip_levels; i++) {

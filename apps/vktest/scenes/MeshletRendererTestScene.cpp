@@ -9,7 +9,6 @@
 #include <span>
 #include <string>
 
-#include "MeshletTestRenderUtil.hpp"
 #include "Window.hpp"
 #include "core/Logger.hpp"
 #include "engine/scene/Scene.hpp"
@@ -20,6 +19,7 @@
 #include "gfx/ModelGPUManager.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/ShaderManager.hpp"
+#include "gfx/renderer/MeshletTestRenderUtil.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
 #include "hlsl/meshlet_test/shared_meshlet_test_shade.h"

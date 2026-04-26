@@ -13,11 +13,7 @@ add_executable(${target_name}
     TestDebugScenes.cpp
     TestRenderer.cpp
     TestApp.cpp
-    scenes/MeshletCsmRenderer.cpp
-    scenes/MeshletDepthPyramid.cpp
-    scenes/MeshletDrawPrep.cpp
     scenes/MeshletRendererTestScene.cpp
-    scenes/MeshletTestRenderUtil.cpp
 )
 
 target_include_directories(${target_name} PRIVATE ${COMMON_SOURCE_DIR} ${METALRENDER_APP_DIR})

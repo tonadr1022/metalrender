@@ -4,7 +4,7 @@
 #include "gfx/DrawBatch.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
 #include "gfx/renderer/RendererCVars.hpp"
-#include "gfx/renderer/TaskCmdBufRgIds.hpp"
+#include "gfx/renderer/old_dont_use_pls/TaskCmdBufRgIds.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "hlsl/shader_constants.h"
 #include "hlsl/shared_cull_data.h"

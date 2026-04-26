@@ -22,7 +22,7 @@ class Device;
 }  // namespace rhi
 
 // Mirrors `encode_meshlet_mesh_draw_pass` in DrawPassSceneBindings.cpp; uses explicit task flags
-// so vktest can compose main, CSM, and future shadow experiments without renderer CVars.
+// so callers can compose main, CSM, and future shadow passes without renderer CVars.
 void encode_meshlet_test_draw_pass(
     bool reverse_z, bool late_pass, uint32_t meshlet_task_flags, rhi::Device* device,
     RenderGraph& rg, const GeometryBatch& batch, rhi::BufferHandle materials_buf,

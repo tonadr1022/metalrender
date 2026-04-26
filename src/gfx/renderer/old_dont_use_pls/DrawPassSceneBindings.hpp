@@ -4,7 +4,7 @@
 
 #include "core/Config.hpp"
 #include "gfx/renderer/RenderView.hpp"
-#include "gfx/renderer/TaskCmdBufRgIds.hpp"
+#include "gfx/renderer/old_dont_use_pls/TaskCmdBufRgIds.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
 namespace TENG_NAMESPACE::gfx {
