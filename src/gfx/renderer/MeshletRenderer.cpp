@@ -131,13 +131,6 @@ MeshletRenderer::MeshletRenderer() = default;
 
 MeshletRenderer::~MeshletRenderer() { shutdown_gpu(); }
 
-void MeshletRenderer::set_csm_scene_defaults(const MeshletCsmRenderer::SceneDefaults& defaults) {
-  pending_csm_defaults_ = defaults;
-  if (csm_renderer_) {
-    csm_renderer_->set_scene_defaults(defaults);
-  }
-}
-
 void MeshletRenderer::lazy_init(const engine::RenderFrameContext& frame) {
   if (gpu_initialized_) {
     return;
@@ -156,6 +149,9 @@ void MeshletRenderer::lazy_init(const engine::RenderFrameContext& frame) {
       std::make_unique<MeshletDepthPyramid>(*frame.device, *frame.render_graph, *frame.shader_mgr);
   csm_renderer_ = std::make_unique<MeshletCsmRenderer>(*frame.device, *frame.render_graph,
                                                        *frame.model_gpu_mgr, *frame.shader_mgr);
+
+  MeshletCsmRenderer::SceneDefaults defaults{};
+  csm_renderer_->set_scene_defaults(defaults);
 
   for (size_t a = 0; a < static_cast<size_t>(AlphaMaskType::Count); ++a) {
     meshlet_pso_early_[a] = frame.shader_mgr->create_graphics_pipeline({
@@ -195,9 +191,6 @@ void MeshletRenderer::lazy_init(const engine::RenderFrameContext& frame) {
   }
 
   frame_uniform_gpu_allocator_.emplace(frame.device, true);
-  if (pending_csm_defaults_) {
-    csm_renderer_->set_scene_defaults(*pending_csm_defaults_);
-  }
 
   make_depth_pyramid_tex(frame);
   gpu_initialized_ = true;

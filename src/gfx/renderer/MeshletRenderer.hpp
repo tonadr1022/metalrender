@@ -60,7 +60,6 @@ class MeshletRenderer final : public engine::IRenderer {
                                                 float z_far) const;
 
   bool gpu_initialized_{false};
-  std::optional<MeshletCsmRenderer::SceneDefaults> pending_csm_defaults_;
   std::unique_ptr<MeshletDrawPrep> draw_prep_;
   std::unique_ptr<MeshletDepthPyramid> depth_pyramid_;
   std::unique_ptr<MeshletCsmRenderer> csm_renderer_;

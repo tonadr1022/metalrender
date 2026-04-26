@@ -103,7 +103,6 @@ void RenderService::shutdown() {
   if (!initialized_) {
     return;
   }
-  meshlet_renderer_ = nullptr;
   renderer_.reset();
   samplers_.clear();
   model_gpu_mgr_.reset();
@@ -132,7 +131,6 @@ void RenderService::shutdown_imgui_renderer() {
 
 void RenderService::set_renderer(std::unique_ptr<IRenderer> renderer) {
   renderer_ = std::move(renderer);
-  meshlet_renderer_ = dynamic_cast<gfx::MeshletRenderer*>(renderer_.get());
   if (renderer_ && initialized_) {
     renderer_->on_resize(frame_);
   }

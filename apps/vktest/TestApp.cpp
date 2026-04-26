@@ -96,19 +96,6 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
     }
     const size_t idx = std::min(index, scene_presets_.size() - 1);
     const auto& preset = scene_presets_[idx];
-    if (gfx::MeshletRenderer* meshlet_renderer = ctx.renderer().meshlet_renderer()) {
-      if (preset.csm_defaults.has_value()) {
-        const auto& d = *preset.csm_defaults;
-        meshlet_renderer->set_csm_scene_defaults(gfx::MeshletCsmRenderer::SceneDefaults{
-            .z_near = d.z_near,
-            .z_far = d.z_far,
-            .cascade_count = d.cascade_count,
-            .split_lambda = d.split_lambda,
-        });
-      } else {
-        meshlet_renderer->set_csm_scene_defaults(gfx::MeshletCsmRenderer::SceneDefaults{});
-      }
-    }
     scene_preset_selection_ = idx;
     [[maybe_unused]] const demo_scene_compat::DemoSceneEntityGuids guids =
         demo_scene_compat::apply_demo_preset_to_scene(ctx.scenes(), preset, ctx.resource_dir());

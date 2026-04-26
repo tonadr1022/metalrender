@@ -72,7 +72,6 @@ class RenderService {
   [[nodiscard]] const RenderScene& last_extracted_scene() const { return last_extracted_scene_; }
   [[nodiscard]] gfx::RenderGraph& render_graph() { return render_graph_; }
   [[nodiscard]] gfx::ModelGPUMgr* model_gpu_mgr() const { return model_gpu_mgr_.get(); }
-  [[nodiscard]] gfx::MeshletRenderer* meshlet_renderer() const { return meshlet_renderer_; }
 
  private:
   void update_frame_context();
@@ -91,7 +90,6 @@ class RenderService {
   std::unique_ptr<gfx::ImGuiRenderer> imgui_renderer_;
   std::unique_ptr<gfx::ModelGPUMgr> model_gpu_mgr_;
   std::unique_ptr<IRenderer> renderer_;
-  gfx::MeshletRenderer* meshlet_renderer_{};
   gfx::RenderGraph render_graph_;
   RenderFrameContext frame_;
   RenderScene last_extracted_scene_;
