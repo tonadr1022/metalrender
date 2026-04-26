@@ -352,9 +352,6 @@ Completed:
 - Add `IRenderer` and `RenderFrameContext`.
 - Add basic render graph bake/execute/present orchestration for renderers owned by `RenderService`.
 - Preserve scene cycling, preset loading, render graph debug dump, uploads, resize handling, and swapchain submission.
-
-Remaining:
-
 - Move or wrap `TestRenderer` frame services behind `RenderService` without changing legacy scene behavior.
 - Keep `TestSceneContext` populated for existing `ITestScene` code, but name the bridge as compatibility.
 - Add `IRenderer` with a compatibility implementation that delegates to the existing graph-pass path.
@@ -368,10 +365,7 @@ Completed:
 
 - Let `RenderService` extract a `RenderScene` from the active `Scene`.
 - Add the simple clear/debug renderer without moving meshlet pass ownership all at once.
-
-Remaining:
-
-- Add optional `RenderScene` logging/inspection UI/path if useful.
+- Not done but optional: Add `RenderScene` logging/inspection UI/path if useful.
 - Keep meshlet demo rendering through the compatibility path until a migrated preset exists.
 
 Slice 4: Migrate one demo preset into ECS data.
