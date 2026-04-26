@@ -61,11 +61,6 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
     if (key == GLFW_KEY_G && mods & GLFW_MOD_ALT) {
       ctx.toggle_imgui_enabled();
     }
-    renderer_->on_key_event(key, action, mods);
-  }
-
-  void on_cursor_pos(teng::engine::EngineContext&, double x, double y) override {
-    renderer_->on_cursor_pos(x, y);
   }
 
   void on_imgui(teng::engine::EngineContext& ctx) override {

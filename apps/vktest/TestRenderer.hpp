@@ -25,11 +25,8 @@ class TestRenderer final : public engine::IRenderer {
   void update(engine::RenderFrameContext& frame);
   void render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) override;
   void imgui_scene_overlay();
-  void on_cursor_pos(double x, double y);
-  void on_key_event(int key, int action, int mods);
   void shutdown();
   void on_resize(engine::RenderFrameContext& frame) override;
-  void cycle_debug_scene();
   void set_scene(TestDebugScene id);
   void apply_demo_scene_preset(size_t index);
   ~TestRenderer() override;
@@ -39,7 +36,6 @@ class TestRenderer final : public engine::IRenderer {
   void sync_resource_compatibility_models(const engine::RenderScene& scene);
   void clear_resource_compatibility_models();
   void add_render_graph_passes();
-  void imgui_device_info() const;
 
   struct RuntimeModel {
     ModelHandle handle;

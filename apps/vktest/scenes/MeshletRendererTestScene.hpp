@@ -13,20 +13,11 @@ class MeshletRendererScene final : public ITestScene {
  public:
   explicit MeshletRendererScene(const TestSceneContext& ctx);
 
-  void shutdown() override;
-
-  void on_frame(const TestSceneContext& ctx) override;
-
-  void on_cursor_pos(double x, double y) override;
-
-  void on_key_event(int key, int action, int mods) override;
-
   void on_imgui() override;
 
   void on_swapchain_resize() override {}
 
   void apply_demo_scene_preset(size_t index) override;
-  void sync_compatibility_ecs_scene(teng::engine::Scene& scene) override;
 
   void set_meshlet_renderer(MeshletRenderer* renderer) { meshlet_gpu_ = renderer; }
 

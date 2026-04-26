@@ -61,11 +61,8 @@ class ITestScene {
   virtual void on_swapchain_resize() = 0;
   virtual void add_render_graph_passes() = 0;
   virtual void on_frame(const TestSceneContext&) {}
-  virtual void on_cursor_pos(double, double) {}
-  virtual void on_key_event(int, int, int) {}
   virtual void on_imgui() {}
   virtual void apply_demo_scene_preset(size_t) {}
-  virtual void sync_compatibility_ecs_scene(engine::Scene&) {}
 
  protected:
   [[maybe_unused]] const TestSceneContext& ctx_;

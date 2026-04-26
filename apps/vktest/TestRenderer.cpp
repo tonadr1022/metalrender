@@ -3,7 +3,6 @@
 #include <GLFW/glfw3.h>
 
 #include <cstddef>
-#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <tracy/Tracy.hpp>
@@ -24,7 +23,6 @@
 #include "gfx/renderer/MeshletRenderer.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
-#include "imgui.h"
 #include "scenes/MeshletRendererTestScene.hpp"
 
 using namespace teng;
@@ -100,7 +98,6 @@ void TestRenderer::update(engine::RenderFrameContext& frame) {
     if (!active_scene) {
       active_scene = &ctx_.scene_manager->create_scene("vktest compatibility render scene");
     }
-    scene_->sync_compatibility_ecs_scene(*active_scene);
   }
 }
 
@@ -190,24 +187,6 @@ void TestRenderer::clear_resource_compatibility_models() {
   runtime_models_.clear();
 }
 
-void TestRenderer::cycle_debug_scene() {
-  auto next = static_cast<uint8_t>(static_cast<uint8_t>(active_scene_) + 1u) %
-              static_cast<uint8_t>(TestDebugScene::Count);
-  set_scene(static_cast<TestDebugScene>(next));
-}
-
-void TestRenderer::on_cursor_pos(double x, double y) {
-  if (scene_) {
-    scene_->on_cursor_pos(x, y);
-  }
-}
-
-void TestRenderer::on_key_event(int key, int action, int mods) {
-  if (scene_) {
-    scene_->on_key_event(key, action, mods);
-  }
-}
-
 void TestRenderer::render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) {
   ZoneScoped;
   populate_compatibility_context(frame);
@@ -221,13 +200,8 @@ void TestRenderer::render(engine::RenderFrameContext& frame, const engine::Rende
 }
 
 void TestRenderer::shutdown() {
-  if (scene_) {
-    if (auto* mrs = dynamic_cast<MeshletRendererScene*>(scene_.get())) {
-      mrs->set_meshlet_renderer(nullptr);
-    }
-    scene_->shutdown();
-    scene_.reset();
-  }
+  scene_->shutdown();
+  scene_.reset();
   meshlet_path_renderer_.reset();
   clear_resource_compatibility_models();
 }
@@ -262,57 +236,6 @@ void TestRenderer::add_render_graph_passes() {
   scene_->add_render_graph_passes();
 }
 
-void TestRenderer::imgui_scene_overlay() {
-  imgui_device_info();
-  if (scene_) {
-    scene_->on_imgui();
-  }
-}
-
-namespace {
-
-const char* gpu_adapter_kind_str(rhi::GpuAdapterKind k) {
-  switch (k) {
-    case rhi::GpuAdapterKind::Integrated:
-      return "Integrated";
-    case rhi::GpuAdapterKind::Discrete:
-      return "Discrete";
-    case rhi::GpuAdapterKind::Virtual:
-      return "Virtual";
-    case rhi::GpuAdapterKind::Cpu:
-      return "CPU";
-    case rhi::GpuAdapterKind::Other:
-      return "Other";
-    case rhi::GpuAdapterKind::Unknown:
-    default:
-      return "Unknown";
-  }
-}
-
-}  // namespace
-
-void TestRenderer::imgui_device_info() const {
-  if (ctx_.device == nullptr) {
-    return;
-  }
-  const rhi::GpuAdapterInfo info = ctx_.device->query_gpu_adapter_info();
-  ImGui::Separator();
-  ImGui::TextUnformatted("GPU / adapter");
-  if (!info.name.empty()) {
-    ImGui::TextWrapped("Name: %s", info.name.c_str());
-  } else {
-    ImGui::TextUnformatted("Name: (unavailable)");
-  }
-  ImGui::Text("Kind: %s", gpu_adapter_kind_str(info.kind));
-  if (!info.api_version.empty()) {
-    ImGui::Text("API: %s", info.api_version.c_str());
-  }
-  if (!info.driver_version.empty()) {
-    ImGui::Text("Driver: %s", info.driver_version.c_str());
-  }
-  if (info.vendor_id != 0 || info.device_id != 0) {
-    ImGui::Text("Vendor ID: 0x%08X  Device ID: 0x%08X", info.vendor_id, info.device_id);
-  }
-}
+void TestRenderer::imgui_scene_overlay() { scene_->on_imgui(); }
 
 }  // namespace teng::gfx

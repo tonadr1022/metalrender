@@ -37,9 +37,6 @@ void MeshletRendererScene::author_current_demo_preset() {
       *ctx_.scene_manager, scene_presets_[current_preset_index_], ctx_.resource_dir);
   demo_preset_authoring_pending_ = false;
   demo_preset_authored_ = true;
-  if (auto* scene = ctx_.scene_manager->active_scene()) {
-    sync_compatibility_ecs_scene(*scene);
-  }
 }
 
 void MeshletRendererScene::apply_preset(size_t idx) {
@@ -74,61 +71,6 @@ void MeshletRendererScene::apply_demo_scene_preset(size_t index) {
   }
   const size_t idx = std::min(index, scene_presets_.size() - 1);
   apply_preset(idx);
-}
-
-void MeshletRendererScene::shutdown() {
-  if (ctx_.window) {
-    glfwSetInputMode(ctx_.window->get_handle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-  }
-}
-
-void MeshletRendererScene::on_frame(const TestSceneContext& ctx) {
-  (void)ctx;
-  sync_mouse_capture_from_ecs();
-}
-
-void MeshletRendererScene::sync_compatibility_ecs_scene(engine::Scene& scene) {
-  if (demo_preset_authoring_pending_) {
-    author_current_demo_preset();
-  }
-  if (!demo_preset_authored_) {
-    return;
-  }
-
-  demo_scene_compat::sync_demo_light_tooling(scene, demo_entity_guids_.light,
-                                             {
-                                                 .direction = glm::vec3{0.35f, 1.f, 0.4f},
-                                                 .color = glm::vec3{1.f},
-                                                 .intensity = 1.f,
-                                             });
-}
-
-void MeshletRendererScene::sync_mouse_capture_from_ecs() {
-  if (!ctx_.window || !ctx_.scene_manager || !demo_entity_guids_.camera.is_valid()) {
-    return;
-  }
-  const engine::Scene* scene = ctx_.scene_manager->active_scene();
-  if (!scene) {
-    return;
-  }
-  const auto* controller = scene->get_fps_camera_controller(demo_entity_guids_.camera);
-  if (!controller || controller->mouse_captured == applied_mouse_captured_) {
-    return;
-  }
-  applied_mouse_captured_ = controller->mouse_captured;
-  glfwSetInputMode(ctx_.window->get_handle(), GLFW_CURSOR,
-                   applied_mouse_captured_ ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
-}
-
-void MeshletRendererScene::on_cursor_pos(double x, double y) {
-  (void)x;
-  (void)y;
-}
-
-void MeshletRendererScene::on_key_event(int key, int action, int mods) {
-  (void)key;
-  (void)action;
-  (void)mods;
 }
 
 void MeshletRendererScene::on_imgui() {
