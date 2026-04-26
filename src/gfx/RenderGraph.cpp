@@ -1,10 +1,19 @@
 #include "RenderGraph.hpp"
 
 #include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <span>
+#include <string>
+#include <string_view>
 #include <tracy/Tracy.hpp>
+#include <unordered_map>
+#include <vector>
 
 #include "core/Config.hpp"
 #include "core/EAssert.hpp"
+#include "core/Logger.hpp"
+#include "gfx/rhi/Barrier.hpp"
 #include "gfx/rhi/Buffer.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -80,7 +89,19 @@ void RenderGraph::execute() {
 void RenderGraph::execute(rhi::CmdEncoder* enc) {
   ZoneScoped;
   gch::small_vector<rhi::GPUBarrier, 8> post_pass_barriers;
-  for (auto pass_i : pass_stack_) {
+  auto is_final_swapchain_write = [&](uint32_t exec_pass_i, rhi::Swapchain* swapchain) {
+    // if any later pass writes to the swapchain, this one isn't the last write.
+    for (uint32_t later_pass_i = exec_pass_i + 1; later_pass_i < pass_stack_.size();
+         ++later_pass_i) {
+      if (passes_[pass_stack_[later_pass_i]].swapchain_write_ == swapchain) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  for (uint32_t exec_i = 0; exec_i < pass_stack_.size(); ++exec_i) {
+    const auto pass_i = pass_stack_[exec_i];
     post_pass_barriers.clear();
     auto& pass = passes_[pass_i];
     ZoneScopedN("Execute Pass");
@@ -100,9 +121,12 @@ void RenderGraph::execute(rhi::CmdEncoder* enc) {
         if (barrier.is_swapchain_write) {
           tex_handle = pass.swapchain_write_->get_current_texture();
           ASSERT(pass.swapchain_write_);
-          post_pass_barriers.emplace_back(rhi::GPUBarrier::tex_barrier(
-              pass.swapchain_write_->get_current_texture(), rhi::ResourceState::ColorWrite,
-              rhi::ResourceState::SwapchainPresent));
+          if (is_final_swapchain_write(exec_i, pass.swapchain_write_)) {
+            post_pass_barriers.emplace_back(rhi::GPUBarrier::tex_barrier(
+                pass.swapchain_write_->get_current_texture(), rhi::ResourceState::ColorWrite,
+                rhi::ResourceState::SwapchainPresent));
+            device_->enqueue_swapchain_for_present(pass.swapchain_write_, enc);
+          }
         }
         enc->barrier(tex_handle, barrier.src_state.stage, barrier.src_state.access,
                      barrier.dst_state.stage, barrier.dst_state.access, barrier.src_state.layout,
@@ -227,8 +251,8 @@ RGResourceId RenderGraph::create_texture(const AttachmentInfo& att_info,
     return id;
   }
   ASSERT((att_info.is_swapchain_tex || att_info.format != rhi::TextureFormat::Undefined));
-  RGResourcePhysHandle handle = {.idx = static_cast<uint32_t>(tex_att_infos_.size()),
-                                 .type = RGResourceType::Texture};
+  const RGResourcePhysHandle handle = {.idx = static_cast<uint32_t>(tex_att_infos_.size()),
+                                       .type = RGResourceType::Texture};
   tex_att_infos_.emplace_back(att_info);
 
   auto record = create_resource_record(RGResourceType::Texture, handle.idx, debug_name);
@@ -255,8 +279,8 @@ RGResourceId RenderGraph::create_buffer(const BufferInfo& buf_info, std::string_
     rg_id_to_external_buffer_[id] = {};
     return id;
   }
-  RGResourcePhysHandle handle = {.idx = static_cast<uint32_t>(buffer_infos_.size()),
-                                 .type = RGResourceType::Buffer};
+  const RGResourcePhysHandle handle = {.idx = static_cast<uint32_t>(buffer_infos_.size()),
+                                       .type = RGResourceType::Buffer};
   buffer_infos_.emplace_back(buf_info);
 
   auto record = create_resource_record(RGResourceType::Buffer, handle.idx, debug_name);
@@ -480,7 +504,7 @@ RGResourceId RenderGraph::next_version(RGResourceId id) {
   auto& rec = resources_[id.idx];
   ALWAYS_ASSERT(rec.type == id.type);
   ALWAYS_ASSERT(!rec.temporal_history_view);
-  uint32_t next = std::max(rec.latest_version, id.version) + 1;
+  const uint32_t next = std::max(rec.latest_version, id.version) + 1;
   rec.latest_version = next;
   return RGResourceId{.idx = id.idx, .type = id.type, .version = next};
 }
@@ -705,9 +729,8 @@ RGResourceId RGPass::rw_tex(RGResourceId input, rhi::PipelineStage stage,
   return output;
 }
 
-void RenderGraph::Pass::w_swapchain_tex(rhi::Swapchain* swapchain) {
+RGResourceId RenderGraph::Pass::w_swapchain_tex(rhi::Swapchain* swapchain) {
   ASSERT(swapchain);
-  swapchain_write_ = swapchain;
   auto curr_tex = swapchain->get_current_texture();
   ASSERT(type_ == RGPassType::Graphics);
   // TODO: remove
@@ -715,15 +738,29 @@ void RenderGraph::Pass::w_swapchain_tex(rhi::Swapchain* swapchain) {
       curr_tex,
       RGState{.stage = rhi::PipelineStage::BottomOfPipe, .layout = rhi::ResourceLayout::Undefined},
       "swapchain");
-  add_write_usage(swapchain_id, rhi::PipelineStage::ColorAttachmentOutput,
-                  rhi::AccessFlags::ColorAttachmentWrite, true);
+  return w_swapchain_tex_new(swapchain, swapchain_id);
 }
 
-void RenderGraph::Pass::w_swapchain_tex_new(rhi::Swapchain* swapchain, RGResourceId swapchain_id) {
+RGResourceId RenderGraph::Pass::w_swapchain_tex_new(rhi::Swapchain* swapchain,
+                                                    RGResourceId swapchain_id) {
   ASSERT(swapchain);
+  ASSERT(type_ == RGPassType::Graphics);
+  ASSERT(swapchain_id.type == RGResourceType::ExternalTexture);
+  ASSERT(swapchain_id.idx < rg_->resources_.size());
   swapchain_write_ = swapchain;
-  add_write_usage(swapchain_id, rhi::PipelineStage::ColorAttachmentOutput,
+  const auto& record = rg_->resources_[swapchain_id.idx];
+  ASSERT(record.type == swapchain_id.type);
+  const RGResourceId prev_swapchain_id{
+      .idx = swapchain_id.idx,
+      .type = swapchain_id.type,
+      .version = std::max(record.latest_version, swapchain_id.version),
+  };
+  add_read_usage(prev_swapchain_id, rhi::PipelineStage::ColorAttachmentOutput,
+                 rhi::AccessFlags::ColorAttachmentRead);
+  const RGResourceId next_swapchain_id = rg_->next_version(prev_swapchain_id);
+  add_write_usage(next_swapchain_id, rhi::PipelineStage::ColorAttachmentOutput,
                   rhi::AccessFlags::ColorAttachmentWrite, true);
+  return next_swapchain_id;
 }
 
 RenderGraph::ResourceRecord RenderGraph::create_resource_record(RGResourceType type,

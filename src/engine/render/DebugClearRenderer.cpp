@@ -5,7 +5,9 @@
 #include "gfx/RenderGraph.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Device.hpp"
+#include "gfx/rhi/GFXTypes.hpp"
 #include "gfx/rhi/Swapchain.hpp"
+#include "glm/ext/vector_float4.hpp"
 
 namespace teng::engine {
 
@@ -16,11 +18,15 @@ void DebugClearRenderer::render(RenderFrameContext& frame, const RenderScene& sc
 
   auto& pass = frame.render_graph->add_graphics_pass("debug_clear");
   pass.w_swapchain_tex(frame.swapchain);
-  pass.set_ex([device = frame.device, swapchain = frame.swapchain, clear_color = clear_color_](
-                  gfx::rhi::CmdEncoder* enc) mutable {
-    device->begin_swapchain_rendering(swapchain, enc, &clear_color);
-    enc->end_rendering();
-  });
+  pass.set_ex(
+      [swapchain = frame.swapchain, clear_color = clear_color_](gfx::rhi::CmdEncoder* enc) mutable {
+        enc->begin_rendering({
+            gfx::rhi::RenderAttInfo::color_att(swapchain->get_current_texture(),
+                                               gfx::rhi::LoadOp::Clear,
+                                               gfx::rhi::ClearValue{.color = clear_color}),
+        });
+        enc->end_rendering();
+      });
 }
 
 }  // namespace teng::engine

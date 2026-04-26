@@ -6,7 +6,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <utility>
 #include <vector>
 
 #include "engine/scene/SceneManager.hpp"
@@ -89,6 +88,7 @@ class Layer {
                          [[maybe_unused]] const EngineTime& time) {}
   virtual void on_imgui([[maybe_unused]] EngineContext& ctx) {}
   virtual void on_render([[maybe_unused]] EngineContext& ctx) {}
+  virtual void on_end_frame([[maybe_unused]] EngineContext& ctx) {}
   virtual void on_key_event([[maybe_unused]] EngineContext& ctx, [[maybe_unused]] int key,
                             [[maybe_unused]] int action, [[maybe_unused]] int mods) {}
   virtual void on_cursor_pos([[maybe_unused]] EngineContext& ctx, [[maybe_unused]] double x,
@@ -111,6 +111,7 @@ class LayerStack {
   void update(const EngineTime& time);
   void imgui();
   void render();
+  void end_frame();
 
  private:
   EngineContext* ctx_{};

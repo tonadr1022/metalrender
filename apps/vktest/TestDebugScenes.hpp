@@ -1,7 +1,6 @@
 #pragma once
 
 #include <filesystem>
-#include <functional>
 #include <memory>
 
 #include "gfx/GPUFrameAllocator2.hpp"
@@ -16,7 +15,6 @@ namespace gfx {
 
 class ShaderManager;
 struct GPUFrameAllocator3;
-class ImGuiRenderer;
 class ModelGPUMgr;
 
 namespace rhi {
@@ -36,8 +34,6 @@ struct TestSceneContext {
   RenderGraph* rg{};
   BufferCopyMgr* buffer_copy{};
   GPUFrameAllocator3* frame_staging{};
-  ImGuiRenderer* imgui_renderer{};
-  std::function<void(rhi::CmdEncoder*)> render_imgui_overlay;
   ModelGPUMgr* model_gpu_mgr{};
   uint32_t curr_frame_in_flight_idx{};
   std::filesystem::path resource_dir{};

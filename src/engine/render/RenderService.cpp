@@ -1,14 +1,11 @@
 #include "engine/render/RenderService.hpp"
 
-#include <algorithm>
-#include <cstdint>
 #include <filesystem>
 #include <glm/ext/vector_int2.hpp>
 #include <memory>
 #include <tracy/Tracy.hpp>
 #include <utility>
 
-#include "UI.hpp"
 #include "Window.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
@@ -23,6 +20,7 @@
 #include "gfx/GPUFrameAllocator2.hpp"
 #include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
+#include "gfx/RenderGraph.hpp"
 #include "gfx/ShaderManager.hpp"
 #include "gfx/renderer/BufferResize.hpp"
 #include "gfx/renderer/InstanceMgr.hpp"
@@ -34,9 +32,6 @@
 #include "gfx/rhi/Swapchain.hpp"
 #include "hlsl/material.h"
 #include "hlsl/shader_constants.h"
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
-#include "implot.h"
 
 namespace teng::engine {
 
@@ -97,13 +92,11 @@ void RenderService::init(const CreateInfo& cinfo) {
   frame_.shader_mgr = shader_mgr_.get();
   frame_.buffer_copy = buffer_copy_mgr_.get();
   frame_.frame_staging = frame_gpu_upload_allocator_.get();
-  frame_.imgui_renderer = imgui_renderer_.get();
   frame_.model_gpu_mgr = model_gpu_mgr_.get();
   frame_.resource_dir = &resource_dir_;
   frame_.time = time_;
   frame_.imgui_ui_active = cinfo.imgui_ui_active;
   update_frame_context();
-  init_imgui();
 
   LINFO("making samplers");
   samplers_.emplace_back(device_->create_sampler_h({
@@ -138,27 +131,26 @@ void RenderService::shutdown() {
   static_draw_batch_.reset();
   static_instance_mgr_.reset();
   render_graph_.shutdown();
-  if (imgui_renderer_) {
-    imgui_renderer_->shutdown();
-  }
-  imgui_renderer_.reset();
+  shutdown_imgui_renderer();
   buffer_copy_mgr_.reset();
   frame_gpu_upload_allocator_.reset();
   shader_mgr_->shutdown();
   shader_mgr_.reset();
-  if (imgui_initialized_) {
-    ImGui_ImplGlfw_Shutdown();
-    ImPlot::DestroyContext();
-    ImGui::DestroyContext();
-    imgui_initialized_ = false;
-  }
   frame_ = {};
   device_ = nullptr;
   swapchain_ = nullptr;
   window_ = nullptr;
   scenes_ = nullptr;
   time_ = nullptr;
+  frame_open_ = false;
   initialized_ = false;
+}
+
+void RenderService::shutdown_imgui_renderer() {
+  if (imgui_renderer_) {
+    imgui_renderer_->shutdown();
+    imgui_renderer_.reset();
+  }
 }
 
 void RenderService::set_renderer(std::unique_ptr<IRenderer> renderer) {
@@ -168,10 +160,25 @@ void RenderService::set_renderer(std::unique_ptr<IRenderer> renderer) {
   }
 }
 
-void RenderService::render_active_scene() {
+void RenderService::begin_frame() {
   ASSERT(initialized_);
+  ASSERT(!frame_open_);
 
   update_frame_context();
+  shader_mgr_->replace_dirty_pipelines();
+  frame_.curr_swapchain_rg_id = render_graph_.import_external_texture(
+      swapchain_->get_current_texture(),
+      gfx::RGState{.stage = gfx::rhi::PipelineStage::BottomOfPipe,
+                   .layout = gfx::rhi::ResourceLayout::Undefined},
+      "swapchain");
+  frame_open_ = true;
+}
+
+void RenderService::enqueue_active_scene() {
+  ASSERT(initialized_);
+  ASSERT(frame_open_);
+  ASSERT(renderer_ != nullptr);
+
   Scene* active_scene = scenes_->active_scene();
   last_extracted_scene_ =
       active_scene
@@ -186,23 +193,38 @@ void RenderService::render_active_scene() {
                             .delta_seconds = time_->delta_seconds,
                             .output_extent = frame_.output_extent,
                         }};
-  render_scene(last_extracted_scene_);
+  renderer_->render(frame_, last_extracted_scene_);
 }
 
-void RenderService::render_scene(const RenderScene& scene) {
+void RenderService::enqueue_imgui_overlay_pass() {
   ASSERT(initialized_);
-  ASSERT(renderer_ != nullptr);
+  ASSERT(frame_open_);
+  ASSERT(imgui_renderer_);
+  if (!frame_.imgui_ui_active) {
+    return;
+  }
 
-  update_frame_context();
-  shader_mgr_->replace_dirty_pipelines();
+  auto& p = render_graph_.add_graphics_pass("imgui_overlay");
+  frame_.curr_swapchain_rg_id = p.w_swapchain_tex_new(swapchain_, frame_.curr_swapchain_rg_id);
+  p.set_ex([imgui_renderer = imgui_renderer_.get(), swapchain = swapchain_,
+            frame_in_flight = frame_.curr_frame_in_flight_idx](gfx::rhi::CmdEncoder* enc) {
+    enc->begin_rendering({
+        gfx::rhi::RenderAttInfo::color_att(swapchain->get_current_texture(),
+                                           gfx::rhi::LoadOp::Load),
+    });
+    imgui_renderer->render(enc, {swapchain->desc_.width, swapchain->desc_.height}, frame_in_flight);
+    enc->end_rendering();
+  });
+}
 
-  renderer_->render(frame_, scene);
+void RenderService::end_frame() {
+  ASSERT(initialized_);
+  ASSERT(frame_open_);
 
   static int i = 0;
   const bool verbose = i++ == -1;
-  render_graph_.bake(frame_.output_extent, verbose);
-
   device_->acquire_next_swapchain_image(swapchain_);
+  render_graph_.bake(frame_.output_extent, verbose);
 
   flush_pending_buffer_copies();
 
@@ -221,6 +243,16 @@ void RenderService::render_scene(const RenderScene& scene) {
   if (frame_gpu_upload_allocator_) {
     frame_gpu_upload_allocator_->set_frame_idx_and_reset_bufs(frame_.curr_frame_in_flight_idx);
   }
+  frame_open_ = false;
+}
+
+void RenderService::render_scene(const RenderScene& scene) {
+  ASSERT(initialized_);
+  ASSERT(renderer_ != nullptr);
+
+  begin_frame();
+  renderer_->render(frame_, scene);
+  end_frame();
 }
 
 void RenderService::set_imgui_ui_active(bool active) { frame_.imgui_ui_active = active; }
@@ -232,30 +264,6 @@ void RenderService::recreate_resources_on_swapchain_resize() {
     update_frame_context();
     renderer_->on_resize(frame_);
   }
-}
-
-void RenderService::init_imgui() {
-  IMGUI_CHECKVERSION();
-  ImGui::CreateContext();
-  ImPlot::CreateContext();
-
-  ImGuiIO& io = ImGui::GetIO();
-  const std::filesystem::path font_dir = resource_dir_ / "fonts";
-  if (std::filesystem::exists(font_dir)) {
-    for (const auto& entry : std::filesystem::directory_iterator(font_dir)) {
-      if (entry.path().extension() == ".ttf") {
-        auto* font = io.Fonts->AddFontFromFileTTF(entry.path().string().c_str(), 16, nullptr,
-                                                  io.Fonts->GetGlyphRangesDefault());
-        add_font(entry.path().stem().string(), font);
-      }
-    }
-  }
-
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-  io.BackendRendererName = "imgui_impl_memes";
-  io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_RendererHasTextures;
-  ImGui_ImplGlfw_InitForOther(window_->get_handle(), true);
-  imgui_initialized_ = true;
 }
 
 void RenderService::update_frame_context() {
@@ -270,7 +278,6 @@ void RenderService::update_frame_context() {
   frame_.shader_mgr = shader_mgr_.get();
   frame_.buffer_copy = buffer_copy_mgr_.get();
   frame_.frame_staging = frame_gpu_upload_allocator_.get();
-  frame_.imgui_renderer = imgui_renderer_.get();
   frame_.model_gpu_mgr = model_gpu_mgr_.get();
   frame_.resource_dir = &resource_dir_;
 }

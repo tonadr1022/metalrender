@@ -102,7 +102,10 @@ class ComputePlusVertexScene final : public ITestScene {
       p.w_swapchain_tex(ctx_.swapchain);
       p.set_ex([this](CmdEncoder* enc) {
         glm::vec4 clear_color{0.5, 0.5, 0, 1};
-        ctx_.device->begin_swapchain_rendering(ctx_.swapchain, enc, &clear_color);
+        enc->begin_rendering({
+            RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::Clear,
+                                     ClearValue{.color = clear_color}),
+        });
         enc->set_cull_mode(CullMode::None);
         enc->set_wind_order(WindOrder::CounterClockwise);
         enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
@@ -220,7 +223,10 @@ class MeshHelloTriangleScene final : public ITestScene {
     p.w_swapchain_tex(ctx_.swapchain);
     p.set_ex([this](CmdEncoder* enc) {
       glm::vec4 clear_color{0.1f, 0.1f, 0.15f, 1.f};
-      ctx_.device->begin_swapchain_rendering(ctx_.swapchain, enc, &clear_color);
+      enc->begin_rendering({
+          RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::Clear,
+                                   ClearValue{.color = clear_color}),
+      });
       enc->set_cull_mode(CullMode::None);
       enc->set_wind_order(WindOrder::CounterClockwise);
       enc->set_viewport({0, 0}, {ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height});
@@ -305,7 +311,10 @@ class TexturedCubeProceduralScene final : public ITestScene {
       }
 
       glm::vec4 clear_color{0.08f, 0.08f, 0.1f, 1.f};
-      ctx_.device->begin_swapchain_rendering(ctx_.swapchain, enc, &clear_color);
+      enc->begin_rendering({
+          RenderAttInfo::color_att(ctx_.swapchain->get_current_texture(), LoadOp::Clear,
+                                   ClearValue{.color = clear_color}),
+      });
       enc->bind_pipeline(mesh_pso_);
       enc->set_cull_mode(CullMode::Back);
       enc->set_wind_order(WindOrder::CounterClockwise);
@@ -329,8 +338,6 @@ class TexturedCubeProceduralScene final : public ITestScene {
       enc->push_constants(&pc, sizeof(pc));
 
       enc->draw_mesh_threadgroups({1, 1, 1}, {1, 1, 1}, {128, 1, 1});
-
-      ctx_.render_imgui_overlay(enc);
       enc->end_rendering();
     });
   }

@@ -4,10 +4,10 @@
 #include <filesystem>
 #include <glm/ext/vector_uint2.hpp>
 
+#include "gfx/RenderGraph.hpp"
+
 namespace teng::gfx {
-class ImGuiRenderer;
 class ModelGPUMgr;
-class RenderGraph;
 class ShaderManager;
 struct BufferCopyMgr;
 struct GPUFrameAllocator3;
@@ -34,11 +34,11 @@ struct RenderFrameContext {
   gfx::ShaderManager* shader_mgr{};
   gfx::BufferCopyMgr* buffer_copy{};
   gfx::GPUFrameAllocator3* frame_staging{};
-  gfx::ImGuiRenderer* imgui_renderer{};
   gfx::ModelGPUMgr* model_gpu_mgr{};
   const std::filesystem::path* resource_dir{};
   const EngineTime* time{};
   glm::uvec2 output_extent{};
+  gfx::RGResourceId curr_swapchain_rg_id{};
   uint64_t frame_index{};
   uint32_t curr_frame_in_flight_idx{};
   bool imgui_ui_active{};

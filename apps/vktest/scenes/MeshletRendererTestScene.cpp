@@ -540,7 +540,6 @@ void MeshletRendererScene::add_render_graph_passes() {
               cull_early_cb](CmdEncoder* enc) {
       glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
       const glm::uvec2 vp_dims{ctx_.swapchain->desc_.width, ctx_.swapchain->desc_.height};
-      ctx_.device->enqueue_swapchain_for_present(ctx_.swapchain, enc);
       enc->begin_rendering({
           RenderAttInfo::color_att(ctx_.rg->get_att_img(gbuffer_a_id), LoadOp::Clear,
                                    ClearValue{.color = clear_color}),
@@ -716,7 +715,6 @@ void MeshletRendererScene::add_render_graph_passes() {
       enc->push_constants(&shade_pc, sizeof(shade_pc));
       enc->draw_primitives(rhi::PrimitiveTopology::TriangleList, 3);
 
-      ctx_.render_imgui_overlay(enc);
       enc->end_rendering();
     });
   }

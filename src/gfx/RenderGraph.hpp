@@ -285,8 +285,8 @@ class RenderGraph {
         RgSubresourceRange write_subresource = RgSubresourceRange::all_mips_all_slices());
     RGResourceId rw_color_output(RGResourceId input);
     RGResourceId rw_depth_output(RGResourceId input);
-    void w_swapchain_tex(rhi::Swapchain* swapchain);
-    void w_swapchain_tex_new(rhi::Swapchain* swapchain, RGResourceId swapchain_id);
+    RGResourceId w_swapchain_tex(rhi::Swapchain* swapchain);
+    RGResourceId w_swapchain_tex_new(rhi::Swapchain* swapchain, RGResourceId swapchain_id);
     RGResourceId read_buf(RGResourceId id, rhi::PipelineStage stage);
     RGResourceId copy_from_buf(RGResourceId id);
     RGResourceId read_buf(RGResourceId id, rhi::PipelineStage stage, rhi::AccessFlags access);

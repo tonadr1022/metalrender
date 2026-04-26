@@ -13,6 +13,7 @@
 #include "Util.hpp"
 #include "core/EAssert.hpp"
 #include "engine/Engine.hpp"
+#include "engine/ImGuiOverlayLayer.hpp"
 #include "engine/render/RenderService.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/renderer/RendererCVars.hpp"
@@ -83,8 +84,7 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
   }
 
   void on_render(teng::engine::EngineContext& ctx) override {
-    ctx.renderer().set_imgui_ui_active(ctx.imgui_enabled());
-    ctx.renderer().render_active_scene();
+    ctx.renderer().enqueue_active_scene();
   }
 
  private:
@@ -108,6 +108,7 @@ TestApp::TestApp(TestAppOptions options)
       })) {
   ZoneScoped;
   engine_->layers().push_layer(std::make_unique<CompatibilityVktestLayer>());
+  engine_->layers().push_layer(std::make_unique<teng::engine::ImGuiOverlayLayer>());
 }
 
 TestApp::~TestApp() = default;

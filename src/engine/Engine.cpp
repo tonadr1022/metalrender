@@ -16,8 +16,6 @@
 #include "engine/render/RenderService.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
-#include "imgui.h"
-#include "imgui_impl_glfw.h"
 
 namespace teng::engine {
 
@@ -89,6 +87,13 @@ void LayerStack::render() {
   ASSERT(ctx_);
   for (auto& layer : layers_) {
     layer->on_render(*ctx_);
+  }
+}
+
+void LayerStack::end_frame() {
+  ASSERT(ctx_);
+  for (auto& layer : layers_) {
+    layer->on_end_frame(*ctx_);
   }
 }
 
@@ -244,24 +249,13 @@ bool Engine::tick() {
     return false;
   }
 
-  if (imgui_enabled_) {
-    ZoneScopedN("imgui_new_frame");
-    ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-  }
+  renderer_->begin_frame();
 
   layers_.update(time_);
-
-  if (imgui_enabled_) {
-    layers_.imgui();
-    ImGui::Render();
-  }
-
+  layers_.imgui();
   layers_.render();
-
-  if (imgui_enabled_) {
-    ImGui::EndFrame();
-  }
+  renderer_->end_frame();
+  layers_.end_frame();
 
   ++completed_frames_;
   if (config_.quit_after_frames.has_value() && completed_frames_ >= *config_.quit_after_frames) {

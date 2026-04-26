@@ -15,12 +15,10 @@
 #include "engine/Engine.hpp"
 #include "engine/render/RenderFrameContext.hpp"
 #include "engine/render/RenderScene.hpp"
-#include "gfx/ImGuiRenderer.hpp"
 #include "gfx/ModelGPUManager.hpp"
 #include "gfx/RenderGraph.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
-#include "gfx/rhi/Swapchain.hpp"
 #include "imgui.h"
 
 using namespace teng;
@@ -34,26 +32,12 @@ TestRenderer::TestRenderer(const CreateInfo& cinfo) : active_scene_(cinfo.initia
 void TestRenderer::populate_compatibility_context(engine::RenderFrameContext& frame) {
   ctx_.device = frame.device;
   ctx_.swapchain = frame.swapchain;
-  // TODO: this might cause pain on resize. if it's called on render() always, maybe don't call it
-  // on resize.
-  ctx_.curr_swapchain_rg_id = frame.render_graph->import_external_texture(
-      frame.swapchain->get_current_texture(),
-      RGState{.stage = rhi::PipelineStage::BottomOfPipe, .layout = rhi::ResourceLayout::Undefined},
-      "swapchain");
+  ctx_.curr_swapchain_rg_id = frame.curr_swapchain_rg_id;
   ctx_.window = frame.window;
   ctx_.shader_mgr = frame.shader_mgr;
   ctx_.rg = frame.render_graph;
   ctx_.buffer_copy = frame.buffer_copy;
   ctx_.frame_staging = frame.frame_staging;
-  ctx_.imgui_renderer = nullptr;
-  ctx_.render_imgui_overlay = [imgui_renderer = frame.imgui_renderer, swapchain = frame.swapchain,
-                               frame_in_flight = frame.curr_frame_in_flight_idx,
-                               imgui_ui_active = frame.imgui_ui_active](rhi::CmdEncoder* enc) {
-    if (!imgui_ui_active || imgui_renderer == nullptr || swapchain == nullptr) {
-      return;
-    }
-    imgui_renderer->render(enc, {swapchain->desc_.width, swapchain->desc_.height}, frame_in_flight);
-  };
   ctx_.model_gpu_mgr = frame.model_gpu_mgr;
   ctx_.curr_frame_in_flight_idx = frame.curr_frame_in_flight_idx;
   ctx_.resource_dir = frame.resource_dir ? *frame.resource_dir : std::filesystem::path{};

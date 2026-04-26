@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <vector>
@@ -56,7 +55,11 @@ class RenderService {
   void init(const CreateInfo& cinfo);
   void shutdown();
   void set_renderer(std::unique_ptr<IRenderer> renderer);
-  void render_active_scene();
+  void begin_frame();
+  void enqueue_active_scene();
+  void enqueue_imgui_overlay_pass();
+  void shutdown_imgui_renderer();
+  void end_frame();
   void render_scene(const RenderScene& scene);
   void set_imgui_ui_active(bool active);
   void request_render_graph_debug_dump();
@@ -69,7 +72,6 @@ class RenderService {
   [[nodiscard]] gfx::ModelGPUMgr* model_gpu_mgr() const { return model_gpu_mgr_.get(); }
 
  private:
-  void init_imgui();
   void update_frame_context();
   void flush_pending_buffer_copies();
   void flush_pending_texture_uploads(gfx::rhi::CmdEncoder* enc);
@@ -93,7 +95,7 @@ class RenderService {
   RenderFrameContext frame_;
   RenderScene last_extracted_scene_;
   std::vector<gfx::rhi::SamplerHandleHolder> samplers_;
-  bool imgui_initialized_{};
+  bool frame_open_{};
   bool initialized_{};
 };
 
