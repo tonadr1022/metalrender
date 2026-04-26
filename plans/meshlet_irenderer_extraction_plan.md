@@ -258,7 +258,7 @@ Exit criteria:
 - Other future renderers, such as a 2D renderer, are not forced to construct mesh/model residency
   services they do not use.
 
-## Phase 2: Promote Meshlet Renderer Helpers Out Of `apps/vktest/scenes`
+## Phase 2: Promote Meshlet Renderer Helpers Out Of `apps/vktest/scenes` DONE
 
 Move reusable meshlet renderer helpers into `src/gfx/renderer`.
 
