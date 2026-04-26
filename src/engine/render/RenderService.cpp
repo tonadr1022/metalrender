@@ -167,6 +167,7 @@ void RenderService::begin_frame() {
 
   update_frame_context();
   shader_mgr_->replace_dirty_pipelines();
+  device_->acquire_next_swapchain_image(swapchain_);
   frame_.curr_swapchain_rg_id = render_graph_.import_external_texture(
       swapchain_->get_current_texture(),
       gfx::RGState{.stage = gfx::rhi::PipelineStage::BottomOfPipe,
@@ -227,7 +228,6 @@ void RenderService::end_frame() {
 
   static int i = 0;
   const bool verbose = i++ == -1;
-  device_->acquire_next_swapchain_image(swapchain_);
   render_graph_.bake(frame_.output_extent, verbose);
   auto* enc = device_->begin_cmd_encoder();
   // Upload and resize migration copies are encoded in-order with render work so visibility

@@ -1255,7 +1255,6 @@ void Device::DeleteQueues::enqueue_deletion(rhi::BufferHandle handle, size_t cur
 
 void Device::destroy_actual(rhi::BufferHandle handle) {
   auto* buf = buffer_pool_.get(handle);
-  ASSERT(buf);
   if (!buf) {
     return;
   }

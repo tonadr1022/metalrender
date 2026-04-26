@@ -268,7 +268,7 @@ void MeshletRenderer::bake_swapchain_clear(engine::RenderFrameContext& frame,
   ASSERT(frame.swapchain != nullptr);
   const glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
   auto& p = frame.render_graph->add_graphics_pass(pass_name);
-  p.w_swapchain_tex_new(frame.swapchain, frame.curr_swapchain_rg_id);
+  frame.curr_swapchain_rg_id = p.w_swapchain_tex_new(frame.swapchain, frame.curr_swapchain_rg_id);
   p.set_ex([swapchain = frame.swapchain, clear_color](CmdEncoder* enc) {
     enc->begin_rendering({
         RenderAttInfo::color_att(swapchain->get_current_texture(), LoadOp::Clear,
