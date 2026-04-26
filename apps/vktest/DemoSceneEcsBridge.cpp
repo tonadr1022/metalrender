@@ -1,6 +1,7 @@
 #include "DemoSceneEcsBridge.hpp"
 
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/mat4x4.hpp>
 #include <glm/vec3.hpp>
 #include <string>
@@ -71,12 +72,7 @@ DemoSceneEntityGuids apply_demo_preset_to_scene(engine::SceneManager& scenes,
   authored.reserve(2);
 
   scene.ensure_entity(k_demo_camera_guid, "demo camera");
-  scene.set_camera(k_demo_camera_guid, {
-                                           .fov_y = 1.04719755f,
-                                           .z_near = 0.1f,
-                                           .z_far = 10000.f,
-                                           .primary = true,
-                                       });
+  sync_demo_camera_tooling(scene, k_demo_camera_guid, preset.cam);
   authored.push_back(k_demo_camera_guid);
 
   scene.ensure_entity(k_demo_light_guid, "demo directional light");
@@ -112,14 +108,23 @@ void sync_demo_camera_tooling(engine::Scene& scene, engine::EntityGuid camera_gu
                               const ::Camera& camera) {
   ::Camera app_camera = camera;
   app_camera.calc_vectors();
-  scene.set_transform(camera_guid, {.translation = app_camera.pos});
-  scene.set_local_to_world(camera_guid, {.value = glm::inverse(app_camera.get_view_mat())});
+  const glm::mat4 local_to_world = glm::inverse(app_camera.get_view_mat());
+  scene.set_transform(camera_guid,
+                      {.translation = app_camera.pos, .rotation = glm::quat_cast(local_to_world)});
+  scene.set_local_to_world(camera_guid, {.value = local_to_world});
   scene.set_camera(camera_guid, {
                                     .fov_y = 1.04719755f,
                                     .z_near = 0.1f,
                                     .z_far = 10000.f,
                                     .primary = true,
                                 });
+  scene.set_fps_camera_controller(camera_guid, {
+                                                   .pitch = app_camera.pitch,
+                                                   .yaw = app_camera.yaw,
+                                                   .max_velocity = app_camera.max_velocity,
+                                                   .move_speed = app_camera.move_speed,
+                                                   .mouse_sensitivity = app_camera.mouse_sensitivity,
+                                               });
 }
 
 void sync_demo_light_tooling(engine::Scene& scene, engine::EntityGuid light_guid,
@@ -154,8 +159,7 @@ bool run_demo_scene_authoring_smoke_test() {
   engine::SceneManager scenes;
   const DemoSceneEntityGuids grid_guids = apply_demo_preset_to_scene(scenes, presets[2], {});
   engine::Scene* scene = scenes.active_scene();
-  if (!scene || !scene->find_entity(grid_guids.camera).is_valid() ||
-      !scene->find_entity(grid_guids.light).is_valid()) {
+  if (!scene || !scene->has_entity(grid_guids.camera) || !scene->has_entity(grid_guids.light)) {
     return false;
   }
   if (!scene->tick(1.f / 60.f)) {
@@ -184,7 +188,7 @@ bool run_demo_scene_authoring_smoke_test() {
   const engine::EntityGuid old_mesh_guid = grid_render_scene.meshes.back().entity;
   const DemoSceneEntityGuids suzanne_guids = apply_demo_preset_to_scene(scenes, presets[0], {});
   if (suzanne_guids.camera != grid_guids.camera || suzanne_guids.light != grid_guids.light ||
-      scene->find_entity(old_mesh_guid).is_valid()) {
+      scene->has_entity(old_mesh_guid)) {
     return false;
   }
   if (!scene->tick(1.f / 60.f)) {

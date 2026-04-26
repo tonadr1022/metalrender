@@ -12,6 +12,10 @@ int main() {
     std::cerr << "engine_scene_smoke: render scene extraction smoke test failed\n";
     return 1;
   }
+  if (!teng::engine::run_fps_camera_system_smoke_test()) {
+    std::cerr << "engine_scene_smoke: fps camera system smoke test failed\n";
+    return 1;
+  }
   if (!teng::gfx::demo_scene_compat::run_demo_scene_authoring_smoke_test()) {
     std::cerr << "engine_scene_smoke: demo scene authoring smoke test failed\n";
     return 1;

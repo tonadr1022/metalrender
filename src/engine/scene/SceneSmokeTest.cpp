@@ -1,5 +1,6 @@
 #include "engine/scene/SceneSmokeTest.hpp"
 
+#include <GLFW/glfw3.h>
 #include <cmath>
 
 #include "engine/render/RenderScene.hpp"
@@ -198,6 +199,55 @@ bool run_render_scene_extraction_smoke_test() {
   }
 
   return true;
+}
+
+bool run_fps_camera_system_smoke_test() {
+  Scene scene{SceneId{101}, "fps camera"};
+  const EntityGuid camera_guid{40};
+  const auto camera = scene.create_entity(camera_guid, "fps camera");
+  camera.set<Camera>({.primary = true});
+  camera.set<FpsCameraController>({
+      .pitch = 0.f,
+      .yaw = 0.f,
+      .max_velocity = 5.f,
+      .move_speed = 10.f,
+      .mouse_sensitivity = 0.1f,
+      .mouse_captured = true,
+  });
+
+  EngineInputSnapshot input;
+  input.held_keys.insert(GLFW_KEY_W);
+  input.cursor_delta = {10.f, 5.f};
+  input.delta_seconds = 1.f;
+  scene.set_input_snapshot(input);
+  if (!scene.tick(input.delta_seconds)) {
+    return false;
+  }
+
+  const auto* transform = camera.try_get<Transform>();
+  const auto* controller = camera.try_get<FpsCameraController>();
+  const auto* local_to_world = camera.try_get<LocalToWorld>();
+  if (!transform || !controller || !local_to_world) {
+    return false;
+  }
+  if (!nearly_equal(controller->yaw, 1.f) || !nearly_equal(controller->pitch, 0.5f)) {
+    return false;
+  }
+  if (transform->translation.x <= 49.f || transform->translation.x >= 51.f) {
+    return false;
+  }
+  if (!matrix_nearly_equal(local_to_world->value, transform_to_matrix(*transform))) {
+    return false;
+  }
+
+  input = {};
+  input.pressed_keys.insert(GLFW_KEY_ESCAPE);
+  scene.set_input_snapshot(input);
+  if (!scene.tick(0.f)) {
+    return false;
+  }
+  controller = camera.try_get<FpsCameraController>();
+  return controller && !controller->mouse_captured;
 }
 
 }  // namespace teng::engine

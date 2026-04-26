@@ -28,12 +28,16 @@ class Scene {
   flecs::entity create_entity(EntityGuid guid = make_entity_guid(), std::string_view name = {});
   void ensure_entity(EntityGuid guid, std::string_view name = {});
   void destroy_entity(EntityGuid guid);
+  [[nodiscard]] bool has_entity(EntityGuid guid) const;
   [[nodiscard]] flecs::entity find_entity(EntityGuid guid) const;
+  [[nodiscard]] const FpsCameraController* get_fps_camera_controller(EntityGuid guid) const;
   bool set_transform(EntityGuid guid, const Transform& transform) const;
   bool set_local_to_world(EntityGuid guid, const LocalToWorld& local_to_world) const;
   bool set_camera(EntityGuid guid, const Camera& camera) const;
+  bool set_fps_camera_controller(EntityGuid guid, const FpsCameraController& controller) const;
   bool set_directional_light(EntityGuid guid, const DirectionalLight& light) const;
   bool set_mesh_renderable(EntityGuid guid, const MeshRenderable& mesh) const;
+  void set_input_snapshot(const EngineInputSnapshot& input);
 
   bool tick(float delta_seconds);
 

@@ -47,8 +47,6 @@ void MeshletRendererScene::apply_preset(size_t idx) {
     return;
   }
   auto& preset = scene_presets_[idx];
-  fps_camera_.camera() = preset.cam;
-  fps_camera_.camera().calc_vectors();
 
   if (meshlet_gpu_) {
     if (preset.csm_defaults.has_value()) {
@@ -80,16 +78,13 @@ void MeshletRendererScene::apply_demo_scene_preset(size_t index) {
 
 void MeshletRendererScene::shutdown() {
   if (ctx_.window) {
-    fps_camera_.set_mouse_captured(ctx_.window->get_handle(), false);
+    glfwSetInputMode(ctx_.window->get_handle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
   }
 }
 
 void MeshletRendererScene::on_frame(const TestSceneContext& ctx) {
-  const bool imgui_blocks =
-      ctx.imgui_ui_active && (ImGui::GetIO().WantTextInput || ImGui::GetIO().WantCaptureKeyboard);
-  if (ctx.window) {
-    fps_camera_.update(ctx.window->get_handle(), ctx.delta_time_sec, imgui_blocks);
-  }
+  (void)ctx;
+  sync_mouse_capture_from_ecs();
 }
 
 void MeshletRendererScene::sync_compatibility_ecs_scene(engine::Scene& scene) {
@@ -100,9 +95,6 @@ void MeshletRendererScene::sync_compatibility_ecs_scene(engine::Scene& scene) {
     return;
   }
 
-  Camera& app_camera = fps_camera_.camera();
-  app_camera.calc_vectors();
-  demo_scene_compat::sync_demo_camera_tooling(scene, demo_entity_guids_.camera, app_camera);
   demo_scene_compat::sync_demo_light_tooling(scene, demo_entity_guids_.light,
                                              {
                                                  .direction = glm::vec3{0.35f, 1.f, 0.4f},
@@ -111,13 +103,32 @@ void MeshletRendererScene::sync_compatibility_ecs_scene(engine::Scene& scene) {
                                              });
 }
 
-void MeshletRendererScene::on_cursor_pos(double x, double y) { fps_camera_.on_cursor_pos(x, y); }
+void MeshletRendererScene::sync_mouse_capture_from_ecs() {
+  if (!ctx_.window || !ctx_.scene_manager || !demo_entity_guids_.camera.is_valid()) {
+    return;
+  }
+  const engine::Scene* scene = ctx_.scene_manager->active_scene();
+  if (!scene) {
+    return;
+  }
+  const auto* controller = scene->get_fps_camera_controller(demo_entity_guids_.camera);
+  if (!controller || controller->mouse_captured == applied_mouse_captured_) {
+    return;
+  }
+  applied_mouse_captured_ = controller->mouse_captured;
+  glfwSetInputMode(ctx_.window->get_handle(), GLFW_CURSOR,
+                   applied_mouse_captured_ ? GLFW_CURSOR_DISABLED : GLFW_CURSOR_NORMAL);
+}
+
+void MeshletRendererScene::on_cursor_pos(double x, double y) {
+  (void)x;
+  (void)y;
+}
 
 void MeshletRendererScene::on_key_event(int key, int action, int mods) {
+  (void)key;
+  (void)action;
   (void)mods;
-  if (action == GLFW_PRESS && key == GLFW_KEY_ESCAPE && ctx_.window) {
-    fps_camera_.toggle_mouse_capture(ctx_.window->get_handle());
-  }
 }
 
 void MeshletRendererScene::on_imgui() {

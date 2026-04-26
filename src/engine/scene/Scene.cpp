@@ -1,5 +1,6 @@
 #include "engine/scene/Scene.hpp"
 
+#include <GLFW/glfw3.h>
 #include <flecs/addons/cpp/entity.hpp>
 #include <flecs/addons/cpp/mixins/pipeline/decl.hpp>
 #include <string>
@@ -7,10 +8,35 @@
 #include <utility>
 
 #include "core/EAssert.hpp"
+#include "engine/Input.hpp"
 #include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/SceneIds.hpp"
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/geometric.hpp>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/trigonometric.hpp>
 
 namespace teng::engine {
+
+namespace {
+
+[[nodiscard]] glm::vec3 camera_front(float yaw, float pitch) {
+  glm::vec3 dir;
+  dir.x = glm::cos(glm::radians(yaw)) * glm::cos(glm::radians(pitch));
+  dir.y = glm::sin(glm::radians(pitch));
+  dir.z = glm::sin(glm::radians(yaw)) * glm::cos(glm::radians(pitch));
+  return glm::normalize(dir);
+}
+
+[[nodiscard]] bool any_key_down(const EngineInputSnapshot& input, int a, int b) {
+  return input.key_down(a) || input.key_down(b);
+}
+
+[[nodiscard]] glm::mat4 camera_local_to_world(const glm::vec3& position, const glm::vec3& front) {
+  return glm::inverse(glm::lookAt(position, position + front, glm::vec3{0.f, 1.f, 0.f}));
+}
+
+}  // namespace
 
 Scene::Scene(SceneId id, std::string name) : id_(id), name_(std::move(name)) {
   ASSERT(id_.is_valid());
@@ -26,12 +52,85 @@ void Scene::register_components() {
   world_.component<Transform>("Transform");
   world_.component<LocalToWorld>("LocalToWorld");
   world_.component<Camera>("Camera");
+  world_.component<FpsCameraController>("FpsCameraController");
+  world_.component<EngineInputSnapshot>("EngineInputSnapshot");
   world_.component<DirectionalLight>("DirectionalLight");
   world_.component<MeshRenderable>("MeshRenderable");
   world_.component<SpriteRenderable>("SpriteRenderable");
 }
 
 void Scene::register_systems() {
+  world_.system<Transform, LocalToWorld, FpsCameraController>("UpdateFpsCamera")
+      .kind(flecs::OnUpdate)
+      .each([this](Transform& transform, LocalToWorld& local_to_world,
+                   FpsCameraController& controller) {
+        const auto* input = world_.try_get<EngineInputSnapshot>();
+        if (!input) {
+          return;
+        }
+
+        if (input->key_pressed(GLFW_KEY_ESCAPE)) {
+          controller.mouse_captured = !controller.mouse_captured;
+        }
+
+        if (controller.mouse_captured) {
+          const glm::vec2 offset = input->cursor_delta * controller.mouse_sensitivity;
+          controller.yaw += offset.x;
+          controller.pitch += controller.look_pitch_sign * offset.y;
+          controller.pitch = glm::clamp(controller.pitch, -89.f, 89.f);
+        }
+
+        if (!input->imgui_blocks_keyboard) {
+          glm::vec3 acceleration{};
+          bool accelerating{};
+          const glm::vec3 front = camera_front(controller.yaw, controller.pitch);
+          const glm::vec3 right = glm::normalize(glm::cross(front, glm::vec3{0.f, 1.f, 0.f}));
+
+          if (any_key_down(*input, GLFW_KEY_W, GLFW_KEY_I)) {
+            acceleration += front;
+            accelerating = true;
+          }
+          if (any_key_down(*input, GLFW_KEY_S, GLFW_KEY_K)) {
+            acceleration -= front;
+            accelerating = true;
+          }
+          if (any_key_down(*input, GLFW_KEY_A, GLFW_KEY_J)) {
+            acceleration -= right;
+            accelerating = true;
+          }
+          if (any_key_down(*input, GLFW_KEY_D, GLFW_KEY_L)) {
+            acceleration += right;
+            accelerating = true;
+          }
+          if (any_key_down(*input, GLFW_KEY_Y, GLFW_KEY_R)) {
+            acceleration += glm::vec3{0.f, 1.f, 0.f};
+            accelerating = true;
+          }
+          if (any_key_down(*input, GLFW_KEY_H, GLFW_KEY_F)) {
+            acceleration -= glm::vec3{0.f, 1.f, 0.f};
+            accelerating = true;
+          }
+          if (input->key_down(GLFW_KEY_B)) {
+            controller.move_speed *= 1.1f;
+            controller.max_velocity *= 1.1f;
+          }
+          if (input->key_down(GLFW_KEY_V)) {
+            controller.move_speed /= 1.1f;
+            controller.max_velocity /= 1.1f;
+          }
+
+          if (accelerating && glm::length(acceleration) > 0.0001f) {
+            transform.translation +=
+                glm::normalize(acceleration) * controller.move_speed * controller.max_velocity *
+                input->delta_seconds;
+          }
+        }
+
+        const glm::vec3 front = camera_front(controller.yaw, controller.pitch);
+        local_to_world.value = camera_local_to_world(transform.translation, front);
+        transform.rotation = glm::quat_cast(local_to_world.value);
+      });
+
   world_.system<const Transform, LocalToWorld>("UpdateLocalToWorld")
       .kind(flecs::OnUpdate)
       .each([](const Transform& transform, LocalToWorld& local_to_world) {
@@ -72,9 +171,16 @@ void Scene::destroy_entity(EntityGuid guid) {
   entities_by_guid_.erase(it);
 }
 
+bool Scene::has_entity(EntityGuid guid) const { return entities_by_guid_.contains(guid); }
+
 flecs::entity Scene::find_entity(EntityGuid guid) const {
   const auto it = entities_by_guid_.find(guid);
   return it == entities_by_guid_.end() ? flecs::entity{} : it->second;
+}
+
+const FpsCameraController* Scene::get_fps_camera_controller(EntityGuid guid) const {
+  const flecs::entity entity = find_entity(guid);
+  return entity.is_valid() ? entity.try_get<FpsCameraController>() : nullptr;
 }
 
 // Compatibility authoring helpers mutate the Flecs world through an entity handle.
@@ -103,6 +209,20 @@ bool Scene::set_camera(EntityGuid guid, const Camera& camera) const {
   }
   entity.set<Camera>(camera);
   return true;
+}
+
+bool Scene::set_fps_camera_controller(EntityGuid guid,
+                                      const FpsCameraController& controller) const {
+  const flecs::entity entity = find_entity(guid);
+  if (!entity.is_valid()) {
+    return false;
+  }
+  entity.set<FpsCameraController>(controller);
+  return true;
+}
+
+void Scene::set_input_snapshot(const EngineInputSnapshot& input) {
+  world_.set<EngineInputSnapshot>(input);
 }
 
 bool Scene::set_directional_light(EntityGuid guid, const DirectionalLight& light) const {

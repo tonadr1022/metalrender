@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "engine/Input.hpp"
 #include "engine/scene/SceneManager.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
@@ -61,6 +62,7 @@ class EngineContext {
   [[nodiscard]] SceneManager& scenes() const { return *scenes_; }
   [[nodiscard]] RenderService& renderer() const { return *renderer_; }
   [[nodiscard]] const EngineTime& time() const { return *time_; }
+  [[nodiscard]] const EngineInputSnapshot& input() const { return *input_; }
   [[nodiscard]] bool imgui_enabled() const { return *imgui_enabled_; }
   void set_imgui_enabled(bool enabled) { *imgui_enabled_ = enabled; }
   void toggle_imgui_enabled() { *imgui_enabled_ = !*imgui_enabled_; }
@@ -76,6 +78,7 @@ class EngineContext {
   SceneManager* scenes_{};
   RenderService* renderer_{};
   const EngineTime* time_{};
+  const EngineInputSnapshot* input_{};
   bool* imgui_enabled_{};
 };
 
@@ -153,6 +156,8 @@ class Engine {
   void init_resource_paths();
   [[nodiscard]] gfx::rhi::GfxAPI resolve_gfx_api() const;
   void dispatch_pending_events();
+  void refresh_input_snapshot_ui_state();
+  void clear_transient_input();
 
   EngineConfig config_;
   std::filesystem::path resource_dir_;
@@ -165,6 +170,9 @@ class Engine {
   EngineContext context_;
   LayerStack layers_;
   EngineTime time_;
+  EngineInputSnapshot input_snapshot_;
+  glm::vec2 last_cursor_pos_{};
+  bool have_cursor_pos_{false};
   bool imgui_enabled_{true};
   bool initialized_{false};
   bool shutting_down_{false};

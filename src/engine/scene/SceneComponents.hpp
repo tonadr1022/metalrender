@@ -7,6 +7,7 @@
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
 
+#include "engine/Input.hpp"
 #include "engine/scene/SceneIds.hpp"
 
 namespace teng::engine {
@@ -34,6 +35,16 @@ struct Camera {
   float z_near{0.1f};
   float z_far{10000.f};
   bool primary{false};
+};
+
+struct FpsCameraController {
+  float pitch{};
+  float yaw{};
+  float max_velocity{5.f};
+  float move_speed{10.f};
+  float mouse_sensitivity{0.1f};
+  float look_pitch_sign{1.f};
+  bool mouse_captured{};
 };
 
 struct DirectionalLight {

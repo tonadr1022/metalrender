@@ -16,6 +16,7 @@
 #include "engine/render/RenderService.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
+#include "imgui.h"
 
 namespace teng::engine {
 
@@ -158,6 +159,7 @@ void Engine::init() {
   context_.local_resource_dir_ = &local_resource_dir_;
   context_.scenes_ = &scenes_;
   context_.time_ = &time_;
+  context_.input_ = &input_snapshot_;
   context_.imgui_enabled_ = &imgui_enabled_;
 
   renderer_ = std::make_unique<RenderService>(RenderService::CreateInfo{
@@ -216,14 +218,42 @@ gfx::rhi::GfxAPI Engine::resolve_gfx_api() const {
 
 void Engine::dispatch_pending_events() {
   for (const auto& event : pending_cursor_events_) {
+    const glm::vec2 pos{static_cast<float>(event.x), static_cast<float>(event.y)};
+    if (have_cursor_pos_) {
+      input_snapshot_.cursor_delta +=
+          glm::vec2{pos.x - last_cursor_pos_.x, last_cursor_pos_.y - pos.y};
+    }
+    last_cursor_pos_ = pos;
+    have_cursor_pos_ = true;
     layers_.dispatch_cursor_pos(event.x, event.y);
   }
   pending_cursor_events_.clear();
 
   for (const auto& event : pending_key_events_) {
+    if (event.action == GLFW_PRESS) {
+      input_snapshot_.held_keys.insert(event.key);
+      input_snapshot_.pressed_keys.insert(event.key);
+    } else if (event.action == GLFW_RELEASE) {
+      input_snapshot_.held_keys.erase(event.key);
+      input_snapshot_.released_keys.insert(event.key);
+    }
     layers_.dispatch_key_event(event.key, event.action, event.mods);
   }
   pending_key_events_.clear();
+}
+
+void Engine::refresh_input_snapshot_ui_state() {
+  input_snapshot_.imgui_blocks_keyboard = false;
+  if (imgui_enabled_ && ImGui::GetCurrentContext()) {
+    const ImGuiIO& io = ImGui::GetIO();
+    input_snapshot_.imgui_blocks_keyboard = io.WantTextInput || io.WantCaptureKeyboard;
+  }
+}
+
+void Engine::clear_transient_input() {
+  input_snapshot_.pressed_keys.clear();
+  input_snapshot_.released_keys.clear();
+  input_snapshot_.cursor_delta = {};
 }
 
 bool Engine::tick() {
@@ -237,6 +267,7 @@ bool Engine::tick() {
     window_->poll_events();
   }
   dispatch_pending_events();
+  refresh_input_snapshot_ui_state();
 
   const double curr_time = glfwGetTime();
   time_.total_seconds = curr_time;
@@ -244,10 +275,15 @@ bool Engine::tick() {
   time_.frame_index = completed_frames_;
   prev_time_seconds_ = curr_time;
   have_prev_time_ = true;
+  input_snapshot_.delta_seconds = time_.delta_seconds;
 
+  if (Scene* active_scene = scenes_.active_scene()) {
+    active_scene->set_input_snapshot(input_snapshot_);
+  }
   if (!scenes_.tick_active_scene(time_.delta_seconds)) {
     return false;
   }
+  clear_transient_input();
 
   renderer_->begin_frame();
 
