@@ -96,6 +96,7 @@ void RenderService::init(const CreateInfo& cinfo) {
       .address_mode = gfx::rhi::AddressMode::ClampToEdge,
   }));
   initialized_ = true;
+  // TODO: this is scene/game dependent. A 2d game uses different renderer maybe? or maybe not?
   set_renderer(std::make_unique<gfx::MeshletRenderer>());
 }
 

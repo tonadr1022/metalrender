@@ -1,8 +1,8 @@
 # Engine Runtime Migration Plan
 
-Status: Phase 4 demo ECS migration implemented. Flecs scene foundation, RenderScene extraction, RenderService shell, ECS-authored demo presets, and the temporary renderer/resource compatibility bridge exist. The next major step is extracting the meshlet renderer out of the `ITestScene`/`MeshletRendererScene` test harness into a real `IRenderer` implementation.
+Status: Phase 5 (meshlet `IRenderer` extraction) is implemented. `gfx::MeshletRenderer` is the default active renderer via `engine::RenderService`; meshlet passes, PSOs, CSM, depth pyramid, and draw prep live under `src/gfx/renderer/`. Demo preset and `ResourceManager` wiring for `vktest` remains in compatibility code (`CompatibilityVktestLayer`, `DemoSceneEcsBridge`, `demo_scene_compat`). The next major steps are the asset/resource service boundary (Phase 6), optional tightening of `ModelGPUMgr` ownership (still constructed by `RenderService` today), then 2D and editor foundations.
 
-This plan treats the engine as a long-term runtime/editor foundation, not as a cleaned-up version of the current demo harness. The current `vktest`, `TestRenderer`, `ITestScene`, and `MeshletRendererScene` code should keep working during migration, but they are scaffolding. The destination is a tick-driven, layer-composed engine with data-first Flecs scenes, stable IDs, renderer services, and an editor layer on top of the same runtime.
+This plan treats the engine as a long-term runtime/editor foundation. `vktest` is a thin `Engine` host with a compatibility layer, not the destination architecture. The destination is a tick-driven, layer-composed engine with data-first Flecs scenes, stable IDs, renderer services, and an editor layer on top of the same runtime. Legacy `TestRenderer` / `ITestScene` / `MeshletRendererTestScene` types from earlier drafts are no longer in the tree; do not reintroduce them as patterns.
 
 ## Decisions From Draft Review
 
@@ -40,50 +40,19 @@ This plan treats the engine as a long-term runtime/editor foundation, not as a c
 
 ### `TestApp`
 
-`apps/vktest/TestApp.cpp` currently owns process and runtime work:
+`apps/vktest/TestApp.cpp` is a thin host over `engine::Engine`: it builds `EngineConfig`, pushes `CompatibilityVktestLayer` and `ImGuiOverlayLayer`, and calls `Engine::run()`. Global `ResourceManager` init/shutdown and demo preset hotkeys live in the compatibility layer. Long term this executable can stay as a smoke-test entry or shrink further once bootstrap is fully generic.
 
-- Resource directory discovery and working directory setup.
-- CVar load/save.
-- Window creation.
-- RHI device and swapchain creation.
-- `gfx::TestRenderer` creation.
-- Global `ResourceManager` init/shutdown.
-- Main loop.
-- ImGui frame lifecycle.
-- Top-level debug key bindings.
+### `CompatibilityVktestLayer` (in `TestApp.cpp`)
 
-Long term, most of this belongs in `engine::Engine` and layers. `TestApp` should become temporary scaffolding, then either disappear or become a thin test executable wrapper.
+Temporary `engine::Layer` for `vktest`: barrier self-test, renderer CVars, `ResourceManager::init` with `ctx.renderer().model_gpu_mgr()`, demo RNG seed, default scene preset load, Ctrl+0–9 preset hotkeys, `on_render` → `ctx.renderer().enqueue_active_scene()`, per-frame `demo_scene_compat::sync_loaded_model_transforms`, and ImGui for app chrome plus preset list / meshlet panels (`ctx.renderer().on_imgui()`). This is demo/tooling, not the engine runtime model.
 
-### `TestRenderer`
+### `engine::RenderService` and `gfx::MeshletRenderer`
 
-`apps/vktest/TestRenderer.cpp` currently owns renderer services and debug-scene orchestration:
+`RenderService` (`src/engine/render/`) owns shared infrastructure: `ShaderManager`, `RenderGraph`, `GPUFrameAllocator3`, `BufferCopyMgr`, `ImGuiRenderer`, `ModelGPUMgr` (shared upload path; still engine-owned for now), default-constructed `gfx::MeshletRenderer` as the active `IRenderer`, frame context, and extract-and-render in `enqueue_active_scene()`. `MeshletRenderer` implements meshlet passes and reads cameras, lights, and extent from `RenderScene` (see `src/gfx/renderer/MeshletRenderer.*`). There is no separate vktest `TestRenderer` class anymore.
 
-- Shader manager.
-- Render graph.
-- ImGui renderer.
-- Frame upload allocator and buffer copy manager.
-- Model GPU manager.
-- Static instance and geometry batches.
-- Material buffer and samplers.
-- Debug scene creation/switching.
-- Frame timing.
-- Render graph bake/execute.
-- Swapchain acquire/submit.
-- Scene input forwarding.
+### Historical note
 
-Long term, renderer services belong in `engine::RenderService` or lower-level `gfx` services. Debug-scene orchestration should remain test-only scaffolding.
-
-### `MeshletRendererScene`
-
-`apps/vktest/scenes/MeshletRendererTestScene.cpp` currently mixes:
-
-- Meshlet draw prep.
-- Depth pyramid.
-- CSM.
-- Render graph pass wiring.
-- Debug ImGui.
-
-Demo preset scene data has moved into ECS authoring. `MeshletRendererScene` still owns meshlet-specific controls, pass wiring, CSM/depth-pyramid/draw-prep resources, and temporary camera/light tooling hooks. The next migration should move those meshlet renderer responsibilities into a renderer-owned `IRenderer` implementation, then delete or sharply reduce this class to test-only adapter code.
+Earlier migrations referred to `gfx::TestRenderer`, `ITestScene`, and `MeshletRendererTestScene` / `MeshletRendererScene`. Those types have been removed; meshlet rendering and the old “debug scene” harness were folded into `RenderService` + `MeshletRenderer` + `CompatibilityVktestLayer` / `DemoSceneEcsBridge`.
 
 ## Destination Architecture
 
@@ -168,7 +137,7 @@ Expected early layers:
 - `RenderLayer`: extracts render data and presents.
 - `ImGuiDebugLayer`: owns generic debug panels and developer toggles.
 - `EditorLayer`: build-flagged layer that inspects and edits scene data.
-- `CompatibilityVktestLayer`: temporary layer that forwards to existing `TestRenderer`/`ITestScene` while systems are moved.
+- `CompatibilityVktestLayer`: temporary `vktest` layer for demo presets, `ResourceManager` bootstrap, and UI hooks; rendering goes through `RenderService` (`enqueue_active_scene`).
 
 The layer stack should support editor play/stop by allowing the editor layer to pause simulation updates while still ticking input, UI, resource processing, and rendering.
 
@@ -409,7 +378,7 @@ Target direction:
 - GPU handles are not serialized scene data.
 - The long-term durable `AssetId` source is an asset registry with generated stable IDs. Source paths, importer type/version, import settings, and source content hashes are metadata on registry entries, not the identity itself.
 
-Compatibility rule: keep `ResourceManager` as a temporary facade until meshlet rendering is migrated. Mark call sites that are expected to disappear.
+Compatibility rule: keep `ResourceManager` as a temporary facade until the asset service (Phase 6) replaces it. The `demo_scene_compat` path in `DemoSceneEcsBridge` and preset code should stay the only place that turns `AssetId` + paths into loaded CPU/GPU model state for demos.
 
 ## Migration Scaffolding
 
@@ -419,67 +388,46 @@ This section names temporary structures so they do not accidentally become archi
 
 Scaffolding role:
 
-- Existing executable shell.
+- Thin `vktest` executable over `Engine`.
 - Smoke-test host.
-- Temporary owner of runtime bootstrap until `Engine` replaces it.
 
-Retire when:
+Retire or shrink when:
 
-- `main.cpp` can create `engine::Engine` directly or `TestApp` is only a thin wrapper with no renderer/resource ownership.
+- Another binary is the primary harness and `TestApp` has nothing left to own.
 
-### `gfx::TestRenderer`
-
-Scaffolding role:
-
-- Compatibility renderer service for the existing debug scenes.
-- Source to extract `RenderService` responsibilities from.
-
-Retire when:
-
-- `engine::RenderService` owns shader/render graph/upload/model GPU services.
-- Active renderer is selected through `IRenderer`.
-- Debug scene switching no longer depends on `TestRenderer`.
-
-### `ITestScene` And `TestDebugScene`
+### `CompatibilityVktestLayer`
 
 Scaffolding role:
 
-- Legacy renderer/debug test harness.
-- Useful for keeping small graphics experiments alive while runtime scenes mature.
-
-Retire from runtime path when:
-
-- Engine scenes are Flecs data scenes.
-- Demo presets load into ECS.
-- Renderer tests can live in a separate test/debug app path.
-
-They may remain in a graphics test executable, but they should not define engine scene architecture.
-
-### `MeshletRendererScene`
-
-Scaffolding role:
-
-- Working reference implementation for meshlet rendering behavior.
-- Temporary bridge for CSM, depth pyramid, draw prep, meshlet pass wiring, renderer debug UI, and camera/light tooling.
+- Wires `vktest`-specific demo behavior: `ResourceManager`, scene presets, hotkeys, transform sync for loaded models, ImGui for presets and `RenderService::on_imgui()`.
 
 Retire when:
 
-- Meshlet-specific render code lives in `MeshletRenderer`.
-- Camera/light/model data continues to come from ECS and `RenderScene`.
-- Demo presets continue to instantiate Flecs entities.
-- Debug UI is split into scene data UI and meshlet renderer debug UI.
+- Demos do not need global `ResourceManager` or preset hotkeys, or those move into a small game/editor module with explicit ownership.
+
+### `DemoSceneEcsBridge` / `teng::gfx::demo_scene_compat`
+
+Scaffolding role:
+
+- Authors Flecs entities from `DemoScenePresetData`.
+- Registers `AssetId` → path for demo resolution.
+- Tracks per-scene `ModelHandle`s for loaded instanced models and syncs transforms from ECS.
+
+Retire when:
+
+- Engine asset service loads models; scene code never touches `ResourceManager` directly.
 
 ### `ResourceManager` Singleton
 
 Scaffolding role:
 
-- Existing model loading and GPU upload bridge.
+- Existing model loading and bind to `ModelGPUMgr` for uploads.
 
 Retire or wrap when:
 
 - Engine asset service owns asset identity/loading.
-- Renderer service owns GPU residency.
-- Scene components store stable asset IDs rather than `ModelHandle`s.
+- GPU residency is owned by a non-global service (or by `RenderService` in a way that is not a static singleton).
+- Scene components store stable `AssetId`s; runtime `ModelHandle` stays out of scene data.
 
 ## Revised Migration Phases
 
@@ -510,12 +458,9 @@ Delivered:
 - Keep `vktest` behavior unchanged through `CompatibilityVktestLayer` in
   `apps/vktest/TestApp.cpp`.
 
-Scaffolding kept:
+Scaffolding kept (historical note for this phase; current tree may differ):
 
 - `TestApp` as a thin executable compatibility host.
-- `TestRenderer`.
-- `ITestScene`.
-- `MeshletRendererScene`.
 - Global `ResourceManager` inside compatibility wiring.
 
 Exit criteria:
@@ -541,11 +486,10 @@ Delivered:
 - Add `engine_scene_smoke` and include it in `./scripts/agent_verify.sh`.
 - Expose `SceneManager` from `Engine` and `EngineContext`, and tick the active scene from `Engine::tick()`.
 
-Scaffolding kept:
+Scaffolding kept (historical note for this phase; current tree may differ):
 
-- Existing debug scenes still render through compatibility path.
-- Demo scene data can initially be created by a temporary C++ demo loader.
-- `TestRenderer`, `ITestScene`, `MeshletRendererScene`, and global `ResourceManager` remain unchanged compatibility scaffolding.
+- Demo scene data can be created by a temporary C++ demo loader or ECS authoring.
+- Global `ResourceManager` where demos require it.
 
 Exit criteria:
 
@@ -556,35 +500,32 @@ Exit criteria:
 
 ### Phase 3: RenderService And RenderScene Extraction
 
-Status: partially complete.
+Status: complete for core goals; see Phase 5 for meshlet ownership.
 
 Delivered:
 
-- Add `RenderScene` snapshot types for cameras, lights, meshes, and sprites under `src/engine/render`.
-- Add ECS render extraction from core components into `RenderScene`.
-- Add device-free extraction smoke coverage to `engine_scene_smoke`.
-- Add `RenderService` as an engine-owned shell exposed through `Engine` and `EngineContext`.
-- Add `IRenderer` and `RenderFrameContext`.
-- Add a simple clear/debug renderer for extracted-data diagnostics.
+- `RenderScene` snapshot types for cameras, lights, meshes, and sprites under `src/engine/render`.
+- ECS render extraction from core components into `RenderScene`.
+- Device-free extraction smoke coverage in `engine_scene_smoke`.
+- `RenderService` owned by `Engine` / `EngineContext` with `ShaderManager`, `RenderGraph`, upload/copy, `ImGuiRenderer`, `ModelGPUMgr`, and active `IRenderer`.
+- `IRenderer` and `RenderFrameContext`.
+- `DebugClearRenderer` as a minimal diagnostic `IRenderer`.
+- ImGui composition for the main window lives in `RenderService` (overlay pass), not in scene code.
 
-Remaining:
+Open follow-ups (not blocking “Phase 3” label):
 
-- Move renderer-owned frame services out of `TestRenderer` where practical.
-- Add a compatibility renderer implementation that can still delegate to current `TestRenderer` or meshlet scene code while extraction matures.
-- Move ImGui renderer ownership out of the compatibility meshlet final pass into a shared overlay/debug service path while preserving the existing overlay behavior.
-- Add optional `RenderScene` logging/inspection if needed.
+- Optional `RenderScene` logging/inspection.
+- Tighter ownership of `ModelGPUMgr` (still constructed in `RenderService` for all renderers; may move when multi-renderer or asset pipeline needs it).
 
-Scaffolding kept:
+Scaffolding still in use:
 
-- `MeshletRendererScene` may still produce final render passes.
-- `ResourceManager` may still load models.
+- `ResourceManager` for `vktest` demo loads via `demo_scene_compat`.
 
 Exit criteria:
 
-- Engine-owned `RenderService` can extract `RenderScene` from the active Flecs scene.
-- New data-scene render paths can consume `RenderScene` without receiving `RenderGraph`.
-- Existing meshlet demo remains functional through the compatibility path.
-- Full exit is still pending until meshlet/debug rendering can run through `IRenderer`/`RenderService` and ImGui composition is no longer owned by `MeshletRendererScene`.
+- Engine-owned `RenderService` extracts `RenderScene` from the active Flecs scene and invokes the active `IRenderer`.
+- Data-scene render paths consume `RenderScene` without receiving `RenderGraph` from gameplay.
+- Meshlet rendering runs through `gfx::MeshletRenderer` and `IRenderer` (Phase 5).
 
 ### Phase 4: Migrate Demo Presets Into ECS Data
 
@@ -593,17 +534,16 @@ Status: complete.
 Deliverables:
 
 - Convert current meshlet demo presets into entity creation against `engine::Scene`.
-- Replace `MeshletRendererScene::models_` ownership with ECS `MeshRenderable` plus `Transform`.
+- Replace monolithic scene-owned model lists with ECS `MeshRenderable` plus `Transform` (the old `MeshletRendererTestScene` `models_` pattern is gone).
 - Move camera and directional light state to ECS components.
-- Keep FPS camera as compatibility/tooling code that mutates the active ECS camera entity.
-- Add a temporary `AssetId` to source-path registry for renderer/resource compatibility code.
-- Add a renderer-side compatibility bridge that diffs extracted `RenderMesh` entries by stable `EntityGuid` and owns runtime `ModelHandle` lifetime.
+- Add a temporary `AssetId` to source-path registry for demo resolution.
+- Track runtime `ModelHandle` lifetime in `demo_scene_compat` / `DemoSceneEcsBridge` (loads on preset apply, not in `RenderScene`).
 
 Scaffolding reduced:
 
-- `MeshletRendererScene` no longer owns demo world/model data.
-- `ModelHandle` is runtime renderer/resource compatibility state, not scene state.
-- Global `ResourceManager` remains compatibility scaffolding behind the renderer-side bridge.
+- No meshlet “scene class” owns demo world data; Flecs + bridge code do.
+- `ModelHandle` remains runtime compatibility state, not serialized scene state.
+- Global `ResourceManager` remains behind demo compatibility code.
 
 Exit criteria:
 
@@ -615,26 +555,25 @@ Exit criteria:
 
 ### Phase 5: Extract Meshlet Renderer Properly
 
-Status: next.
+Status: complete.
 
-Deliverables:
+Delivered:
 
-- Create `MeshletRenderer` implementing `IRenderer`; it should be the owner of the meshlet runtime path instead of `apps/vktest/scenes/MeshletRendererTestScene.*`.
-- Move CSM, depth pyramid, draw prep, and meshlet pass wiring into renderer-owned code.
-- Consume `RenderScene` mesh/camera/light data.
-- Keep renderer instance allocation diffed by stable `EntityGuid` so unchanged model instances do not rewrite instance buffers every frame. The first mesh path treats one `EntityGuid` as one model instance.
-- Split debug UI into renderer debug UI and scene/editor UI.
+- `gfx::MeshletRenderer` (`src/gfx/renderer/MeshletRenderer.*`) implements `engine::IRenderer` and is the default renderer installed by `RenderService::init()`.
+- Meshlet draw prep, depth pyramid, CSM, PSOs, visibility/readbacks, and final shade pass live in `src/gfx/renderer/` (promoted from the old `vktest` scene files).
+- Consumes `RenderScene` (camera selection, directional light, output extent) and drives `ModelGPUMgr` through `RenderFrameContext`.
+- Renderer-specific debug UI: `MeshletRenderer::on_imgui()`; preset list and app chrome remain in `CompatibilityVktestLayer`.
+- The former `MeshletRendererTestScene` / `ITestScene` / `TestRenderer` types are removed; no `add_render_graph_passes` from scene code on the default path.
 
-Scaffolding retired:
+Residual debt (track under Phase 6 or small refactors):
 
-- `MeshletRendererScene` should be deleted or reduced to a test-only adapter.
-- `ITestScene` should no longer be required for normal meshlet demo rendering.
+- `ModelGPUMgr` is still owned by `RenderService` and passed via `RenderFrameContext` (convenient for a single meshlet renderer; revisit for multi-renderer or asset service).
+- `ResourceManager` + `demo_scene_compat` still load CPU models for presets; that is expected until the asset service exists.
 
 Exit criteria:
 
-- Meshlet rendering no longer depends on `ITestScene`.
-- Active runtime scene is Flecs data.
-- Meshlet renderer can be selected as an `IRenderer`.
+- Met: normal `vktest` does not use `ITestScene` or a meshlet test scene class for rendering.
+- Met: active scene is Flecs data; `RenderService` presents via `MeshletRenderer`.
 
 ### Phase 6: Asset Service Boundary
 
@@ -711,7 +650,7 @@ touching meshlet internals, Flecs, stable IDs, or renderer extraction.
 4. `engine::Layer` and `engine::LayerStack`.
 5. `engine::Engine` with public `tick()` and `run()`.
 6. `TestApp` as a compatibility host over `Engine`.
-7. `CompatibilityVktestLayer` as the explicit bridge to current debug rendering.
+7. `CompatibilityVktestLayer` as the explicit bridge for `vktest` demo behavior and `RenderService` presentation.
 
 ### Slice 2: Flecs Scene Foundation
 
@@ -730,8 +669,8 @@ migrating meshlet demo data or renderer ownership.
 
 ### Slice 3: RenderScene Extraction And RenderService Shell
 
-The third implementation slice added the renderer-facing scene bridge without
-migrating the current meshlet demo off the compatibility path.
+The third implementation slice added the renderer-facing scene bridge. Later
+slices moved the default meshlet path onto `gfx::MeshletRenderer` (see Slice 5).
 
 1. `engine::RenderScene` snapshot schema under `src/engine/render`.
 2. ECS extraction from `Camera`, `DirectionalLight`, `MeshRenderable`,
@@ -746,32 +685,41 @@ migrating the current meshlet demo off the compatibility path.
 
 ### Slice 4: Demo Preset ECS Authoring And Resource Compatibility Bridge
 
-The fourth implementation slice moved demo scene data out of
-`MeshletRendererScene` and into ECS authoring while preserving the current
-meshlet demo visuals through an explicit compatibility bridge.
+The fourth implementation slice moved demo scene data into ECS authoring while
+preserving meshlet demo visuals through `demo_scene_compat` and
+`ResourceManager`.
 
-1. `apps/common/ScenePresets.*` now exposes plain `DemoScenePresetData`
-   containing camera defaults, optional CSM defaults, model source paths, and
-   per-instance transforms.
+1. `apps/common/ScenePresets.*` exposes `DemoScenePresetData` (camera defaults,
+   optional CSM defaults, model source paths, per-instance transforms).
 2. `apps/vktest/DemoSceneEcsBridge.*` authors camera, directional light, mesh
    renderable, transform, local-to-world, name, and stable GUID components into
    the active `engine::Scene`.
 3. Preset reapplication clears previously authored demo entities by tracked
    `EntityGuid`.
-4. `MeshletRendererScene` no longer owns `ModelHandle`s or authors one-off
-   Suzanne ECS data. It keeps meshlet controls, CSM/debug UI, and temporary
-   camera/light tooling hooks.
-5. `TestRenderer` owns the renderer/resource compatibility bridge that resolves
-   extracted `AssetId`s to demo source paths, loads/frees `ResourceManager`
-   runtime models, and updates runtime transforms from `RenderScene` meshes.
-6. `engine_scene_smoke` covers procedural demo authoring, valid asset IDs,
+4. `demo_scene_compat` registers `AssetId` → path, loads instanced models via
+   `ResourceManager`, and tracks per-scene `ModelHandle`s; `sync_loaded_model_transforms`
+   updates transforms from ECS.
+5. `engine_scene_smoke` covers procedural demo authoring, valid asset IDs,
    deterministic extraction, and stale entity cleanup.
 
-Current next implementation work: move the meshlet renderer out of the
-`ITestScene`/`MeshletRendererScene` test harness and into a real
-`IRenderer` implementation that consumes `RenderScene`. `TestRenderer`,
-`ITestScene`, `MeshletRendererScene`, and global `ResourceManager` remain
-compatibility scaffolding until that extraction is complete.
+### Slice 5: Meshlet `IRenderer` Extraction
+
+The fifth slice removed the old `TestRenderer` / `ITestScene` / meshlet test
+scene path and made `gfx::MeshletRenderer` the real `IRenderer` for the default
+`vktest` run.
+
+1. `src/gfx/renderer/MeshletRenderer.*` — meshlet PSOs, CSM, depth pyramid, draw
+   prep, shade pass, stats readbacks, `on_imgui` for renderer diagnostics.
+2. `RenderService` constructs `std::make_unique<gfx::MeshletRenderer>()` at init.
+3. Meshlet helpers live under `src/gfx/renderer/` (e.g. `MeshletDrawPrep`,
+   `MeshletDepthPyramid`, `MeshletCsmRenderer`, `MeshletTestRenderUtil`).
+4. `CompatibilityVktestLayer` calls `ctx.renderer().enqueue_active_scene()` and
+   `ctx.renderer().on_imgui()`; no scene-owned render graph.
+5. Validation: `./scripts/agent_verify.sh` and
+   `./build/Debug/bin/vktest --quit-after-frames 30`.
+
+Current next implementation work: Phase 6 asset/resource service, then Phase 7 2D
+path. `ResourceManager` and `demo_scene_compat` remain until then.
 
 ## Validation Strategy
 
@@ -795,8 +743,8 @@ These should become small plans before the related implementation phase. Current
 triage after the first Phase 3 slice:
 
 1. Flecs submodule/CMake integration plan: done. Covered by `plans/flecs_scene_foundation_design.md` and the completed Phase 2 implementation. No new doc needed unless the Flecs version/pin policy changes.
-2. Stable ID and asset handle design note: partially done. `SceneId`, `EntityGuid`, and path-derived `AssetId` exist. The long-term answer is an asset registry with generated durable IDs plus source/import metadata; fold the detailed registry/resource-service design into the asset service boundary doc before Phase 5 or Phase 6.
-3. Editor play-mode semantics: not needed yet. Write this before Phase 8, after runtime scenes and renderer extraction are usable.
-4. RenderScene schema for 2D plus 3D: first implementation done for Phase 3 in `src/engine/render/RenderScene.hpp`; keep `plans/render_service_extraction_design.md` updated as implementation reveals naming or ownership changes.
-5. Asset service boundary and `ResourceManager` retirement plan: needed after the meshlet `IRenderer` extraction clarifies final renderer/resource ownership. The current `AssetId -> path -> ResourceManager` bridge is temporary compatibility code.
+2. Stable ID and asset handle design note: partially done. `SceneId`, `EntityGuid`, and path-derived `AssetId` exist. The long-term answer is an asset registry with generated durable IDs plus source/import metadata; fold the detailed registry/resource-service design into the asset service boundary work before Phase 6.
+3. Editor play-mode semantics: not needed yet. Write this before Phase 8, after runtime scenes and renderer extraction are stable for editor use.
+4. RenderScene schema for 2D plus 3D: first implementation done for Phase 3 in `src/engine/render/RenderScene.hpp`. The companion note `plans/render_service_extraction_design.md` is outdated (it still references removed `TestRenderer` types); refresh it when editing renderer docs.
+5. Asset service boundary and `ResourceManager` retirement plan: next major doc/code milestone. Meshlet `IRenderer` extraction is done; `ModelGPUMgr` + `ResourceManager` ownership should be revisited as part of Phase 6. The `AssetId -> path -> ResourceManager` bridge in `demo_scene_compat` is temporary compatibility code.
 6. Metal validation plan for `EngineConfig` backend selection: useful but not blocking Phase 3. Write before backend-specific renderer/service changes or before any migration slice that claims Metal parity.
