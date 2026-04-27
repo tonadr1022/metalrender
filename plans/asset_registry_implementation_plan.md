@@ -1,6 +1,6 @@
 # Asset Registry And Runtime Asset Service Plan
 
-Status: investigation and requirements for Phase 6 of `plans/engine_runtime_migration_plan.md`.
+Status: Phase 6.1 is complete. `AssetId` now has a 128-bit representation with text parse/format helpers, and `src/engine/assets` contains the first GPU-free asset registry record/dependency/redirect/tombstone foundation. The next implementation slice is Phase 6.2: registry storage, project scanning, and asset file operations.
 
 Scope: define the long-term asset registry, asset dependency, CPU resource, and renderer GPU residency boundaries for `metalrender`. This plan intentionally avoids implementation code. It is the design target for replacing the current `ResourceManager` singleton and making scenes durable data that reference assets by stable IDs.
 
@@ -8,7 +8,7 @@ Scope: define the long-term asset registry, asset dependency, CPU resource, and 
 
 Relevant current paths:
 
-- `src/engine/scene/SceneIds.*`: defines `AssetId` as a `uint64_t`; `AssetId::from_path()` is a deterministic FNV-1a hash of a normalized path. This is useful as migration scaffolding only.
+- `src/engine/scene/SceneIds.*`: defines `AssetId` as a 128-bit value with text parse/format helpers. `AssetId::from_path()` still exists as compatibility scaffolding and maps a deterministic FNV-1a path hash into the low half of an `AssetId`; it must not be used for new serialized scene/asset data.
 - `src/engine/scene/SceneComponents.hpp`: renderable scene data stores `AssetId`, not runtime handles.
 - `src/engine/render/RenderScene.*`: extracted render data carries `AssetId` for meshes and sprites.
 - `apps/vktest/DemoSceneEcsBridge.*`: temporary demo bridge that maps `AssetId -> filesystem path`, loads models through global `ResourceManager`, stores runtime `ModelHandle`s by scene/entity, and syncs ECS transforms into loaded `ModelInstance`s.
@@ -16,7 +16,7 @@ Relevant current paths:
 - `src/gfx/ModelGPUManager.*`: renderer-side model residency machinery. It currently also calls `gfx::load_model()` from `ModelLoader`, so CPU import/loading and GPU upload are coupled.
 - `src/engine/render/RenderService.*`: owns `ShaderManager`, `RenderGraph`, upload helpers, `ImGuiRenderer`, and `ModelGPUMgr`; exposes `model_gpu_mgr()` so compatibility code can initialize `ResourceManager`.
 
-The important current split is already partially correct: scenes and render extraction use `AssetId`, while runtime/GPU handles stay outside scene data. The incomplete part is that `AssetId` is still path-derived, the registry does not exist, CPU asset loading is not an engine service, and model GPU residency is still reached through `ResourceManager`/`RenderService` compatibility seams.
+The important current split is already partially correct: scenes and render extraction use `AssetId`, while runtime/GPU handles stay outside scene data. Phase 6.1 introduced the first in-memory asset registry foundation, but registry storage does not exist yet, CPU asset loading is not an engine service, demo assets are still path-derived through compatibility code, and model GPU residency is still reached through `ResourceManager`/`RenderService` compatibility seams.
 
 ## Lessons From Existing Engines
 
@@ -293,6 +293,17 @@ Exit criteria:
 
 ### Phase 6.1: Asset ID And Registry Records
 
+Status: complete.
+
+Delivered:
+
+- Extended `AssetId` to a 128-bit representation with stable text parse/format helpers and hashing/comparison support.
+- Kept `AssetId::from_path()` only as compatibility scaffolding for existing demo/tests; it now maps path hashes into the low half of an `AssetId`.
+- Added `src/engine/assets/AssetRegistry.*`.
+- Added `AssetRecord`, `AssetTypeId`, dependency kinds, record statuses, registry result codes, redirects, tombstones, dependency queries, dependent queries, duplicate ID rejection, self-redirect rejection, and redirect cycle rejection.
+- Added a GPU-free asset registry smoke test and wired it into `engine_scene_smoke`.
+- Validated with `./scripts/agent_verify.sh --format`.
+
 Deliverables:
 
 - Replace or extend `AssetId` with a durable generated representation and text parse/format helpers.
@@ -301,8 +312,8 @@ Deliverables:
 
 Exit criteria:
 
-- New asset records can be created and validated without device/window/renderer initialization.
-- Path-derived IDs are isolated to compatibility code.
+- Met: new asset records can be created and validated without device/window/renderer initialization.
+- Met for Phase 6.1: path-derived IDs are still present only as explicit compatibility scaffolding. Full removal waits until demo presets are registered as real asset metadata in Phase 6.3 and `ResourceManager` is removed in Phase 6.5.
 
 ### Phase 6.2: Registry Storage And Project Scan
 

@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "DemoSceneEcsBridge.hpp"
+#include "engine/assets/AssetRegistry.hpp"
 #include "engine/scene/SceneSmokeTest.hpp"
 
 int main() {
@@ -18,6 +19,10 @@ int main() {
   }
   if (!teng::gfx::demo_scene_compat::run_demo_scene_authoring_smoke_test()) {
     std::cerr << "engine_scene_smoke: demo scene authoring smoke test failed\n";
+    return 1;
+  }
+  if (!teng::engine::assets::run_asset_registry_smoke_test()) {
+    std::cerr << "engine_scene_smoke: asset registry smoke test failed\n";
     return 1;
   }
   return 0;
