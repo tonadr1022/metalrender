@@ -78,6 +78,10 @@ class AssetRegistry {
   [[nodiscard]] std::vector<AssetDependency> dependencies(AssetId id) const;
   [[nodiscard]] std::vector<AssetDependency> dependents(AssetId id) const;
   [[nodiscard]] std::vector<AssetId> records() const;
+  [[nodiscard]] std::optional<std::filesystem::path> source_path(AssetId id) const;
+  [[nodiscard]] std::optional<AssetId> asset_id_for_source_path(
+      const std::filesystem::path& source_path) const;
+  [[nodiscard]] const std::unordered_map<AssetId, AssetId>& redirects() const { return redirects_; }
 
  private:
   [[nodiscard]] bool redirect_path_contains(AssetId start, AssetId target) const;

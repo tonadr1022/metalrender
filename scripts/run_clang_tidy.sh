@@ -33,6 +33,7 @@ done < <(
     {
         git -C "$REPO_ROOT" diff --name-only --diff-filter=d
         git -C "$REPO_ROOT" diff --cached --name-only --diff-filter=d
+        git -C "$REPO_ROOT" ls-files -o --exclude-standard
     } | LC_ALL=C sort -u
 )
 

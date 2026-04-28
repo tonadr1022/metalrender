@@ -40,6 +40,7 @@ struct AssetId {
 
 [[nodiscard]] SceneId make_scene_id();
 [[nodiscard]] EntityGuid make_entity_guid();
+[[nodiscard]] AssetId make_asset_id();
 
 [[nodiscard]] constexpr bool operator==(SceneId a, SceneId b) { return a.value == b.value; }
 [[nodiscard]] constexpr bool operator!=(SceneId a, SceneId b) { return !(a == b); }

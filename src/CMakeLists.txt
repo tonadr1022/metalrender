@@ -13,6 +13,7 @@ add_library(${target_name} SHARED
 
     engine/Engine.cpp
     engine/ImGuiOverlayLayer.cpp
+    engine/assets/AssetDatabase.cpp
     engine/assets/AssetRegistry.cpp
     engine/render/DebugClearRenderer.cpp
     engine/render/RenderSceneExtractor.cpp
@@ -120,6 +121,7 @@ target_link_libraries(${target_name} PUBLIC
     concurrentqueue
     ktx
     fts_fuzzy_match
+    tomlplusplus
 )
 
 target_link_libraries(${target_name} PRIVATE flecs::flecs_static)

@@ -1,6 +1,7 @@
 #include <iostream>
 
 #include "DemoSceneEcsBridge.hpp"
+#include "engine/assets/AssetDatabase.hpp"
 #include "engine/assets/AssetRegistry.hpp"
 #include "engine/scene/SceneSmokeTest.hpp"
 
@@ -23,6 +24,10 @@ int main() {
   }
   if (!teng::engine::assets::run_asset_registry_smoke_test()) {
     std::cerr << "engine_scene_smoke: asset registry smoke test failed\n";
+    return 1;
+  }
+  if (!teng::engine::assets::run_asset_database_smoke_test()) {
+    std::cerr << "engine_scene_smoke: asset database smoke test failed\n";
     return 1;
   }
   return 0;

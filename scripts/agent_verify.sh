@@ -5,11 +5,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Unstaged + staged paths, newline-separated, sorted (includes deleted/rename targets; see git diff --name-only).
+# Unstaged + staged + untracked paths, newline-separated, sorted.
 changed_paths() {
 	{
 		git -C "$REPO_ROOT" diff --name-only
 		git -C "$REPO_ROOT" diff --cached --name-only
+		# Include newly-added (untracked) files, but respect .gitignore.
+		git -C "$REPO_ROOT" ls-files -o --exclude-standard
 	} | LC_ALL=C sort -u
 }
 
@@ -169,6 +171,7 @@ if [[ "$DO_FORMAT" -eq 1 ]]; then
 		{
 			git -C "$REPO_ROOT" diff --name-only --diff-filter=d
 			git -C "$REPO_ROOT" diff --cached --name-only --diff-filter=d
+			git -C "$REPO_ROOT" ls-files -o --exclude-standard
 		} | LC_ALL=C sort -u
 	)
 

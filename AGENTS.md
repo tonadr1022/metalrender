@@ -90,7 +90,13 @@ For design-note tasks:
 - const correctness
 - don't cast when you don't need to.
 - don't use min/max, null checks when you don't need to. Many times invariants are true about these things.
+- Make required invariants explicit at validation boundaries; don't propagate optional/null states after validation.
 
-### Mindset
+### Required Guidelines
 
-No shortcuts. Changes need to consider long term maintainability. Be thorough
+- Minimum code that solves the problem. Nothing speculative.
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.

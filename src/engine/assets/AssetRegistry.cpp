@@ -105,6 +105,25 @@ std::vector<AssetId> AssetRegistry::records() const {
   return result;
 }
 
+std::optional<std::filesystem::path> AssetRegistry::source_path(AssetId id) const {
+  const AssetRecord* record = find(id);
+  if (!record) {
+    return std::nullopt;
+  }
+  return record->source_path;
+}
+
+std::optional<AssetId> AssetRegistry::asset_id_for_source_path(
+    const std::filesystem::path& source_path) const {
+  const std::filesystem::path normalized = source_path.lexically_normal();
+  for (const auto& [id, record] : records_) {
+    if (record.source_path.lexically_normal() == normalized) {
+      return id;
+    }
+  }
+  return std::nullopt;
+}
+
 bool AssetRegistry::redirect_path_contains(AssetId start, AssetId target) const {
   AssetId current = start;
   for (size_t depth = 0; depth <= redirects_.size(); ++depth) {

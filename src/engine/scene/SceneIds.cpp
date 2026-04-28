@@ -5,6 +5,7 @@
 #include <charconv>
 #include <cstddef>
 #include <cstdio>
+#include <random>
 #include <string>
 
 namespace teng::engine {
@@ -68,6 +69,17 @@ SceneId make_scene_id() { return SceneId{next_scene_id.fetch_add(1, std::memory_
 
 EntityGuid make_entity_guid() {
   return EntityGuid{next_entity_guid.fetch_add(1, std::memory_order_relaxed)};
+}
+
+AssetId make_asset_id() {
+  std::random_device random;
+  const uint64_t high = (static_cast<uint64_t>(random()) << 32) ^ static_cast<uint64_t>(random());
+  const uint64_t low = (static_cast<uint64_t>(random()) << 32) ^ static_cast<uint64_t>(random());
+  AssetId id = AssetId::from_parts(high, low);
+  if (!id.is_valid()) {
+    id.low = 1;
+  }
+  return id;
 }
 
 AssetId AssetId::from_path(const std::filesystem::path& resource_relative_path) {
