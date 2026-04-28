@@ -84,13 +84,6 @@ template <class T>
   return *value;
 }
 
-#define REQUIRED_OR_RETURN(result)              \
-  do {                                          \
-    if (!(result)) {                            \
-      return make_unexpected((result).error()); \
-    }                                           \
-  } while (false)
-
 [[nodiscard]] Result<uint32_t> required_u32(const toml::table& table, std::string_view key) {
   const Result<int64_t> value = required<int64_t>(table, key);
   if (!value) {
