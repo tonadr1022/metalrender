@@ -1,6 +1,6 @@
 # Asset Registry And Runtime Asset Service Plan
 
-Status: Phase 6.2 is complete and Phase 6.3 has started. `AssetId` now has a 128-bit representation with text parse/format helpers; `src/engine/assets` contains GPU-free asset registry/database storage, project scanning, sidecar metadata, and asset file operations. The current implementation slice is Phase 6.3: an engine-owned CPU asset service. Renderer residency and `ResourceManager` retirement remain Phase 6.4/6.5 work.
+Status: Phase 6 asset bridge is implemented. `AssetId` has a 128-bit representation with text parse/format helpers; `src/engine/assets` contains GPU-free asset registry/database storage, project scanning, sidecar metadata, asset file operations, and an engine-owned CPU `AssetService`. `RenderService` now owns model residency for extracted meshes and no `apps/vktest` or `src/engine` path depends on global `ResourceManager`. Remaining work is data scene generation/loading, cooked runtime manifests, and deleting legacy `ResourceManager` references outside the engine/vktest runtime path.
 
 Scope: define the long-term asset registry, asset dependency, CPU resource, and renderer GPU residency boundaries for `metalrender`. This plan intentionally avoids implementation code. It is the design target for replacing the current `ResourceManager` singleton and making scenes durable data that reference assets by stable IDs.
 
@@ -11,12 +11,12 @@ Relevant current paths:
 - `src/engine/scene/SceneIds.*`: defines `AssetId` as a 128-bit value with text parse/format helpers. `AssetId::from_path()` still exists as compatibility scaffolding and maps a deterministic FNV-1a path hash into the low half of an `AssetId`; it must not be used for new serialized scene/asset data.
 - `src/engine/scene/SceneComponents.hpp`: renderable scene data stores `AssetId`, not runtime handles.
 - `src/engine/render/RenderScene.*`: extracted render data carries `AssetId` for meshes and sprites.
-- `apps/vktest/DemoSceneEcsBridge.*`: temporary demo bridge that maps `AssetId -> filesystem path`, loads models through global `ResourceManager`, stores runtime `ModelHandle`s by scene/entity, and syncs ECS transforms into loaded `ModelInstance`s.
-- `src/ResourceManager.*`: global singleton that hashes paths with `std::hash<std::string>`, loads CPU model data, caches model GPU resources, allocates per-instance runtime handles, frees GPU instances, and owns lifetime counters.
-- `src/gfx/ModelGPUManager.*`: renderer-side model residency machinery. It currently also calls `gfx::load_model()` from `ModelLoader`, so CPU import/loading and GPU upload are coupled.
-- `src/engine/render/RenderService.*`: owns `ShaderManager`, `RenderGraph`, upload helpers, `ImGuiRenderer`, and `ModelGPUMgr`; exposes `model_gpu_mgr()` so compatibility code can initialize `ResourceManager`.
+- `apps/vktest/DemoSceneEcsBridge.*`: temporary demo bridge that authors Flecs entities from C++ presets and resolves demo source model paths to registered `AssetId`s through `AssetDatabase`. It does not load CPU/GPU models or track runtime handles.
+- `src/ResourceManager.*`: legacy global singleton that still exists for old renderer/app code, but is no longer used by `apps/vktest` or `src/engine`.
+- `src/gfx/ModelGPUManager.*`: renderer-side model residency machinery. It can upload an already-imported `ModelInstance + ModelLoadResult`; its path-loading API remains as a temporary legacy wrapper.
+- `src/engine/render/RenderService.*`: owns `ShaderManager`, `RenderGraph`, upload helpers, `ImGuiRenderer`, `ModelGPUMgr`, and the render-side model residency bridge. It resolves extracted `RenderMesh{EntityGuid, AssetId, transform}` entries through `AssetService`, uploads first-use model resources, and owns per-entity GPU instances.
 
-The important current split is already partially correct: scenes and render extraction use `AssetId`, while runtime/GPU handles stay outside scene data. Phase 6.1 introduced the first in-memory asset registry foundation, but registry storage does not exist yet, CPU asset loading is not an engine service, demo assets are still path-derived through compatibility code, and model GPU residency is still reached through `ResourceManager`/`RenderService` compatibility seams.
+The important split is now in place for models: scenes and render extraction use `AssetId`, CPU asset import is an engine service, and runtime/GPU handles stay outside scene data. The remaining gap is that demo scenes themselves are still authored by C++ preset code rather than serialized scene assets.
 
 ## Lessons From Existing Engines
 
@@ -217,7 +217,7 @@ For models, split today's `ModelGPUMgr::load_model()`:
 - `ModelResidency` or refactored `ModelGPUMgr`: uploads CPU model data into GPU geometry/material/texture allocations and returns renderer-local handles.
 - `ModelInstanceResidency`: allocates per-entity/per-renderable GPU instance data from extracted transforms.
 
-Important: "model asset" and "model instance" are separate. A model asset is shared. Scene entities instantiate it with transforms and per-instance overrides. Current `ResourceManager::load_model()` copies a `ModelInstance` and allocates a GPU instance in one operation; that coupling must be removed.
+Important: "model asset" and "model instance" are separate. A model asset is shared. Scene entities instantiate it with transforms and per-instance overrides. The runtime bridge now keeps that split: `AssetService` imports model payloads, `ModelGPUMgr` uploads shared GPU resources, and `RenderService` owns per-entity GPU instances.
 
 ## Runtime Loading And Lifetimes
 
@@ -249,24 +249,24 @@ Long-term options:
 
 Recommended path:
 
-- First refactor `ModelGPUMgr::load_model(path, ...)` into CPU import plus GPU upload so it can accept `ModelAsset`/`ModelLoadResult` data.
-- Keep `ModelGPUMgr` owned by `RenderService` during the bridge if that minimizes churn.
+- Done for the bridge: `ModelGPUMgr` accepts imported CPU model data for upload while retaining path loading as a legacy wrapper.
+- Keep `ModelGPUMgr` owned by `RenderService` during the bridge.
 - Once 2D renderer work starts, move meshlet-specific model residency either into `gfx::MeshletRenderer` or behind a `RenderAssetResidency` interface so a 2D-only renderer is not forced to construct meshlet model buffers.
 
-Exit condition for this phase: `RenderService` no longer exposes `model_gpu_mgr()` to app compatibility code for `ResourceManager::init()`.
+Exit condition for this phase: met. `RenderService` no longer exposes `model_gpu_mgr()` to app compatibility code for `ResourceManager::init()`.
 
 ## Migration Scaffolding
 
 `ResourceManager`
 
-- Current role: global path cache, CPU model cache, GPU model resource cache, per-instance handle pool.
-- Required retirement: no engine/runtime path calls `ResourceManager::get()`.
-- Compatibility allowance: a temporary adapter may translate asset-service model loads into existing `ModelGPUMgr` calls while the model import/upload split lands.
+- Current role: legacy path cache, CPU model cache, GPU model resource cache, and per-instance handle pool for old code.
+- Required retirement: remove remaining non-engine/vktest call sites, then delete `src/ResourceManager.*` from the normal build.
+- Current runtime status: `rg "ResourceManager" apps/vktest src/engine` has no hits.
 
 `DemoSceneEcsBridge`
 
-- Current role: authors demo Flecs entities, computes path-hash `AssetId`s, registers `AssetId -> path`, loads model handles, syncs transforms.
-- Required retirement: demo presets use registered asset IDs from the asset database; model loading is handled by engine asset service and renderer residency.
+- Current role: authors demo Flecs entities from C++ preset data and resolves registered model asset IDs from the asset database.
+- Required retirement: generated scene assets replace C++ demo preset authoring.
 
 `AssetId::from_path()`
 
@@ -275,8 +275,7 @@ Exit condition for this phase: `RenderService` no longer exposes `model_gpu_mgr(
 
 `RenderService::model_gpu_mgr()`
 
-- Current role: exposes renderer residency machinery to app compatibility code.
-- Required retirement: renderer internals are not reachable from scene/demo/app asset loading.
+- Status: retired from public app/demo compatibility use. Renderer internals are no longer reachable from scene/demo/app asset loading.
 
 ## Phased Implementation
 
@@ -339,15 +338,16 @@ Exit criteria:
 
 ### Phase 6.3: CPU Asset Service
 
-Status: in progress.
+Status: complete for synchronous model assets.
 
 Delivered:
 
 - Added engine-owned `AssetService` and exposed it through `Engine` / `EngineContext`.
 - Added a synchronous GPU-free `AssetId -> ModelAsset` load/cache path backed by `AssetDatabase` and existing CPU model import.
+- Added one-shot `AssetService::import_model_for_upload()` for fresh move-only texture upload payloads.
 - Added smoke coverage for model asset load, cache reuse, wrong type, and missing asset status.
 
-Deliverables:
+Delivered:
 
 - Add engine-owned `AssetService`/`AssetDatabase` to `Engine` and `EngineContext`.
 - Add typed CPU asset cache and loader interface.
@@ -361,10 +361,12 @@ Exit criteria:
 
 ### Phase 6.4: Renderer Residency Bridge
 
-Deliverables:
+Status: complete for model residency bridge.
+
+Delivered:
 
 - Refactor `ModelGPUMgr` to accept CPU model asset data for upload/residency.
-- Add a renderer residency bridge that maps `AssetId`/`ModelAsset` to `ModelGPUHandle`.
+- Add `RenderService` model residency that maps `AssetId`/imported model payloads to cached `ModelGPUHandle`s.
 - Move per-renderable instance allocation out of `ResourceManager` and into renderer/extraction/residency flow.
 - Keep meshlet demo behavior unchanged.
 
@@ -376,15 +378,18 @@ Exit criteria:
 
 ### Phase 6.5: Delete ResourceManager
 
+Status: partially complete.
+
 Deliverables:
 
-- Remove global `ResourceManager` from runtime code.
-- Convert remaining call sites to asset service or renderer residency.
-- Remove path-hash model cache.
+- Done: remove global `ResourceManager` from `apps/vktest` and `src/engine`.
+- Remaining: convert or archive remaining legacy call sites outside the current runtime path.
+- Remaining: remove `src/ResourceManager.*` and the path-hash model cache from the normal build once those legacy references are gone.
 
 Exit criteria:
 
-- No runtime/app path includes `ResourceManager.hpp` except possibly an old archived graphics experiment.
+- `rg "ResourceManager" apps/vktest src/engine` returns no hits.
+- No normal runtime/app path includes `ResourceManager.hpp` except possibly an old archived graphics experiment.
 - Repeated scene load/unload returns CPU and GPU asset instance counters to baseline.
 
 ### Phase 6.6: Cooked Runtime Manifest
@@ -448,8 +453,8 @@ Requirements:
 - The script is idempotent: rerunning it updates existing preset assets instead of minting new IDs every time.
 - The script can run in CI or from a developer shell without window/device/renderer startup.
 - Demo-specific random presets must use stored generated data or a fixed seed recorded in metadata so generated entities keep stable IDs.
-- Preset selection in `vktest` becomes "load scene asset N" rather than "run C++ code that creates entities and calls `ResourceManager`".
-- Once this exists, `DemoSceneEcsBridge` should stop owning `AssetId -> path`, model loading, and transform sync. At most, `vktest` keeps a small compatibility UI listing preset scene assets.
+- Preset selection in `vktest` becomes "load scene asset N" rather than "run C++ code that creates entities".
+- Once this exists, `DemoSceneEcsBridge` can be removed. At most, `vktest` keeps a small compatibility UI listing preset scene assets.
 
 This is the point where the hacky `vktest` preset/resource bridge can be deleted: the runtime loads scene assets through `SceneManager`, resolves asset references through `AssetService`, and renderer residency handles GPU resources behind the render boundary.
 

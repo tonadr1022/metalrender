@@ -1,6 +1,6 @@
 # Render Service Extraction Design
 
-Status: Phase 3 foundation and Phase 4 demo ECS data migration are implemented. `RenderScene` schema, ECS extraction, smoke coverage, engine-owned `RenderService` shell, `IRenderer`, `RenderFrameContext`, `DebugClearRenderer`, ECS-authored demo presets, and a temporary renderer/resource compatibility bridge exist. Compatibility meshlet rendering still flows through `gfx::TestRenderer`/`ITestScene`; the next step is to move meshlet rendering out of `MeshletRendererScene` and into a real `IRenderer` implementation.
+Status: historical design note. Phase 3 render extraction, Phase 5 meshlet `IRenderer` extraction, and the Phase 6 asset/model residency bridge are implemented. `RenderService` now owns frame services, active renderer dispatch, and model residency; the normal `vktest` path no longer uses `gfx::TestRenderer`, `ITestScene`, `MeshletRendererScene`, or global `ResourceManager`. Use `plans/engine_runtime_migration_plan.md` and `plans/asset_registry_implementation_plan.md` for current sequencing.
 
 Scope: track the renderer migration after the completed Phase 2 Flecs scene foundation. The first Phase 3 implementation introduced a renderer-neutral `RenderScene` snapshot, ECS extraction from `engine::Scene`, and an engine-owned `RenderService`/renderer boundary while preserving the current `vktest` meshlet demo.
 
@@ -14,8 +14,8 @@ Read with:
 - `RenderScene` is a plain per-frame snapshot extracted from Flecs scene data. It is not a live ECS wrapper and not a meshlet GPU state container.
 - Gameplay, editor, scene loaders, and ECS systems must not receive `gfx::RenderGraph`, RHI objects, `ModelGPUMgr`, bindless IDs, buffer handles, or texture handles.
 - Render graph pass construction belongs to renderer code behind `RenderService`/`IRenderer`.
-- The first implementation must preserve `vktest` and may keep `TestRenderer`, `ITestScene`, `TestSceneContext`, `MeshletRendererScene`, and global `ResourceManager` as compatibility scaffolding.
-- Do not create a separate asset service / `ResourceManager` retirement note yet. Keep a short deferral note here until the first `RenderScene` extraction creates real adapter names and call sites worth tracking separately.
+- The first implementation preserved `vktest`; those compatibility types have since been removed from the normal runtime path.
+- Asset service and `ResourceManager` retirement details now live in `plans/asset_registry_implementation_plan.md`.
 - Keep Vulkan and Metal viable by making new engine-facing renderer APIs backend-neutral and routing backend details through existing RHI/gfx abstractions.
 - Put the engine-facing owner and frame boundary in `src/engine/render`; keep low-level, reusable renderer services in `src/gfx`; avoid putting `SceneManager` or Flecs knowledge into `gfx`.
 - Move ImGui renderer ownership out of the compatibility meshlet final pass now, into a shared overlay/debug service path.
@@ -40,17 +40,17 @@ Implemented in the first Phase 3 slice:
 - Added `apps/vktest/DemoSceneEcsBridge.*` to author demo camera, directional light, mesh renderables, transforms, local-to-world matrices, names, and stable entity GUIDs into the active `engine::Scene`.
 - Added a temporary demo `AssetId` to source-path registry for compatibility resource code.
 - Moved preset world/model data ownership out of `MeshletRendererScene`; it now keeps meshlet controls, CSM/debug UI, and temporary camera/light tooling hooks.
-- Added renderer/resource compatibility syncing in `TestRenderer`: extracted ECS mesh renderables are diffed by `EntityGuid`, resolved through the demo asset map, loaded/freed through `ResourceManager`, and updated from `RenderScene` transforms.
+- Historical: the first bridge added renderer/resource compatibility syncing in `TestRenderer`. Current code resolves registered `AssetId`s through `AssetService` and performs model residency in `RenderService`.
 - Expanded `engine_scene_smoke` with procedural demo authoring coverage for valid assets, extraction, and stale entity cleanup.
 - Validation passed with `./scripts/agent_verify.sh` and `./build/Debug/bin/vktest --quit-after-frames 30`.
 
-Not implemented yet:
+Implemented after this note:
 
-- Moving `TestRenderer` frame upload/copy/model GPU services behind `RenderService`.
-- A production meshlet `IRenderer` implementation that owns the current meshlet pass path.
-- Moving ImGui renderer ownership/final composition out of the meshlet final pass.
-- Removing the normal meshlet demo dependency on `ITestScene`/`MeshletRendererScene`.
-- Replacing the temporary `AssetId -> source path -> ResourceManager` bridge with an engine asset/resource service.
+- `TestRenderer` frame services moved into `RenderService`.
+- `gfx::MeshletRenderer` became the default meshlet `IRenderer`.
+- ImGui final composition moved under the `RenderService` overlay path.
+- The normal meshlet demo dependency on `ITestScene`/`MeshletRendererScene` was removed.
+- The temporary `AssetId -> source path -> ResourceManager` bridge was replaced by registered asset IDs, `AssetService`, and `RenderService` model residency.
 
 ## Relevant Current Code
 
@@ -81,16 +81,13 @@ Current Phase 3 engine/render code is present under `src/engine/render`:
 - `DebugClearRenderer.*` provides a minimal clear renderer that consumes the new renderer boundary.
 - `Engine` owns `RenderService`; `EngineContext` exposes it to layers.
 
-Current `vktest` rendering still flows through compatibility scaffolding:
+Current `vktest` rendering no longer flows through the old compatibility renderer:
 
 - `apps/vktest/TestApp.cpp` installs `CompatibilityVktestLayer` into `Engine`.
-- `CompatibilityVktestLayer` creates `gfx::TestRenderer`, initializes global `ResourceManager` from `renderer_->get_model_gpu_mgr()`, forwards input/UI, and calls `TestRenderer::render()` from `on_render()`.
-- `TestRenderer` owns `ShaderManager`, `RenderGraph`, `ImGuiRenderer`, frame upload allocator, `BufferCopyMgr`, `ModelGPUMgr`, `InstanceMgr`, `GeometryBatch`, material buffer, samplers, active `ITestScene`, and `TestSceneContext`.
-- `TestSceneContext` exposes renderer internals directly to `ITestScene`.
-- `MeshletRendererScene` owns FPS camera tooling, directional light/day-night controls, meshlet PSOs, CSM, depth pyramid, draw prep, readbacks, per-frame uniforms, debug UI, and render graph pass construction. It no longer owns preset model handles or the demo world data.
-- `apps/vktest/DemoSceneEcsBridge.*` converts demo preset data into ECS camera/light/mesh entities and tracks authored demo entities for cleanup on preset reapply.
-- `TestRenderer` contains a temporary renderer/resource bridge that maps extracted `RenderMesh{EntityGuid, AssetId, LocalToWorld}` entries to runtime `ResourceManager` `ModelHandle`s.
-- `ResourceManager` is a global singleton facade that maps model paths to cached CPU-ish `ModelInstance` data and `ModelGPUMgr` GPU resources, then returns runtime `ModelHandle`s to renderer/resource compatibility code.
+- `CompatibilityVktestLayer` handles preset hotkeys/UI and calls `ctx.renderer().enqueue_active_scene()` from `on_render()`.
+- `RenderService` owns `ShaderManager`, `RenderGraph`, `ImGuiRenderer`, frame upload allocator, `BufferCopyMgr`, `ModelGPUMgr`, model residency, active `IRenderer`, and frame context.
+- `gfx::MeshletRenderer` owns meshlet PSOs, CSM, depth pyramid, draw prep, readbacks, per-frame uniforms, renderer debug UI, and render graph pass construction.
+- `apps/vktest/DemoSceneEcsBridge.*` converts demo preset data into ECS camera/light/mesh entities, resolves model asset IDs through `AssetDatabase`, and tracks authored demo entities for cleanup on preset reapply.
 
 ## Target Architecture
 
@@ -319,18 +316,18 @@ Retire or wrap when:
 - A renderer resource service owns GPU residency and model instance allocation.
 - Runtime scene code no longer calls `ResourceManager::get()`.
 
-## Asset Service Deferral
+## Asset Service Follow-Up
 
-Do not create a separate asset service / `ResourceManager` retirement plan before the meshlet `IRenderer` extraction clarifies final renderer/resource ownership. The current design has a concrete temporary adapter, but replacing it before the meshlet renderer leaves `ITestScene` would mostly churn compatibility code.
+The asset service and renderer residency bridge have moved into Phase 6 and are tracked in `plans/asset_registry_implementation_plan.md`.
 
 For Phase 3:
 
 - `RenderScene` carries `AssetId` only.
-- Path-derived `AssetId` remains acceptable scaffolding for demos and tests.
+- Path-derived `AssetId` remains acceptable only for legacy tests/tools; current demo model identity resolves through registered asset metadata.
 - The long-term durable source is an asset registry with generated stable IDs. Source paths, importer type/version, import settings, and source content hashes are metadata on registry entries, not the identity itself.
-- `ResourceManager`, `ModelGPUMgr`, material allocation, texture upload queues, and instance allocation diffing remain behind compatibility or renderer-owned code.
+- `ModelGPUMgr`, material allocation, texture upload queues, and instance allocation diffing remain behind renderer-owned code.
 - ECS extraction must not call `ResourceManager`.
-- Any temporary `AssetId` to model-path or model-handle bridge must be named as compatibility scaffolding and kept out of scene components.
+- Any temporary model-path compatibility bridge must be named as scaffolding and kept out of scene components.
 
 Create a separate asset/resource service design note after one of these happens:
 

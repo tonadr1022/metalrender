@@ -1,6 +1,6 @@
 # Engine Runtime Migration Plan
 
-Status: Phase 5 (meshlet `IRenderer` extraction) is implemented. `gfx::MeshletRenderer` is the default active renderer via `engine::RenderService`; meshlet passes, PSOs, CSM, depth pyramid, and draw prep live under `src/gfx/renderer/`. Phase 6 asset work has started: generated 128-bit `AssetId`s, asset registry/database storage, project scanning, and the first engine-owned CPU `AssetService` exist. Demo preset and `ResourceManager` wiring for `vktest` remains in compatibility code (`CompatibilityVktestLayer`, `DemoSceneEcsBridge`, `demo_scene_compat`). The next major steps are to finish the asset/resource service boundary, generate demo scene data with tools instead of C++ preset code, make the normal runtime app the primary game host, and add a separate editor build target on top of the same runtime libraries.
+Status: Phase 6 asset bridge is implemented. `gfx::MeshletRenderer` is the default active renderer via `engine::RenderService`; meshlet passes, PSOs, CSM, depth pyramid, and draw prep live under `src/gfx/renderer/`. Generated 128-bit `AssetId`s, asset registry/database storage, project scanning, `AssetService`, one-shot model import for upload, and `RenderService`-owned model residency are in place. `vktest` still authors demo presets in C++, but it no longer initializes or calls global `ResourceManager`. The next major step is Phase 7: generate/load scene data instead of C++ demo presets, make the normal runtime app the primary game host, and then split editor/tool targets on top of the same runtime libraries.
 
 This plan treats the engine as a long-term runtime foundation used by separate products: a game/runtime executable, a separate editor executable, and small command-line tools. `vktest` is migration scaffolding only. It is useful while old meshlet demos are still being converted, but it should not remain the primary integration harness once scene assets and the runtime app can load data directly. The destination is a tick-driven, layer-composed engine with data-first Flecs scenes, stable IDs, renderer services, a normal runtime/game app for data-authored scenes, and a separate editor build target that links editor-only code. Legacy `TestRenderer` / `ITestScene` / `MeshletRendererTestScene` types from earlier drafts are no longer in the tree; do not reintroduce them as patterns.
 
@@ -43,15 +43,15 @@ This plan treats the engine as a long-term runtime foundation used by separate p
 
 ### `TestApp`
 
-`apps/vktest/TestApp.cpp` is a thin host over `engine::Engine`: it builds `EngineConfig`, pushes `CompatibilityVktestLayer` and `ImGuiOverlayLayer`, and calls `Engine::run()`. Global `ResourceManager` init/shutdown and demo preset hotkeys live in the compatibility layer. Long term this executable should stop being the primary smoke-test entry; the main runtime app should take that role once it can load generated scene assets.
+`apps/vktest/TestApp.cpp` is a thin host over `engine::Engine`: it builds `EngineConfig`, pushes `CompatibilityVktestLayer` and `ImGuiOverlayLayer`, and calls `Engine::run()`. Demo preset hotkeys and meshlet debug UI live in the compatibility layer. Long term this executable should stop being the primary smoke-test entry; the main runtime app should take that role once it can load generated scene assets.
 
 ### `CompatibilityVktestLayer` (in `TestApp.cpp`)
 
-Temporary `engine::Layer` for `vktest`: barrier self-test, renderer CVars, `ResourceManager::init` with `ctx.renderer().model_gpu_mgr()`, demo RNG seed, default scene preset load, Ctrl+0–9 preset hotkeys, `on_render` → `ctx.renderer().enqueue_active_scene()`, per-frame `demo_scene_compat::sync_loaded_model_transforms`, and ImGui for app chrome plus preset list / meshlet panels (`ctx.renderer().on_imgui()`). This is demo/tooling, not the engine runtime model.
+Temporary `engine::Layer` for `vktest`: barrier self-test, renderer CVars, asset scan, demo RNG seed, default scene preset load, Ctrl+0-9 preset hotkeys, `on_render` -> `ctx.renderer().enqueue_active_scene()`, and ImGui for app chrome plus preset list / meshlet panels (`ctx.renderer().on_imgui()`). This is demo/tooling, not the engine runtime model.
 
 ### `engine::RenderService` and `gfx::MeshletRenderer`
 
-`RenderService` (`src/engine/render/`) owns shared infrastructure: `ShaderManager`, `RenderGraph`, `GPUFrameAllocator3`, `BufferCopyMgr`, `ImGuiRenderer`, `ModelGPUMgr` (shared upload path; still engine-owned for now), default-constructed `gfx::MeshletRenderer` as the active `IRenderer`, frame context, and extract-and-render in `enqueue_active_scene()`. `MeshletRenderer` implements meshlet passes and reads cameras, lights, and extent from `RenderScene` (see `src/gfx/renderer/MeshletRenderer.*`). There is no separate vktest `TestRenderer` class anymore.
+`RenderService` (`src/engine/render/`) owns shared infrastructure: `ShaderManager`, `RenderGraph`, `GPUFrameAllocator3`, `BufferCopyMgr`, `ImGuiRenderer`, `ModelGPUMgr`, render-side model residency, default-constructed `gfx::MeshletRenderer` as the active `IRenderer`, frame context, and extract-and-render in `enqueue_active_scene()`. It reconciles `RenderScene.meshes` by `EntityGuid`, `AssetId`, and transform, resolves model assets through `AssetService`, uploads imported model payloads through `ModelGPUMgr`, and owns per-entity GPU model instances. `MeshletRenderer` implements meshlet passes and reads cameras, lights, and extent from `RenderScene` (see `src/gfx/renderer/MeshletRenderer.*`). There is no separate vktest `TestRenderer` class anymore.
 
 ### Historical note
 
@@ -433,7 +433,7 @@ Render service ownership direction:
 
 ## Resource And Asset Direction
 
-`ResourceManager` is currently a global singleton tied to `ModelGPUMgr`. That is practical for the current demos, but it is not a good final editor/runtime boundary.
+`ResourceManager` still exists as legacy renderer/app code, but it is no longer used by `apps/vktest` or `src/engine`. The runtime path now flows through `AssetService` and `RenderService` model residency instead of a global singleton.
 
 Target direction:
 
@@ -444,7 +444,7 @@ Target direction:
 - GPU handles are not serialized scene data.
 - The long-term durable `AssetId` source is an asset registry with generated stable IDs. Source paths, importer type/version, import settings, and source content hashes are metadata on registry entries, not the identity itself.
 
-Compatibility rule: keep `ResourceManager` as a temporary facade until the asset service (Phase 6) replaces it. The `demo_scene_compat` path in `DemoSceneEcsBridge` and preset code should stay the only place that turns `AssetId` + paths into loaded CPU/GPU model state for demos.
+Current rule: engine/runtime code must not add new `ResourceManager` dependencies. `DemoSceneEcsBridge` may remain as C++ preset authoring scaffolding, but it resolves model source paths to registered `AssetId`s through `AssetDatabase` and does not load CPU/GPU models itself.
 
 ## Migration Scaffolding
 
@@ -461,13 +461,13 @@ Retire or shrink when:
 
 - The main runtime app can load a scene asset or manifest and run a bounded smoke test.
 - Static demo presets have been converted into generated scene data.
-- Renderer/resource compatibility wiring no longer requires `CompatibilityVktestLayer`.
+- Generic debug/runtime layers cover the remaining preset UI and render dispatch currently hosted by `CompatibilityVktestLayer`.
 
 ### `CompatibilityVktestLayer`
 
 Scaffolding role:
 
-- Wires `vktest`-specific demo behavior: `ResourceManager`, scene presets, hotkeys, transform sync for loaded models, ImGui for presets and `RenderService::on_imgui()`.
+- Wires `vktest`-specific demo behavior: scene presets, hotkeys, ImGui for presets, and `RenderService::on_imgui()`.
 
 Retire when:
 
@@ -480,12 +480,11 @@ Retire when:
 Scaffolding role:
 
 - Authors Flecs entities from `DemoScenePresetData`.
-- Registers `AssetId` → path for demo resolution.
-- Tracks per-scene `ModelHandle`s for loaded instanced models and syncs transforms from ECS.
+- Resolves demo model source paths to registered `AssetId`s through `AssetDatabase`.
+- Leaves model import, GPU upload, and per-entity instance lifetime to `RenderService` residency.
 
 Retire when:
 
-- Engine asset service loads models; scene code never touches `ResourceManager` directly.
 - Demo presets are generated by Python or CLI tools into scene assets with stable IDs instead of authored as C++ branches.
 
 ### `ResourceManager` Singleton
@@ -494,11 +493,10 @@ Scaffolding role:
 
 - Existing model loading and bind to `ModelGPUMgr` for uploads.
 
-Retire or wrap when:
+Retire when:
 
-- Engine asset service owns asset identity/loading.
-- GPU residency is owned by a non-global service (or by `RenderService` in a way that is not a static singleton).
-- Scene components store stable `AssetId`s; runtime `ModelHandle` stays out of scene data.
+- Remaining legacy app/renderer references are deleted or moved into an archived graphics experiment.
+- `src/ResourceManager.*` can be removed from the normal build.
 
 ### `apps/common/ScenePresets.*`
 
@@ -544,7 +542,7 @@ Delivered:
 Scaffolding kept (historical note for this phase; current tree may differ):
 
 - `TestApp` as a thin executable compatibility host.
-- Global `ResourceManager` inside compatibility wiring.
+- Global `ResourceManager` inside compatibility wiring at the time; this has since been removed from `apps/vktest` and `src/engine`.
 
 Exit criteria:
 
@@ -572,7 +570,7 @@ Delivered:
 Scaffolding kept (historical note for this phase; current tree may differ):
 
 - Demo scene data can be created by a temporary C++ demo loader or ECS authoring.
-- Global `ResourceManager` where demos require it.
+- Global `ResourceManager` where demos required it at the time; current demo rendering uses `RenderService` residency instead.
 
 Exit criteria:
 
@@ -600,9 +598,9 @@ Open follow-ups (not blocking “Phase 3” label):
 - Optional `RenderScene` logging/inspection.
 - Tighter ownership of `ModelGPUMgr` (still constructed in `RenderService` for all renderers; may move when multi-renderer or asset pipeline needs it).
 
-Scaffolding still in use:
+Scaffolding updated later:
 
-- `ResourceManager` for `vktest` demo loads via `demo_scene_compat`.
+- `vktest` demo model residency now flows through `RenderService` and `AssetService`, not `ResourceManager`.
 
 Exit criteria:
 
@@ -619,14 +617,14 @@ Deliverables:
 - Convert current meshlet demo presets into entity creation against `engine::Scene`.
 - Replace monolithic scene-owned model lists with ECS `MeshRenderable` plus `Transform` (the old `MeshletRendererTestScene` `models_` pattern is gone).
 - Move camera and directional light state to ECS components.
-- Add a temporary `AssetId` to source-path registry for demo resolution.
-- Track runtime `ModelHandle` lifetime in `demo_scene_compat` / `DemoSceneEcsBridge` (loads on preset apply, not in `RenderScene`).
+- Resolve demo model source paths to registered `AssetId`s through `AssetDatabase`.
+- Keep runtime model residency out of `DemoSceneEcsBridge`; `RenderService` owns per-entity model instances.
 
 Scaffolding reduced:
 
 - No meshlet “scene class” owns demo world data; Flecs + bridge code do.
-- `ModelHandle` remains runtime compatibility state, not serialized scene state.
-- Global `ResourceManager` remains behind demo compatibility code.
+- `ModelHandle` is no longer part of the vktest demo bridge.
+- Global `ResourceManager` is no longer behind the vktest demo path.
 
 Exit criteria:
 
@@ -651,7 +649,7 @@ Delivered:
 Residual debt (track under Phase 6 or small refactors):
 
 - `ModelGPUMgr` is still owned by `RenderService` and passed via `RenderFrameContext` (convenient for a single meshlet renderer; revisit for multi-renderer or asset service).
-- `ResourceManager` + `demo_scene_compat` still load CPU models for presets; that is expected until the asset service exists.
+- `RenderService` model residency currently recreates per-entity instances when transforms change. A dedicated GPU instance update path can replace that once needed.
 
 Exit criteria:
 
@@ -660,18 +658,18 @@ Exit criteria:
 
 ### Phase 6: Asset Service Boundary
 
-Status: in progress. See `plans/asset_registry_implementation_plan.md` for the detailed asset registry/resource-service plan.
+Status: bridge implemented; cleanup remains. See `plans/asset_registry_implementation_plan.md` for the detailed asset registry/resource-service plan.
 
 Deliverables:
 
-- Finish engine-owned asset/resource service enough for scenes to resolve `AssetId` to CPU asset data without `ResourceManager`.
-- Keep stable asset registry records, sidecar metadata, source paths, importer metadata, import settings, dependencies, and source content hashes outside scene components.
-- Split runtime asset loading from editor/tool asset mutation:
+- Done: engine-owned `AssetService` resolves registered `AssetId`s to CPU model data, with a one-shot `import_model_for_upload()` path for move-only texture upload payloads.
+- Done: stable asset registry records, sidecar metadata, source paths, importer metadata, dependencies, and source content hashes stay outside scene components.
+- Done for the current runtime bridge: `ModelGPUMgr` can upload already-imported model payloads, while path loading remains as a legacy compatibility wrapper.
+- Done: `RenderService` owns model residency for extracted `RenderScene.meshes`, keeps shared GPU model resources cached by `AssetId`, and releases per-entity instances when entities disappear or change asset/transform.
+- Remaining: split runtime asset loading from editor/tool asset mutation:
   - Runtime side: read registry/manifest, load typed CPU assets, expose cache/lease state.
   - Tool/editor side: scan project, register assets, write sidecars, import/reimport, move/delete/fixup.
-- Refactor model loading so CPU model import can feed renderer residency without going through global `ResourceManager`.
-- Let renderer service handle GPU residency for assets behind a render boundary.
-- Wrap or replace `ResourceManager` singleton, then delete it when call sites are gone.
+- Remaining: delete or archive `ResourceManager` once legacy `apps/metalrender` / old renderer references are gone.
 
 Scaffolding retired or isolated:
 
@@ -685,6 +683,7 @@ Exit criteria:
 - Runtime scene/demo code can resolve `AssetId -> ModelAsset` without `ResourceManager`.
 - Renderer code can acquire GPU resources without scene code storing GPU handles.
 - GPU-free asset service tests cover registry lookup and CPU model load.
+- `rg "ResourceManager" apps/vktest src/engine` returns no hits.
 
 ### Phase 7: Data Scene Authoring And Runtime App Handoff
 
@@ -816,8 +815,9 @@ slices moved the default meshlet path onto `gfx::MeshletRenderer` (see Slice 5).
 ### Slice 4: Demo Preset ECS Authoring And Resource Compatibility Bridge
 
 The fourth implementation slice moved demo scene data into ECS authoring while
-preserving meshlet demo visuals through `demo_scene_compat` and
-`ResourceManager`.
+preserving meshlet demo visuals through `demo_scene_compat`. The original slice
+used `ResourceManager`; the Phase 6 bridge later replaced that with registered
+asset IDs and `RenderService` model residency.
 
 1. `apps/common/ScenePresets.*` exposes `DemoScenePresetData` (camera defaults,
    optional CSM defaults, model source paths, per-instance transforms).
@@ -826,9 +826,9 @@ preserving meshlet demo visuals through `demo_scene_compat` and
    the active `engine::Scene`.
 3. Preset reapplication clears previously authored demo entities by tracked
    `EntityGuid`.
-4. `demo_scene_compat` registers `AssetId` → path, loads instanced models via
-   `ResourceManager`, and tracks per-scene `ModelHandle`s; `sync_loaded_model_transforms`
-   updates transforms from ECS.
+4. Current state: `DemoSceneEcsBridge` resolves model source paths through
+   `AssetDatabase`, writes `MeshRenderable{AssetId}`, and leaves model loading
+   plus transform-to-GPU-instance residency to `RenderService`.
 5. `engine_scene_smoke` covers procedural demo authoring, valid asset IDs,
    deterministic extraction, and stale entity cleanup.
 
@@ -848,39 +848,34 @@ scene path and made `gfx::MeshletRenderer` the real `IRenderer` for the default
 5. Validation: `./scripts/agent_verify.sh` and
    `./build/Debug/bin/vktest --quit-after-frames 30`.
 
-Current next implementation work: finish Phase 6 asset/resource service, then Phase 7 data scene authoring and runtime app handoff. `ResourceManager`, `demo_scene_compat`, and `vktest` remain only until generated scene assets can run through the main runtime app.
+Current next implementation work: Phase 7 data scene authoring and runtime app handoff. `DemoSceneEcsBridge`, `apps/common/ScenePresets.*`, and `vktest` remain only until generated scene assets can run through the main runtime app.
 
 ## Immediate Next Work To Retire `vktest`
 
 The next practical goal is not "make an editor" first. It is to make the normal runtime app load real data. The editor target should come after the data and library boundaries exist.
 
-1. Finish the asset service bridge:
-   - CPU model assets resolve from registered `AssetId`s.
-   - `ModelGPUMgr` or its bridge uploads CPU model data without `ResourceManager`.
-   - Render extraction/residency owns per-entity model instance state.
-
-2. Add minimal scene asset serialization/loading:
+1. Add minimal scene asset serialization/loading:
    - Support only the currently needed components first: entity GUID/name, transform/local-to-world, camera, directional light, mesh renderable.
    - Keep the format tool-friendly and stable enough for generated data.
    - Loading a scene asset creates a Flecs world through `SceneManager`.
 
-3. Generate current demo presets as data:
+2. Generate current demo presets as data:
    - Add Python scripts under `scripts/` to register model assets and write scene assets for the current numbered presets.
    - Reuse current `apps/common/ScenePresets.*` only as migration input if needed; do not make the runtime depend on it.
    - Preserve deterministic random scenes by writing generated entities or recorded seeds into the scene metadata.
 
-4. Promote the main runtime app:
+3. Promote the main runtime app:
    - Re-enable or replace `apps/metalrender` as the primary data-scene host.
    - Add `--scene <asset-id-or-path>` and `--quit-after-frames N`.
    - Move validation from `vktest --quit-after-frames 30` to the runtime app once it renders generated scene data.
 
-5. Delete compatibility code:
+4. Delete compatibility code:
    - Remove `DemoSceneEcsBridge` once scene loading covers the generated presets.
    - Remove `CompatibilityVktestLayer` once generic runtime/debug layers cover the remaining app behavior.
    - Remove `apps/common/ScenePresets.*` after scripts/data are the source of demo content.
    - Delete or demote `vktest` to a tiny sample only after the main runtime smoke test is the guardrail.
 
-6. Split editor/tool libraries:
+5. Split editor/tool libraries:
    - Separate runtime registry loading from authoring/import/fixup code before adding `metalrender_editor`.
    - Keep Python/CLI generation and validation GPU-free.
    - Add the editor target once it can stand on runtime scene loading and asset services rather than `vktest` scaffolding.
@@ -916,6 +911,6 @@ triage after the first Phase 3 slice:
 2. Stable ID and asset handle design note: done enough to proceed. `AssetId` is now a 128-bit generated identity with registry/database storage; continue detailed work in `plans/asset_registry_implementation_plan.md`.
 3. Editor play-mode semantics: not needed yet. Write this before Phase 9, after runtime scene loading and renderer residency no longer depend on `vktest`.
 4. RenderScene schema for 2D plus 3D: first implementation done for Phase 3 in `src/engine/render/RenderScene.hpp`. The companion note `plans/render_service_extraction_design.md` is outdated (it still references removed `TestRenderer` types); refresh it when editing renderer docs.
-5. Asset service boundary and `ResourceManager` retirement plan: active major milestone. Meshlet `IRenderer` extraction is done; `ModelGPUMgr` + `ResourceManager` ownership should be resolved as part of Phase 6. The `AssetId -> path -> ResourceManager` bridge in `demo_scene_compat` is temporary compatibility code.
+5. Asset service boundary and `ResourceManager` retirement plan: bridge implemented. `AssetId -> CPU model import -> ModelGPUMgr upload -> RenderService residency` is the runtime path. Remaining work is deletion/archive of legacy `ResourceManager` call sites outside `apps/vktest` and `src/engine`, plus cooked/runtime manifest cleanup.
 6. Metal validation plan for `EngineConfig` backend selection: useful but not blocking Phase 3. Write before backend-specific renderer/service changes or before any migration slice that claims Metal parity.
 7. Library split plan: `plans/library_linkage_architecture_plan.md` now needs a follow-up implementation slice for runtime/assets/editor/tool targets once Phase 6 clarifies which code is runtime-only versus authoring-only.

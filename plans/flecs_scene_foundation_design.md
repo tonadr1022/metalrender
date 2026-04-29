@@ -20,7 +20,7 @@ Deferred:
 - Transform hierarchy/parent relationships.
 - Scene serialization.
 - Demo preset conversion into ECS entities is now implemented as vktest compatibility authoring.
-- Resource bridge from `MeshRenderable{AssetId}` to `ResourceManager`/`ModelGPUMgr` is now implemented as renderer/resource compatibility code in `TestRenderer`.
+- Resource bridge from `MeshRenderable{AssetId}` to GPU model residency is now implemented in `RenderService` using `AssetService` and `ModelGPUMgr`.
 - Renderer-neutral `RenderScene` extraction is now implemented under `src/engine/render`.
 - Editor component metadata and play/edit world semantics.
 
@@ -28,15 +28,14 @@ Deferred:
 
 - `third_party/CMakeLists.txt` owns third-party integration directly with `add_subdirectory(...)` and cache option setup before dependencies are added. Existing third-party dependencies are recorded in `.gitmodules` under `third_party/<name>`.
 - `src/CMakeLists.txt` builds the shared `teng` library from an explicit source list and links public dependencies such as `glm::glm`, `meshoptimizer`, `ktx`, `concurrentqueue`, `implot`, and the project warning target.
-- `apps/vktest/TestApp.cpp` currently owns runtime bootstrap: resource directory setup, CVar load/save, window/device/swapchain creation, `gfx::TestRenderer` creation, global `ResourceManager` init/shutdown, input callbacks, ImGui frame setup, and the main loop.
-- `apps/vktest/TestRenderer.*` currently owns renderer services plus debug scene selection. It constructs `ModelGPUMgr`, `RenderGraph`, ImGui renderer, upload/copy helpers, static instance data, material storage, and the active `ITestScene`.
-- `apps/vktest/TestDebugScenes.hpp` defines `ITestScene`, a C++ virtual scene interface whose methods receive `TestSceneContext` and can add render graph passes directly.
-- `apps/vktest/scenes/MeshletRendererTestScene.*` is the main working meshlet demo. It still mixes camera/controller tooling, light/day-night controls, render graph pass wiring, CSM, depth pyramid, draw prep, and debug ImGui, but preset world/model data now comes from ECS authoring.
+- `apps/vktest/TestApp.cpp` is now a thin `Engine` host with `CompatibilityVktestLayer` for demo preset selection, hotkeys, and meshlet debug UI.
+- `src/engine/render/RenderService.*` owns renderer services plus active renderer dispatch. It constructs `ModelGPUMgr`, `RenderGraph`, ImGui renderer, upload/copy helpers, model residency, and the default `gfx::MeshletRenderer`.
+- Legacy `TestRenderer`, `ITestScene`, and `MeshletRendererTestScene` have been removed from the default runtime path.
 - `apps/common/ScenePresets.*` provides data-first demo presets as plain camera defaults, optional CSM defaults, source model paths, and per-instance transforms. The older callback-based loader wrapper remains for compatibility.
-- `apps/vktest/DemoSceneEcsBridge.*` converts demo presets into Flecs entities and owns the temporary demo `AssetId` to source-path registry.
+- `apps/vktest/DemoSceneEcsBridge.*` converts demo presets into Flecs entities and resolves model source paths to registered `AssetId`s through `AssetDatabase`.
 - `src/core/Handle.hpp` and `src/core/Pool.hpp` provide runtime generational handles. They are good for in-process object lifetime, but they are not stable serialized IDs.
-- `src/ResourceManager.*` is a global singleton that caches models by `std::hash<std::string>` of the path, stores CPU `ModelInstance` data, creates per-instance GPU handles through `ModelGPUMgr`, and returns runtime `ModelHandle`s.
-- `src/gfx/ModelGPUManager.*` owns model GPU residency and per-instance GPU allocation through `ModelGPUHandle` and `ModelInstanceGPUHandle`. It loads model files, uploads model resources, allocates instance data, and frees GPU resources.
+- `src/ResourceManager.*` remains as legacy code, but it is no longer used by `apps/vktest` or `src/engine`.
+- `src/gfx/ModelGPUManager.*` owns model GPU upload/residency and per-instance GPU allocation through `ModelGPUHandle` and `ModelInstanceGPUHandle`. It can upload imported model data and still has a legacy source-path loading wrapper.
 
 ## Target Architecture
 
@@ -188,11 +187,11 @@ Avoid making the first implementation a closed enum of component types. The edit
 
 Scene components should reference assets using `AssetId`. Runtime resource loading should resolve those IDs into loaded CPU resources and then into GPU residency as needed.
 
-Initial bridge from current code:
+Current bridge:
 
-- Treat `ResourceManager` and `ModelGPUMgr` as compatibility services.
-- Add a resolver concept that maps `AssetId` to a source model path, then uses the existing model loading path while meshlet rendering is being migrated.
-- Keep `ModelHandle` only inside runtime compatibility/resource layers.
+- `DemoSceneEcsBridge` resolves demo source model paths to registered `AssetId`s through `AssetDatabase`.
+- `AssetService` imports CPU model data by `AssetId`.
+- `RenderService` owns shared model GPU residency and per-entity model instances.
 - Keep `ModelGPUHandle` and `ModelInstanceGPUHandle` inside renderer/resource residency code.
 
 Longer-term asset service responsibilities:
@@ -202,7 +201,7 @@ Longer-term asset service responsibilities:
 - Let renderer services decide GPU residency and per-instance allocation.
 - Support non-model assets such as textures, materials, scripts, scenes, and sprite resources.
 
-The current `ResourceManager` path hash is not enough as final asset identity. `std::hash<std::string>` is implementation-defined and not a durable asset ID contract.
+Legacy `ResourceManager` path hashes are not enough as final asset identity. `std::hash<std::string>` is implementation-defined and not a durable asset ID contract.
 
 ## Avoiding Gameplay C++ Scene Subclasses
 
@@ -246,11 +245,11 @@ Not allowed as destination architecture:
 Global `ResourceManager`
 
 - Scaffolding role: model path cache plus CPU/GPU model instance bridge.
-- Retire or wrap when an engine asset/resource service owns stable asset identity and CPU loading, while renderer services own GPU residency.
+- Runtime status: retired from `apps/vktest` and `src/engine`; remove remaining legacy references before deleting `src/ResourceManager.*`.
 
 `ModelGPUMgr`
 
-- Scaffolding status: not inherently temporary, but its current ownership through `TestRenderer` and `ResourceManager` is temporary.
+- Scaffolding status: not inherently temporary; current ownership through `RenderService` is acceptable for the model residency bridge.
 - Keep as renderer residency machinery only if its API is made independent of scene identity and fed by render/resource services rather than authored scene classes.
 
 ## Phased Implementation Sequence
@@ -338,12 +337,12 @@ Exit criteria:
 
 ### Phase 5: Resource Bridge For Mesh Renderables
 
-Status: complete as compatibility scaffolding.
+Status: superseded by the Phase 6 `RenderService` residency bridge.
 
 Deliverables:
 
-- Add an adapter that resolves `MeshRenderable{AssetId}` through a temporary asset map into the current `ResourceManager`/`ModelGPUMgr` flow.
-- Keep runtime `ModelHandle`s in a bridge-owned cache keyed by entity GUID or instance identity.
+- Resolve `MeshRenderable{AssetId}` through `AssetService` into `ModelGPUMgr` upload/residency.
+- Keep runtime GPU instance handles in `RenderService` residency keyed by entity GUID.
 - Define cleanup when entities or scenes unload.
 
 Exit criteria:

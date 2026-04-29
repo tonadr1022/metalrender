@@ -1,7 +1,8 @@
 # Engine Tick And Layer Design
 
-Status: Phase 1 runtime shell implemented. The remaining sections describe the
-target direction and the next migration slices.
+Status: Phase 1 runtime shell implemented. This is now a historical design
+record; the current roadmap and asset/render residency state live in
+`plans/engine_runtime_migration_plan.md`.
 
 This document is a Phase 1 design record and detailed reference note. The canonical migration roadmap (phases, sequencing, and destination architecture) lives in `plans/engine_runtime_migration_plan.md`.
 
@@ -27,7 +28,8 @@ Out of scope:
 
 - Implementing Flecs scene storage.
 - Rewriting the meshlet renderer.
-- Replacing `ResourceManager`.
+- Replacing `ResourceManager` was out of scope for Phase 1 and is now handled by
+  the Phase 6 asset bridge work.
 - Final editor UI architecture.
 - New CMake targets beyond what the phases identify.
 
@@ -40,7 +42,7 @@ Before Phase 1, `apps/vktest/TestApp.cpp` owned most process/runtime concerns:
 - Creates a platform window through `create_platform_window()`.
 - Hard-codes `gfx::rhi::GfxAPI::Vulkan` when calling `gfx::rhi::create_device`.
 - Initializes the RHI device, creates the swapchain, creates `gfx::TestRenderer`,
-  initializes global `ResourceManager`, installs input callbacks, and runs the
+  initialized global `ResourceManager`, installed input callbacks, and ran the
   main loop.
 - Owns the ImGui frame lifecycle and top-level debug shortcuts such as scene
   cycling, demo preset selection, and ImGui toggling.
@@ -243,8 +245,9 @@ Temporary role:
 - Preserve current meshlet/debug-scene rendering while `Engine::tick()` and layers
   are introduced.
 - Serve as the source for extracting `RenderService` responsibilities.
-- Keep `ResourceManager::init()` viable until asset and GPU residency boundaries
-  are redesigned.
+- Historically kept `ResourceManager::init()` viable until asset and GPU
+  residency boundaries were redesigned. Current `vktest`/engine rendering no
+  longer uses it.
 
 Retirement criteria:
 
@@ -389,8 +392,9 @@ Validation:
 - Layer order can become ambiguous if render, editor, and debug UI all mutate
   scene state. Define update phases early and keep render extraction after scene
   mutation.
-- Global `ResourceManager` makes asset ownership fuzzy. Treat it as a temporary
-  facade until asset IDs and renderer GPU residency are separated.
+- Global `ResourceManager` made asset ownership fuzzy. Current engine/vktest
+  runtime rendering resolves registered `AssetId`s through `AssetService` and
+  `RenderService` residency instead.
 
 ## Validation Strategy
 
@@ -422,7 +426,8 @@ Validation for future code phases:
 - Should `CompatibilityVktestLayer` stay in `TestApp.cpp`, move to a named
   app-side source file, or call a smaller adapter as `TestRenderer` extraction
   proceeds?
-- When should `ResourceManager::init()` leave compatibility code and become an
-  engine asset/resource service boundary?
+- Answered by Phase 6: `ResourceManager::init()` left the engine/vktest runtime
+  path; asset loading uses `AssetService` and model residency lives in
+  `RenderService`.
 - What is the first Metal validation target: successful device/window/swapchain
   startup, or full parity with the current meshlet vktest path?
