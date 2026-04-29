@@ -94,6 +94,4 @@ class AssetRegistry {
 [[nodiscard]] std::string_view to_string(AssetRecordStatus status);
 [[nodiscard]] std::string_view to_string(AssetRegistryResult result);
 
-[[nodiscard]] bool run_asset_registry_smoke_test();
-
 }  // namespace teng::engine::assets

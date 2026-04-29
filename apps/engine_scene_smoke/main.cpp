@@ -1,9 +1,9 @@
 #include <iostream>
 
-#include "DemoSceneEcsBridge.hpp"
-#include "engine/assets/AssetDatabase.hpp"
-#include "engine/assets/AssetRegistry.hpp"
-#include "engine/assets/AssetService.hpp"
+#include "AssetDatabaseSmokeTest.hpp"
+#include "AssetRegistrySmokeTest.hpp"
+#include "AssetServiceSmokeTest.hpp"
+#include "DemoSceneAuthoringSmokeTest.hpp"
 #include "engine/scene/SceneSmokeTest.hpp"
 
 int main() {

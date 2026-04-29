@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Run clang-tidy on changed first-party C/C++ sources/headers under apps/ and src/.
+# Run clang-tidy on changed first-party C/C++ sources/headers under apps/, src/, and tests/.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,7 +20,7 @@ TIDY_FILES=()
 while IFS= read -r f; do
     [[ -n "$f" ]] || continue
     case "$f" in
-    apps/*|src/*) ;;
+    apps/*|src/*|tests/*) ;;
     *) continue ;;
     esac
     case "$f" in

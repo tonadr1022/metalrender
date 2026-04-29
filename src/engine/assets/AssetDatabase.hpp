@@ -113,6 +113,5 @@ class AssetDatabase {
 };
 
 [[nodiscard]] std::string_view to_string(AssetDiagnosticKind kind);
-[[nodiscard]] bool run_asset_database_smoke_test();
 
 }  // namespace teng::engine::assets

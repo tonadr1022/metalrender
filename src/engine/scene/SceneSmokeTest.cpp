@@ -1,6 +1,7 @@
 #include "engine/scene/SceneSmokeTest.hpp"
 
 #include <GLFW/glfw3.h>
+
 #include <cmath>
 
 #include "engine/render/RenderScene.hpp"
@@ -163,7 +164,8 @@ bool run_render_scene_extraction_smoke_test() {
   const RenderCamera& extracted_camera = render_scene.cameras.front();
   if (extracted_camera.entity != camera_guid || !extracted_camera.primary ||
       !nearly_equal(extracted_camera.fov_y, 0.9f) ||
-      !matrix_nearly_equal(extracted_camera.local_to_world, transform_to_matrix(camera_transform))) {
+      !matrix_nearly_equal(extracted_camera.local_to_world,
+                           transform_to_matrix(camera_transform))) {
     return false;
   }
 
@@ -186,8 +188,7 @@ bool run_render_scene_extraction_smoke_test() {
 
   if (render_scene.sprites[0].entity != sprite_guid_a ||
       render_scene.sprites[0].texture != sprite_asset_a ||
-      render_scene.sprites[0].sorting_layer != 0 ||
-      render_scene.sprites[0].sorting_order != 5 ||
+      render_scene.sprites[0].sorting_layer != 0 || render_scene.sprites[0].sorting_order != 5 ||
       !nearly_equal(render_scene.sprites[0].tint.x, 1.f)) {
     return false;
   }

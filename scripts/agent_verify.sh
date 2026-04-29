@@ -155,7 +155,7 @@ if [[ "$DO_FORMAT" -eq 1 ]]; then
 	while IFS= read -r f; do
 		[[ -n "$f" ]] || continue
 		case "$f" in
-		apps/* | src/* | cmake/*) ;;
+		apps/* | src/* | tests/* | cmake/*) ;;
 		*) continue ;;
 		esac
 		# Skip .mm/.m: root .clang-format is C++-only; clang-format errors on ObjC++.

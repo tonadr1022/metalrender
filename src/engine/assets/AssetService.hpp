@@ -55,6 +55,5 @@ class AssetService {
 };
 
 [[nodiscard]] const char* to_string(AssetLoadStatus status);
-[[nodiscard]] bool run_asset_service_smoke_test();
 
 }  // namespace teng::engine::assets

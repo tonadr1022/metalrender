@@ -35,6 +35,4 @@ void clear_loaded_models(engine::SceneManager& scenes);
 void register_asset_path(engine::AssetId asset_id, std::filesystem::path path);
 [[nodiscard]] std::optional<std::filesystem::path> resolve_model_path(engine::AssetId asset_id);
 
-[[nodiscard]] bool run_demo_scene_authoring_smoke_test();
-
 }  // namespace teng::gfx::demo_scene_compat
