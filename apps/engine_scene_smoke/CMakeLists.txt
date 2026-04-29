@@ -15,4 +15,4 @@ target_include_directories(${target_name} PRIVATE
     ${METALRENDER_APP_DIR}
     ${VKTEST_APP_DIR}
 )
-target_link_libraries(${target_name} PRIVATE teng_engine_smoke teng)
+target_link_libraries(${target_name} PRIVATE teng_engine_smoke)

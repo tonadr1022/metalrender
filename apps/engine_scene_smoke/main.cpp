@@ -4,7 +4,7 @@
 #include "AssetRegistrySmokeTest.hpp"
 #include "AssetServiceSmokeTest.hpp"
 #include "DemoSceneAuthoringSmokeTest.hpp"
-#include "engine/scene/SceneSmokeTest.hpp"
+#include "SceneSmokeTest.hpp"
 
 int main() {
   if (!teng::engine::run_scene_foundation_smoke_test()) {

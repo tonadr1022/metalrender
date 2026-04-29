@@ -21,10 +21,11 @@ Relationship: complements [`engine_runtime_migration_plan.md`](engine_runtime_mi
 
 | Artifact | Kind | Role |
 |----------|------|------|
-| `teng` (`libteng.so` / `.dylib`) | **SHARED** | Large engine + gfx + assets + scene + flecs (private) + Vulkan/Metal pieces |
+| `teng` (`libteng.so` / `.dylib`) | **SHARED** | App-facing engine aggregate over internal core/platform/gfx/engine object components |
+| `teng_static` | **STATIC** | Static engine aggregate for Flecs-facing tests that must compile scene/ECS headers outside `libteng` |
 | `teng_shader_compiler` | **STATIC** | Shader compiler; linked into `teng` and `teng-shaderc` |
-| `teng_engine_smoke` | **STATIC** | GPU-free smoke tests; **PUBLIC** link to `teng`; scene ECS smokes remain **inside** `teng` because Flecs is not re-exported from the shared library |
-| `vktest`, `engine_scene_smoke`, `teng-shaderc` | **EXECUTABLE** | Apps link `teng` (and smoke lib where relevant) |
+| `teng_engine_smoke` | **STATIC** | GPU-free smoke tests; **PUBLIC** link to `teng_static` so scene/ECS smokes live under `tests/smoke` without exporting Flecs |
+| `vktest`, `engine_scene_smoke`, `teng-shaderc` | **EXECUTABLE** | `vktest` links shared `teng`; `engine_scene_smoke` links `teng_engine_smoke`; `teng-shaderc` links `teng_shader_compiler` |
 
 Pain points already observed:
 
@@ -87,14 +88,14 @@ Do **not** rely on “export all Flecs symbols from `libteng.so`” as the long-
 
 ## Migration phases
 
-### Phase 1 — Document and enforce invariants (no big refactor)
+### Phase 1 — Document and enforce invariants (implemented)
 
 - Add a short **`README` or CMake comment block** (repo-root or `cmake/`) stating: Flecs is **private** to `teng`; tests including Flecs must either compile inside `teng` or use **`teng_static`** (once introduced).
 - Optionally add **`INTERFACE`** compile definitions or a **`TENG_BUILD_SHARED`** macro so headers can `static_assert` or comment dangerous combinations.
 
 **Validation:** existing `agent_verify` unchanged.
 
-### Phase 2 — Introduce optional `teng` static variant for tests
+### Phase 2 — Introduce optional `teng` static variant for tests (implemented)
 
 - Add **`add_library(teng STATIC ...)`** with **same sources** as shared `teng`, gated by `BUILD_SHARED_LIBS` or explicit `TENG_LIBRARY_TYPE` option (default stays shared for normal apps).
 - Wire **`engine_scene_smoke`** (and optionally **`vktest`** later) to link **`teng` static** + move **`SceneSmokeTest`** sources to `tests/smoke` if desired.
@@ -103,10 +104,14 @@ Do **not** rely on “export all Flecs symbols from `libteng.so`” as the long-
 
 **Risk:** longer link times for static test exe; duplicate codegen size vs shared — acceptable for CI-sized binaries.
 
-### Phase 3 — Logical split of `teng` into static sub-libraries (still one consumer)
+### Phase 3 — Logical split of `teng` into internal components (implemented)
 
-- Factor **`teng_shader_compiler`**-style **STATIC** libs inside CMake: e.g. `teng_gfx`, `teng_engine`, merged into **either** shared `teng` **or** static `teng` via `OBJECT` or `STATIC` + `target_link_libraries`.
+- Factor **`teng_shader_compiler`**-style internal libs inside CMake: e.g. `teng_gfx`, `teng_engine`, merged into **either** shared `teng` **or** static `teng` via `OBJECT` or `STATIC` + `target_link_libraries`.
 - Goal: **clear dependency DAG** and faster incremental builds, **not** multiple shipped shared libs yet.
+
+Implemented shape: `teng` and `teng_static` aggregate paired shared/static object-library variants
+for core, platform, gfx, and engine. These are internal CMake organization targets, not app-facing
+link targets.
 
 **Validation:** no behavior change; binary sizes roughly stable.
 

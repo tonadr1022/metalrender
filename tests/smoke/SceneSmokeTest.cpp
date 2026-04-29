@@ -1,4 +1,4 @@
-#include "engine/scene/SceneSmokeTest.hpp"
+#include "SceneSmokeTest.hpp"
 
 #include <GLFW/glfw3.h>
 
