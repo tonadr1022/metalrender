@@ -24,6 +24,9 @@ class Swapchain;
 namespace engine {
 
 class RenderService;
+namespace assets {
+class AssetService;
+}
 
 enum class EngineGfxApi {
   PlatformDefault,
@@ -59,6 +62,7 @@ class EngineContext {
   [[nodiscard]] const std::filesystem::path& local_resource_dir() const {
     return *local_resource_dir_;
   }
+  [[nodiscard]] assets::AssetService& assets() const { return *assets_; }
   [[nodiscard]] SceneManager& scenes() const { return *scenes_; }
   [[nodiscard]] RenderService& renderer() const { return *renderer_; }
   [[nodiscard]] const EngineTime& time() const { return *time_; }
@@ -75,6 +79,7 @@ class EngineContext {
   gfx::rhi::Swapchain* swapchain_{};
   const std::filesystem::path* resource_dir_{};
   const std::filesystem::path* local_resource_dir_{};
+  assets::AssetService* assets_{};
   SceneManager* scenes_{};
   RenderService* renderer_{};
   const EngineTime* time_{};
@@ -135,6 +140,8 @@ class Engine {
   [[nodiscard]] EngineContext& context() { return context_; }
   [[nodiscard]] const EngineContext& context() const { return context_; }
   [[nodiscard]] LayerStack& layers() { return layers_; }
+  [[nodiscard]] assets::AssetService& assets() { return *assets_; }
+  [[nodiscard]] const assets::AssetService& assets() const { return *assets_; }
   [[nodiscard]] SceneManager& scenes() { return scenes_; }
   [[nodiscard]] const SceneManager& scenes() const { return scenes_; }
   [[nodiscard]] RenderService& renderer() { return *renderer_; }
@@ -165,6 +172,7 @@ class Engine {
   std::unique_ptr<Window> window_;
   std::unique_ptr<gfx::rhi::Device> device_;
   gfx::rhi::SwapchainHandleHolder swapchain_;
+  std::unique_ptr<assets::AssetService> assets_;
   SceneManager scenes_;
   std::unique_ptr<RenderService> renderer_;
   EngineContext context_;

@@ -13,6 +13,7 @@
 #include "core/CVar.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
+#include "engine/assets/AssetService.hpp"
 #include "engine/render/RenderService.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
@@ -157,6 +158,11 @@ void Engine::init() {
   context_.swapchain_ = device_->get_swapchain(swapchain_);
   context_.resource_dir_ = &resource_dir_;
   context_.local_resource_dir_ = &local_resource_dir_;
+  assets_ = std::make_unique<assets::AssetService>(assets::AssetServiceConfig{
+      .project_root = resource_dir_.parent_path(),
+      .content_root = resource_dir_.filename(),
+  });
+  context_.assets_ = assets_.get();
   context_.scenes_ = &scenes_;
   context_.time_ = &time_;
   context_.input_ = &input_snapshot_;
@@ -315,6 +321,7 @@ void Engine::shutdown() {
   layers_.clear();
   renderer_->shutdown();
   renderer_.reset();
+  assets_.reset();
   swapchain_ = {};
   window_->shutdown();
   device_->shutdown();

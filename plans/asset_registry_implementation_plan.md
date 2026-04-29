@@ -1,6 +1,6 @@
 # Asset Registry And Runtime Asset Service Plan
 
-Status: Phase 6.1 is complete. `AssetId` now has a 128-bit representation with text parse/format helpers, and `src/engine/assets` contains the first GPU-free asset registry record/dependency/redirect/tombstone foundation. The next implementation slice is Phase 6.2: registry storage, project scanning, and asset file operations.
+Status: Phase 6.2 is complete and Phase 6.3 has started. `AssetId` now has a 128-bit representation with text parse/format helpers; `src/engine/assets` contains GPU-free asset registry/database storage, project scanning, sidecar metadata, and asset file operations. The current implementation slice is Phase 6.3: an engine-owned CPU asset service. Renderer residency and `ResourceManager` retirement remain Phase 6.4/6.5 work.
 
 Scope: define the long-term asset registry, asset dependency, CPU resource, and renderer GPU residency boundaries for `metalrender`. This plan intentionally avoids implementation code. It is the design target for replacing the current `ResourceManager` singleton and making scenes durable data that reference assets by stable IDs.
 
@@ -317,6 +317,15 @@ Exit criteria:
 
 ### Phase 6.2: Registry Storage And Project Scan
 
+Status: complete.
+
+Delivered:
+
+- Added TOML sidecar metadata storage with `AssetDatabase`.
+- Added project scanning under `resources/`.
+- Added source registration, move/rename, delete/tombstone, path redirect fixup, aggregate index writing, and registry diagnostics.
+- Added GPU-free smoke coverage for registration roundtrip, move/redirect, delete/dependency blocking, stale hashes, missing sources, duplicate IDs, schema errors, and redirect cycle rejection.
+
 Deliverables:
 
 - Define sidecar metadata format and aggregate registry/index behavior.
@@ -329,6 +338,14 @@ Exit criteria:
 - A test fixture can create assets, move them, delete them, and verify registry diagnostics and reference behavior.
 
 ### Phase 6.3: CPU Asset Service
+
+Status: in progress.
+
+Delivered:
+
+- Added engine-owned `AssetService` and exposed it through `Engine` / `EngineContext`.
+- Added a synchronous GPU-free `AssetId -> ModelAsset` load/cache path backed by `AssetDatabase` and existing CPU model import.
+- Added smoke coverage for model asset load, cache reuse, wrong type, and missing asset status.
 
 Deliverables:
 

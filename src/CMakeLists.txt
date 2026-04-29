@@ -15,6 +15,7 @@ add_library(${target_name} SHARED
     engine/ImGuiOverlayLayer.cpp
     engine/assets/AssetDatabase.cpp
     engine/assets/AssetRegistry.cpp
+    engine/assets/AssetService.cpp
     engine/render/DebugClearRenderer.cpp
     engine/render/RenderSceneExtractor.cpp
     engine/render/RenderService.cpp
