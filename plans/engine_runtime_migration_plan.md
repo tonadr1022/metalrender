@@ -1,8 +1,8 @@
 # Engine Runtime Migration Plan
 
-Status: Phase 5 (meshlet `IRenderer` extraction) is implemented. `gfx::MeshletRenderer` is the default active renderer via `engine::RenderService`; meshlet passes, PSOs, CSM, depth pyramid, and draw prep live under `src/gfx/renderer/`. Demo preset and `ResourceManager` wiring for `vktest` remains in compatibility code (`CompatibilityVktestLayer`, `DemoSceneEcsBridge`, `demo_scene_compat`). The next major steps are the asset/resource service boundary (Phase 6), optional tightening of `ModelGPUMgr` ownership (still constructed by `RenderService` today), then 2D and editor foundations.
+Status: Phase 5 (meshlet `IRenderer` extraction) is implemented. `gfx::MeshletRenderer` is the default active renderer via `engine::RenderService`; meshlet passes, PSOs, CSM, depth pyramid, and draw prep live under `src/gfx/renderer/`. Phase 6 asset work has started: generated 128-bit `AssetId`s, asset registry/database storage, project scanning, and the first engine-owned CPU `AssetService` exist. Demo preset and `ResourceManager` wiring for `vktest` remains in compatibility code (`CompatibilityVktestLayer`, `DemoSceneEcsBridge`, `demo_scene_compat`). The next major steps are to finish the asset/resource service boundary, generate demo scene data with tools instead of C++ preset code, make the normal runtime app the primary game host, and add a separate editor build target on top of the same runtime libraries.
 
-This plan treats the engine as a long-term runtime/editor foundation. `vktest` is a thin `Engine` host with a compatibility layer, not the destination architecture. The destination is a tick-driven, layer-composed engine with data-first Flecs scenes, stable IDs, renderer services, and an editor layer on top of the same runtime. Legacy `TestRenderer` / `ITestScene` / `MeshletRendererTestScene` types from earlier drafts are no longer in the tree; do not reintroduce them as patterns.
+This plan treats the engine as a long-term runtime foundation used by separate products: a game/runtime executable, a separate editor executable, and small command-line tools. `vktest` is migration scaffolding only. It is useful while old meshlet demos are still being converted, but it should not remain the primary integration harness once scene assets and the runtime app can load data directly. The destination is a tick-driven, layer-composed engine with data-first Flecs scenes, stable IDs, renderer services, a normal runtime/game app for data-authored scenes, and a separate editor build target that links editor-only code. Legacy `TestRenderer` / `ITestScene` / `MeshletRendererTestScene` types from earlier drafts are no longer in the tree; do not reintroduce them as patterns.
 
 ## Decisions From Draft Review
 
@@ -12,7 +12,9 @@ This plan treats the engine as a long-term runtime/editor foundation. `vktest` i
 - Flecs should be a git submodule under `third_party`, added to `.gitmodules`.
 - Metal support should be preserved if the existing platform/window/device abstractions make that practical. New engine code should avoid Vulkan-only assumptions.
 - The first real use cases are 2D games and simple 3D platformers. Meshlet rendering remains important, but the shared scene/render abstraction cannot be meshlet-shaped only.
-- The editor should be a layer on top of the runtime, enabled by build configuration, not a separate architecture.
+- The editor should be a separate build target, not a mode of `vktest` and not a different architecture. It links the same runtime libraries, installs editor-only layers/tools, and may drive `Engine::tick()` manually for play/edit control.
+- The runtime/game app should become the primary harness for loading scene data. `vktest` retires after its static C++ presets are represented as generated scene assets.
+- Library boundaries need to become intentional. Runtime, render, assets, scene, editor, and tools should be split enough that editor-only asset mutation/import code does not leak into shipped runtime targets.
 - Stable scene/entity IDs and asset handles should be introduced early if delaying them would cause broad future churn. The plan assumes they are phase-one foundations.
 
 ## Goals
@@ -23,8 +25,9 @@ This plan treats the engine as a long-term runtime/editor foundation. `vktest` i
 - Preserve Metal and Vulkan as supported backend goals through RHI/platform factories.
 - Support data-first 2D and simple 3D scenes before optimizing for editor richness.
 - Make the renderer boundary broad enough for mesh renderables, sprites/2D renderables, cameras, lights, and later custom renderer hooks.
-- Preserve `vktest --quit-after-frames 30` and `./scripts/agent_verify.sh` as migration guardrails.
+- Preserve `vktest --quit-after-frames 30` while `vktest` is still the active compatibility harness, then replace it with an equivalent bounded run of the main runtime app.
 - Mark temporary compatibility code clearly so it can be deleted deliberately.
+- Keep editor-only systems, asset authoring/import mutation, and developer UI out of shipped game/runtime linkage except through explicit build-target choices.
 
 ## Non-Goals For Phase One
 
@@ -40,7 +43,7 @@ This plan treats the engine as a long-term runtime/editor foundation. `vktest` i
 
 ### `TestApp`
 
-`apps/vktest/TestApp.cpp` is a thin host over `engine::Engine`: it builds `EngineConfig`, pushes `CompatibilityVktestLayer` and `ImGuiOverlayLayer`, and calls `Engine::run()`. Global `ResourceManager` init/shutdown and demo preset hotkeys live in the compatibility layer. Long term this executable can stay as a smoke-test entry or shrink further once bootstrap is fully generic.
+`apps/vktest/TestApp.cpp` is a thin host over `engine::Engine`: it builds `EngineConfig`, pushes `CompatibilityVktestLayer` and `ImGuiOverlayLayer`, and calls `Engine::run()`. Global `ResourceManager` init/shutdown and demo preset hotkeys live in the compatibility layer. Long term this executable should stop being the primary smoke-test entry; the main runtime app should take that role once it can load generated scene assets.
 
 ### `CompatibilityVktestLayer` (in `TestApp.cpp`)
 
@@ -54,14 +57,33 @@ Temporary `engine::Layer` for `vktest`: barrier self-test, renderer CVars, `Reso
 
 Earlier migrations referred to `gfx::TestRenderer`, `ITestScene`, and `MeshletRendererTestScene` / `MeshletRendererScene`. Those types have been removed; meshlet rendering and the old “debug scene” harness were folded into `RenderService` + `MeshletRenderer` + `CompatibilityVktestLayer` / `DemoSceneEcsBridge`.
 
+### Current app/build shape
+
+`apps/CMakeLists.txt` currently builds `vktest`, `teng-shaderc`, and `engine_scene_smoke`; `apps/metalrender` exists but is not currently added to the build. The long-term primary runtime app should come from this main runtime target, not from `vktest`. Bringing that target back should happen after it can load a scene asset or runtime manifest through `SceneManager`/`AssetService`, not by copying the `CompatibilityVktestLayer` preset bridge.
+
+`src/CMakeLists.txt` currently aggregates core/platform/gfx/engine object libraries into shared `teng` and static `teng_static`. That organization is acceptable migration scaffolding. The next architecture step is not just adding more executables; it is splitting editor-only asset tooling and runtime asset loading so `metalrender_editor` and data-generation tools can link the authoring side without forcing the shipped runtime to carry it.
+
 ## Destination Architecture
 
 ```text
-Executable
+Runtime/game executable
   parses command line
   builds EngineConfig
-  installs layers
+  installs runtime/game/debug layers
+  loads a scene asset or cooked scene manifest
   calls Engine::run() or drives Engine::tick()
+
+Editor executable
+  links editor-only code and tooling
+  builds EngineConfig with editor services enabled
+  installs editor, runtime, render, and debug layers
+  drives Engine::tick() manually for edit/play control
+
+Tool executables / scripts
+  import/register assets
+  generate scene assets
+  validate registry and dependency graph
+  do not initialize window/device/renderer unless required
 
 Engine
   owns platform/window/device/swapchain
@@ -73,7 +95,7 @@ LayerStack
   Core runtime layer
   Render layer
   Optional ImGui/debug layer
-  Optional editor layer
+  Editor layer in the editor target only
   Future scripting layer
 
 SceneManager
@@ -101,9 +123,51 @@ IRenderer implementations
 
 The important shift is that `Scene` is not a polymorphic gameplay object. It is loaded data plus registered ECS systems. Temporary C++ adapters are allowed only to bridge existing demos.
 
+The second important shift is that the executable target is not the architecture boundary. The editor is a separate product target, but it should use the same engine runtime, scene model, asset database, and renderer services as the game/runtime app. Differences between game and editor belong in CMake targets, linked libraries, layer installation, and enabled services.
+
+## Build Targets And Library Boundaries
+
+Long-term build products should be explicit:
+
+| Target | Role | Linkage direction |
+|--------|------|-------------------|
+| `metalrender` or renamed runtime app | Main game/runtime host for data-authored scenes | Links runtime, scene, assets runtime, render, platform, core |
+| `metalrender_editor` | Editor host | Links runtime plus editor-only assets/tools/UI libraries |
+| `teng-shaderc` and future tools | CLI processing and validation | Link only the libraries they need; avoid renderer/device startup for data tools |
+| `vktest` | Temporary compatibility harness | Deleted or reduced to a sample once runtime scene loading replaces static presets |
+
+The current CMake split already has internal object-library buckets (`teng_core`, `teng_platform`, `teng_gfx`, `teng_engine`) and shared/static aggregates (`teng`, `teng_static`). That is useful scaffolding, but the long-term split needs stronger ownership:
+
+- `teng_core`: logging, files, math/common utilities, IDs, no renderer, no Flecs runtime ownership.
+- `teng_assets_runtime`: read-only registry/manifest lookup, typed CPU asset cache, source-independent runtime loading.
+- `teng_assets_tools` or `teng_editor_assets`: project scanning, import/reimport, sidecar writes, move/delete/fixup, generated scene authoring support.
+- `teng_scene`: Flecs scene/world, core components, scene serialization/loading, stable entity IDs.
+- `teng_render`: `RenderService`, render extraction boundary, renderer-facing residency services.
+- `teng_gfx`: RHI, render graph, shader management, renderer internals, GPU residency implementations.
+- `teng_editor`: editor layers, inspectors, hierarchy, editor commands, asset/scene authoring UI.
+
+The exact target names can change, but the dependency direction should not:
+
+```text
+editor exe -> teng_editor -> assets_tools -> assets_runtime -> core
+                       \-> runtime/scene/render/gfx/platform
+
+game exe   -> runtime/scene/render/assets_runtime/gfx/platform/core
+
+tools      -> core/assets_tools/scene serialization as needed
+```
+
+Rules:
+
+- Shipped runtime targets should not link editor-only asset mutation/import UI code.
+- Editor and runtime should share the same scene serialization, asset IDs, runtime registry records, and renderer-facing scene extraction.
+- Tooling that only creates or validates scene/asset data should not depend on `RenderService`, Vulkan, Metal, or window creation.
+- Flecs still needs one runtime instance per process. Public headers that force downstream code to inline Flecs APIs should stay inside the same linkage model or use the static aggregate for tests, per `plans/library_linkage_architecture_plan.md`.
+- Do not promote shared-library boundaries until there is a real consumer. Static/internal targets are fine while the ABI surface is still moving.
+
 ## Layer Model
 
-The engine should use layers because runtime, debug UI, editor, and future scripting need different build/run compositions without forking the architecture.
+The engine should use layers because runtime, debug UI, editor, and future scripting need different build/run compositions without forking the architecture. Layer composition is a runtime mechanism; editor ownership is a build-target decision. The editor target installs editor layers, while the game/runtime target does not link or install editor-only code.
 
 For Phase 1 tick/layer ownership boundaries, layer ordering, and ImGui lifecycle constraints (captured during the runtime shell work), see `plans/engine_tick_layer_design.md`.
 
@@ -136,7 +200,7 @@ Expected early layers:
 - `RuntimeLayer`: advances simulation for the active scene when simulation is running.
 - `RenderLayer`: extracts render data and presents.
 - `ImGuiDebugLayer`: owns generic debug panels and developer toggles.
-- `EditorLayer`: build-flagged layer that inspects and edits scene data.
+- `EditorLayer`: editor-target layer that inspects and edits scene data.
 - `CompatibilityVktestLayer`: temporary `vktest` layer for demo presets, `ResourceManager` bootstrap, and UI hooks; rendering goes through `RenderService` (`enqueue_active_scene`).
 
 The layer stack should support editor play/stop by allowing the editor layer to pause simulation updates while still ticking input, UI, resource processing, and rendering.
@@ -155,7 +219,7 @@ struct EngineConfig {
   gfx::rhi::GfxAPI preferred_gfx_api;
   std::string app_name;
   bool enable_imgui = true;
-  bool enable_editor = false;
+  bool enable_editor_services = false;
   bool vsync = true;
   int initial_window_width = -1;
   int initial_window_height = -1;
@@ -196,6 +260,8 @@ Engine-owned responsibilities:
 - ImGui context/frame lifecycle if an ImGui layer is installed.
 - Layer attach/detach/update order.
 - Coordinated shutdown.
+
+Editor-only responsibilities should not become unconditional `Engine` responsibilities. The editor target can enable services for scene editing, asset mutation, undo/redo, selection, gizmos, import/reimport, and play-mode orchestration, but the runtime executable should remain able to load data scenes without linking those systems.
 
 Backend support rule: `Engine` may choose Vulkan or Metal through config/factory selection, but engine-level code should not include backend-specific renderer logic unless isolated behind platform/backend implementations.
 
@@ -389,11 +455,13 @@ This section names temporary structures so they do not accidentally become archi
 Scaffolding role:
 
 - Thin `vktest` executable over `Engine`.
-- Smoke-test host.
+- Temporary smoke-test host for meshlet/demo compatibility.
 
 Retire or shrink when:
 
-- Another binary is the primary harness and `TestApp` has nothing left to own.
+- The main runtime app can load a scene asset or manifest and run a bounded smoke test.
+- Static demo presets have been converted into generated scene data.
+- Renderer/resource compatibility wiring no longer requires `CompatibilityVktestLayer`.
 
 ### `CompatibilityVktestLayer`
 
@@ -403,7 +471,9 @@ Scaffolding role:
 
 Retire when:
 
-- Demos do not need global `ResourceManager` or preset hotkeys, or those move into a small game/editor module with explicit ownership.
+- The runtime app can select/load scene assets by ID/path/manifest.
+- Preset selection is data selection, not C++ scene construction.
+- Generic debug UI lives in debug/editor layers instead of a `vktest` compatibility layer.
 
 ### `DemoSceneEcsBridge` / `teng::gfx::demo_scene_compat`
 
@@ -416,6 +486,7 @@ Scaffolding role:
 Retire when:
 
 - Engine asset service loads models; scene code never touches `ResourceManager` directly.
+- Demo presets are generated by Python or CLI tools into scene assets with stable IDs instead of authored as C++ branches.
 
 ### `ResourceManager` Singleton
 
@@ -428,6 +499,18 @@ Retire or wrap when:
 - Engine asset service owns asset identity/loading.
 - GPU residency is owned by a non-global service (or by `RenderService` in a way that is not a static singleton).
 - Scene components store stable `AssetId`s; runtime `ModelHandle` stays out of scene data.
+
+### `apps/common/ScenePresets.*`
+
+Scaffolding role:
+
+- C++ description of numbered demo presets and model path lists.
+
+Retire when:
+
+- Equivalent preset scenes are generated into durable scene assets by Python or a small CLI.
+- The generated data records entity IDs, transforms, camera, light, model `AssetId`s, and deterministic random seeds/results where needed.
+- Runtime and editor can load those scenes without linking `apps/common`.
 
 ## Revised Migration Phases
 
@@ -577,54 +660,101 @@ Exit criteria:
 
 ### Phase 6: Asset Service Boundary
 
+Status: in progress. See `plans/asset_registry_implementation_plan.md` for the detailed asset registry/resource-service plan.
+
 Deliverables:
 
-- Add engine-owned asset/resource service.
-- Define stable asset registry format with generated durable asset IDs plus source path, importer metadata, import settings, and source content hash metadata.
-- Resolve `AssetId` to CPU asset data.
-- Let renderer service handle GPU residency for assets.
-- Wrap or replace `ResourceManager` singleton.
+- Finish engine-owned asset/resource service enough for scenes to resolve `AssetId` to CPU asset data without `ResourceManager`.
+- Keep stable asset registry records, sidecar metadata, source paths, importer metadata, import settings, dependencies, and source content hashes outside scene components.
+- Split runtime asset loading from editor/tool asset mutation:
+  - Runtime side: read registry/manifest, load typed CPU assets, expose cache/lease state.
+  - Tool/editor side: scan project, register assets, write sidecars, import/reimport, move/delete/fixup.
+- Refactor model loading so CPU model import can feed renderer residency without going through global `ResourceManager`.
+- Let renderer service handle GPU residency for assets behind a render boundary.
+- Wrap or replace `ResourceManager` singleton, then delete it when call sites are gone.
 
 Scaffolding retired or isolated:
 
 - Direct runtime dependence on global `ResourceManager`.
+- `RenderService::model_gpu_mgr()` exposure to app/demo compatibility code.
+- `AssetId::from_path()` use in serialized or newly generated scene data.
 
 Exit criteria:
 
 - Scene components refer to stable `AssetId`s.
+- Runtime scene/demo code can resolve `AssetId -> ModelAsset` without `ResourceManager`.
 - Renderer code can acquire GPU resources without scene code storing GPU handles.
+- GPU-free asset service tests cover registry lookup and CPU model load.
 
-### Phase 7: 2D Runtime Path
+### Phase 7: Data Scene Authoring And Runtime App Handoff
 
 Deliverables:
 
-- Add minimal sprite components and extraction.
+- Bring the main runtime app target (`apps/metalrender` or a renamed successor) back into the normal build.
+- Add runtime CLI arguments for loading a scene asset or manifest, plus a bounded `--quit-after-frames` path equivalent to the current `vktest` smoke run.
+- Add scene serialization/loading for the subset needed by current demo presets: entities, stable entity IDs, transforms, camera, directional light, mesh renderables, and referenced `AssetId`s.
+- Add Python scripts or a small CLI tool that registers demo model assets and generates scene asset data from the current static preset definitions.
+- Make the generator idempotent: rerunning it updates existing scene/asset metadata instead of minting new IDs.
+- Move numbered preset selection from "execute C++ preset branch" to "load generated scene asset".
+- Keep any random demo presets deterministic by writing generated results or fixed seeds into scene metadata.
+
+Exit criteria:
+
+- The main runtime app can render at least one generated meshlet demo scene from data.
+- The main runtime app has a bounded smoke command and can replace `vktest --quit-after-frames 30` in validation.
+- `DemoSceneEcsBridge` no longer owns `AssetId -> path`, model loading, or transform sync.
+- `apps/common/ScenePresets.*` is no longer linked by the runtime app.
+
+### Phase 8: Library Split For Runtime, Tools, And Editor
+
+Deliverables:
+
+- Split CMake targets so runtime asset loading and editor/tool asset mutation are separate link units.
+- Keep scene serialization/loading reusable by runtime, editor, and data-generation tools.
+- Keep renderer/device/window dependencies out of pure asset registry, scene-data generation, and validation tools.
+- Decide whether `teng` remains a shared aggregate for app-facing runtime code or whether the main runtime/editor targets link a static engine stack during migration.
+- Preserve the single-Flecs-runtime invariant across shared/static variants.
+
+Exit criteria:
+
+- Runtime app does not link editor-only asset authoring or editor UI code.
+- Asset generation/validation tools can run without initializing window/device/renderer.
+- Editor target can link the authoring/tooling libraries intentionally instead of borrowing `vktest` code.
+
+### Phase 9: Separate Editor Target Foundation
+
+Deliverables:
+
+- Add a `metalrender_editor` executable target.
+- Add `teng_editor` or equivalent editor-only library for editor layers, hierarchy, inspector, editor commands, and asset/scene authoring UI.
+- Add `EditorLayer` using ImGui in the editor target only.
+- Add hierarchy view from Flecs entities.
+- Add component inspector for registered core components.
+- Add play/stop simulation model.
+- Add scene reload flow.
+- Reuse the same scene serialization, asset database, runtime asset service, and render service as the runtime app.
+
+Exit criteria:
+
+- Editor runs on the same runtime libraries as the game app, but as a separate executable target.
+- Editor can inspect and edit a data scene.
+- Play mode can start/stop without restarting the app.
+- Runtime app remains usable without editor libraries.
+
+### Phase 10: 2D Runtime Path
+
+Deliverables:
+
+- Add minimal sprite components and extraction if the existing component shape is not enough.
 - Add simple 2D renderer or 2D path inside a renderer implementation.
-- Support a small 2D sample scene.
+- Support a small 2D sample scene authored as data.
 
 Exit criteria:
 
 - Engine can run a simple data-authored 2D scene.
 - 2D support does not require meshlet renderer code.
 
-### Phase 8: Editor Layer Foundation
-
-Deliverables:
-
-- Add build flag for editor layer.
-- Add `EditorLayer` using ImGui.
-- Add hierarchy view from Flecs entities.
-- Add component inspector for registered core components.
-- Add play/stop simulation model.
-- Add scene reload flow.
-
-Exit criteria:
-
-- Editor runs on the same runtime.
-- Editor can inspect and edit a data scene.
-- Play mode can start/stop without restarting the app.
-
-### Phase 9: Scripting Preparation
+### Phase 11: Scripting Preparation
 
 Deliverables:
 
@@ -718,8 +848,42 @@ scene path and made `gfx::MeshletRenderer` the real `IRenderer` for the default
 5. Validation: `./scripts/agent_verify.sh` and
    `./build/Debug/bin/vktest --quit-after-frames 30`.
 
-Current next implementation work: Phase 6 asset/resource service, then Phase 7 2D
-path. `ResourceManager` and `demo_scene_compat` remain until then.
+Current next implementation work: finish Phase 6 asset/resource service, then Phase 7 data scene authoring and runtime app handoff. `ResourceManager`, `demo_scene_compat`, and `vktest` remain only until generated scene assets can run through the main runtime app.
+
+## Immediate Next Work To Retire `vktest`
+
+The next practical goal is not "make an editor" first. It is to make the normal runtime app load real data. The editor target should come after the data and library boundaries exist.
+
+1. Finish the asset service bridge:
+   - CPU model assets resolve from registered `AssetId`s.
+   - `ModelGPUMgr` or its bridge uploads CPU model data without `ResourceManager`.
+   - Render extraction/residency owns per-entity model instance state.
+
+2. Add minimal scene asset serialization/loading:
+   - Support only the currently needed components first: entity GUID/name, transform/local-to-world, camera, directional light, mesh renderable.
+   - Keep the format tool-friendly and stable enough for generated data.
+   - Loading a scene asset creates a Flecs world through `SceneManager`.
+
+3. Generate current demo presets as data:
+   - Add Python scripts under `scripts/` to register model assets and write scene assets for the current numbered presets.
+   - Reuse current `apps/common/ScenePresets.*` only as migration input if needed; do not make the runtime depend on it.
+   - Preserve deterministic random scenes by writing generated entities or recorded seeds into the scene metadata.
+
+4. Promote the main runtime app:
+   - Re-enable or replace `apps/metalrender` as the primary data-scene host.
+   - Add `--scene <asset-id-or-path>` and `--quit-after-frames N`.
+   - Move validation from `vktest --quit-after-frames 30` to the runtime app once it renders generated scene data.
+
+5. Delete compatibility code:
+   - Remove `DemoSceneEcsBridge` once scene loading covers the generated presets.
+   - Remove `CompatibilityVktestLayer` once generic runtime/debug layers cover the remaining app behavior.
+   - Remove `apps/common/ScenePresets.*` after scripts/data are the source of demo content.
+   - Delete or demote `vktest` to a tiny sample only after the main runtime smoke test is the guardrail.
+
+6. Split editor/tool libraries:
+   - Separate runtime registry loading from authoring/import/fixup code before adding `metalrender_editor`.
+   - Keep Python/CLI generation and validation GPU-free.
+   - Add the editor target once it can stand on runtime scene loading and asset services rather than `vktest` scaffolding.
 
 ## Validation Strategy
 
@@ -735,6 +899,12 @@ Smoke test:
 ./build/Debug/bin/vktest --quit-after-frames 30
 ```
 
+After Phase 7, replace the smoke command with the main runtime app loading a generated scene asset:
+
+```bash
+./build/Debug/bin/metalrender --scene <generated-scene> --quit-after-frames 30
+```
+
 For shader or shared HLSL changes, rely on `agent_verify.sh` because it runs `teng-shaderc --all`.
 
 ## Open Follow-Up Design Notes
@@ -743,8 +913,9 @@ These should become small plans before the related implementation phase. Current
 triage after the first Phase 3 slice:
 
 1. Flecs submodule/CMake integration plan: done. Covered by `plans/flecs_scene_foundation_design.md` and the completed Phase 2 implementation. No new doc needed unless the Flecs version/pin policy changes.
-2. Stable ID and asset handle design note: partially done. `SceneId`, `EntityGuid`, and path-derived `AssetId` exist. The long-term answer is an asset registry with generated durable IDs plus source/import metadata; fold the detailed registry/resource-service design into the asset service boundary work before Phase 6.
-3. Editor play-mode semantics: not needed yet. Write this before Phase 8, after runtime scenes and renderer extraction are stable for editor use.
+2. Stable ID and asset handle design note: done enough to proceed. `AssetId` is now a 128-bit generated identity with registry/database storage; continue detailed work in `plans/asset_registry_implementation_plan.md`.
+3. Editor play-mode semantics: not needed yet. Write this before Phase 9, after runtime scene loading and renderer residency no longer depend on `vktest`.
 4. RenderScene schema for 2D plus 3D: first implementation done for Phase 3 in `src/engine/render/RenderScene.hpp`. The companion note `plans/render_service_extraction_design.md` is outdated (it still references removed `TestRenderer` types); refresh it when editing renderer docs.
-5. Asset service boundary and `ResourceManager` retirement plan: next major doc/code milestone. Meshlet `IRenderer` extraction is done; `ModelGPUMgr` + `ResourceManager` ownership should be revisited as part of Phase 6. The `AssetId -> path -> ResourceManager` bridge in `demo_scene_compat` is temporary compatibility code.
+5. Asset service boundary and `ResourceManager` retirement plan: active major milestone. Meshlet `IRenderer` extraction is done; `ModelGPUMgr` + `ResourceManager` ownership should be resolved as part of Phase 6. The `AssetId -> path -> ResourceManager` bridge in `demo_scene_compat` is temporary compatibility code.
 6. Metal validation plan for `EngineConfig` backend selection: useful but not blocking Phase 3. Write before backend-specific renderer/service changes or before any migration slice that claims Metal parity.
+7. Library split plan: `plans/library_linkage_architecture_plan.md` now needs a follow-up implementation slice for runtime/assets/editor/tool targets once Phase 6 clarifies which code is runtime-only versus authoring-only.

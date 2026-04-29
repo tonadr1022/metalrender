@@ -1,0 +1,12 @@
+schema_version = 1
+id = "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+type = "model"
+source_path = "models/Cube/glTF/Cube.gltf"
+display_name = "Cube"
+importer = "gltf"
+importer_version = 1
+source_content_hash = "fnv1a64:8c0e219d1b643d5a"
+imported_artifact_hash = ""
+status = "available"
+dependencies = []
+labels = [ "demo" ]

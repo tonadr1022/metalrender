@@ -36,6 +36,18 @@ struct ModelAssetLoadResult {
   const ModelAsset* asset{};
 };
 
+struct ModelAssetImport {
+  AssetId id;
+  std::filesystem::path source_path;
+  ModelInstance model;
+  gfx::ModelLoadResult load_result;
+};
+
+struct ModelAssetImportResult {
+  AssetLoadStatus status{AssetLoadStatus::MissingAsset};
+  std::unique_ptr<ModelAssetImport> asset;
+};
+
 class AssetService {
  public:
   explicit AssetService(AssetServiceConfig config);
@@ -44,8 +56,10 @@ class AssetService {
   [[nodiscard]] const AssetDatabase& database() const { return database_; }
   [[nodiscard]] AssetScanReport scan() { return database_.scan(); }
   [[nodiscard]] ModelAssetLoadResult load_model(AssetId id);
+  [[nodiscard]] ModelAssetImportResult import_model_for_upload(AssetId id);
 
  private:
+  [[nodiscard]] AssetLoadStatus validate_model_asset(AssetId id, const AssetRecord*& out_record) const;
   [[nodiscard]] std::filesystem::path absolute_source_path(
       const std::filesystem::path& source_path) const;
 

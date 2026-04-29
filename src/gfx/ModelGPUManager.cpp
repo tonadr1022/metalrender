@@ -38,9 +38,16 @@ bool ModelGPUMgr::load_model(const std::filesystem::path& path, const glm::mat4&
   if (!::teng::gfx::load_model(path, root_transform, model, result)) {
     return false;
   }
-  upload_model(result, model, *device_, pending_texture_uploads_, materials_buf_, buffer_copy_mgr_,
-               static_draw_batch_, out_handle, model_gpu_resource_pool_);
+  upload_model(result, model, out_handle);
   return true;
+}
+
+void ModelGPUMgr::upload_model(ModelLoadResult& result, ModelInstance& model,
+                               ModelGPUHandle& out_handle) {
+  ZoneScoped;
+  ::teng::gfx::upload_model(result, model, *device_, pending_texture_uploads_, materials_buf_,
+                            buffer_copy_mgr_, static_draw_batch_, out_handle,
+                            model_gpu_resource_pool_);
 }
 
 void ModelGPUMgr::reserve_space_for(std::span<std::pair<ModelGPUHandle, uint32_t>> models) {
@@ -85,9 +92,9 @@ ModelInstanceGPUHandle ModelGPUMgr::add_model_instance(ModelInstance& model,
     instance_datas[i].rotation = transform.rotation;
     instance_datas[i].scale = transform.scale;
     instance_datas[i].meshlet_vis_base += instance_data_gpu_alloc.meshlet_vis_alloc.offset;
-    size_t mesh_id = model.mesh_ids[node_i];
+    const size_t mesh_id = model.mesh_ids[node_i];
     auto& mesh = model_resources->meshes[mesh_id];
-    IndexedIndirectDrawCmd cmd{
+    const IndexedIndirectDrawCmd cmd{
         .index_count = mesh.index_count,
         .instance_count = 1,
         .first_index = static_cast<uint32_t>(

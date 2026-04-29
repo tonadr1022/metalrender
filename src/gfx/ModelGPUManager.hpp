@@ -36,6 +36,7 @@ class ModelGPUMgr {
 
   bool load_model(const std::filesystem::path& path, const glm::mat4& root_transform,
                   ModelInstance& model, ModelGPUHandle& out_handle);
+  void upload_model(ModelLoadResult& result, ModelInstance& model, ModelGPUHandle& out_handle);
   void set_curr_frame_idx(uint32_t curr_frame_idx) { curr_frame_idx_ = curr_frame_idx; }
   void reserve_space_for(std::span<std::pair<ModelGPUHandle, uint32_t>> models);
   ModelInstanceGPUHandle add_model_instance(ModelInstance& model, ModelGPUHandle model_gpu_handle);

@@ -10,12 +10,12 @@
 #include <vector>
 
 #include "DemoSceneEcsBridge.hpp"
-#include "ResourceManager.hpp"
 #include "ScenePresets.hpp"
 #include "Util.hpp"
 #include "core/EAssert.hpp"
 #include "engine/Engine.hpp"
 #include "engine/ImGuiOverlayLayer.hpp"
+#include "engine/assets/AssetService.hpp"
 #include "engine/render/RenderService.hpp"
 #include "engine/scene/Scene.hpp"
 #include "engine/scene/SceneManager.hpp"
@@ -35,17 +35,13 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
     ALWAYS_ASSERT(RenderGraph::run_barrier_coalesce_self_tests());
     gfx::apply_renderer_cvar_device_constraints(true);
 
-    ResourceManager::init(
-        ResourceManager::CreateInfo{.model_gpu_mgr = ctx.renderer().model_gpu_mgr()});
+    (void)ctx.assets().scan();
     teng::demo_scenes::seed_demo_scene_rng(10000000);
     load_scene_presets(ctx);
     apply_demo_scene_preset(ctx, 0);
   }
 
-  void on_detach(teng::engine::EngineContext& ctx) override {
-    demo_scene_compat::clear_loaded_models(ctx.scenes());
-    ResourceManager::shutdown();
-  }
+  void on_detach(teng::engine::EngineContext& ctx) override { (void)ctx; }
 
   void on_key_event(teng::engine::EngineContext& ctx, int key, int action, int mods) override {
     if (action == GLFW_PRESS && key >= GLFW_KEY_0 && key <= GLFW_KEY_9 &&
@@ -72,12 +68,6 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
     imgui_meshlet_renderer(ctx);
   }
 
-  void on_update(teng::engine::EngineContext& ctx, const teng::engine::EngineTime&) override {
-    if (teng::engine::Scene* scene = ctx.scenes().active_scene()) {
-      demo_scene_compat::sync_loaded_model_transforms(*scene);
-    }
-  }
-
   void on_render(teng::engine::EngineContext& ctx) override {
     ctx.renderer().enqueue_active_scene();
   }
@@ -96,7 +86,8 @@ class CompatibilityVktestLayer final : public teng::engine::Layer {
     const auto& preset = scene_presets_[idx];
     scene_preset_selection_ = idx;
     [[maybe_unused]] const demo_scene_compat::DemoSceneEntityGuids guids =
-        demo_scene_compat::apply_demo_preset_to_scene(ctx.scenes(), preset, ctx.resource_dir());
+        demo_scene_compat::apply_demo_preset_to_scene(ctx.scenes(), preset, ctx.resource_dir(),
+                                                      ctx.assets().database());
   }
 
   void imgui_meshlet_renderer(teng::engine::EngineContext& ctx) {

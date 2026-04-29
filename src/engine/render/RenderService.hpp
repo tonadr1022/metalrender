@@ -34,6 +34,10 @@ namespace engine {
 class IRenderer;
 class SceneManager;
 struct EngineTime;
+namespace assets {
+class AssetService;
+}
+class RenderModelResidencyService;
 
 class RenderService {
  public:
@@ -42,6 +46,7 @@ class RenderService {
     gfx::rhi::Swapchain* swapchain{};
     Window* window{};
     SceneManager* scenes{};
+    assets::AssetService* assets{};
     const EngineTime* time{};
     std::filesystem::path resource_dir;
     bool imgui_ui_active{};
@@ -71,7 +76,6 @@ class RenderService {
   [[nodiscard]] const RenderFrameContext& frame_context() const { return frame_; }
   [[nodiscard]] const RenderScene& last_extracted_scene() const { return last_extracted_scene_; }
   [[nodiscard]] gfx::RenderGraph& render_graph() { return render_graph_; }
-  [[nodiscard]] gfx::ModelGPUMgr* model_gpu_mgr() const { return model_gpu_mgr_.get(); }
 
  private:
   void update_frame_context();
@@ -82,6 +86,7 @@ class RenderService {
   gfx::rhi::Swapchain* swapchain_{};
   Window* window_{};
   SceneManager* scenes_{};
+  assets::AssetService* assets_{};
   const EngineTime* time_{};
   std::filesystem::path resource_dir_;
   std::unique_ptr<gfx::ShaderManager> shader_mgr_;
@@ -89,6 +94,7 @@ class RenderService {
   std::unique_ptr<gfx::BufferCopyMgr> buffer_copy_mgr_;
   std::unique_ptr<gfx::ImGuiRenderer> imgui_renderer_;
   std::unique_ptr<gfx::ModelGPUMgr> model_gpu_mgr_;
+  std::unique_ptr<RenderModelResidencyService> model_residency_;
   std::unique_ptr<IRenderer> renderer_;
   gfx::RenderGraph render_graph_;
   RenderFrameContext frame_;

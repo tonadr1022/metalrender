@@ -1,7 +1,6 @@
 #include "AssetServiceSmokeTest.hpp"
 
 #include <fstream>
-#include <glm/mat4x4.hpp>
 #include <string_view>
 #include <utility>
 
@@ -116,7 +115,15 @@ bool run_asset_service_smoke_test() {
   if (loaded_again.status != AssetLoadStatus::Ok || loaded_again.asset != loaded.asset) {
     return false;
   }
+  ModelAssetImportResult imported = scanned_service.import_model_for_upload(model_id);
+  if (imported.status != AssetLoadStatus::Ok || !imported.asset ||
+      imported.asset->load_result.meshes.empty() || imported.asset->model.nodes.empty()) {
+    return false;
+  }
   if (scanned_service.load_model(test_id(2)).status != AssetLoadStatus::WrongType) {
+    return false;
+  }
+  if (scanned_service.import_model_for_upload(test_id(2)).status != AssetLoadStatus::WrongType) {
     return false;
   }
   if (scanned_service.load_model(test_id(99)).status != AssetLoadStatus::MissingAsset) {

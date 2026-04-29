@@ -17,16 +17,10 @@ ModelAssetLoadResult AssetService::load_model(AssetId id) {
     return {.status = AssetLoadStatus::Ok, .asset = it->second.get()};
   }
 
-  const AssetRecord* record = database_.find(id);
-  if (!record || record->status == AssetRecordStatus::Tombstoned) {
-    return {.status = AssetLoadStatus::MissingAsset};
-  }
-  if (record->type.value != "model") {
-    return {.status = AssetLoadStatus::WrongType};
-  }
-  if (record->status == AssetRecordStatus::MissingSource ||
-      !std::filesystem::is_regular_file(absolute_source_path(record->source_path))) {
-    return {.status = AssetLoadStatus::MissingSource};
+  const AssetRecord* record{};
+  const AssetLoadStatus status = validate_model_asset(id, record);
+  if (status != AssetLoadStatus::Ok) {
+    return {.status = status};
   }
 
   auto asset = std::make_unique<ModelAsset>();
@@ -40,6 +34,40 @@ ModelAssetLoadResult AssetService::load_model(AssetId id) {
   const ModelAsset* loaded = asset.get();
   model_assets_.emplace(id, std::move(asset));
   return {.status = AssetLoadStatus::Ok, .asset = loaded};
+}
+
+ModelAssetImportResult AssetService::import_model_for_upload(AssetId id) {
+  const AssetRecord* record{};
+  const AssetLoadStatus status = validate_model_asset(id, record);
+  if (status != AssetLoadStatus::Ok) {
+    return {.status = status};
+  }
+
+  auto asset = std::make_unique<ModelAssetImport>();
+  asset->id = id;
+  asset->source_path = record->source_path;
+  if (!gfx::load_model(absolute_source_path(record->source_path), glm::mat4{1}, asset->model,
+                       asset->load_result)) {
+    return {.status = AssetLoadStatus::ImportFailed};
+  }
+
+  return {.status = AssetLoadStatus::Ok, .asset = std::move(asset)};
+}
+
+AssetLoadStatus AssetService::validate_model_asset(AssetId id, const AssetRecord*& out_record) const {
+  const AssetRecord* record = database_.find(id);
+  if (!record || record->status == AssetRecordStatus::Tombstoned) {
+    return AssetLoadStatus::MissingAsset;
+  }
+  if (record->type.value != "model") {
+    return AssetLoadStatus::WrongType;
+  }
+  if (record->status == AssetRecordStatus::MissingSource ||
+      !std::filesystem::is_regular_file(absolute_source_path(record->source_path))) {
+    return AssetLoadStatus::MissingSource;
+  }
+  out_record = record;
+  return AssetLoadStatus::Ok;
 }
 
 std::filesystem::path AssetService::absolute_source_path(

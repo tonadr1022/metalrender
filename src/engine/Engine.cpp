@@ -162,6 +162,7 @@ void Engine::init() {
       .project_root = resource_dir_.parent_path(),
       .content_root = resource_dir_.filename(),
   });
+  (void)assets_->scan();
   context_.assets_ = assets_.get();
   context_.scenes_ = &scenes_;
   context_.time_ = &time_;
@@ -173,6 +174,7 @@ void Engine::init() {
       .swapchain = context_.swapchain_,
       .window = window_.get(),
       .scenes = &scenes_,
+      .assets = assets_.get(),
       .time = &time_,
       .resource_dir = resource_dir_,
       .imgui_ui_active = imgui_enabled_,

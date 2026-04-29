@@ -221,8 +221,8 @@ AssetScanReport AssetDatabase::scan() {
 
   std::vector<std::filesystem::path> sidecars;
   std::vector<std::filesystem::path> sources;
-  for (const std::filesystem::directory_entry& entry :
-       std::filesystem::recursive_directory_iterator(root, ec)) {
+  for (const std::filesystem::directory_entry& entry : std::filesystem::recursive_directory_iterator(
+           root, std::filesystem::directory_options::follow_directory_symlink, ec)) {
     if (ec || !entry.is_regular_file(ec)) {
       continue;
     }

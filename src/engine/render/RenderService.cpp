@@ -4,12 +4,15 @@
 #include <glm/ext/vector_int2.hpp>
 #include <memory>
 #include <tracy/Tracy.hpp>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #include "Window.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"  // IWYU pragma: keep
 #include "engine/Engine.hpp"
+#include "engine/assets/AssetService.hpp"
 #include "engine/render/IRenderer.hpp"
 #include "engine/render/RenderScene.hpp"
 #include "engine/render/RenderSceneExtractor.hpp"
@@ -33,6 +36,157 @@
 
 namespace teng::engine {
 
+namespace {
+
+[[nodiscard]] bool same_matrix(const glm::mat4& a, const glm::mat4& b) {
+  for (glm::length_t col = 0; col < 4; ++col) {
+    for (glm::length_t row = 0; row < 4; ++row) {
+      if (a[col][row] != b[col][row]) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+}  // namespace
+
+class RenderModelResidencyService {
+ public:
+  RenderModelResidencyService(assets::AssetService& assets, gfx::ModelGPUMgr& model_gpu_mgr)
+      : assets_(assets), model_gpu_mgr_(model_gpu_mgr) {}
+
+  ~RenderModelResidencyService() { clear_instances(); }
+
+  void reconcile(const RenderScene& scene) {
+    std::vector<std::pair<ModelGPUHandle, uint32_t>> reserve_requests;
+    reserve_requests.reserve(scene.meshes.size());
+    for (const RenderMesh& mesh : scene.meshes) {
+      if (!mesh.model.is_valid() || entity_instances_.contains(mesh.entity)) {
+        continue;
+      }
+      ModelResidency* model = ensure_model_resident(mesh.model);
+      if (model) {
+        reserve_requests.emplace_back(model->gpu_handle, 1);
+      }
+    }
+    if (!reserve_requests.empty()) {
+      model_gpu_mgr_.reserve_space_for(reserve_requests);
+    }
+
+    std::unordered_set<EntityGuid> seen;
+    seen.reserve(scene.meshes.size());
+    for (const RenderMesh& mesh : scene.meshes) {
+      seen.insert(mesh.entity);
+      reconcile_mesh(mesh);
+    }
+
+    std::vector<EntityGuid> removed;
+    for (const auto& [entity, instance] : entity_instances_) {
+      (void)instance;
+      if (!seen.contains(entity)) {
+        removed.push_back(entity);
+      }
+    }
+    for (const EntityGuid entity : removed) {
+      free_entity_instance(entity);
+    }
+  }
+
+  void clear_instances() {
+    std::vector<EntityGuid> entities;
+    entities.reserve(entity_instances_.size());
+    for (const auto& [entity, instance] : entity_instances_) {
+      (void)instance;
+      entities.push_back(entity);
+    }
+    for (const EntityGuid entity : entities) {
+      free_entity_instance(entity);
+    }
+  }
+
+ private:
+  struct ModelResidency {
+    ModelInstance model;
+    ModelGPUHandle gpu_handle;
+  };
+
+  struct EntityInstance {
+    AssetId model;
+    glm::mat4 local_to_world{1.f};
+    ModelInstance instance;
+  };
+
+  void reconcile_mesh(const RenderMesh& mesh) {
+    if (!mesh.model.is_valid()) {
+      free_entity_instance(mesh.entity);
+      return;
+    }
+
+    const auto it = entity_instances_.find(mesh.entity);
+    if (it != entity_instances_.end() && it->second.model == mesh.model &&
+        same_matrix(it->second.local_to_world, mesh.local_to_world)) {
+      return;
+    }
+    if (it != entity_instances_.end()) {
+      free_entity_instance(mesh.entity);
+    }
+
+    ModelResidency* model = ensure_model_resident(mesh.model);
+    if (!model) {
+      return;
+    }
+
+    ModelInstance instance = model->model;
+    instance.set_transform(0, mesh.local_to_world);
+    instance.update_transforms();
+    instance.instance_gpu_handle = model_gpu_mgr_.add_model_instance(instance, model->gpu_handle);
+    instance.model_gpu_handle = model->gpu_handle;
+    entity_instances_.emplace(mesh.entity, EntityInstance{
+                                               .model = mesh.model,
+                                               .local_to_world = mesh.local_to_world,
+                                               .instance = std::move(instance),
+                                           });
+  }
+
+  ModelResidency* ensure_model_resident(AssetId asset_id) {
+    const auto it = models_.find(asset_id);
+    if (it != models_.end()) {
+      return &it->second;
+    }
+
+    assets::ModelAssetImportResult imported = assets_.import_model_for_upload(asset_id);
+    if (imported.status != assets::AssetLoadStatus::Ok || !imported.asset) {
+      LWARN("failed to import model asset {} for render upload: {}", asset_id.to_string(),
+            assets::to_string(imported.status));
+      return nullptr;
+    }
+
+    ModelGPUHandle gpu_handle;
+    model_gpu_mgr_.upload_model(imported.asset->load_result, imported.asset->model, gpu_handle);
+    auto [inserted, did_insert] = models_.emplace(asset_id, ModelResidency{
+                                                               .model = std::move(imported.asset->model),
+                                                               .gpu_handle = gpu_handle,
+                                                           });
+    ASSERT(did_insert);
+    return &inserted->second;
+  }
+
+  void free_entity_instance(EntityGuid entity) {
+    const auto it = entity_instances_.find(entity);
+    if (it == entity_instances_.end()) {
+      return;
+    }
+    model_gpu_mgr_.free_instance(it->second.instance.instance_gpu_handle);
+    entity_instances_.erase(it);
+  }
+
+  assets::AssetService& assets_;
+  gfx::ModelGPUMgr& model_gpu_mgr_;
+  std::unordered_map<AssetId, ModelResidency> models_;
+  std::unordered_map<EntityGuid, EntityInstance> entity_instances_;
+};
+
 RenderService::RenderService(const CreateInfo& cinfo) { init(cinfo); }
 
 RenderService::~RenderService() { shutdown(); }
@@ -43,12 +197,14 @@ void RenderService::init(const CreateInfo& cinfo) {
   ASSERT(cinfo.swapchain != nullptr);
   ASSERT(cinfo.window != nullptr);
   ASSERT(cinfo.scenes != nullptr);
+  ASSERT(cinfo.assets != nullptr);
   ASSERT(cinfo.time != nullptr);
 
   device_ = cinfo.device;
   swapchain_ = cinfo.swapchain;
   window_ = cinfo.window;
   scenes_ = cinfo.scenes;
+  assets_ = cinfo.assets;
   time_ = cinfo.time;
   resource_dir_ = cinfo.resource_dir;
 
@@ -60,6 +216,7 @@ void RenderService::init(const CreateInfo& cinfo) {
   imgui_renderer_ = std::make_unique<gfx::ImGuiRenderer>(*shader_mgr_, device_);
   render_graph_.init(device_);
   model_gpu_mgr_ = std::make_unique<gfx::ModelGPUMgr>(*device_, *buffer_copy_mgr_);
+  model_residency_ = std::make_unique<RenderModelResidencyService>(*assets_, *model_gpu_mgr_);
 
   frame_ = {};
   frame_.device = device_;
@@ -105,6 +262,7 @@ void RenderService::shutdown() {
     return;
   }
   renderer_.reset();
+  model_residency_.reset();
   samplers_.clear();
   model_gpu_mgr_.reset();
   render_graph_.shutdown();
@@ -118,6 +276,7 @@ void RenderService::shutdown() {
   swapchain_ = nullptr;
   window_ = nullptr;
   scenes_ = nullptr;
+  assets_ = nullptr;
   time_ = nullptr;
   frame_open_ = false;
   initialized_ = false;
@@ -173,6 +332,7 @@ void RenderService::enqueue_active_scene() {
                             .delta_seconds = time_->delta_seconds,
                             .output_extent = frame_.output_extent,
                         }};
+  model_residency_->reconcile(last_extracted_scene_);
   renderer_->render(frame_, last_extracted_scene_);
 }
 
@@ -233,6 +393,7 @@ void RenderService::render_scene(const RenderScene& scene) {
   ASSERT(renderer_ != nullptr);
 
   begin_frame();
+  model_residency_->reconcile(scene);
   renderer_->render(frame_, scene);
   end_frame();
 }
