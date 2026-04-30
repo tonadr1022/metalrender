@@ -8,7 +8,7 @@ From root:
 ./scripts/agent_verify.sh
 ```
 
-Configures CMake, builds app, runs `teng-shaderc --all`.
+Configures CMake, builds apps, runs `engine_scene_smoke`, and runs shader compile checks.
 Add `--format` to format.
 
 ### Target names
@@ -25,12 +25,14 @@ metalrender
 Smoke test (bounded run; avoids leaving the app open in automation):
 
 ```bash
+./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml --quit-after-frames 30
 ./build/Debug/bin/vktest --quit-after-frames 30
 ```
 
 Run without a frame limit (interactive, until the window is closed):
 
 ```bash
+./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml
 ./build/Debug/bin/vktest
 ```
 

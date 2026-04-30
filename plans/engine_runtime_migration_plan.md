@@ -1,6 +1,6 @@
 # Engine Runtime Migration Plan
 
-Status: Phase 6 asset bridge is implemented. `gfx::MeshletRenderer` is the default active renderer via `engine::RenderService`; meshlet passes, PSOs, CSM, depth pyramid, and draw prep live under `src/gfx/renderer/`. Generated 128-bit `AssetId`s, asset registry/database storage, project scanning, `AssetService`, one-shot model import for upload, and `RenderService`-owned model residency are in place. `vktest` still authors demo presets in C++, but it no longer initializes or calls global `ResourceManager`. The next major step is Phase 7: generate/load scene data instead of C++ demo presets, make the normal runtime app the primary game host, and then split editor/tool targets on top of the same runtime libraries.
+Status: Phase 7 has a minimal data-scene runtime path. `gfx::MeshletRenderer` is the default active renderer via `engine::RenderService`; generated 128-bit `AssetId`s, asset registry/database storage, `AssetService`, and `RenderService`-owned model residency are in place. `src/engine/scene/SceneAssetLoader.*` loads the first TOML scene subset into `SceneManager`, and `apps/metalrender` is back in the normal build as a thin Engine host with `--scene` and `--quit-after-frames`. The checked-in `resources/scenes/demo_cube.tscene.toml` validates the path with a registered Cube model asset. Remaining Phase 7 work is converting the numbered `vktest` presets into generated scene assets and retiring the C++ preset bridge.
 
 This plan treats the engine as a long-term runtime foundation used by separate products: a game/runtime executable, a separate editor executable, and small command-line tools. `vktest` is migration scaffolding only. It is useful while old meshlet demos are still being converted, but it should not remain the primary integration harness once scene assets and the runtime app can load data directly. The destination is a tick-driven, layer-composed engine with data-first Flecs scenes, stable IDs, renderer services, a normal runtime/game app for data-authored scenes, and a separate editor build target that links editor-only code. Legacy `TestRenderer` / `ITestScene` / `MeshletRendererTestScene` types from earlier drafts are no longer in the tree; do not reintroduce them as patterns.
 
@@ -43,7 +43,7 @@ This plan treats the engine as a long-term runtime foundation used by separate p
 
 ### `TestApp`
 
-`apps/vktest/TestApp.cpp` is a thin host over `engine::Engine`: it builds `EngineConfig`, pushes `CompatibilityVktestLayer` and `ImGuiOverlayLayer`, and calls `Engine::run()`. Demo preset hotkeys and meshlet debug UI live in the compatibility layer. Long term this executable should stop being the primary smoke-test entry; the main runtime app should take that role once it can load generated scene assets.
+`apps/vktest/TestApp.cpp` is a thin host over `engine::Engine`: it builds `EngineConfig`, pushes `CompatibilityVktestLayer` and `ImGuiOverlayLayer`, and calls `Engine::run()`. Demo preset hotkeys and meshlet debug UI live in the compatibility layer. It remains the compatibility harness for numbered C++ presets until those presets are generated as scene assets.
 
 ### `CompatibilityVktestLayer` (in `TestApp.cpp`)
 
@@ -59,7 +59,7 @@ Earlier migrations referred to `gfx::TestRenderer`, `ITestScene`, and `MeshletRe
 
 ### Current app/build shape
 
-`apps/CMakeLists.txt` currently builds `vktest`, `teng-shaderc`, and `engine_scene_smoke`; `apps/metalrender` exists but is not currently added to the build. The long-term primary runtime app should come from this main runtime target, not from `vktest`. Bringing that target back should happen after it can load a scene asset or runtime manifest through `SceneManager`/`AssetService`, not by copying the `CompatibilityVktestLayer` preset bridge.
+`apps/CMakeLists.txt` currently builds `vktest`, `metalrender`, `teng-shaderc`, and `engine_scene_smoke`. `apps/metalrender/main.cpp` is the primary data-scene host: it parses `--scene <path>` and `--quit-after-frames <n>`, loads the TOML scene through `SceneAssetLoader`, and renders the active `SceneManager` scene through `RenderService`. It intentionally does not link `apps/common/ScenePresets.*` or `apps/vktest/DemoSceneEcsBridge.*`.
 
 `src/CMakeLists.txt` currently aggregates core/platform/gfx/engine object libraries into shared `teng` and static `teng_static`. That organization is acceptable migration scaffolding. The next architecture step is not just adding more executables; it is splitting editor-only asset tooling and runtime asset loading so `metalrender_editor` and data-generation tools can link the authoring side without forcing the shipped runtime to carry it.
 
@@ -848,26 +848,38 @@ scene path and made `gfx::MeshletRenderer` the real `IRenderer` for the default
 5. Validation: `./scripts/agent_verify.sh` and
    `./build/Debug/bin/vktest --quit-after-frames 30`.
 
-Current next implementation work: Phase 7 data scene authoring and runtime app handoff. `DemoSceneEcsBridge`, `apps/common/ScenePresets.*`, and `vktest` remain only until generated scene assets can run through the main runtime app.
+Current next implementation work: finish Phase 7 by generating the remaining numbered demo presets as scene assets. `DemoSceneEcsBridge`, `apps/common/ScenePresets.*`, and `vktest` remain only until generated scene assets cover those presets.
+
+### Slice 6: Asset Service Boundary
+
+The sixth slice introduced generated 128-bit `AssetId`s, sidecar-backed asset registry/database storage, engine-owned `AssetService`, and `RenderService` model residency. `apps/vktest` and `src/engine` no longer use global `ResourceManager`; extracted `MeshRenderable{AssetId}` data resolves through `AssetService` and renderer-owned GPU residency.
+
+### Slice 7a: Minimal Scene Asset Runtime Path
+
+The first Phase 7 slice added `SceneAssetLoader` for a narrow TOML scene asset subset: entity GUID/name, transform/local-to-world, camera, directional light, and `MeshRenderable{AssetId}`. It added `resources/scenes/demo_cube.tscene.toml`, `scripts/generate_demo_cube_scene.py`, and re-enabled `apps/metalrender` as an Engine-based runtime app. Validation now includes:
+
+```bash
+./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml --quit-after-frames 30
+```
 
 ## Immediate Next Work To Retire `vktest`
 
-The next practical goal is not "make an editor" first. It is to make the normal runtime app load real data. The editor target should come after the data and library boundaries exist.
+The next practical goal is to convert the remaining C++ demo presets into generated scene data. The editor target should come after the data and library boundaries exist.
 
-1. Add minimal scene asset serialization/loading:
-   - Support only the currently needed components first: entity GUID/name, transform/local-to-world, camera, directional light, mesh renderable.
-   - Keep the format tool-friendly and stable enough for generated data.
-   - Loading a scene asset creates a Flecs world through `SceneManager`.
+1. Expand demo scene generation:
+   - Generate scene assets for the current numbered presets from `apps/common/ScenePresets.*` as migration input.
+   - Preserve deterministic random scenes by writing generated entities or recorded seeds into scene metadata.
+   - Keep generated scene data referencing registered `AssetId`s, not paths.
 
-2. Generate current demo presets as data:
-   - Add Python scripts under `scripts/` to register model assets and write scene assets for the current numbered presets.
-   - Reuse current `apps/common/ScenePresets.*` only as migration input if needed; do not make the runtime depend on it.
-   - Preserve deterministic random scenes by writing generated entities or recorded seeds into the scene metadata.
+2. Move preset selection onto scene assets:
+   - Load generated scene files through `SceneAssetLoader`.
+   - Keep `vktest` only as a temporary UI for selecting generated preset scene assets if needed.
+   - Do not make `metalrender` depend on `apps/common/ScenePresets.*`.
 
-3. Promote the main runtime app:
-   - Re-enable or replace `apps/metalrender` as the primary data-scene host.
-   - Add `--scene <asset-id-or-path>` and `--quit-after-frames N`.
-   - Move validation from `vktest --quit-after-frames 30` to the runtime app once it renders generated scene data.
+3. Tighten runtime validation:
+   - Keep `./scripts/agent_verify.sh` building `metalrender`.
+   - Use `metalrender --scene resources/scenes/demo_cube.tscene.toml --quit-after-frames 30` as the primary data-scene smoke.
+   - Keep `vktest --quit-after-frames 30` until compatibility preset coverage is replaced.
 
 4. Delete compatibility code:
    - Remove `DemoSceneEcsBridge` once scene loading covers the generated presets.
@@ -880,6 +892,16 @@ The next practical goal is not "make an editor" first. It is to make the normal 
    - Keep Python/CLI generation and validation GPU-free.
    - Add the editor target once it can stand on runtime scene loading and asset services rather than `vktest` scaffolding.
 
+## Current Scene Asset Format
+
+The first scene asset format is intentionally narrow and TOML-based. It is represented by `resources/scenes/demo_cube.tscene.toml` and loaded by `SceneAssetLoader`.
+
+- Top-level fields: `schema_version = 1`, `name`, and `[[entities]]`.
+- Required entity fields: positive integer `guid`, string `name`, and `[entities.transform]` with `translation`, quaternion `rotation` as `[w, x, y, z]`, and `scale`.
+- Optional entity component tables: `[entities.local_to_world] matrix = [16 floats]`, `[entities.camera]`, `[entities.directional_light]`, and `[entities.mesh_renderable]`.
+- `mesh_renderable.model` stores the stable 128-bit `AssetId` text. Serialized scene data must not use `AssetId::from_path()` or source paths.
+- Missing `local_to_world` falls back to `transform_to_matrix(transform)`; all other supported component fields are required when their table is present.
+
 ## Validation Strategy
 
 Required command after implementation slices:
@@ -891,13 +913,8 @@ Required command after implementation slices:
 Smoke test:
 
 ```bash
+./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml --quit-after-frames 30
 ./build/Debug/bin/vktest --quit-after-frames 30
-```
-
-After Phase 7, replace the smoke command with the main runtime app loading a generated scene asset:
-
-```bash
-./build/Debug/bin/metalrender --scene <generated-scene> --quit-after-frames 30
 ```
 
 For shader or shared HLSL changes, rely on `agent_verify.sh` because it runs `teng-shaderc --all`.

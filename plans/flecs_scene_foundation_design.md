@@ -18,7 +18,7 @@ Delivered:
 Deferred:
 
 - Transform hierarchy/parent relationships.
-- Scene serialization.
+- Full scene serialization. A minimal TOML loader now exists for entity GUID/name, transform/local-to-world, camera, directional light, and `MeshRenderable{AssetId}`.
 - Demo preset conversion into ECS entities is now implemented as vktest compatibility authoring.
 - Resource bridge from `MeshRenderable{AssetId}` to GPU model residency is now implemented in `RenderService` using `AssetService` and `ModelGPUMgr`.
 - Renderer-neutral `RenderScene` extraction is now implemented under `src/engine/render`.
@@ -33,6 +33,8 @@ Deferred:
 - Legacy `TestRenderer`, `ITestScene`, and `MeshletRendererTestScene` have been removed from the default runtime path.
 - `apps/common/ScenePresets.*` provides data-first demo presets as plain camera defaults, optional CSM defaults, source model paths, and per-instance transforms. The older callback-based loader wrapper remains for compatibility.
 - `apps/vktest/DemoSceneEcsBridge.*` converts demo presets into Flecs entities and resolves model source paths to registered `AssetId`s through `AssetDatabase`.
+- `src/engine/scene/SceneAssetLoader.*` loads the first data scene format into `SceneManager`.
+- `apps/metalrender/main.cpp` is a thin Engine host for `--scene <path>` data-scene loading and bounded runtime smoke tests.
 - `src/core/Handle.hpp` and `src/core/Pool.hpp` provide runtime generational handles. They are good for in-process object lifetime, but they are not stable serialized IDs.
 - `src/ResourceManager.*` remains as legacy code, but it is no longer used by `apps/vktest` or `src/engine`.
 - `src/gfx/ModelGPUManager.*` owns model GPU upload/residency and per-instance GPU allocation through `ModelGPUHandle` and `ModelInstanceGPUHandle`. It can upload imported model data and still has a legacy source-path loading wrapper.

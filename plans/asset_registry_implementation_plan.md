@@ -1,6 +1,6 @@
 # Asset Registry And Runtime Asset Service Plan
 
-Status: Phase 6 asset bridge is implemented. `AssetId` has a 128-bit representation with text parse/format helpers; `src/engine/assets` contains GPU-free asset registry/database storage, project scanning, sidecar metadata, asset file operations, and an engine-owned CPU `AssetService`. `RenderService` now owns model residency for extracted meshes and no `apps/vktest` or `src/engine` path depends on global `ResourceManager`. Remaining work is data scene generation/loading, cooked runtime manifests, and deleting legacy `ResourceManager` references outside the engine/vktest runtime path.
+Status: Phase 6 asset bridge is implemented and Phase 7 has a minimal scene-data runtime path. `AssetId` has a 128-bit representation with text parse/format helpers; `src/engine/assets` contains GPU-free asset registry/database storage, project scanning, sidecar metadata, asset file operations, and an engine-owned CPU `AssetService`. `RenderService` owns model residency for extracted meshes, and `SceneAssetLoader` can load a narrow TOML scene subset containing `MeshRenderable{AssetId}` into `SceneManager`. Remaining work is full numbered demo preset generation, cooked runtime manifests, and deleting legacy `ResourceManager` references outside the engine/runtime path.
 
 Scope: define the long-term asset registry, asset dependency, CPU resource, and renderer GPU residency boundaries for `metalrender`. This plan intentionally avoids implementation code. It is the design target for replacing the current `ResourceManager` singleton and making scenes durable data that reference assets by stable IDs.
 
@@ -10,13 +10,15 @@ Relevant current paths:
 
 - `src/engine/scene/SceneIds.*`: defines `AssetId` as a 128-bit value with text parse/format helpers. `AssetId::from_path()` still exists as compatibility scaffolding and maps a deterministic FNV-1a path hash into the low half of an `AssetId`; it must not be used for new serialized scene/asset data.
 - `src/engine/scene/SceneComponents.hpp`: renderable scene data stores `AssetId`, not runtime handles.
+- `src/engine/scene/SceneAssetLoader.*`: loads the first TOML scene asset subset into `SceneManager`: entity GUID/name, transform/local-to-world, camera, directional light, and `MeshRenderable{AssetId}`.
 - `src/engine/render/RenderScene.*`: extracted render data carries `AssetId` for meshes and sprites.
+- `apps/metalrender/main.cpp`: primary runtime data-scene host. It accepts `--scene <path>` and `--quit-after-frames <n>` and does not link `apps/common/ScenePresets.*`.
 - `apps/vktest/DemoSceneEcsBridge.*`: temporary demo bridge that authors Flecs entities from C++ presets and resolves demo source model paths to registered `AssetId`s through `AssetDatabase`. It does not load CPU/GPU models or track runtime handles.
 - `src/ResourceManager.*`: legacy global singleton that still exists for old renderer/app code, but is no longer used by `apps/vktest` or `src/engine`.
 - `src/gfx/ModelGPUManager.*`: renderer-side model residency machinery. It can upload an already-imported `ModelInstance + ModelLoadResult`; its path-loading API remains as a temporary legacy wrapper.
 - `src/engine/render/RenderService.*`: owns `ShaderManager`, `RenderGraph`, upload helpers, `ImGuiRenderer`, `ModelGPUMgr`, and the render-side model residency bridge. It resolves extracted `RenderMesh{EntityGuid, AssetId, transform}` entries through `AssetService`, uploads first-use model resources, and owns per-entity GPU instances.
 
-The important split is now in place for models: scenes and render extraction use `AssetId`, CPU asset import is an engine service, and runtime/GPU handles stay outside scene data. The remaining gap is that demo scenes themselves are still authored by C++ preset code rather than serialized scene assets.
+The important split is now in place for models: serialized scene data and render extraction use `AssetId`, CPU asset import is an engine service, and runtime/GPU handles stay outside scene data. The remaining gap is breadth: only `resources/scenes/demo_cube.tscene.toml` is generated data today; the numbered `vktest` demo presets are still authored by C++ preset code.
 
 ## Lessons From Existing Engines
 
@@ -444,7 +446,7 @@ Python/CLI preset importer
   -> creates or updates scene asset metadata for presets 1-9
   -> writes Flecs scene data containing entities, transforms, cameras, lights, and AssetId references
   -> validates all model/material/texture references through the registry
-  -> leaves vktest as a thin loader for selected scene asset IDs
+  -> leaves metalrender as the primary runtime loader and vktest as temporary preset-selection scaffolding
 ```
 
 Requirements:
@@ -453,7 +455,7 @@ Requirements:
 - The script is idempotent: rerunning it updates existing preset assets instead of minting new IDs every time.
 - The script can run in CI or from a developer shell without window/device/renderer startup.
 - Demo-specific random presets must use stored generated data or a fixed seed recorded in metadata so generated entities keep stable IDs.
-- Preset selection in `vktest` becomes "load scene asset N" rather than "run C++ code that creates entities".
+- Preset selection becomes "load scene asset N" rather than "run C++ code that creates entities".
 - Once this exists, `DemoSceneEcsBridge` can be removed. At most, `vktest` keeps a small compatibility UI listing preset scene assets.
 
 This is the point where the hacky `vktest` preset/resource bridge can be deleted: the runtime loads scene assets through `SceneManager`, resolves asset references through `AssetService`, and renderer residency handles GPU resources behind the render boundary.
