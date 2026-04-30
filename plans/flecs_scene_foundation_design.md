@@ -387,4 +387,3 @@ Validation after future code phases:
 - How much editor metadata should be included in the first component registration pass?
 - Answered: demo scene generation lives in `scripts/generate_demo_scene_assets.py`; runtime loading stays in engine scene code.
 - What is the first non-mesh renderable target: sprites for 2D games, debug primitives, or UI/editor gizmos?
-- Should scene serialization be deferred entirely until after render extraction, or should a minimal text/binary format be introduced as soon as stable IDs exist?
