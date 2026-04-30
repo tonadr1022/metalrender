@@ -25,6 +25,4 @@
 - consolidate tex upload functions with imgui renderer
 - meshlet visibility bit buffer instead of uint32_t
 - figure out synchronization in metal3 command encoder officially
-- modularize MemeRenderer123
-- vulkan support
 - re-add voxels
