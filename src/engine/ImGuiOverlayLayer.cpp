@@ -1,5 +1,7 @@
 #include "engine/ImGuiOverlayLayer.hpp"
 
+#include <GLFW/glfw3.h>
+
 #include <filesystem>
 
 #include "UI.hpp"
@@ -34,7 +36,10 @@ void ImGuiOverlayLayer::on_update(EngineContext& ctx, const EngineTime&) {
   frame_started_ = true;
 }
 
-void ImGuiOverlayLayer::on_imgui(EngineContext&) {
+void ImGuiOverlayLayer::on_imgui(EngineContext& ctx) {
+  if (frame_started_) {
+    ctx.renderer().on_imgui();
+  }
   if (frame_started_) {
     ImGui::Render();
   }
@@ -51,6 +56,12 @@ void ImGuiOverlayLayer::on_end_frame(EngineContext&) {
   if (frame_started_) {
     ImGui::EndFrame();
     frame_started_ = false;
+  }
+}
+
+void ImGuiOverlayLayer::on_key_event(EngineContext& ctx, int key, int action, int mods) {
+  if (action == GLFW_PRESS && key == GLFW_KEY_G && (mods & GLFW_MOD_ALT) != 0) {
+    ctx.toggle_imgui_enabled();
   }
 }
 

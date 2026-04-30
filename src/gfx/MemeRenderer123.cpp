@@ -6,7 +6,6 @@
 #include <tracy/Tracy.hpp>
 
 #include "GLFW/glfw3.h"
-#include "ResourceManager.hpp"
 #include "UI.hpp"
 #include "Window.hpp"
 #include "core/CVar.hpp"
@@ -994,7 +993,7 @@ void MemeRenderer123::on_imgui() {
         }
       }
 
-      meshlet_stats_imgui(ResourceManager::get().get_tot_instances_loaded());
+      meshlet_stats_imgui();
 
       ImGui::EndTabItem();
     }
@@ -1330,7 +1329,7 @@ MemeRenderer123::MemeRenderer123(const CreateInfo& cinfo)
   }
 }
 
-void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
+void MemeRenderer123::meshlet_stats_imgui() {
   if (renderer_cv::pipeline_mesh_shaders.get() != 0) {
     ImGui::Separator();
     bool collect_stats = renderer_cv::developer_collect_meshlet_draw_stats.get() != 0;
@@ -1390,11 +1389,10 @@ void MemeRenderer123::meshlet_stats_imgui(size_t total_scene_models) {
     ImGui::Text(
         "Triangles: %12s\n"
         "Vertices:  %12s\n"
-        "Objects:   %12s\n"
-        "Models:    %12s",
+        "Objects:   %12s",
         add_commas(stats.triangles_drawn_early + stats.triangles_drawn_late).c_str(),
         add_commas(stats_.total_instance_vertices).c_str(),
-        add_commas(stats_.total_instances).c_str(), add_commas(total_scene_models).c_str());
+        add_commas(stats_.total_instances).c_str());
   }
 }
 

@@ -1,6 +1,8 @@
 #include "InstanceMgr.hpp"
 
-#include "gfx/MemeRenderer123.hpp"
+#include "gfx/rhi/Buffer.hpp"
+#include "gfx/rhi/CmdEncoder.hpp"
+#include "gfx/rhi/Device.hpp"
 
 namespace TENG_NAMESPACE {
 

@@ -14,6 +14,7 @@
 #include "gfx/renderer/MeshletDepthPyramid.hpp"
 #include "gfx/renderer/MeshletDrawPrep.hpp"
 #include "gfx/renderer/MeshletTestRenderUtil.hpp"
+#include "gfx/renderer/RendererCVars.hpp"
 #include "gfx/rhi/CmdEncoder.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "gfx/rhi/Texture.hpp"
@@ -142,6 +143,7 @@ void MeshletRenderer::lazy_init(const engine::RenderFrameContext& frame) {
   ASSERT(frame.frame_staging != nullptr);
 
   gpu_device_ = frame.device;
+  apply_renderer_cvar_device_constraints(true);
 
   draw_prep_ = std::make_unique<MeshletDrawPrep>(*frame.device, *frame.render_graph,
                                                  *frame.model_gpu_mgr, *frame.shader_mgr);
@@ -150,7 +152,7 @@ void MeshletRenderer::lazy_init(const engine::RenderFrameContext& frame) {
   csm_renderer_ = std::make_unique<MeshletCsmRenderer>(*frame.device, *frame.render_graph,
                                                        *frame.model_gpu_mgr, *frame.shader_mgr);
 
-  MeshletCsmRenderer::SceneDefaults defaults{};
+  const MeshletCsmRenderer::SceneDefaults defaults{};
   csm_renderer_->set_scene_defaults(defaults);
 
   for (size_t a = 0; a < static_cast<size_t>(AlphaMaskType::Count); ++a) {

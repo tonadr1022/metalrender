@@ -38,7 +38,6 @@ set(TENG_ENGINE_SOURCES
 )
 
 set(TENG_GFX_SOURCES
-    ResourceManager.cpp
     gfx/ModelLoader.cpp
     gfx/ModelInstance.cpp
     gfx/ShaderManager.cpp

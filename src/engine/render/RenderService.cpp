@@ -214,6 +214,7 @@ void RenderService::init(const CreateInfo& cinfo) {
   frame_gpu_upload_allocator_ = std::make_unique<gfx::GPUFrameAllocator3>(device_, false);
   buffer_copy_mgr_ = std::make_unique<gfx::BufferCopyMgr>(device_, *frame_gpu_upload_allocator_);
   imgui_renderer_ = std::make_unique<gfx::ImGuiRenderer>(*shader_mgr_, device_);
+  ALWAYS_ASSERT(gfx::RenderGraph::run_barrier_coalesce_self_tests());
   render_graph_.init(device_);
   model_gpu_mgr_ = std::make_unique<gfx::ModelGPUMgr>(*device_, *buffer_copy_mgr_);
   model_residency_ = std::make_unique<RenderModelResidencyService>(*assets_, *model_gpu_mgr_);

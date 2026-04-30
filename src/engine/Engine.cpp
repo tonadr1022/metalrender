@@ -13,8 +13,10 @@
 #include "core/CVar.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
+#include "core/TomlUtil.hpp"
 #include "engine/assets/AssetService.hpp"
 #include "engine/render/RenderService.hpp"
+#include "engine/scene/SceneAssetLoader.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "imgui.h"
@@ -264,16 +266,37 @@ void Engine::clear_transient_input() {
   input_snapshot_.cursor_delta = {};
 }
 
+Result<SceneAssetLoadResult> Engine::load_scene_asset(const std::filesystem::path& scene_path) {
+  return teng::engine::load_scene_asset(scenes_, scene_path);
+}
+
+Result<SceneAssetLoadResult> Engine::load_project_startup_scene() {
+  const std::filesystem::path project_path = resource_dir_ / "project.toml";
+  Result<toml::table> project = parse_toml_file(project_path);
+  if (!project) {
+    return make_unexpected("failed to load project config " + project_path.string() + ": " +
+                           project.error());
+  }
+
+  const std::optional<int64_t> schema_version = (*project)["schema_version"].value<int64_t>();
+  if (!schema_version || *schema_version != 1) {
+    return make_unexpected("project config schema_version must be 1");
+  }
+
+  const std::optional<std::string> startup_scene = (*project)["startup_scene"].value<std::string>();
+  if (!startup_scene || startup_scene->empty()) {
+    return make_unexpected("project config is missing startup_scene");
+  }
+  return load_scene_asset(*startup_scene);
+}
+
 bool Engine::tick() {
   ZoneScoped;
   if (shutting_down_ || !initialized_ || window_->should_close()) {
     return false;
   }
 
-  {
-    ZoneScopedN("poll_events");
-    window_->poll_events();
-  }
+  window_->poll_events();
   dispatch_pending_events();
   refresh_input_snapshot_ui_state();
 
@@ -297,6 +320,9 @@ bool Engine::tick() {
 
   layers_.update(time_);
   layers_.imgui();
+  if (scenes_.active_scene()) {
+    renderer_->enqueue_active_scene();
+  }
   layers_.render();
   renderer_->end_frame();
   layers_.end_frame();
@@ -315,6 +341,7 @@ void Engine::run() {
 }
 
 void Engine::shutdown() {
+  ZoneScoped;
   if (shutting_down_ || !initialized_) {
     return;
   }

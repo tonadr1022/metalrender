@@ -91,7 +91,7 @@ class MemeRenderer123 {
  private:
   void init_imgui();
   void shutdown_imgui();
-  void meshlet_stats_imgui(size_t total_scene_models);
+  void meshlet_stats_imgui();
   void flush_pending_texture_uploads(rhi::CmdEncoder* enc);
   [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandleHolder& buf) const;
   [[nodiscard]] uint32_t get_bindless_idx(const rhi::BufferHandle& buf) const {

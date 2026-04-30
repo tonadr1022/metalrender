@@ -12,6 +12,7 @@ class ImGuiOverlayLayer final : public Layer {
   void on_imgui(EngineContext& ctx) override;
   void on_render(EngineContext& ctx) override;
   void on_end_frame(EngineContext& ctx) override;
+  void on_key_event(EngineContext& ctx, int key, int action, int mods) override;
 
  private:
   void init_imgui(EngineContext& ctx);
