@@ -316,7 +316,7 @@ Delivered:
 Validation:
 
 - `./scripts/agent_verify.sh`
-- `./build/Debug/bin/vktest --quit-after-frames 30`
+- `./build/Debug/bin/metalrender --quit-after-frames 30`
 
 ### Phase 2: Compatibility Layer Cleanup
 
@@ -401,14 +401,14 @@ Validation:
 Phase 1 implementation validation:
 
 - Run `./scripts/agent_verify.sh` from repo root.
-- Run `./build/Debug/bin/vktest --quit-after-frames 30`.
+- Run `./build/Debug/bin/metalrender --quit-after-frames 30`.
 - Confirm `src/engine` does not include Vulkan or Metal concrete backend
   headers.
 
 Validation for future code phases:
 
 - Run `./scripts/agent_verify.sh` from repo root.
-- Run `./build/Debug/bin/vktest --quit-after-frames 30`.
+- Run `./build/Debug/bin/metalrender --quit-after-frames 30`.
 - For backend-selection work, validate all compiled backend combinations that the
   local platform supports:
   - Vulkan-only build.

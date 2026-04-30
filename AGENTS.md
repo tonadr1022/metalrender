@@ -13,8 +13,9 @@ Add `--format` to format.
 
 ### Target names
 
-vktest
 metalrender
+teng-shaderc
+engine_scene_smoke
 
 ### Run
 
@@ -25,15 +26,15 @@ metalrender
 Smoke test (bounded run; avoids leaving the app open in automation):
 
 ```bash
+./build/Debug/bin/metalrender --quit-after-frames 30
 ./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml --quit-after-frames 30
-./build/Debug/bin/vktest --quit-after-frames 30
 ```
 
 Run without a frame limit (interactive, until the window is closed):
 
 ```bash
+./build/Debug/bin/metalrender
 ./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml
-./build/Debug/bin/vktest
 ```
 
 ### Shader compiler (single files or ad hoc)
@@ -68,13 +69,11 @@ Current migration direction:
 
 These are temporary compatibility structures, not architecture to copy into new systems:
 
-- `apps/vktest/TestApp.*`
-- `apps/vktest/TestRenderer.*`
-- `apps/vktest/TestDebugScenes.*`
-- `apps/vktest/scenes/MeshletRendererTestScene.*`
+- Deleted `apps/vktest/*` compatibility harness and old C++ demo presets
+- Deleted old `apps/metalrender/App.*` / `Camera.*` / `FpsCameraController.*` scaffolding
 - Global `ResourceManager` singleton usage
 
-It is okay to keep scaffolding working during migration, but new engine/runtime code should not deepen dependency on it unless the change is explicitly a compatibility bridge.
+New engine/runtime code should not reintroduce deleted app/demo scaffolding unless the change is explicitly an archived sample or compatibility bridge.
 
 ## Planning Work
 
@@ -96,9 +95,6 @@ For design-note tasks:
 
 ### Required Guidelines
 
-- Minimum code that solves the problem. Nothing speculative.
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
+- No abstractions for single-use code, unless you know for sure it'll be used again.
 - No error handling for impossible scenarios.
 - If you write 200 lines and it could be 50, rewrite it.

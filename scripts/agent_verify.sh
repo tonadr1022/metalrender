@@ -18,7 +18,7 @@ changed_paths() {
 PRESET="${CMAKE_PRESET:-Debug}"
 BUILD_DIR="$REPO_ROOT/build/$PRESET"
 BIN_DIR="$BUILD_DIR/bin"
-TARGETS=(vktest metalrender teng-shaderc engine_scene_smoke)
+TARGETS=(metalrender teng-shaderc engine_scene_smoke)
 DO_FORMAT=0
 DO_TIDY=1
 

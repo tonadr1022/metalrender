@@ -32,22 +32,25 @@ git clone https://github.com/tonadr1022/metalrender
 cd metalrender
 git submodule update --init --recursive
 cmake --preset Release
-cmake --build build/Release --target metalrender # or vktest for compatibility demos
+cmake --build build/Release --target metalrender
 
 # Optional broader demo assets: https://github.com/KhronosGroup/glTF-Sample-Assets
 ./scripts/download_gltf_models.sh $HOME/gltf_sample_assets
 # symlink so the default config file can find the models
 ln -s $HOME/gltf_sample_assets/models/gltf ./resources/models/gltf
 
-# Run the current data-scene runtime path. The checked-in Cube scene uses
-# resources/models/Cube/glTF/Cube.gltf and its registered AssetId sidecar.
+# Run the runtime app. Without --scene it loads resources/project.toml
+# startup_scene, currently resources/scenes/demo_00_cube.tscene.toml.
+./build/Release/bin/metalrender
+
+# Override the startup scene explicitly.
 ./build/Release/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml
 
 # Bounded smoke run
-./build/Release/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml --quit-after-frames 30
+./build/Release/bin/metalrender --quit-after-frames 30
 
-# Regenerate the checked-in demo scene data
-./scripts/generate_demo_cube_scene.py
+# Regenerate checked-in demo scene data
+./scripts/generate_demo_scene_assets.py
 ```
 
 ## Current Features (probably out of date)

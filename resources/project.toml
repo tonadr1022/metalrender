@@ -1,0 +1,2 @@
+schema_version = 1
+startup_scene = "resources/scenes/demo_00_cube.tscene.toml"

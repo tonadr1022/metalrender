@@ -9,7 +9,7 @@ Relationship: complements [`engine_runtime_migration_plan.md`](engine_runtime_mi
 - Define a **small number of intentional boundaries** (shared vs static) instead of one accidental monolith.
 - Keep **exactly one Flecs runtime per process** without exporting Flecs symbols from DSOs or linking `flecs_static` twice into conflicting roles.
 - Align **tools/tests** (fast iteration, boring links) with **shipping games** (controlled modules, platform constraints) without maintaining two unrelated CMake worlds.
-- Preserve [`AGENTS.md`](../AGENTS.md) guardrails: `./scripts/agent_verify.sh`, `vktest --quit-after-frames 30`, shader compile flows.
+- Preserve [`AGENTS.md`](../AGENTS.md) guardrails: `./scripts/agent_verify.sh`, `metalrender --quit-after-frames 30`, shader compile flows.
 
 ## Non-goals
 
@@ -25,7 +25,7 @@ Relationship: complements [`engine_runtime_migration_plan.md`](engine_runtime_mi
 | `teng_static` | **STATIC** | Static engine aggregate for Flecs-facing tests that must compile scene/ECS headers outside `libteng` |
 | `teng_shader_compiler` | **STATIC** | Shader compiler; linked into `teng` and `teng-shaderc` |
 | `teng_engine_smoke` | **STATIC** | GPU-free smoke tests; **PUBLIC** link to `teng_static` so scene/ECS smokes live under `tests/smoke` without exporting Flecs |
-| `vktest`, `engine_scene_smoke`, `teng-shaderc` | **EXECUTABLE** | `vktest` links shared `teng`; `engine_scene_smoke` links `teng_engine_smoke`; `teng-shaderc` links `teng_shader_compiler` |
+| `metalrender`, `engine_scene_smoke`, `teng-shaderc` | **EXECUTABLE** | `metalrender` links shared `teng`; `engine_scene_smoke` links `teng_engine_smoke`; `teng-shaderc` links `teng_shader_compiler` |
 
 Pain points already observed:
 
@@ -98,7 +98,7 @@ Do **not** rely on “export all Flecs symbols from `libteng.so`” as the long-
 ### Phase 2 — Introduce optional `teng` static variant for tests (implemented)
 
 - Add **`add_library(teng STATIC ...)`** with **same sources** as shared `teng`, gated by `BUILD_SHARED_LIBS` or explicit `TENG_LIBRARY_TYPE` option (default stays shared for normal apps).
-- Wire **`engine_scene_smoke`** (and optionally **`vktest`** later) to link **`teng` static** + move **`SceneSmokeTest`** sources to `tests/smoke` if desired.
+- Wire **`engine_scene_smoke`** to link **`teng` static** + move **`SceneSmokeTest`** sources to `tests/smoke` if desired.
 
 **Retirement criteria:** scene smokes can live entirely under `tests/smoke` without CMake comments explaining DSO leakage; **or** team explicitly chooses “scene smokes stay in `libteng`” and deletes the static variant for tests only.
 
@@ -124,7 +124,7 @@ link targets.
 
 ## What should stay in the main executable (static)
 
-- **Entry point**, CLI parsing, per-app layer wiring (`vktest` compatibility layer stays app-adjacent until retired per migration plan).
+- **Entry point**, CLI parsing, and per-app layer wiring.
 - **Glue** that must run before shared libs load (minimal).
 - **Third-party** that must be singleton per process **and** is hard to isolate — preferably **not** duplicated; if duplicated, must be proven independent (usually avoid).
 
@@ -146,15 +146,14 @@ link targets.
 ## Validation
 
 - `./scripts/agent_verify.sh` passes.
-- `vktest --quit-after-frames 30` passes.
+- `metalrender --quit-after-frames 30` passes.
 - No duplicate Flecs symbols in final link (`nm`, `ldd`, or linker map review when changing linkage).
 
 ## Open questions
 
-1. Should **`vktest`** remain the primary integration harness indefinitely, or shrink to a minimal sample once `Engine` + layers stabilize?
-2. Is a future **editor** a separate executable or the same binary with `--editor`? Answers drive shared-lib boundaries.
-3. Should **asset tooling** ship as separate CLI binaries linking **only** `teng_assets` + core (lighter than full renderer)?
+1. Is a future **editor** a separate executable or the same binary with `--editor`? Answers drive shared-lib boundaries.
+2. Should **asset tooling** ship as separate CLI binaries linking **only** `teng_assets` + core (lighter than full renderer)?
 
 ---
 
-*This plan is specific to this repository; retire compatibility scaffolding (`CompatibilityVktestLayer`, global `ResourceManager`) per [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md), not per linkage phase unless CMake cleanup requires it.*
+*This plan is specific to this repository; retire remaining compatibility scaffolding such as global `ResourceManager` per [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md), not per linkage phase unless CMake cleanup requires it.*

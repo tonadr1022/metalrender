@@ -19,7 +19,7 @@ Deferred:
 
 - Transform hierarchy/parent relationships.
 - Full scene serialization. A minimal TOML loader now exists for entity GUID/name, transform/local-to-world, camera, directional light, and `MeshRenderable{AssetId}`.
-- Demo preset conversion into ECS entities is now implemented as vktest compatibility authoring.
+- Demo preset compatibility authoring has been retired; demo scenes are generated TOML assets loaded by `metalrender`.
 - Resource bridge from `MeshRenderable{AssetId}` to GPU model residency is now implemented in `RenderService` using `AssetService` and `ModelGPUMgr`.
 - Renderer-neutral `RenderScene` extraction is now implemented under `src/engine/render`.
 - Editor component metadata and play/edit world semantics.
@@ -28,15 +28,14 @@ Deferred:
 
 - `third_party/CMakeLists.txt` owns third-party integration directly with `add_subdirectory(...)` and cache option setup before dependencies are added. Existing third-party dependencies are recorded in `.gitmodules` under `third_party/<name>`.
 - `src/CMakeLists.txt` builds the shared `teng` library from an explicit source list and links public dependencies such as `glm::glm`, `meshoptimizer`, `ktx`, `concurrentqueue`, `implot`, and the project warning target.
-- `apps/vktest/TestApp.cpp` is now a thin `Engine` host with `CompatibilityVktestLayer` for demo preset selection, hotkeys, and meshlet debug UI.
+- `apps/metalrender/main.cpp` is the thin `Engine` host with optional `--scene`, project `startup_scene`, bounded runtime smoke tests, and meshlet debug UI.
 - `src/engine/render/RenderService.*` owns renderer services plus active renderer dispatch. It constructs `ModelGPUMgr`, `RenderGraph`, ImGui renderer, upload/copy helpers, model residency, and the default `gfx::MeshletRenderer`.
 - Legacy `TestRenderer`, `ITestScene`, and `MeshletRendererTestScene` have been removed from the default runtime path.
-- `apps/common/ScenePresets.*` provides data-first demo presets as plain camera defaults, optional CSM defaults, source model paths, and per-instance transforms. The older callback-based loader wrapper remains for compatibility.
-- `apps/vktest/DemoSceneEcsBridge.*` converts demo presets into Flecs entities and resolves model source paths to registered `AssetId`s through `AssetDatabase`.
+- `scripts/generate_demo_scene_assets.py` generates demo scene assets and model sidecars for available in-repo model assets.
 - `src/engine/scene/SceneAssetLoader.*` loads the first data scene format into `SceneManager`.
-- `apps/metalrender/main.cpp` is a thin Engine host for `--scene <path>` data-scene loading and bounded runtime smoke tests.
+- `apps/metalrender/main.cpp` loads generated scene data through `SceneAssetLoader` and renders it through `RenderService`.
 - `src/core/Handle.hpp` and `src/core/Pool.hpp` provide runtime generational handles. They are good for in-process object lifetime, but they are not stable serialized IDs.
-- `src/ResourceManager.*` remains as legacy code, but it is no longer used by `apps/vktest` or `src/engine`.
+- `src/ResourceManager.*` remains as legacy code, but it is no longer used by `src/engine`.
 - `src/gfx/ModelGPUManager.*` owns model GPU upload/residency and per-instance GPU allocation through `ModelGPUHandle` and `ModelInstanceGPUHandle`. It can upload imported model data and still has a legacy source-path loading wrapper.
 
 ## Target Architecture
@@ -79,7 +78,7 @@ Implemented CMake shape:
 
 - Flecs setup lives in `third_party/CMakeLists.txt` near other general-purpose libraries, after Flecs cache options are set.
 - The engine library links against `flecs::flecs_static`; Flecs sources are not vendored into `src/CMakeLists.txt`.
-- Flecs is owned by `teng`, not by `vktest`, so engine scene code is available to future app/editor targets.
+- Flecs is owned by `teng`, not by an app target, so engine scene code is available to future app/editor targets.
 - Avoid adding Vulkan, Metal, renderer, or app-specific compile definitions to Flecs integration.
 - Keep warning treatment for third-party code consistent with the surrounding file. If Flecs emits warnings under `project_warnings`, isolate it as a third-party target instead of weakening warnings on engine code.
 
@@ -127,7 +126,7 @@ The exact component names can change during implementation, but these responsibi
 - Renderable components store stable `AssetId`s, not `ModelHandle`s.
 - Renderer-specific GPU state is not stored on the authoring entity.
 
-Component registration should live in engine scene code, not in `apps/vktest`. A future game/editor module may register additional components, but engine components should be available to all runtime targets.
+Component registration should live in engine scene code, not in app/demo code. A future game/editor module may register additional components, but engine components should be available to all runtime targets.
 
 ## Scene
 
@@ -159,7 +158,7 @@ Initial `SceneManager` responsibilities:
 - Track an active runtime scene.
 - Provide hooks for edit/play scene switching once the editor layer exists.
 - Own scene load/unload/reload sequencing.
-- Keep scene lifetime independent from `vktest` debug scene switching.
+- Keep scene lifetime independent from app/debug scene switching.
 - Provide a narrow API for engine layers to access the active `Scene` and its `flecs::world`.
 
 The first implementation can manage one active scene plus a small map by `SceneId`. Do not overbuild multi-scene streaming yet. The important early boundary is that the engine owns scene lifetime and scenes are data worlds.
@@ -191,7 +190,7 @@ Scene components should reference assets using `AssetId`. Runtime resource loadi
 
 Current bridge:
 
-- `DemoSceneEcsBridge` resolves demo source model paths to registered `AssetId`s through `AssetDatabase`.
+- Generated scene assets resolve demo model references to registered `AssetId`s through sidecar metadata and `AssetDatabase`.
 - `AssetService` imports CPU model data by `AssetId`.
 - `RenderService` owns shared model GPU residency and per-entity model instances.
 - Keep `ModelGPUHandle` and `ModelInstanceGPUHandle` inside renderer/resource residency code.
@@ -211,7 +210,7 @@ Do not add a new hierarchy such as `class Scene { virtual update(); virtual rend
 
 Allowed temporary adapters:
 
-- A demo scene loader that converts `apps/common/ScenePresets` into Flecs entities.
+- A GPU-free script/tool that generates TOML scene assets.
 - A compatibility layer that keeps `ITestScene` running while the engine runtime and renderer boundary are introduced.
 - Tooling systems such as an editor/FPS camera controller, as long as they are systems/components or layers, not scene identity.
 
@@ -220,34 +219,19 @@ Not allowed as destination architecture:
 - A Flecs world hidden behind game-specific C++ scene subclasses.
 - Gameplay scenes adding render graph passes directly.
 - Scene components storing GPU handles as authored state.
-- New engine runtime APIs depending on `apps/vktest` scene types.
+- New engine runtime APIs depending on app/demo scene types.
 
 ## Migration Scaffolding And Retirement Criteria
 
-`apps/vktest/TestApp.*`
+Deleted app/demo scaffolding
 
-- Scaffolding role: current executable shell and bootstrap owner.
-- Retire when `main.cpp` or a thin app wrapper can construct `engine::Engine`, install layers, and call `run()` or drive `tick()` without owning resources/rendering directly.
-
-`apps/vktest/TestRenderer.*`
-
-- Scaffolding role: current renderer service bundle and debug scene router.
-- Retire from engine runtime when `RenderService` owns shared renderer frame services and active renderers are selected through engine/runtime APIs.
-
-`apps/vktest/TestDebugScenes.*` and `ITestScene`
-
-- Scaffolding role: legacy graphics test harness.
-- Retire from runtime scene architecture when demos load into Flecs scenes and no engine scene path depends on `ITestScene`. It may remain in a separate graphics test app if useful.
-
-`apps/vktest/scenes/MeshletRendererTestScene.*`
-
-- Scaffolding role: working reference for meshlet renderer behavior, demo presets, CSM, depth pyramid, draw prep, camera, light, and debug UI.
-- Retire when model/camera/light data comes from ECS, render extraction feeds a renderer-neutral snapshot, and meshlet-specific pass wiring lives in a meshlet renderer implementation.
+- Previous role: executable shell, C++ demo preset owner, and compatibility bridge.
+- Status: retired from the normal build; do not use as a pattern for new runtime code.
 
 Global `ResourceManager`
 
 - Scaffolding role: model path cache plus CPU/GPU model instance bridge.
-- Runtime status: retired from `apps/vktest` and `src/engine`; remove remaining legacy references before deleting `src/ResourceManager.*`.
+- Runtime status: retired from `src/engine`; remove remaining legacy references before deleting `src/ResourceManager.*`.
 
 `ModelGPUMgr`
 
@@ -265,7 +249,7 @@ Deliverables:
 - Add Flecs as `third_party/flecs` submodule.
 - Wire Flecs into `third_party/CMakeLists.txt` and link `teng` to the C++ Flecs target.
 - Add a small engine scene source area to `src/CMakeLists.txt` for scene foundation files.
-- Keep `vktest` behavior unchanged.
+- Keep `metalrender --quit-after-frames 30` behavior working.
 
 Exit criteria:
 
@@ -327,7 +311,7 @@ Status: complete.
 
 Deliverables:
 
-- Add a compatibility loader that converts `apps/common/ScenePresets`-style model paths and transforms into Flecs entities with `Transform` and `MeshRenderable`.
+- Add a scene data generation path that writes model paths and transforms into TOML scene assets with `Transform` and `MeshRenderable`.
 - Map source model paths to temporary `AssetId`s.
 - Keep the loader clearly named as demo/compatibility code.
 
@@ -384,12 +368,12 @@ Completed implementation validation:
 
 - `./scripts/agent_verify.sh --format`
 - `./scripts/agent_verify.sh`
-- `cmake --build build/Debug --target vktest && ./build/Debug/bin/vktest --quit-after-frames 30`
+- `cmake --build build/Debug --target metalrender && ./build/Debug/bin/metalrender --quit-after-frames 30`
 
 Validation after future code phases:
 
 - Run `./scripts/agent_verify.sh` from repo root after each implementation slice.
-- Run `./build/Debug/bin/vktest --quit-after-frames 30` after runtime/app integration slices.
+- Run `./build/Debug/bin/metalrender --quit-after-frames 30` after runtime/app integration slices.
 - Add focused unit or smoke coverage for `EntityGuid` lookup, scene create/destroy, component registration, and transform system behavior when a test harness exists.
 - For resource bridge phases, load and unload a scene repeatedly and verify model instance counts return to baseline.
 - For render extraction phases, validate that scene code does not include `RenderGraph` and authored components do not store runtime GPU handles.
@@ -401,6 +385,6 @@ Validation after future code phases:
 - Where should the first asset registry live: under `resources/`, under a future project directory, or generated into `resources/local` for experiments?
 - Should transform hierarchy use Flecs relationships immediately, or start with an explicit parent component and migrate once editor requirements are clearer?
 - How much editor metadata should be included in the first component registration pass?
-- Should demo preset conversion live under `apps/common`, `apps/vktest`, or an engine compatibility namespace?
+- Answered: demo scene generation lives in `scripts/generate_demo_scene_assets.py`; runtime loading stays in engine scene code.
 - What is the first non-mesh renderable target: sprites for 2D games, debug primitives, or UI/editor gizmos?
 - Should scene serialization be deferred entirely until after render extraction, or should a minimal text/binary format be introduced as soon as stable IDs exist?

@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "core/EAssert.hpp"
+#include "core/TomlUtil.hpp"
 #include "engine/Engine.hpp"
 #include "engine/ImGuiOverlayLayer.hpp"
 #include "engine/assets/AssetService.hpp"
@@ -31,8 +32,8 @@ struct RuntimeOptions {
 };
 
 void usage(const char* argv0) {
-  std::cout << "usage: " << argv0 << " --scene <path> [--quit-after-frames <n>]\n"
-            << "  --scene              Load a TOML scene asset\n"
+  std::cout << "usage: " << argv0 << " [--scene <path>] [--quit-after-frames <n>]\n"
+            << "  --scene              Load a TOML scene asset instead of project startup_scene\n"
             << "  --quit-after-frames  Exit after completing n frames (n >= 1)\n"
             << "  -h, --help           Show this help\n";
 }
@@ -75,12 +76,30 @@ std::optional<RuntimeOptions> parse_options(int argc, char* argv[]) {
     }
   }
 
-  if (options.scene_path.empty()) {
-    std::cerr << argv[0] << ": --scene is required\n";
-    usage(argv[0]);
-    return std::nullopt;
-  }
   return options;
+}
+
+std::filesystem::path load_project_startup_scene(const std::filesystem::path& resource_dir) {
+  const std::filesystem::path project_path = resource_dir / "project.toml";
+  teng::Result<toml::table> project = teng::parse_toml_file(project_path);
+  if (!project) {
+    std::cerr << "metalrender: failed to load project config " << project_path << ": "
+              << project.error() << '\n';
+    std::exit(1);
+  }
+
+  const std::optional<int64_t> schema_version = (*project)["schema_version"].value<int64_t>();
+  if (!schema_version || *schema_version != 1) {
+    std::cerr << "metalrender: project config schema_version must be 1\n";
+    std::exit(1);
+  }
+
+  const std::optional<std::string> startup_scene = (*project)["startup_scene"].value<std::string>();
+  if (!startup_scene || startup_scene->empty()) {
+    std::cerr << "metalrender: project config is missing startup_scene\n";
+    std::exit(1);
+  }
+  return *startup_scene;
 }
 
 class RuntimeSceneLayer final : public teng::engine::Layer {
@@ -94,10 +113,12 @@ class RuntimeSceneLayer final : public teng::engine::Layer {
     teng::gfx::apply_renderer_cvar_device_constraints(true);
     (void)ctx.assets().scan();
 
+    const std::filesystem::path scene_path =
+        scene_path_.empty() ? load_project_startup_scene(ctx.resource_dir()) : scene_path_;
     teng::Result<teng::engine::SceneAssetLoadResult> loaded =
-        teng::engine::load_scene_asset(ctx.scenes(), scene_path_);
+        teng::engine::load_scene_asset(ctx.scenes(), scene_path);
     if (!loaded) {
-      std::cerr << "metalrender: failed to load scene " << scene_path_ << ": " << loaded.error()
+      std::cerr << "metalrender: failed to load scene " << scene_path << ": " << loaded.error()
                 << '\n';
       std::exit(1);
     }

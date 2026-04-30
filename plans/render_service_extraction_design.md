@@ -42,7 +42,7 @@ Implemented in the first Phase 3 slice:
 - Moved preset world/model data ownership out of `MeshletRendererScene`; it now keeps meshlet controls, CSM/debug UI, and temporary camera/light tooling hooks.
 - Historical: the first bridge added renderer/resource compatibility syncing in `TestRenderer`. Current code resolves registered `AssetId`s through `AssetService` and performs model residency in `RenderService`.
 - Expanded `engine_scene_smoke` with procedural demo authoring coverage for valid assets, extraction, and stale entity cleanup.
-- Validation passed with `./scripts/agent_verify.sh` and `./build/Debug/bin/vktest --quit-after-frames 30`.
+- Validation passed with `./scripts/agent_verify.sh`; the current bounded runtime smoke is `./build/Debug/bin/metalrender --quit-after-frames 30`.
 
 Implemented after this note:
 
@@ -422,7 +422,7 @@ For Phase 3 implementation slices:
 Runtime smoke:
 
 ```bash
-./build/Debug/bin/vktest --quit-after-frames 30
+./build/Debug/bin/metalrender --quit-after-frames 30
 ```
 
 Additional implementation checkpoints:

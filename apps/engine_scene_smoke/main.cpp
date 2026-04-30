@@ -3,7 +3,7 @@
 #include "AssetDatabaseSmokeTest.hpp"
 #include "AssetRegistrySmokeTest.hpp"
 #include "AssetServiceSmokeTest.hpp"
-#include "DemoSceneAuthoringSmokeTest.hpp"
+#include "GeneratedSceneAssetsSmokeTest.hpp"
 #include "SceneAssetLoaderSmokeTest.hpp"
 #include "SceneSmokeTest.hpp"
 
@@ -24,8 +24,8 @@ int main() {
     std::cerr << "engine_scene_smoke: scene asset loader smoke test failed\n";
     return 1;
   }
-  if (!teng::gfx::demo_scene_compat::run_demo_scene_authoring_smoke_test()) {
-    std::cerr << "engine_scene_smoke: demo scene authoring smoke test failed\n";
+  if (!teng::engine::run_generated_scene_assets_smoke_test()) {
+    std::cerr << "engine_scene_smoke: generated scene assets smoke test failed\n";
     return 1;
   }
   if (!teng::engine::assets::run_asset_registry_smoke_test()) {
