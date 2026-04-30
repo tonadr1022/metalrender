@@ -7,6 +7,7 @@ add_library(teng_engine_smoke STATIC
     smoke/AssetRegistrySmokeTest.cpp
     smoke/AssetDatabaseSmokeTest.cpp
     smoke/DemoSceneAuthoringSmokeTest.cpp
+    smoke/SceneAssetLoaderSmokeTest.cpp
     smoke/SceneSmokeTest.cpp
 )
 target_link_libraries(teng_engine_smoke PUBLIC teng_static)

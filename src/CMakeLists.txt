@@ -31,6 +31,7 @@ set(TENG_ENGINE_SOURCES
     engine/render/RenderSceneExtractor.cpp
     engine/render/RenderService.cpp
     engine/scene/Scene.cpp
+    engine/scene/SceneAssetLoader.cpp
     engine/scene/SceneComponents.cpp
     engine/scene/SceneIds.cpp
     engine/scene/SceneManager.cpp
