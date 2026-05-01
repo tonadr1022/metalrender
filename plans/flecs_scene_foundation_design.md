@@ -1,6 +1,6 @@
 # Flecs scene foundation (implemented)
 
-**Status:** Phase 2 foundation is in the tree. Flecs lives under **`third_party/flecs`**, linked privately into **`teng`** with headers exposed for engine scene code (single Flecs runtime per process — see [`library_linkage_architecture_plan.md`](library_linkage_architecture_plan.md)).
+**Status:** Initial Flecs scene foundation is in the tree. Flecs lives under **`third_party/flecs`**, linked privately into **`teng`** with headers exposed for engine scene code (single Flecs runtime per process — see [`library_linkage_architecture_plan.md`](library_linkage_architecture_plan.md)).
 
 ## What shipped
 

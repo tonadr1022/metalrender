@@ -48,24 +48,25 @@ Run `teng-shaderc` on shaders you change; after editing a shared `.hlsli` / head
 
 ## Engine Architecture Direction
 
-The long-term engine plan lives in:
+The engine direction and phased roadmap live in:
 
 ```bash
 plans/engine_runtime_migration_plan.md
 ```
 
-Read it before making engine/runtime/scene/renderer architecture changes.
+Read it before making engine/runtime/scene/renderer architecture changes. Related notes: `plans/library_linkage_architecture_plan.md`, `plans/scene_serialization_design.md`, `plans/render_service_extraction_design.md`.
 
-Current migration direction:
+Direction (high level):
 
-- `Engine::tick()` is the primary runtime primitive; `run()` should be a convenience wrapper.
+- `Engine::tick()` is the primary runtime primitive; `run()` is a convenience wrapper.
 - Scenes are data-first Flecs worlds, not game-specific C++ scene subclasses.
-- Game behavior should come from ECS systems and future scripting, not hardcoded C++ scene classes.
-- The engine should use a layer model: runtime layer, render layer, ImGui/debug layer, editor layer, future scripting layer.
-- Keep Vulkan and Metal viable through existing platform/RHI abstractions; avoid new Vulkan-only assumptions in engine-level code.
-- Stable scene/entity/asset IDs should be introduced early where relevant.
+- Game behavior comes from ECS systems and future scripting, not monolithic C++ scene classes.
+- Layer model: runtime, render, ImGui/debug, editor (separate target), future scripting.
+- Presentation stays behind `RenderScene` / `IRenderer`; simulation modules (physics, animation, audio) extend via components + systems + narrow services—do not collapse everything into meshlet code.
+- Vulkan and Metal stay viable through platform/RHI abstractions; avoid Vulkan-only assumptions in engine-level code.
+- Stable scene/entity/asset IDs remain the authored identity model; **on-disk scene formats and `RenderScene` extraction may break** as 2D/editor/cooked pipelines land—see the plan’s compatibility section. Things do not need to be backward compatible. we are far from 1.0. big refactors are allowed.
 
-### Migration Scaffolding
+### Guardrails
 
 Do not reintroduce deleted compatibility harnesses, old C++ demo preset bridges, or monolithic app-side renderer/scene types removed during the engine migration.
 

@@ -2,7 +2,7 @@
 
 **Status:** Runtime bridge is implemented: stable **`AssetId`** (128-bit + text format), **`AssetRegistry`** / **`AssetDatabase`** (sidecars, project scan, dependencies, redirects, tombstones), engine **`AssetService`** for CPU **`ModelAsset`** load/cache, and **`RenderService`**-owned model GPU residency (**`ModelGPUMgr`** upload + per-entity instances). Demo scenes and model registration are driven by **`scripts/generate_demo_scene_assets.py`** and loaded via **`SceneAssetLoader`** into **`SceneManager`**.
 
-**Remaining (see also Phase 6.6 in [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md)):** read-only **cooked runtime manifests** (dependency closure for shipped scenes, artifact paths) so runtime startup can avoid full source-tree scanning where desired.
+**Remaining (see also Phase 6 in [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md)):** read-only **cooked runtime manifests** (dependency closure for shipped scenes, artifact paths) so runtime startup can avoid full source-tree scanning where desired.
 
 ## Implemented layout (reference)
 

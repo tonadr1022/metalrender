@@ -1,159 +1,68 @@
-# Library linkage and split architecture plan
+# Library linkage and split architecture
 
-Status: **design note** — proposes long-term CMake/library boundaries for `metalrender`: what should ship as shared libraries, what should link statically into executables, and how to avoid repeating mistakes around third-party ECS linkage (see [`tests/CMakeLists.txt`](../tests/CMakeLists.txt) comment on Flecs + `libteng`).
+**Scope:** CMake/link **topology** and **ABI** (Flecs single-runtime, shared vs static). Product-level target names and Phase 8–9 sequencing: [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md). Flecs + `libteng` context: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
 
-Relationship: complements [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) (runtime behavior and layers); this document is **only** about **build/link topology** and **ABI surfaces**.
+**Product:** Enforce runtime vs editor vs GPU-free tools—wrong linkage blocks clean shipped games and optional simulation modules.
+
+**Expect breakage** when promoting splits or renaming internal targets; update consumers, not monoliths.
+
+## Long-term requirement (shipped runtime)
+
+**Strict match** to a typical commercial-engine **player** build (Godot export template, Unity/Unreal-style standalone game): the **shipped game executable** **statically links** **ECS (scene / Flecs)** and **engine core/runtime** (platform, assets runtime, presentation stack as required for the product) so simulation + core runtime live in the **same linkage unit** as game code—not a thin loader that depends on a separately shipped **`libteng`-style DSO** for core ECS/engine ABI. OS/driver-tier shared libraries are fine; **core ECS + runtime are not an unstable external ABI for shipping**.
+
+**Interim:** `metalrender` may keep **shared** `teng` until Phase 8 finishes the split and the default shipped-style target **statically** pulls scene + core (see [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) Phase 8 exit).
 
 ## Goals
 
-- Define a **small number of intentional boundaries** (shared vs static) instead of one accidental monolith.
-- Keep **exactly one Flecs runtime per process** without exporting Flecs symbols from DSOs or linking `flecs_static` twice into conflicting roles.
-- Align **tools/tests** (fast iteration, boring links) with **shipping games** (controlled modules, platform constraints) without maintaining two unrelated CMake worlds.
-- Preserve [`AGENTS.md`](../AGENTS.md) guardrails: `./scripts/agent_verify.sh`, `metalrender --quit-after-frames 30`, shader compile flows.
+- Few intentional boundaries (not one accidental `teng` blob).
+- **Exactly one Flecs runtime** per process—no duplicate `flecs_static` / DSO symbol soup.
+- **Meet the long-term shipped-runtime linkage rule above**; tools/CI stay simple (static aggregates, minimal DSOs where platforms demand them).
+- Keep [`AGENTS.md`](../AGENTS.md) guardrails (`agent_verify`, `metalrender` smokes, shaderc).
 
 ## Non-goals
 
-- Rewriting RHI, render graph, or renderer internals for linkage reasons alone.
-- Choosing a packaging format for end users (Steam, console packages) beyond “what links how.”
-- Mandating static-only or shared-only for every platform forever — the plan phases options.
+RHI/renderer rewrites for CMake only; full consumer packaging (Steam, etc.). **Editor and internal tools** are **not** required to use the same linkage shape as shipped games (shared libs for iteration are OK); the **strict match applies to shipped/player runtime**, not every executable in the repo.
 
-## Current state (snapshot)
+## Current layout (snapshot)
 
 | Artifact | Kind | Role |
 |----------|------|------|
-| `teng` (`libteng.so` / `.dylib`) | **SHARED** | App-facing engine aggregate over internal core/platform/gfx/engine object components |
-| `teng_static` | **STATIC** | Static engine aggregate for Flecs-facing tests that must compile scene/ECS headers outside `libteng` |
-| `teng_shader_compiler` | **STATIC** | Shader compiler; linked into `teng` and `teng-shaderc` |
-| `teng_engine_smoke` | **STATIC** | GPU-free smoke tests; **PUBLIC** link to `teng_static` so scene/ECS smokes live under `tests/smoke` without exporting Flecs |
-| `metalrender`, `engine_scene_smoke`, `teng-shaderc` | **EXECUTABLE** | `metalrender` links shared `teng`; `engine_scene_smoke` links `teng_engine_smoke`; `teng-shaderc` links `teng_shader_compiler` |
+| `teng` | **SHARED** | Engine aggregate (core/platform/gfx/engine objects) |
+| `teng_static` | **STATIC** | Same sources—for tests/smokes that include Flecs headers without exporting from `libteng` |
+| `teng_shader_compiler` | **STATIC** | `teng` + `teng-shaderc` |
+| `teng_engine_smoke` | **STATIC** | GPU-free smokes → links `teng_static` **PUBLIC** so `tests/smoke` can use scene APIs |
+| Exes | | `metalrender` → shared `teng`; `engine_scene_smoke` → `teng_engine_smoke`; `teng-shaderc` → shader lib |
 
-Pain points already observed:
+**Pain:** static third parties inside **shared** `teng` don’t give ABI to other static libs that need the same headers—**or** you duplicate the runtime (fatal for ECS). **Fix:** smokes that inline Flecs link **`teng_static`**, not shared `teng` alone.
 
-- **Third-party static deps linked privately into a shared `teng`** do not expose their C/C++ ABI to **other** static libraries or TUs that include the same headers unless those TUs live inside `teng` or you duplicate the runtime (bad for ECS).
-- Splitting “tests” into a separate static library works when tests call **only** stable engine APIs; it breaks when tests **inline** Flecs C++ API while Flecs lives only inside `libteng.so`.
+## Invariants
 
-## Principles (what “real” engines usually optimize for)
+1. **One ECS runtime** per process (Flecs, future VM, etc.).
+2. **Narrow shared ABI** if you export DSOs; everything else same linkage unit or opaque handles.
+3. **Flecs rule:** With **shared** interim `teng`, prefer no public `flecs` headers for **out-of-library** game/app code; tests needing Flecs C++ use `teng_static` **or** live inside the lib that owns `Scene`. **Long-term shipped game** is **static** ECS+core—game code may include scene/Flecs-facing headers without a giant exported Flecs ABI from a DSO. Do not “export all Flecs from libteng.so” as the fix.
+4. **Thin exes:** `main` + parse + layer push; heavy code in libraries.
 
-1. **One runtime per dependency class per process** — especially ECS, scripting VMs, and allocators that hold global or quasi-global state.
-2. **Explicit ABI surfaces** — shared libraries expose **narrow, versioned** APIs (C or stable C++ subset); everything else stays inside the same linkage unit or behind opaque handles.
-3. **Shipped games** often favor **few binaries** and **predictable symbols** (static monolith or a **small** set of DLLs/SOs with clear roles: render device, audio, platform).
-4. **Tools and CI** favor **fast links** and **simple graphs**; duplicating large static libs across ten tiny tools can be acceptable on desktop dev machines.
+**Target concept** (names flexible; matches engine plan): `teng_core` / `teng_scene` (Flecs) / `teng_render`+gfx / `teng_assets` * / `teng_editor` * — one-way DAG, no Flecs in a stray `.a` that also links **shared** `teng` unless single-instance is proven.
 
-These principles conflict slightly; the migration phases below pick defaults per **phase** and record **retirement criteria** when upgrading.
+***Not all of these are separate shipped libs today**—internal `OBJECT`/`STATIC` buckets are fine until a second major consumer (editor) needs a promoted **SHARED** boundary with a stable API.
 
-## Recommended long-term shape (target)
+## Done vs next (this doc’s CMake track)
 
-### A. Thin executable runtime (always static glue)
-
-Every **game/editor/tool entry** should stay a **thin** `main` + argument parsing + perhaps crash hooks:
-
-- **Statically linked**: bootstrap, memory/debug init, logging setup if not inside engine, and calls into the engine library.
-
-This does **not** mean “statically link the entire engine into every exe” forever — it means the **executable itself** is not where large reusable code lives.
-
-### B. Engine core vs presentation split (medium-term CMake targets)
-
-Split **`teng`** into layered libraries with **one-way dependencies** (avoid cycles):
-
-| Proposed target | Contents (conceptual) | Default linkage suggestion |
-|-----------------|------------------------|----------------------------|
-| `teng_core` | Types, logging, files, math helpers, **non-Flecs** or minimal ECS-neutral IDs if feasible | **STATIC** first; revisit **SHARED** only if multiple consumers need ABI stability |
-| `teng_scene` (or `engine_scene`) | Flecs world, `Scene`, components, extraction that touches ECS | **Same linkage mode as the runtime that owns worlds** — typically **STATIC into** the main engine DLL **or** **STATIC into** final exe |
-| `teng_render` / existing gfx cluster | `RenderService`, `RenderGraph`, RHI, meshlet path | Often **SHARED** “engine” slice for editor + game if both exist; otherwise **STATIC** into a single game binary |
-| `teng_assets` | `AssetRegistry`, `AssetDatabase`, `AssetService`, load pipelines | **STATIC** into engine unless a standalone asset processor ships separately |
-| `teng_shader_compiler` | Already separate static lib — **keep** |
-
-Exact file lists are implementation details; the **rule** is: **Flecs-using code never sits in a separate static `.a` that links against a **SHARED** `teng` that **also** contains Flecs unless Flecs is guaranteed single-instance (see below).
-
-### C. Flecs linkage rule (non-negotiable invariant)
-
-Pick **one** model and document it in CMake:
-
-1. **Encapsulated Flecs (preferred for shared `libteng`)**  
-   - No `flecs` headers in **public** engine headers consumed by games/tests outside `teng`.  
-   - Scene smoke tests that need Flecs live **inside** the same library as `Scene` **or** tests link a **fully static** engine stack (see D).
-
-2. **Static engine for tests that include Flecs headers**  
-   - Provide **`teng_static`** (or `BUILD_TENG_AS_STATIC`) used **only** by `engine_scene_smoke` / integration tests so scene smoke `.cpp` files can live under `tests/smoke` **without** exporting Flecs from a shared `libteng`.
-
-Do **not** rely on “export all Flecs symbols from `libteng.so`” as the long-term fix — it widens ABI coupling and complicates Linux/macOS symbol visibility.
-
-### D. Shipping vs development profiles
-
-| Profile | Purpose | Suggested topology |
-|---------|---------|---------------------|
-| **Dev / CI** | Fast iteration, many small executables | Prefer **one** `teng` variant per configuration (shared **or** static), plus thin test exes; avoid mixing shared `teng` + separate static libs that pull Flecs headers unless invariant C holds |
-| **Shipping PC game** | Single player binary + maybe anti-cheat | Often **single main binary** or exe + **explicit** DLL set (renderer/audio); engine either fully static or one “game.dll” |
-| **Editor (future)** | Loads tools, possibly hot reload | More **shared** modules with clear ABI; editor-specific code never duplicates ECS |
-
-## Migration phases
-
-### Phase 1 — Document and enforce invariants (implemented)
-
-- Add a short **`README` or CMake comment block** (repo-root or `cmake/`) stating: Flecs is **private** to `teng`; tests including Flecs must either compile inside `teng` or use **`teng_static`** (once introduced).
-- Optionally add **`INTERFACE`** compile definitions or a **`TENG_BUILD_SHARED`** macro so headers can `static_assert` or comment dangerous combinations.
-
-**Validation:** existing `agent_verify` unchanged.
-
-### Phase 2 — Introduce optional `teng` static variant for tests (implemented)
-
-- Add **`add_library(teng STATIC ...)`** with **same sources** as shared `teng`, gated by `BUILD_SHARED_LIBS` or explicit `TENG_LIBRARY_TYPE` option (default stays shared for normal apps).
-- Wire **`engine_scene_smoke`** to link **`teng` static** + move **`SceneSmokeTest`** sources to `tests/smoke` if desired.
-
-**Retirement criteria:** scene smokes can live entirely under `tests/smoke` without CMake comments explaining DSO leakage; **or** team explicitly chooses “scene smokes stay in `libteng`” and deletes the static variant for tests only.
-
-**Risk:** longer link times for static test exe; duplicate codegen size vs shared — acceptable for CI-sized binaries.
-
-### Phase 3 — Logical split of `teng` into internal components (implemented)
-
-- Factor **`teng_shader_compiler`**-style internal libs inside CMake: e.g. `teng_gfx`, `teng_engine`, merged into **either** shared `teng` **or** static `teng` via `OBJECT` or `STATIC` + `target_link_libraries`.
-- Goal: **clear dependency DAG** and faster incremental builds, **not** multiple shipped shared libs yet.
-
-Implemented shape: `teng` and `teng_static` aggregate paired shared/static object-library variants
-for core, platform, gfx, and engine. These are internal CMake organization targets, not app-facing
-link targets.
-
-**Validation:** no behavior change; binary sizes roughly stable.
-
-### Phase 4 — Optional shared boundaries for editor / second executable
-
-- Only when a **second major consumer** (editor, embedded viewer) exists: promote **`teng_render`** or **`teng_runtime`** to **SHARED** with a **narrow C ABI** or stable C++ API for tools.
-- Keep Flecs **inside** the runtime shared lib **or** behind opaque scene handles exported from that lib.
-
-**Unresolved until needed:** plugin ABI, hot reload boundaries, macOS framework layout.
-
-## What should stay in the main executable (static)
-
-- **Entry point**, CLI parsing, and per-app layer wiring.
-- **Glue** that must run before shared libs load (minimal).
-- **Third-party** that must be singleton per process **and** is hard to isolate — preferably **not** duplicated; if duplicated, must be proven independent (usually avoid).
-
-## What should be shared libraries (when justified)
-
-- **Large** engine/runtime code reused by **multiple processes or tools** with compatible ABI expectations.
-- **GPU drivers / platform bridges** already modeled as dynamic (Vulkan loader, Metal frameworks) — keep existing pattern.
-- **Optional** editor modules once editor exists — deliberate ABI, not accidental Flecs export.
+- **Done:** Invariants documented; `teng` + `teng_static` pair; internal `teng_core` / `teng_platform` / `teng_gfx` / `teng_engine` object aggregates feeding both.
+- **Next (aligns engine Phase 8–9):** Flip **shipped-style** `metalrender` (or successor player target) to **static** ECS+core per long-term requirement; optional **shared** slices **only** where a **second major consumer** (e.g. editor hot-reload) needs a narrow stable ABI—not for core simulation. Asset/tool CLIs link minimal `teng_*` where possible. Editor = **separate executable** per engine plan (not `--editor` on the same binary unless you later revisit and update both docs).
 
 ## Risks
 
 | Risk | Mitigation |
 |------|------------|
-| Two Flecs runtimes | Single linkage rule; CI test that fails if `ecs_*` appears from two archives |
-| CMake explosion | Phase 3 uses **internal** static libs consumed only by `teng` target |
-| Link time regression | Unity builds / ninja pools; split only after profiling |
-| Apple / Windows differences | Document `SHARED` vs `STATIC` defaults per OS in CMake presets |
+| Two Flecs | Single linkage model; watch link maps for duplicate `ecs_*` |
+| CMake sprawl | Internal libs only; promote SHARED when a real second consumer needs it |
+| Link time | Profiling, unity/pools—split for clarity first |
 
 ## Validation
 
-- `./scripts/agent_verify.sh` passes.
-- `metalrender --quit-after-frames 30` passes.
-- No duplicate Flecs symbols in final link (`nm`, `ldd`, or linker map review when changing linkage).
+`./scripts/agent_verify.sh`, `metalrender --quit-after-frames 30`, no duplicate Flecs in final link when changing topology.
 
-## Open questions
+## Open
 
-1. Is a future **editor** a separate executable or the same binary with `--editor`? Answers drive shared-lib boundaries.
-2. Should **asset tooling** ship as separate CLI binaries linking **only** `teng_assets` + core (lighter than full renderer)?
-
----
-
-*This plan is specific to this repository; runtime/editor CMake splits follow [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) Phases 8–9, not ad hoc linkage experiments.*
+- Should heavy **asset-only** tools be dedicated exes linking minimal `teng_*` set (no window/device)?
