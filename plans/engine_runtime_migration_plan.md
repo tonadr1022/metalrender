@@ -17,7 +17,7 @@ Do not reintroduce app-specific scene subclasses, deleted demo bridges, or monol
 - **Vulkan and Metal** stay viable through RHI/platform code; avoid Vulkan-only assumptions in engine-level logic.
 - **Stable IDs** (`SceneId`, `EntityGuid`, `AssetId`) anchor authored data; Flecs entity ids and GPU handles stay runtime-only.
 - **Library boundaries** intentional—runtime must not link editor asset mutation. Details: `plans/library_linkage_architecture_plan.md`.
-- **Shipped runtime linkage (long-term, strict):** Player/game targets **statically link** ECS (scene/Flecs) and **core engine runtime** libraries—Godot/Unity/Unreal-style standalone binary, not core simulation living in a separate versioned engine DSO. **Interim** shared `teng` for `metalrender` is scaffolding until Phase 8 meets the exit below. Full rule: `plans/library_linkage_architecture_plan.md` (“Long-term requirement”).
+- **Shipped runtime linkage (long-term, strict):** Player/game targets **statically link** ECS (scene/Flecs) and **core engine runtime** libraries—Godot/Unity/Unreal-style standalone binary, not core simulation living in a separate versioned engine DSO. `metalrender` now links the static `teng_runtime` aggregate. Full rule: `plans/library_linkage_architecture_plan.md` (“Long-term requirement”).
 
 ## Goals
 
@@ -63,7 +63,7 @@ The phases below build **architecture** (linkage, editor foundation, serializati
 | Scene on-disk | TOML layout, `schema_version`, generators | Stable **IDs** as authored references |
 | `RenderScene` / extraction | New channels, fields | No `RenderGraph`/GPU in gameplay components |
 | Asset pipeline | DB manifest layout | Scenes use **AssetId**, not paths |
-| Internal CMake | Target names, split topology, interim shared `teng` | One Flecs/runtime process; `agent_verify` workflows; **long-term** shipped player = **static** ECS + core (`library_linkage_architecture_plan.md`) |
+| Internal CMake | Target names, split topology, removed shared `teng` | One Flecs/runtime process; `agent_verify` workflows; **long-term** shipped player = **static** ECS + core (`library_linkage_architecture_plan.md`) |
 
 Ship version bumps, migration notes, and generator updates—no silent drift.
 
@@ -95,7 +95,7 @@ Components (no GPU in serialized gameplay state) → systems → narrow services
 | Render boundary | `src/engine/render/RenderService.*`, `RenderScene.hpp`, `IRenderer.hpp`; design note `plans/render_service_extraction_design.md` |
 | Meshlet renderer | `src/gfx/renderer/MeshletRenderer.*` |
 | Interim scene load | `src/engine/scene/SceneAssetLoader.*` |
-| Build | `apps/CMakeLists.txt` (`metalrender`, `teng-shaderc`, `engine_scene_smoke`); `src/CMakeLists.txt` aggregates `teng` / `teng_static` |
+| Build | `apps/CMakeLists.txt` (`metalrender`, `teng-shaderc`, `engine_scene_smoke`); `src/CMakeLists.txt` aggregates static `teng_runtime` |
 
 ## Destination architecture
 
@@ -116,7 +116,7 @@ Scene = loaded data + registered systems, not a gameplay base class. Editor and 
 
 | Product | Role |
 |---------|------|
-| `metalrender` | Shipped-style runtime for data scenes (**interim:** shared `teng`; **destination:** static ECS+core per linkage plan) |
+| `metalrender` | Shipped-style runtime for data scenes; links static `teng_runtime` per linkage plan |
 | `metalrender_editor` (planned) | + authoring UI/libs |
 | `teng-shaderc`, future tools | Minimal link; no full renderer when unnecessary |
 

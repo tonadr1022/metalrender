@@ -1,5 +1,3 @@
-set(target_name teng)
-
 add_library(teng_shader_compiler STATIC
     shader_compiler/ShaderCompiler.cpp
 )
@@ -149,19 +147,12 @@ function(configure_teng_component target_name build_shared)
     endif()
 endfunction()
 
-function(add_teng_component component_name build_shared)
-    set(target_name ${component_name})
-    if(build_shared)
-        set(target_name ${component_name}_shared)
-    else()
-        set(target_name ${component_name}_static)
-    endif()
-
-    add_library(${target_name} OBJECT ${ARGN})
-    configure_teng_component(${target_name} ${build_shared})
+function(add_teng_component component_name)
+    add_library(${component_name} OBJECT ${ARGN})
+    configure_teng_component(${component_name} 0)
 
     if(BUILD_METAL)
-        add_dependencies(${target_name} compile_metal_backend_shaders)
+        add_dependencies(${component_name} compile_metal_backend_shaders)
     endif()
 endfunction()
 
@@ -199,38 +190,20 @@ if(BUILD_METAL)
     list(APPEND TENG_GFX_SOURCES ${TENG_METAL_GFX_SOURCES})
 endif()
 
-add_teng_component(teng_core 1 ${TENG_CORE_SOURCES})
-add_teng_component(teng_platform 1 ${TENG_PLATFORM_SOURCES})
-add_teng_component(teng_gfx 1 ${TENG_GFX_SOURCES})
-add_teng_component(teng_engine 1 ${TENG_ENGINE_SOURCES})
+add_teng_component(teng_core ${TENG_CORE_SOURCES})
+add_teng_component(teng_platform ${TENG_PLATFORM_SOURCES})
+add_teng_component(teng_gfx ${TENG_GFX_SOURCES})
+add_teng_component(teng_engine ${TENG_ENGINE_SOURCES})
 
-add_teng_component(teng_core 0 ${TENG_CORE_SOURCES})
-add_teng_component(teng_platform 0 ${TENG_PLATFORM_SOURCES})
-add_teng_component(teng_gfx 0 ${TENG_GFX_SOURCES})
-add_teng_component(teng_engine 0 ${TENG_ENGINE_SOURCES})
+target_link_libraries(teng_platform PUBLIC teng_core)
+target_link_libraries(teng_gfx PUBLIC teng_core teng_platform)
+target_link_libraries(teng_engine PUBLIC teng_core teng_platform teng_gfx)
+target_link_libraries(teng_engine PRIVATE flecs::flecs_static)
 
-target_link_libraries(teng_platform_shared PUBLIC teng_core_shared)
-target_link_libraries(teng_gfx_shared PUBLIC teng_core_shared teng_platform_shared)
-target_link_libraries(teng_engine_shared PUBLIC teng_core_shared teng_platform_shared teng_gfx_shared)
-target_link_libraries(teng_engine_shared PRIVATE flecs::flecs_static)
-
-target_link_libraries(teng_platform_static PUBLIC teng_core_static)
-target_link_libraries(teng_gfx_static PUBLIC teng_core_static teng_platform_static)
-target_link_libraries(teng_engine_static PUBLIC teng_core_static teng_platform_static teng_gfx_static)
-target_link_libraries(teng_engine_static PRIVATE flecs::flecs_static)
-
-add_library(${target_name} SHARED
-    $<TARGET_OBJECTS:teng_core_shared>
-    $<TARGET_OBJECTS:teng_platform_shared>
-    $<TARGET_OBJECTS:teng_gfx_shared>
-    $<TARGET_OBJECTS:teng_engine_shared>
+add_library(teng_runtime STATIC
+    $<TARGET_OBJECTS:teng_core>
+    $<TARGET_OBJECTS:teng_platform>
+    $<TARGET_OBJECTS:teng_gfx>
+    $<TARGET_OBJECTS:teng_engine>
 )
-configure_teng_aggregate(${target_name} 1)
-
-add_library(teng_static STATIC
-    $<TARGET_OBJECTS:teng_core_static>
-    $<TARGET_OBJECTS:teng_platform_static>
-    $<TARGET_OBJECTS:teng_gfx_static>
-    $<TARGET_OBJECTS:teng_engine_static>
-)
-configure_teng_aggregate(teng_static 0)
+configure_teng_aggregate(teng_runtime 0)

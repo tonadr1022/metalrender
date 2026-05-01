@@ -1,10 +1,10 @@
 # Phase 8: Library split and shipped-runtime linkage — implementation spec
 
-**Status:** specification for the **next** deep implementation step aligned with [Phase 8 in `engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) and [`library_linkage_architecture_plan.md`](library_linkage_architecture_plan.md).
+**Status:** Phase 8 P0/P1 implementation landed: `metalrender` links static `teng_runtime`, the broad shared `teng` aggregate was removed, and the duplicate shared object lanes were collapsed.
 
 **Scope:** CMake topology, linkage shapes per product (game runtime vs tests vs tools), Flecs single-runtime invariants, and optional promotion of internal buckets to first-class static libraries. **Out of scope for this document:** editor UI (Phase 9), full serialization v2 (Phase 12), RHI/renderer refactors.
 
-**Expectation:** Large CMake and possibly minor source edits are allowed; internal target names may change; **`metalrender` default linkage becomes static ECS + core** per long-term shipped-runtime rule.
+**Expectation:** Large CMake and possibly minor source edits are allowed; internal target names may change; **`metalrender` default linkage is static ECS + core** per long-term shipped-runtime rule.
 
 ---
 
@@ -14,7 +14,7 @@
 
 Today the repo already uses **four OBJECT buckets** (`teng_core`, `teng_platform`, `teng_gfx`, `teng_engine`) duplicated in shared-vs-static flavors, then welded into:
 
-| Artifact | Role today |
+| Artifact | Role before Phase 8 |
 |----------|------------|
 | `libteng.so` (SHARED) | Full engine aggregate consumed by **`metalrender`** |
 | `libteng_static.a` (STATIC) | Same logical library for **`teng_engine_smoke`** → `engine_scene_smoke` |
@@ -33,7 +33,7 @@ That means:
 
 - **Single Flecs static archive** linked privately into aggregates (`flecs::flecs_static` on engine objects / aggregate)—no duplicate Flecs link lines in apps today.
 - **GPU-free tool precedent:** `teng-shaderc` links only `teng_shader_compiler` + warnings—not full engine.
-- **Smoke tests** correctly use `teng_static` via `teng_engine_smoke` ([`tests/CMakeLists.txt`](../tests/CMakeLists.txt)).
+- **Smoke tests** now use `teng_runtime` via `teng_engine_smoke` ([`tests/CMakeLists.txt`](../tests/CMakeLists.txt)).
 
 ---
 
@@ -120,8 +120,8 @@ Update **`AGENTS.md`** target section only when CMake target names change (optio
 
 Relevant CMake and consumers:
 
-- Engine aggregate: [`src/CMakeLists.txt`](../src/CMakeLists.txt) — `TENG_*_SOURCES`, `add_teng_component`, `teng` SHARED, `teng_static`.
-- App: [`apps/metalrender/CMakeLists.txt`](../apps/metalrender/CMakeLists.txt) — `target_link_libraries(metalrender PUBLIC teng)`.
+- Engine aggregate: [`src/CMakeLists.txt`](../src/CMakeLists.txt) — `TENG_*_SOURCES`, `add_teng_component`, `teng_runtime` STATIC.
+- App: [`apps/metalrender/CMakeLists.txt`](../apps/metalrender/CMakeLists.txt) — `target_link_libraries(metalrender PRIVATE teng_runtime)`.
 - Smokes: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt), [`apps/engine_scene_smoke/CMakeLists.txt`](../apps/engine_scene_smoke/CMakeLists.txt).
 - Verify script: [`scripts/agent_verify.sh`](../scripts/agent_verify.sh) — builds `metalrender`, `teng-shaderc`, `engine_scene_smoke`.
 
@@ -273,11 +273,11 @@ Probably yes
 
 Copy into PR description / tracking issue:
 
-- [ ] Default **`metalrender`** uses **static** linkage for core + ECS + engine (no `libteng.so` runtime dependency).
-- [ ] **Single Flecs** link model documented and audited.
-- [ ] **`agent_verify.sh`** green; bounded **`metalrender`** smokes green.
-- [ ] **`library_linkage_architecture_plan.md`** snapshot updated.
-- [ ] Shared `teng` **removed** or **explicitly quarantined** with forbidden-use notes.
-- [ ] Optional: OBJECT/STATIC promotion and/or engine CMake splits merged or ticketed as Phase 8.1.
+- [x] Default **`metalrender`** uses **static** linkage for core + ECS + engine (no `libteng.so` runtime dependency).
+- [x] **Single Flecs** link model documented and audited.
+- [x] **`agent_verify.sh`** green; bounded **`metalrender`** smokes green.
+- [x] **`library_linkage_architecture_plan.md`** snapshot updated.
+- [x] Shared `teng` **removed** or **explicitly quarantined** with forbidden-use notes.
+- [x] Optional: OBJECT/STATIC promotion and/or engine CMake splits merged or ticketed as Phase 8.1.
 
 ---

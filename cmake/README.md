@@ -1,18 +1,18 @@
 # CMake Linkage Notes
 
-`teng` is the default engine target for normal applications. It is built as a shared library so
-existing app targets keep linking the same runtime boundary.
+`teng_runtime` is the default engine target for normal applications. It is built as a static
+library so shipped-style app targets link engine core, scene, and Flecs into the executable.
 
-Flecs is private engine runtime state. Do not treat Flecs headers or symbols as part of the shared
-`teng` ABI. Code outside `teng` that compiles against Flecs-facing engine headers must link the
-static engine target, `teng_static`, so it uses one static engine/Flecs runtime in that final
+Flecs is private engine runtime state. Do not introduce a shared engine ABI that exports Flecs
+headers or symbols by accident. Code outside the engine that compiles against Flecs-facing scene
+headers must link `teng_runtime`, so it uses one static engine/Flecs runtime in the final
 executable.
 
-Tests and tools that only use stable engine APIs should keep linking `teng` unless they need to
-compile code that touches Flecs-facing scene APIs. Scene smoke tests are the current example: they
-link through `teng_static` via `teng_engine_smoke`.
+Tests and tools that need the full runtime should link `teng_runtime`. Minimal tools should keep
+their own narrow libraries instead of pulling the runtime aggregate; `teng-shaderc` is the current
+example and links only `teng_shader_compiler`.
 
-`teng` and `teng_static` are app-facing aggregation targets over internal object-library components:
-core, platform, gfx, and engine. Those internal component targets are a CMake organization boundary,
-not public app link targets. Normal apps should continue to link `teng`; Flecs-facing smoke tests
-should continue to link through `teng_engine_smoke`.
+`teng_runtime` is the app-facing aggregation target over internal object-library components: core,
+platform, gfx, and engine. Those internal component targets are a CMake organization boundary, not
+public app link targets. Normal apps should link `teng_runtime`; scene smoke tests link it through
+`teng_engine_smoke`.
