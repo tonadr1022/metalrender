@@ -23,7 +23,7 @@ An agent can consider Phase 12 **complete** when all of the following are true:
 
 1. **Single source of truth** — Every **authored** component type that must appear in shipped scenes is registered in one **component serialization registry**. Adding a new serializable component does **not** require hand-editing a parallel loader (contrast: today’s `SceneAssetLoader.cpp` vs `SceneComponents.hpp` drift).
 
-2. **Round-trip** — For the set of **serialized authored components** (§4), `deserialize(serialize(scene))` is **semantically equivalent** to the original for extraction and gameplay: same `EntityGuid` sets, same payloads for every serialized component, stable entity ordering (§8). **Excluded from byte-for-byte component comparison:** runtime-only components (§4), **`LocalToWorld`** (derived after load per §5.3), and any other registry-flagged derived/cache rows. After round-trip, **`LocalToWorld`** must match **deterministic derivation** from authored `Transform` (and FPS/controller rules in code) before gameplay reads—not necessarily equality with pre-save runtime matrices.
+2. **Round-trip** — For the set of **serialized authored components** (§4), `deserialize(serialize(scene))` is **semantically equivalent** to the original for extraction and gameplay: same `EntityGuid` sets, same payloads for every serialized component, stable entity ordering (§8). **Excluded from byte-for-byte component comparison:** runtime-only components (§4), **`LocalToWorld`** (derived after load per §5.3), and any other registry-flagged derived/cache rows. After round-trip, **`LocalToWorld`** must match **deterministic derivation** from authored `Transform` (and FPS/controller rules in code) before gameplay reads—not necessarily equality with pre-save runtime matrices. **Camera entities** must round-trip **position/orientation via `Transform`** per §4.3 (save path syncs controller → `Transform` where FPS drives the view).
 
 3. **Runtime load path** — `Engine` / `SceneManager` loads scenes through the **new** pipeline (registry-driven). The interim `SceneAssetLoader` API is **removed**.
 
@@ -68,6 +68,8 @@ An agent can consider Phase 12 **complete** when all of the following are true:
 
 3. **Schema evolution (canonical rule)** — **`registry_version`** is the **single authoritative monotonic integer** for the **canonical JSON envelope + every registered component payload codec** shipped together. When **any** breaking change occurs (new required field, incompatible payload shape, envelope key changes), bump **`registry_version`** and extend the registry **`migrate`** pipeline. **Do not** rely on independent per-component version fields in v1 files.
 
+   **Tradeoff (global bump):** An unrelated breaking change in one component forces **every** canonical scene file to move forward on **`registry_version`** (whole-repo migration surface), not just scenes that use that component. Implementations and repo owners should **accept that cost** as the price of one authoritative evolution integer, **or** operationalize it: batch **`teng-scene-tool migrate`** in scripts/CI, pre-commit hooks, or editor save-all workflows so iteration does not stall on manual per-file edits.
+
    **Binary cooked format:** The cooked blob header carries its own **`binary_format_version`** (layout of tables, alignment, padding—§7.3). It is **not** the same integer as **`registry_version`**. The cook implementation documents which **`registry_version`** ranges each **`binary_format_version`** can encode. Reject unknown pairs with a clear error.
 
 4. **One registry** — Serialization metadata drives **load/save**, future **inspector** (Phase 9+), and **validation** messages (§8.1). **Normative validation** is **registry-driven**: known top-level keys, required envelope fields, registered component keys, and typed payload checks—**not** a separate JSON Schema document unless the project adds one later for ancillary tooling.
@@ -93,7 +95,9 @@ An agent can consider Phase 12 **complete** when all of the following are true:
 | `MeshRenderable` | Yes | `AssetId` only |
 | `SpriteRenderable` | Yes | `AssetId` + tint + sorting fields |
 
-**Human-readable entity label:** Optional **top-level** **`name`** string on each entity record (§5.2). **Do not** serialize a **`Name`** component under **`components`**—single source of truth on disk is the entity envelope field only. Runtime may still attach a Flecs `Name` (or equivalent) **derived from** that string when loading; saves **must** emit **`name`** from the canonical runtime source for that label (not a divergent second field).
+**Human-readable entity label:** Optional **top-level** **`name`** string on each entity record (§5.2). **Do not** duplicate the label as a **`name`** payload under **`components`**—one envelope field on disk, no second JSON blob for the same string.
+
+**Canonical runtime source (normative):** **Flecs `Name`** (or the project’s agreed Flecs name tag/component registered alongside entities) is the **single source of truth** for the entity label while the world is loaded. **Load** applies **`name`** from the file into Flecs `Name`. **Save** reads **only** Flecs `Name` and writes the envelope **`name`** (omit or empty string if unset—pick one policy and document it in code). After load, edits to the label in tooling update Flecs `Name`; there is **no** competing authoritative field—disk is a serialized snapshot, not a parallel master.
 
 ### 4.2 Derived at runtime (never in canonical JSON)
 
@@ -106,7 +110,7 @@ An agent can consider Phase 12 **complete** when all of the following are true:
 | Component / state | Reason |
 |-------------------|--------|
 | `EngineInputSnapshot` | Frame input; not authored |
-| `FpsCameraController` | Runtime simulation state; **not** authored on disk. Editor yaw/pitch defaults are **not** serialized in v1; reintroduce later only via an explicit authoring component if needed |
+| `FpsCameraController` | **Do not** serialize this component’s **blob** on disk (runtime tuning/smoothing/noise remain code-owned). **Camera pose round-trip (normative):** Authored **position and orientation** for the camera entity live in **`Transform`** like any other entity. Implementations **must** ensure **save** captures the orientation the player/editor sees: before emitting JSON, **sync controller-derived aim into `Transform`** (or equivalently guarantee gameplay never treats orientation as controller-only without mirroring into `Transform`). **Load** applies **`Transform`**, then attaches/runs FPS setup so the controller **initializes from** that **`Transform`**—first rendered frame matches the saved pose. Extra controller-only scalars stay runtime-only until an authoring type is added deliberately. |
 
 If a component is added to `SceneComponents.hpp` for gameplay, the registry must gain an entry **in the same change** or the change must be labeled **non-serialized experimental** with a tracked follow-up.
 
@@ -128,7 +132,7 @@ Optional future: hash keys in **binary** format only; canonical text keeps reada
 Each entity in a scene file:
 
 - Has **`guid`**: JSON **number** when the value is in the IEEE-754 safe integer range (§7.4), encoding **`EntityGuid::value`** as **`uint64_t`** consistent with `SceneIds.hpp`.
-- Has optional **`name`** (string) — **only** place the entity’s authored label appears on disk (§4.1).
+- Has optional **`name`** (string) — **only** place the entity’s label appears on disk; maps to Flecs `Name` on load and is **written from** Flecs `Name` on save (§4.1).
 - Has an object **`components`**: map **component key → payload object** for **serialized authored** components present on that entity (**no** `local_to_world`, **no** `name` component payload).
 - **`entities` array** order is **sorted by `EntityGuid::value` ascending as unsigned `uint64_t`**, matching `operator<(EntityGuid, EntityGuid)` in `SceneIds.hpp`. Apply the **same** rule in **save** and **cook** text staging.
 
@@ -246,6 +250,8 @@ Use **[nlohmann/json](https://github.com/nlohmann/json)** as the **only** JSON i
 - **Entity table** — fixed-size records: `guid`, indices into string/asset tables, bitmask or tag list of present components.
 - **Component blob section** — typed binary payloads matching registry binary codec.
 
+**JSON vs binary codec drift (normative awareness):** Canonical JSON uses registry **JSON** (de)serializers (typically hand-written at first). Cooked binary requires a **second** encoding per component (**binary codec**) that must stay **semantically aligned** with the JSON payloads for the same **`registry_version`**. This is easy to underestimate: field order, defaults, and implicit unions all drift without discipline. **Mitigations:** (1) **parity tests** — cook → dump → canonical JSON compare (§12.1) for representative scenes; (2) **single schema/codegen** later — generate **both** JSON and binary pack/unpack from one description when duplication becomes painful; until then, treat “binary codec matches JSON” as an explicit checklist item whenever **`registry_version`** or payload shapes change.
+
 **Endianness:** **Little-endian only.** Supported engineering platforms are little-endian; **big-endian hosts are unsupported** for reading/writing cooked blobs—reject or fail fast with a clear error if detected.
 
 **Alignment / packing:** Explicit rules **must** be written into the format header comment and implementation **before** cooked golden-byte tests are enabled (§12.1). Until then, treat binary layout as **implementation-detail** revocable by **`binary_format_version`** bumps.
@@ -297,7 +303,7 @@ Provide:
 1. Read file → parse with **`nlohmann::json`** → validate **`registry_version`** (known set + migrate path), envelope keys, and **registry-driven** payload checks (**no separate JSON Schema artifact required** for Phase 12—§3).
 2. `SceneManager::create_scene(name)` or clear existing — API decision: loading into **new** scene vs **in-place replace** of active world (default: **new scene**, set active like today).
 3. For each entity record (**deterministic sort order**, §5.2):
-   - `create_entity(guid, name)` using **top-level `name`** only.
+   - `create_entity(guid, name)` — set Flecs **`Name`** from **top-level `name`** (§4.1).
    - For each component payload under `components`: **deserialize** via registry and `set` on entity.
 4. **Do not** serialize `EngineInputSnapshot`; if needed, runtime sets it each frame as today.
 5. After applying payloads, **derive `LocalToWorld`** deterministically (§5.3). Prefer **no** `tick(0)` requirement; if a future subsystem forces it, document that exception prominently.
@@ -306,13 +312,13 @@ Provide:
 
 1. Iterate entities with `EntityGuidComponent` (all serializable entities).
 2. For each entity, **skip** runtime-only and derived components per registry rules (`LocalToWorld`, `FpsCameraController`, `EngineInputSnapshot`, …).
-3. Emit **top-level `name`** from the canonical runtime label source (§4.1); **do not** emit a `name` component blob.
+3. Emit **top-level `name`** from **Flecs `Name`** (§4.1); **do not** emit a `name` component blob.
 4. Emit entities in **sorted `EntityGuid::value` order** (unsigned).
 5. Write **`registry_version`** and metadata; **`dump`** with stable formatting (indent + sorted keys).
 
 ### 8.3 Interaction with systems
 
-Systems registered in `Scene::register_systems()` run on **update**. **`LocalToWorld`** after load must be correct **before** first `tick` for static scenes; FPS controllers **overwrite** `LocalToWorld` each frame as they do today—**saving immediately after systems run** captures whichever transient state exists in **serialized** components only (`Transform`, etc.), never `LocalToWorld`.
+Systems registered in `Scene::register_systems()` run on **update**. **`LocalToWorld`** after load must be correct **before** first `tick` for static scenes; FPS controllers **overwrite** `LocalToWorld` each frame as they do today—**saving immediately after systems run** captures **`Transform`** (and other serialized components), never `LocalToWorld`. **Normative:** For camera entities using FPS control, **save** must **not** drop orientation: the implementation **syncs aim into `Transform`** before serialization (§4.3) so round-trip preserves pose even though `FpsCameraController` itself is not written as a JSON blob.
 
 ---
 
@@ -325,7 +331,7 @@ Systems registered in `Scene::register_systems()` run on **update**. **`LocalToW
 
 ### 9.2 CLI and project startup paths
 
-- `apps/metalrender/main.cpp` **`--scene`**: accept canonical **`.tscene.json`** (or chosen extension) and load via the new pipeline.
+- `apps/metalrender/main.cpp` **`--scene`**: accept canonical **`.tscene.json`** and load via the new pipeline.
 - `resources/project.toml` **`startup_scene`**: update demo paths to JSON scene files. *(This file remains project configuration TOML; only the referenced scene paths change.)*
 
 ### 9.3 Demo generator
@@ -379,7 +385,7 @@ Large refactors are **in scope**:
 ### 12.1 Unit / integration tests
 
 - **Round-trip (JSON):** Build a `Scene` in memory with known **serialized** components → save JSON to temp → load → compare **guid sets** and **per-component equality** for authored types; verify **`LocalToWorld`** against **derived** expectations (§5.3).
-- **Golden files:** Commit **canonical** demo **`.tscene.json`** files and hash or diff them in CI. **Cooked binary golden-byte or hash tests are deferred** until **`binary_format_version`** layout rules are fixed (§7.3); until then, rely on round-trip **JSON** and optional **cook → dump → JSON compare** without asserting raw blob hashes.
+- **Golden files:** Commit **canonical** demo **`.tscene.json`** files and hash or diff them in CI. **Cooked binary golden-byte or hash tests are deferred** until **`binary_format_version`** layout rules are fixed (§7.3); until then, rely on round-trip **JSON** and **cook → dump → JSON compare** on at least one representative scene per milestone so JSON/binary semantic drift is caught early (§7.3).
 
 ### 12.2 Smoke updates
 
@@ -418,6 +424,8 @@ Parallel documentation: update **`AGENTS.md`** smoke examples if paths or flags 
 | Cook closure vs asset DB mismatch | Emit asset list from cook; integrate manifest when asset plan lands |
 | Large refactor breaks linkage | Follow `library_linkage_architecture_plan.md`; run `./scripts/agent_verify.sh` frequently |
 | `uint64` guid precision in JSON | Safe integer **`guid`** policy §7.4; migrator if string form is ever added |
+| JSON vs binary codec divergence | Parity tests (cook → dump → JSON); eventual single-schema codegen for both (§7.3) |
+| Global **`registry_version`** bumps | Batch migrate tooling and CI hooks (§3) |
 
 ---
 
@@ -436,8 +444,8 @@ _Update this subsection as the team locks choices during implementation._
 
 - **Canonical scene text format:** JSON only (`*.tscene.json` recommended); **not** TOML for scene bytes.
 - **JSON implementation:** **[nlohmann/json](https://github.com/nlohmann/json)** (`nlohmann_json::nlohmann_json`) for all Phase 12 scene parse/emit and registry JSON payloads; scene serialization **must not** use `toml++`.
-- **`FpsCameraController`:** **Runtime-only** — not serialized in v1 (§4.3).
-- **Entity label:** **Top-level `name` only** on disk — no `Name` component JSON blob (§4.1, §5.2).
+- **`FpsCameraController`:** **Component blob not on disk**; **camera pose** round-trips via **`Transform`** with save-time sync from controller (§4.3, §8.3).
+- **Entity label:** **Flecs `Name`** is authoritative at runtime; envelope **`name`** on disk mirrors it on save; no duplicate `name` under **`components`** (§4.1, §5.2).
 - **`LocalToWorld`:** **Never on disk**; derive after load (§5.3); round-trip compares authored components + deterministic derivation.
 - **Evolution:** **`registry_version`** monotonic authority for JSON + registry codecs; **`binary_format_version`** separate for cooked layout (§3, §7.3).
 - **Validation:** **Registry-driven** envelope + payloads; no normative JSON Schema requirement for v1 (§3, §8.1).
