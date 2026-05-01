@@ -16,13 +16,12 @@ Add `--format` to format.
 metalrender
 teng-shaderc
 engine_scene_smoke
-teng_scene_validate
+teng-scene-tool
 
 Common internal library targets include `teng_runtime` (interface aggregate over static runtime
 component libraries) and components such as `teng_core`, `teng_assets`, `teng_scene`, `teng_render`,
-`teng_gfx`, and `teng_engine_runtime`. `teng_scene_validate` is intentionally built by default
-verification even before it has a CLI consumer so the GPU-free validation scaffold does not silently
-break.
+`teng_gfx`, `teng_engine_runtime`, and `teng_scene_tool_lib`. `teng-scene-tool` is intentionally built
+by default verification so the GPU-free scene CLI scaffold does not silently break.
 
 ### Run
 

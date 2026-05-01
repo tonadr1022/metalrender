@@ -20,11 +20,12 @@ teng_runtime -> teng_engine_runtime -> teng_render -> teng_gfx -> teng_platform 
                                       -> teng_cvars -> teng_core
                                       -> teng_scene -> teng_assets -> teng_core
 
-teng_scene_validate -> teng_scene + teng_assets + teng_core
+teng_scene_tool_lib -> teng_scene + teng_assets + teng_core
+teng-scene-tool -> teng_scene_tool_lib
 ```
 
-`teng_scene_validate` is a concrete GPU-free static scaffold for future scene validate/migrate CLIs.
-It is built by `scripts/agent_verify.sh` even before a CLI consumes it. It must not gain platform,
+`teng_scene_tool_lib` is a GPU-free static library for scene validate/migrate/cook; the `teng-scene-tool`
+executable links it and is built by `scripts/agent_verify.sh`. The library must not gain platform,
 renderer, gfx, Vulkan, Metal, ImGui, or CVar dependencies. `teng_runtime` is a pure interface
 aggregate and does not compile an anchor source or add backend compile definitions directly; backend
 flags live on concrete backend-using component targets. `AssetService` stays in

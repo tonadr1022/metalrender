@@ -33,8 +33,8 @@ RHI/renderer rewrites for CMake only; full consumer packaging (Steam, etc.). **E
 | `teng_core` | **STATIC** | Core utilities and process-wide runtime helpers |
 | `teng_cvars` | **STATIC** | CVar/console/debug UI helpers; kept out of GPU-free scene validation |
 | `teng_assets` | **STATIC** | GPU-free asset IDs, registry, and database |
-| `teng_scene` | **STATIC** | Flecs scene, components, IDs, manager, and interim TOML loader |
-| `teng_scene_validate` | **STATIC** | GPU-free scaffold for future scene validate/migrate CLIs |
+| `teng_scene` | **STATIC** | Flecs scene, components, IDs, manager; interim `SceneAssetLoader` until Phase 12 — then registry + **`nlohmann/json`** canonical scenes ([`scene_serialization_design.md`](scene_serialization_design.md)) |
+| `teng_scene_tool_lib` | **STATIC** | GPU-free scene validate/migrate/cook library (`teng-scene-tool` exe) |
 | `teng_platform` | **STATIC** | Window/UI platform support |
 | `teng_gfx` | **STATIC** | RHI, RenderGraph, model loading, and meshlet renderer implementation |
 | `teng_render` | **STATIC** | Engine render service and scene extraction |
@@ -42,7 +42,7 @@ RHI/renderer rewrites for CMake only; full consumer packaging (Steam, etc.). **E
 | `teng_runtime` | **INTERFACE** | Full runtime aggregate for shipped-style apps and runtime smokes; resolves to static component libraries |
 | `teng_shader_compiler` | **STATIC** | Minimal shader compiler library used by `teng-shaderc` |
 | `teng_engine_smoke` | **STATIC** | Smoke-test helper library → links `teng_runtime` **PUBLIC** so smoke sources can use scene APIs |
-| Exes | | `metalrender` → `teng_runtime` **PRIVATE**; `engine_scene_smoke` → `teng_engine_smoke`; `teng-shaderc` → shader lib |
+| Exes | | `metalrender` → `teng_runtime` **PRIVATE**; `engine_scene_smoke` → `teng_engine_smoke`; `teng-shaderc` → shader lib; `teng-scene-tool` → `teng_scene_tool_lib` |
 
 The removed shared `teng` target should not be reintroduced as a broad engine DSO. If a future
 editor hot-reload path needs shared linkage, add a deliberately narrow `teng_editor_api`-style
@@ -62,7 +62,8 @@ teng_runtime -> teng_engine_runtime -> teng_render -> teng_gfx -> teng_platform 
                                       -> teng_cvars -> teng_core
                                       -> teng_scene -> teng_assets -> teng_core
 
-teng_scene_validate -> teng_scene + teng_assets + teng_core
+teng_scene_tool_lib -> teng_scene + teng_assets + teng_core (+ `nlohmann_json::nlohmann_json` once Phase 12 scene tools parse JSON — see [`scene_serialization_design.md`](scene_serialization_design.md))
+teng-scene-tool -> teng_scene_tool_lib
 ```
 
 `AssetService` remains in `teng_engine_runtime` because it currently owns `gfx::ModelLoadResult`
@@ -77,7 +78,7 @@ libraries that compile backend code.
 
 ## Done vs next (this doc’s CMake track)
 
-- **Done:** Invariants documented; shared `teng` retired; `teng_runtime` is the interface aggregate over static runtime component libraries; internal object buckets were promoted to static component libraries; `teng_scene_validate` exists as a GPU-free static scaffold.
+- **Done:** Invariants documented; shared `teng` retired; `teng_runtime` is the interface aggregate over static runtime component libraries; internal object buckets were promoted to static component libraries; `teng_scene_tool_lib` + `teng-scene-tool` exist as GPU-free scene tooling scaffolds.
 - **Next (aligns engine Phase 9+):** Optional **shared** slices only where a **second major consumer** (e.g. editor hot-reload) needs a narrow stable ABI—not for core simulation. Asset/tool CLIs link minimal `teng_*` where possible. Editor = **separate executable** per engine plan (not `--editor` on the same binary unless you later revisit and update both docs).
 
 ## Risks
@@ -90,7 +91,7 @@ libraries that compile backend code.
 
 ## Validation
 
-`./scripts/agent_verify.sh`, `metalrender --quit-after-frames 30`, no duplicate Flecs in final link when changing topology. `agent_verify.sh` builds `teng_scene_validate` by default even before a CLI consumes it, so its GPU-free scaffold source stays compiled.
+`./scripts/agent_verify.sh`, `metalrender --quit-after-frames 30`, no duplicate Flecs in final link when changing topology. `agent_verify.sh` builds `teng-scene-tool` by default so GPU-free scene tool sources stay compiled.
 
 ## Open
 

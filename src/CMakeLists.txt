@@ -185,7 +185,7 @@ add_teng_component(teng_platform OFF ${TENG_PLATFORM_SOURCES})
 add_teng_component(teng_gfx ON ${TENG_GFX_SOURCES})
 add_teng_component(teng_assets OFF ${TENG_ASSETS_SOURCES})
 add_teng_component(teng_scene OFF ${TENG_SCENE_SOURCES})
-add_teng_component(teng_scene_validate OFF engine/scene/SceneValidate.cpp)
+add_teng_component(teng_scene_tool_lib OFF engine/scene/SceneValidate.cpp)
 add_teng_component(teng_render ON ${TENG_RENDER_SOURCES})
 add_teng_component(teng_engine_runtime ON ${TENG_ENGINE_RUNTIME_SOURCES})
 add_library(teng_runtime INTERFACE)
@@ -200,7 +200,7 @@ target_link_libraries(teng_gfx
 target_link_libraries(teng_assets PUBLIC teng_core)
 target_link_libraries(teng_scene PUBLIC teng_core teng_assets)
 teng_link_flecs(teng_scene)
-target_link_libraries(teng_scene_validate PUBLIC teng_core teng_assets teng_scene)
+target_link_libraries(teng_scene_tool_lib PUBLIC teng_core teng_assets teng_scene)
 target_link_libraries(teng_render PUBLIC teng_core teng_scene teng_gfx PRIVATE Tracy::TracyClient)
 target_link_libraries(teng_engine_runtime PUBLIC
     teng_core

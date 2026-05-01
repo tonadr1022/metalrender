@@ -2,7 +2,7 @@
 
 **North-star:** runtime, editor, tools, and shipped games on one architecture—genre-capable (platformers, 2D, later voxel-scale verticals), not only a meshlet demo host.
 
-**Snapshot (today):** `apps/metalrender` hosts `engine::Engine`; default renderer is `gfx::MeshletRenderer` via `RenderService`. `AssetId`, registry/DB, `AssetService`, and render-side model residency exist. **Interim** TOML scenes load via `SceneAssetLoader` (`--scene`, `resources/project.toml` `startup_scene`). Demo data: `scripts/generate_demo_scene_assets.py`.
+**Snapshot (today):** `apps/metalrender` hosts `engine::Engine`; default renderer is `gfx::MeshletRenderer` via `RenderService`. `AssetId`, registry/DB, `AssetService`, and render-side model residency exist. **Interim** scene files (`*.tscene.toml`) load via `SceneAssetLoader` (`--scene`, `resources/project.toml` `startup_scene`). **Canonical scenes (Phase 12):** UTF-8 JSON `*.tscene.json`, registry-driven load/save — [`plans/scene_serialization_design.md`](scene_serialization_design.md). Demo data: `scripts/generate_demo_scene_assets.py`.
 
 **Forward work** will **break** narrow on-disk formats, `RenderScene` shape, and internal CMake where the plan says so—see [Compatibility](#compatibility-and-intentional-breakage).
 
@@ -33,7 +33,7 @@ Lua implementation, polished editor UX v1, full material-graph product, RHI/mesh
 
 ## Temporary non-goals (not permanent endpoints)
 
-- TOML-only scenes forever — Phase 12 replaces/supersedes interim `SceneAssetLoader` with versioned serialization + optional binary cook.
+- Interim **scene loader + `*.tscene.toml` forever** — Phase 12 replaces/supersedes `SceneAssetLoader` with **JSON** canonical scenes (`*.tscene.json`, `nlohmann/json`) + registry + optional binary cook per [`scene_serialization_design.md`](scene_serialization_design.md). *(Project config such as `project.toml` is unrelated; scenes on disk are JSON after Phase 12.)*
 - Single `RenderScene` / single renderer forever — 2D/voxel milestones may extend or version extraction.
 - Stable **internal** CMake target names — Phase 8+ may rename splits.
 
@@ -60,7 +60,7 @@ The phases below build **architecture** (linkage, editor foundation, serializati
 
 | Area | Likely to break | Keep stable (spirit) |
 |------|-----------------|----------------------|
-| Scene on-disk | TOML layout, `schema_version`, generators | Stable **IDs** as authored references |
+| Scene on-disk | Interim layout / loader until Phase 12; then **JSON** canonical + cooked binary per [`scene_serialization_design.md`](scene_serialization_design.md) | Stable **IDs** as authored references |
 | `RenderScene` / extraction | New channels, fields | No `RenderGraph`/GPU in gameplay components |
 | Asset pipeline | DB manifest layout | Scenes use **AssetId**, not paths |
 | Internal CMake | Target names, split topology, removed shared `teng` | One Flecs/runtime process; `agent_verify` workflows; **long-term** shipped player = **static** ECS + core (`library_linkage_architecture_plan.md`) |
@@ -95,7 +95,7 @@ Components (no GPU in serialized gameplay state) → systems → narrow services
 | Render boundary | `src/engine/render/RenderService.*`, `RenderScene.hpp`, `IRenderer.hpp`; design note `plans/render_service_extraction_design.md` |
 | Meshlet renderer | `src/gfx/renderer/MeshletRenderer.*` |
 | Interim scene load | `src/engine/scene/SceneAssetLoader.*` |
-| Build | `apps/CMakeLists.txt` (`metalrender`, `teng-shaderc`, `engine_scene_smoke`); `src/CMakeLists.txt` defines static component libs, `teng_scene_validate`, and the `teng_runtime` interface aggregate |
+| Build | `apps/CMakeLists.txt` (`metalrender`, `teng-shaderc`, `engine_scene_smoke`, `teng-scene-tool`); `src/CMakeLists.txt` defines static component libs, `teng_scene_tool_lib`, and the `teng_runtime` interface aggregate |
 
 ## Destination architecture
 
@@ -118,7 +118,7 @@ Scene = loaded data + registered systems, not a gameplay base class. Editor and 
 |---------|------|
 | `metalrender` | Shipped-style runtime for data scenes; links `teng_runtime`, which resolves to static runtime component libraries per linkage plan |
 | `metalrender_editor` (planned) | + authoring UI/libs |
-| `teng_scene_validate` | GPU-free static scaffold for future scene validate/migrate CLIs |
+| `teng_scene_tool_lib` / `teng-scene-tool` | GPU-free scene validate/migrate/cook library + CLI scaffold |
 | `teng-shaderc`, future tools | Minimal link; no full renderer when unnecessary |
 
 Target dependency direction (names may change):
@@ -145,15 +145,19 @@ Flecs scene → extract → RenderScene → IRenderer → RenderGraph / RHI
 
 ## Interim authoring (demos)
 
-`scripts/generate_demo_scene_assets.py` → `resources/scenes/*.tscene.toml` → `SceneAssetLoader` until Phase 12 provides shared save/load. Adding components: keep ECS, extraction, loader/generator, and docs aligned—or document gaps.
+**Until Phase 12:** `scripts/generate_demo_scene_assets.py` → `resources/scenes/*.tscene.toml` → `SceneAssetLoader`. **After Phase 12:** generator emits **canonical JSON** `*.tscene.json`; runtime and tools use the registry + **`nlohmann/json`** only for scene bytes — see [`scene_serialization_design.md`](scene_serialization_design.md). Adding components: keep ECS, extraction, loader/generator, and docs aligned—or document gaps.
 
-### Scene format v1 (interim)
+### Scene format v1 (interim, TOML — retired by Phase 12)
 
-`schema_version = 1`, `name`, `[[entities]]`. Per entity: `guid`, `name`, `[transform]`; optional `local_to_world`, `camera`, `directional_light`, `mesh_renderable` (`model` = `AssetId` text—never `from_path()` in authored data). Missing `local_to_world` derives from transform.
+`schema_version = 1`, `name`, `[[entities]]`. Per entity: `guid`, `name`, `[transform]`; optional `local_to_world`, `camera`, `directional_light`, `mesh_renderable` (`model` = `AssetId` text—never `from_path()` in authored data). Missing `local_to_world` derives from transform. **Replaced by** JSON canonical layout (`registry_version`, `scene`, `entities[].components`, …) in Phase 12 — see [`scene_serialization_design.md`](scene_serialization_design.md).
+
+### Canonical scenes (Phase 12 — normative)
+
+[`plans/scene_serialization_design.md`](scene_serialization_design.md): **`*.tscene.json`**, **`nlohmann/json`**, component registry, cooked binary optional.
 
 ## Phased delivery
 
-### Completed (0–7)
+### Completed (0–8)
 
 | Phase | Summary |
 |-------|---------|
@@ -162,11 +166,8 @@ Flecs scene → extract → RenderScene → IRenderer → RenderGraph / RHI
 | 3 | `RenderScene`, extraction, `RenderService`, `IRenderer`, `DebugClearRenderer` |
 | 4–5 | Demo data in ECS; `MeshletRenderer` as default `IRenderer` |
 | 6 | `AssetService`, registry/DB, render residency by `AssetId` (cooked split/manifests still open) |
-| 7 | `metalrender` + `SceneAssetLoader` + generated TOML + `project.toml` startup |
-
-### Phase 8: Library split (runtime, tools, editor)
-
-Separate link units for runtime load vs authoring/mutation; GPU-free tools; preserve single-Flecs invariant. **Exit:** game/player exe clean of editor code **and** **statically** linked ECS + core runtime (no shared `teng`-style core engine DSO for shipping—see linkage plan); tools run without device/renderer; editor can link authoring libs deliberately (editor linkage may still use shared slices where useful).
+| 7 | `metalrender` + `SceneAssetLoader` + generated interim scene files + `project.toml` startup paths |
+| 8 | Static runtime component libs + `teng_runtime` aggregate; shared `teng` removed; GPU-free `teng_scene_tool_lib` / `teng-scene-tool` scaffold (`library_linkage_architecture_plan.md`) |
 
 ### Phase 9: Editor foundation
 
@@ -182,7 +183,7 @@ Metadata + scheduling hooks for future Lua (or other) without replacing scene/la
 
 ### Phase 12: Serialization + cooked runtime
 
-Round-trip save/load, schema versioning, component contract (reflection/tables/codegen), canonical vs cooked binary, GPU-free validate/migrate where practical. **Detail:** `plans/scene_serialization_design.md`.
+Round-trip save/load, schema versioning, component contract (reflection/tables/codegen), **canonical JSON** vs cooked binary, GPU-free validate/migrate where practical. **No backward-compat requirement** for interim scene v1 (`*.tscene.toml`)—replace or bulk-migrate wholesale to **`*.tscene.json`**. **Implementation spec (agents):** [`plans/scene_serialization_design.md`](scene_serialization_design.md) — registry, **`nlohmann/json`**, on-disk layouts, cook/validate CLI, CMake splits, sub-phases 12-A–E, exit criteria.
 
 ### Phase 13: Simulation modules spine
 
@@ -190,12 +191,11 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 
 ## Immediate priorities
 
-1. Phase 8 — CMake/tool vs runtime split (`library_linkage_architecture_plan.md`).
-2. Phase 12 slice — prove one component through shared serialize/deserialize before inspector/TOML sprawl.
-3. Phase 9 — editor exe + basics (after play-mode semantics stub).
-4. Phase 10 — 2D proof.
+1. Phase 12 slice — prove one component through shared serialize/deserialize before inspector / hand-maintained loader sprawl.
+2. Phase 9 — editor exe + basics (after play-mode semantics stub).
+3. Phase 10 — 2D proof.
 
-**Smoke:** `./scripts/agent_verify.sh`; `metalrender --quit-after-frames 30`; `--scene resources/scenes/demo_cube.tscene.toml --quit-after-frames 30`. Shaders: `agent_verify` runs `teng-shaderc --all`.
+**Smoke:** `./scripts/agent_verify.sh`; `metalrender --quit-after-frames 30`; `--scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30` once Phase 12 migrates demos *(until then, interim `*.tscene.toml` paths remain in `AGENTS.md` and `project.toml`)*. Shaders: `agent_verify` runs `teng-shaderc --all`.
 
 ## Open follow-up plans
 
@@ -203,12 +203,12 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 |-------|--------|--------|
 | Flecs / CMake pin | Done enough | `plans/flecs_scene_foundation_design.md` |
 | Asset registry / cooked | Partial | `plans/asset_registry_implementation_plan.md` |
-| Scene serialization v2 | Needed | `plans/scene_serialization_design.md` |
+| Scene serialization v2 | Spec ready (Phase 12) | `plans/scene_serialization_design.md` |
 | Editor play-mode | Before Phase 9 | Short `plans/` note |
 | RenderScene evolution | Ongoing | `plans/render_service_extraction_design.md` |
 | Metal parity checklist | Future | Before claiming Metal for new renderer work |
 | Voxel vertical | Unscoped | Dedicated milestone when started |
-| Linkage | In progress | `plans/library_linkage_architecture_plan.md` |
+| Linkage | Done (Phase 8) | `plans/library_linkage_architecture_plan.md` |
 | Scope honesty / unstated product gaps | Living section | This doc, [§ Scope honesty](#scope-honesty-not-designed-yet) |
 | Player save / progression | Not started | Distinct from Phase 12 scene serialization |
 | Export & release pipeline | Not started | Distribution, signing, release diagnostics—see Scope honesty |
