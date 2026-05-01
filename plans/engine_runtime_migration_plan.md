@@ -37,6 +37,25 @@ Lua implementation, polished editor UX v1, full material-graph product, RHI/mesh
 - Single `RenderScene` / single renderer forever — 2D/voxel milestones may extend or version extraction.
 - Stable **internal** CMake target names — Phase 8+ may rename splits.
 
+## Scope honesty: not designed yet
+
+The phases below build **architecture** (linkage, editor foundation, serialization, 2D, scripting hooks, simulation modules). They do **not** imply the following are specified, shipped, or safe to assume—unless code or a dedicated plan says otherwise.
+
+| Area | Reality | Notes |
+|------|---------|--------|
+| **Editor depth** | Phase 9 is **foundation** (hierarchy, inspector, play/stop, reload). | Undo/redo, selection/multi-edit, prefabs/variants/overrides, gizmos, and rich **asset import/browser** UX are **not** scoped in these plans—add focused notes when that work starts. |
+| **Play vs edit worlds** | Required semantics before heavy editor UI. | Short `plans/` note (see Open follow-up plans)—duplicate worlds, mutation during play, what reload means. |
+| **Scripting** | Phase 11 is **prep** (metadata + scheduling hooks). | No VM choice, ECS binding surface, debug workflow, or sandbox policy—**do not** treat “Lua later” as designed API. |
+| **Scene save vs player save** | Phase 12 is **scene/content** round-trip + cook. | **Player progression** (save games, checkpoints) is a **separate** concern—no format or pipeline here. |
+| **Shipping / distribution** | Plans cover **cooked runtime layout**, **AssetId** closure, and **static player linkage** (`library_linkage_architecture_plan.md`). | Store packaging (Steam/Epic/etc.), codesigning/notarization, crash telemetry, release-only logging, and **release CI** are **outside** current plan docs until explicitly added. |
+| **Input** | Window/input feed exists; layers consume events. | **Action maps**, **rebinding**, local/multiplayer input split—not specified. |
+| **Networking** | No architectural stance. | Single-player-first is implicit; multiplayer/replication is **not** assumed or forbidden—decide in a future note if needed. |
+| **Audio** | Listed under Phase 13 as an optional module spine. | No parallel to `render_service_extraction_design.md` / `asset_registry_implementation_plan.md` yet. |
+| **Diagnostics & perf** | Smoke tests and dev iteration are defined (`AGENTS.md`). | Shipping **log tiers**, **crash hooks**, frame budgets/profiling policy for release builds—not roadmap items here. |
+| **Validation beyond smoke** | `agent_verify`, scene smoke, bounded `metalrender`. | Headless simulation tests, golden-frame/compare, soak automation—not specified. |
+
+**For agents and humans:** Do not implement or advertise features from the table as approved design without a plan slice or maintainer direction. **Cooked bundles ≠ commercial publish pipeline.** Missing rows are **gaps in product coverage**, not contradictions of the runtime principles above.
+
 ## Compatibility and intentional breakage
 
 | Area | Likely to break | Keep stable (spirit) |
@@ -189,3 +208,8 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 | Metal parity checklist | Future | Before claiming Metal for new renderer work |
 | Voxel vertical | Unscoped | Dedicated milestone when started |
 | Linkage | In progress | `plans/library_linkage_architecture_plan.md` |
+| Scope honesty / unstated product gaps | Living section | This doc, [§ Scope honesty](#scope-honesty-not-designed-yet) |
+| Player save / progression | Not started | Distinct from Phase 12 scene serialization |
+| Export & release pipeline | Not started | Distribution, signing, release diagnostics—see Scope honesty |
+| Scripting contract (VM, bindings, safety) | Not started | After Phase 11 prep; separate plan |
+| Input (actions, rebind) | Not started | Optional future `plans/` note |

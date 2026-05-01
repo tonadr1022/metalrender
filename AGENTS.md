@@ -56,6 +56,8 @@ plans/engine_runtime_migration_plan.md
 
 Read it before making engine/runtime/scene/renderer architecture changes. Related notes: `plans/library_linkage_architecture_plan.md`, `plans/scene_serialization_design.md`, `plans/render_service_extraction_design.md`.
 
+**Scope honesty:** Many “full engine” concerns (deep editor UX, scripting VM/bindings, player saves, store export, networking, input rebinding) are **not** fully planned—see [Scope honesty: not designed yet](plans/engine_runtime_migration_plan.md#scope-honesty-not-designed-yet) in the migration plan so agents and humans do not assume they exist.
+
 Direction (high level):
 
 - `Engine::tick()` is the primary runtime primitive; `run()` is a convenience wrapper.
@@ -72,7 +74,7 @@ Do not reintroduce deleted compatibility harnesses, old C++ demo preset bridges,
 
 ## Planning Work
 
-For design-note tasks:
+For design-note and spec tasks:
 
 - Do not write implementation code unless explicitly asked.
 - Inspect the relevant code before planning.
@@ -90,6 +92,5 @@ For design-note tasks:
 
 ### Required Guidelines
 
-- No abstractions for single-use code, unless you know for sure it'll be used again.
+- Big refactors are allowed and encouraged in the name of achieving long term direction
 - No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
