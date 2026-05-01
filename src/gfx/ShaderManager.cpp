@@ -386,7 +386,8 @@ void teng::gfx::ShaderManager::check_and_recompile(
     if (!entry.is_regular_file()) {
       continue;
     }
-    auto last_write_time = entry.last_write_time().time_since_epoch().count();
+    auto last_write_time =
+        static_cast<uint64_t>(entry.last_write_time().time_since_epoch().count());
     const auto& path = entry.path();
     auto it = last_write_times_.find(path);
     if (it == last_write_times_.end() || it->second < last_write_time ||
