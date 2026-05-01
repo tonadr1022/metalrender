@@ -156,4 +156,4 @@ link targets.
 
 ---
 
-*This plan is specific to this repository; retire remaining compatibility scaffolding such as global `ResourceManager` per [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md), not per linkage phase unless CMake cleanup requires it.*
+*This plan is specific to this repository; runtime/editor CMake splits follow [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) Phases 8–9, not ad hoc linkage experiments.*

@@ -67,13 +67,7 @@ Current migration direction:
 
 ### Migration Scaffolding
 
-These are temporary compatibility structures, not architecture to copy into new systems:
-
-- Deleted `apps/vktest/*` compatibility harness and old C++ demo presets
-- Deleted old `apps/metalrender/App.*` / `Camera.*` / `FpsCameraController.*` scaffolding
-- Global `ResourceManager` singleton usage
-
-New engine/runtime code should not reintroduce deleted app/demo scaffolding unless the change is explicitly an archived sample or compatibility bridge.
+Do not reintroduce deleted compatibility harnesses, old C++ demo preset bridges, or monolithic app-side renderer/scene types removed during the engine migration.
 
 ## Planning Work
 
