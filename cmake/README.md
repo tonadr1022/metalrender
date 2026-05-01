@@ -1,8 +1,8 @@
 # CMake Linkage Notes
 
-`teng_runtime` is the default engine target for normal applications. It is a static library target
-over the runtime component libraries, so shipped-style app targets link engine core, scene, Flecs,
-platform, renderer, and gfx into the executable.
+`teng_runtime` is the default engine target for normal applications. It is an interface aggregate
+over the static runtime component libraries, so shipped-style app targets link engine core, scene,
+Flecs, platform, renderer, and gfx into the executable.
 
 Flecs is private engine runtime state. Do not introduce a shared engine ABI that exports Flecs
 headers or symbols by accident. Code outside the engine that compiles against Flecs-facing scene
@@ -25,7 +25,7 @@ teng_scene_validate -> teng_scene + teng_assets + teng_core
 
 `teng_scene_validate` is a concrete GPU-free static scaffold for future scene validate/migrate CLIs.
 It is built by `scripts/agent_verify.sh` even before a CLI consumes it. It must not gain platform,
-renderer, gfx, Vulkan, Metal, ImGui, or CVar dependencies. `teng_runtime` is a pure aggregate and
-does not add backend compile definitions directly; backend flags live on concrete backend-using
-component targets. `AssetService` stays in `teng_engine_runtime` for now because its public API owns
-model loader/runtime model types.
+renderer, gfx, Vulkan, Metal, ImGui, or CVar dependencies. `teng_runtime` is a pure interface
+aggregate and does not compile an anchor source or add backend compile definitions directly; backend
+flags live on concrete backend-using component targets. `AssetService` stays in
+`teng_engine_runtime` for now because its public API owns model loader/runtime model types.

@@ -188,7 +188,7 @@ add_teng_component(teng_scene OFF ${TENG_SCENE_SOURCES})
 add_teng_component(teng_scene_validate OFF engine/scene/SceneValidate.cpp)
 add_teng_component(teng_render ON ${TENG_RENDER_SOURCES})
 add_teng_component(teng_engine_runtime ON ${TENG_ENGINE_RUNTIME_SOURCES})
-add_teng_component(teng_runtime OFF engine/RuntimeLink.cpp)
+add_library(teng_runtime INTERFACE)
 
 target_link_libraries(teng_core PRIVATE fts_fuzzy_match)
 target_link_libraries(teng_cvars PUBLIC teng_core PRIVATE implot Tracy::TracyClient)
@@ -212,5 +212,4 @@ target_link_libraries(teng_engine_runtime PUBLIC
     teng_render
 )
 target_link_libraries(teng_engine_runtime PRIVATE implot Tracy::TracyClient)
-add_dependencies(teng_runtime teng_engine_runtime)
 target_link_libraries(teng_runtime INTERFACE teng_engine_runtime Tracy::TracyClient)

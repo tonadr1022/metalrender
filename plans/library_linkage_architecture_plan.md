@@ -10,7 +10,7 @@
 
 **Strict match** to a typical commercial-engine **player** build (Godot export template, Unity/Unreal-style standalone game): the **shipped game executable** **statically links** **ECS (scene / Flecs)** and **engine core/runtime** (platform, assets runtime, presentation stack as required for the product) so simulation + core runtime live in the **same linkage unit** as game code—not a thin loader that depends on a separately shipped **`libteng`-style DSO** for core ECS/engine ABI. OS/driver-tier shared libraries are fine; **core ECS + runtime are not an unstable external ABI for shipping**.
 
-**Phase 8 status:** `metalrender` links the static `teng_runtime` aggregate. The old shared
+**Phase 8 status:** `metalrender` links the `teng_runtime` interface aggregate over static runtime component libraries. The old shared
 `teng` aggregate and duplicate shared object lanes have been removed. The runtime is now composed
 from first-class static component libraries, and a future shared editor API must be designed as a
 narrow boundary, not restored as the core runtime ABI.
@@ -39,7 +39,7 @@ RHI/renderer rewrites for CMake only; full consumer packaging (Steam, etc.). **E
 | `teng_gfx` | **STATIC** | RHI, RenderGraph, model loading, and meshlet renderer implementation |
 | `teng_render` | **STATIC** | Engine render service and scene extraction |
 | `teng_engine_runtime` | **STATIC** | Engine, layers, runtime frame orchestration, and `AssetService` |
-| `teng_runtime` | **STATIC** | Full runtime aggregate for shipped-style apps and runtime smokes |
+| `teng_runtime` | **INTERFACE** | Full runtime aggregate for shipped-style apps and runtime smokes; resolves to static component libraries |
 | `teng_shader_compiler` | **STATIC** | Minimal shader compiler library used by `teng-shaderc` |
 | `teng_engine_smoke` | **STATIC** | Smoke-test helper library → links `teng_runtime` **PUBLIC** so smoke sources can use scene APIs |
 | Exes | | `metalrender` → `teng_runtime` **PRIVATE**; `engine_scene_smoke` → `teng_engine_smoke`; `teng-shaderc` → shader lib |
@@ -69,14 +69,15 @@ teng_scene_validate -> teng_scene + teng_assets + teng_core
 and `ModelInstance` in its public model-loading API. `teng_assets` is the GPU-free registry/database
 slice. `teng_scene` uses engine-owned key constants rather than GLFW key constants so scene
 validation does not inherit platform/window headers. `teng_runtime` is configured as a pure
-aggregate target: it does not add backend compile definitions or link backend libraries directly;
-those stay on the concrete platform/gfx/render component libraries that compile backend code.
+interface aggregate target: it does not compile an anchor source, add backend compile definitions,
+or link backend libraries directly; those stay on the concrete platform/gfx/render component
+libraries that compile backend code.
 
 ***Not all of these are separate shipped libs today**—internal `OBJECT`/`STATIC` buckets are fine until a second major consumer (editor) needs a promoted **SHARED** boundary with a stable API.
 
 ## Done vs next (this doc’s CMake track)
 
-- **Done:** Invariants documented; shared `teng` retired; `teng_runtime` is the static aggregate; internal object buckets were promoted to static component libraries; `teng_scene_validate` exists as a GPU-free static scaffold.
+- **Done:** Invariants documented; shared `teng` retired; `teng_runtime` is the interface aggregate over static runtime component libraries; internal object buckets were promoted to static component libraries; `teng_scene_validate` exists as a GPU-free static scaffold.
 - **Next (aligns engine Phase 9+):** Optional **shared** slices only where a **second major consumer** (e.g. editor hot-reload) needs a narrow stable ABI—not for core simulation. Asset/tool CLIs link minimal `teng_*` where possible. Editor = **separate executable** per engine plan (not `--editor` on the same binary unless you later revisit and update both docs).
 
 ## Risks
