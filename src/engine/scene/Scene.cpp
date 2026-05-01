@@ -1,7 +1,5 @@
 #include "engine/scene/Scene.hpp"
 
-#include <GLFW/glfw3.h>
-
 #include <flecs/addons/cpp/entity.hpp>
 #include <flecs/addons/cpp/mixins/pipeline/decl.hpp>
 #include <glm/ext/matrix_transform.hpp>
@@ -70,7 +68,7 @@ void Scene::register_systems() {
           return;
         }
 
-        if (input->key_pressed(GLFW_KEY_ESCAPE)) {
+        if (input->key_pressed(KeyCode::Escape)) {
           controller.mouse_captured = !controller.mouse_captured;
         }
 
@@ -87,35 +85,35 @@ void Scene::register_systems() {
           const glm::vec3 front = camera_front(controller.yaw, controller.pitch);
           const glm::vec3 right = glm::normalize(glm::cross(front, glm::vec3{0.f, 1.f, 0.f}));
 
-          if (any_key_down(*input, GLFW_KEY_W, GLFW_KEY_I)) {
+          if (any_key_down(*input, KeyCode::W, KeyCode::I)) {
             acceleration += front;
             accelerating = true;
           }
-          if (any_key_down(*input, GLFW_KEY_S, GLFW_KEY_K)) {
+          if (any_key_down(*input, KeyCode::S, KeyCode::K)) {
             acceleration -= front;
             accelerating = true;
           }
-          if (any_key_down(*input, GLFW_KEY_A, GLFW_KEY_J)) {
+          if (any_key_down(*input, KeyCode::A, KeyCode::J)) {
             acceleration -= right;
             accelerating = true;
           }
-          if (any_key_down(*input, GLFW_KEY_D, GLFW_KEY_L)) {
+          if (any_key_down(*input, KeyCode::D, KeyCode::L)) {
             acceleration += right;
             accelerating = true;
           }
-          if (any_key_down(*input, GLFW_KEY_Y, GLFW_KEY_R)) {
+          if (any_key_down(*input, KeyCode::Y, KeyCode::R)) {
             acceleration += glm::vec3{0.f, 1.f, 0.f};
             accelerating = true;
           }
-          if (any_key_down(*input, GLFW_KEY_H, GLFW_KEY_F)) {
+          if (any_key_down(*input, KeyCode::H, KeyCode::F)) {
             acceleration -= glm::vec3{0.f, 1.f, 0.f};
             accelerating = true;
           }
-          if (input->key_down(GLFW_KEY_B)) {
+          if (input->key_down(KeyCode::B)) {
             controller.move_speed *= 1.1f;
             controller.max_velocity *= 1.1f;
           }
-          if (input->key_down(GLFW_KEY_V)) {
+          if (input->key_down(KeyCode::V)) {
             controller.move_speed /= 1.1f;
             controller.max_velocity /= 1.1f;
           }

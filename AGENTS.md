@@ -8,7 +8,7 @@ From root:
 ./scripts/agent_verify.sh
 ```
 
-Configures CMake, builds apps, runs `engine_scene_smoke`, and runs shader compile checks.
+Configures CMake, builds apps and scaffold libraries, runs `engine_scene_smoke`, and runs shader compile checks.
 Add `--format` to format.
 
 ### Target names
@@ -16,6 +16,12 @@ Add `--format` to format.
 metalrender
 teng-shaderc
 engine_scene_smoke
+teng_scene_validate
+
+Common internal library targets include `teng_runtime` (static runtime aggregate) and component
+libraries such as `teng_core`, `teng_assets`, `teng_scene`, `teng_render`, `teng_gfx`, and
+`teng_engine_runtime`. `teng_scene_validate` is intentionally built by default verification even
+before it has a CLI consumer so the GPU-free validation scaffold does not silently break.
 
 ### Run
 

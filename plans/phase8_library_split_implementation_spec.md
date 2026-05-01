@@ -1,6 +1,6 @@
 # Phase 8: Library split and shipped-runtime linkage — implementation spec
 
-**Status:** Phase 8 P0/P1 implementation landed: `metalrender` links static `teng_runtime`, the broad shared `teng` aggregate was removed, and the duplicate shared object lanes were collapsed.
+**Status:** Phase 8 implementation landed: `metalrender` links static `teng_runtime`, the broad shared `teng` aggregate was removed, duplicate shared object lanes were collapsed, component buckets were promoted to static libraries, and `teng_scene_validate` exists as a GPU-free scaffold.
 
 **Scope:** CMake topology, linkage shapes per product (game runtime vs tests vs tools), Flecs single-runtime invariants, and optional promotion of internal buckets to first-class static libraries. **Out of scope for this document:** editor UI (Phase 9), full serialization v2 (Phase 12), RHI/renderer refactors.
 
@@ -12,26 +12,26 @@
 
 ### 1.1 Why Phase 8 is “deep”
 
-Today the repo already uses **four OBJECT buckets** (`teng_core`, `teng_platform`, `teng_gfx`, `teng_engine`) duplicated in shared-vs-static flavors, then welded into:
+Before Phase 8 the repo used **four OBJECT buckets** (`teng_core`, `teng_platform`, `teng_gfx`, `teng_engine`) duplicated in shared-vs-static flavors, then welded into:
 
 | Artifact | Role before Phase 8 |
 |----------|------------|
 | `libteng.so` (SHARED) | Full engine aggregate consumed by **`metalrender`** |
 | `libteng_static.a` (STATIC) | Same logical library for **`teng_engine_smoke`** → `engine_scene_smoke` |
 
-That means:
+That meant:
 
-1. **Shipped-runtime rule is not met:** the primary demo/game-style exe links a **shared** aggregate while the architecture docs require **static** ECS + core for a player build ([`library_linkage_architecture_plan.md`](library_linkage_architecture_plan.md) § Long-term requirement).
+1. **Shipped-runtime rule was not met:** the primary demo/game-style exe linked a **shared** aggregate while the architecture docs required **static** ECS + core for a player build ([`library_linkage_architecture_plan.md`](library_linkage_architecture_plan.md) § Long-term requirement).
 
-2. **Shared + static Flecs rule is fragile:** only one consumer (`metalrender`) links shared `teng` today, but the pattern encourages future **multiple linkage units** pulling Flecs differently—duplicate `ecs_*` symbols or ODR violations if miswired.
+2. **Shared + static Flecs rule was fragile:** only one consumer (`metalrender`) linked shared `teng`, but the pattern encouraged future **multiple linkage units** pulling Flecs differently—duplicate `ecs_*` symbols or ODR violations if miswired.
 
-3. **Boundaries are CMake-internal only:** `TENG_ENGINE_SOURCES` mixes **assets**, **Flecs scene**, and **render service** in one bucket. That is acceptable as an interim fold, but Phase 8 is the right time to **make dependency direction explicit** so Phase 9 (editor) and Phase 12 (GPU-free validate) can link **subsets** without accidentally pulling window/device/GPU.
+3. **Boundaries were CMake-internal only:** `TENG_ENGINE_SOURCES` mixed **assets**, **Flecs scene**, and **render service** in one bucket. Phase 8 split this into first-class static targets so Phase 9 (editor) and Phase 12 (GPU-free validate) can link **subsets** without accidentally pulling window/device/GPU.
 
-4. **`TENG_BUILD_SHARED` is defined but unused** in first-party sources (only set in `src/CMakeLists.txt`). There is no export macro layer—good for a static flip, but any future **narrow shared ABI** (editor hot-reload) will need a deliberate design.
+4. **`TENG_BUILD_SHARED` was defined but unused** in first-party sources. Phase 8 removed that dead plumbing; any future **narrow shared ABI** (editor hot-reload) will need a deliberate export design.
 
 ### 1.2 What is already solid
 
-- **Single Flecs static archive** linked privately into aggregates (`flecs::flecs_static` on engine objects / aggregate)—no duplicate Flecs link lines in apps today.
+- **Single Flecs static archive** linked privately by `teng_scene` (`flecs::flecs_static`)—no duplicate Flecs link lines in apps today.
 - **GPU-free tool precedent:** `teng-shaderc` links only `teng_shader_compiler` + warnings—not full engine.
 - **Smoke tests** now use `teng_runtime` via `teng_engine_smoke` ([`tests/CMakeLists.txt`](../tests/CMakeLists.txt)).
 
@@ -108,8 +108,8 @@ Update **`AGENTS.md`** target section only when CMake target names change (optio
 
 **Decision branch (record the choice in the PR implementing Phase 8):**
 
-- **Option A — Remove shared `teng`:** Simplest; matches “player static only” until an editor needs a shared slice. All consumers use `teng_static` or renamed static aggregate.
-- **Option B — Keep shared `teng` for non-shipped experiments:** e.g. faster incremental linking during dev **only if** no second Flecs consumer appears. Must document **forbidden** pairings (never link shared `teng` + `teng_static` into one process).
+- **Option A — Remove shared `teng`:** Chosen. All runtime consumers use `teng_runtime` or narrower static component targets.
+- **Option B — Keep shared `teng` for non-shipped experiments:** Not chosen.
 - **Option C — Narrow shared ABI later:** Not Phase 8 unless explicitly scoped—would require export macros and stable C API slice.
 
 **Recommendation:** Option A unless you already have a concrete shared-lib consumer scheduled within weeks.
@@ -120,12 +120,26 @@ Update **`AGENTS.md`** target section only when CMake target names change (optio
 
 Relevant CMake and consumers:
 
-- Engine aggregate: [`src/CMakeLists.txt`](../src/CMakeLists.txt) — `TENG_*_SOURCES`, `add_teng_component`, `teng_runtime` STATIC.
+- Engine aggregate and splits: [`src/CMakeLists.txt`](../src/CMakeLists.txt) — `teng_core`, `teng_cvars`, `teng_assets`, `teng_scene`, `teng_scene_validate`, `teng_platform`, `teng_gfx`, `teng_render`, `teng_engine_runtime`, `teng_runtime`.
 - App: [`apps/metalrender/CMakeLists.txt`](../apps/metalrender/CMakeLists.txt) — `target_link_libraries(metalrender PRIVATE teng_runtime)`.
 - Smokes: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt), [`apps/engine_scene_smoke/CMakeLists.txt`](../apps/engine_scene_smoke/CMakeLists.txt).
 - Verify script: [`scripts/agent_verify.sh`](../scripts/agent_verify.sh) — builds `metalrender`, `teng-shaderc`, `engine_scene_smoke`.
 
-No other CMake consumers of shared `teng` were found at spec time—**low blast radius** for flipping `metalrender` to static.
+Current DAG:
+
+```text
+teng_runtime -> teng_engine_runtime -> teng_render -> teng_gfx -> teng_platform -> teng_core
+                                      -> teng_cvars -> teng_core
+                                      -> teng_scene -> teng_assets -> teng_core
+
+teng_scene_validate -> teng_scene + teng_assets + teng_core
+```
+
+`AssetService` is intentionally in `teng_engine_runtime` until its model-loading API is separated
+from `gfx::ModelLoadResult` / `ModelInstance`. `teng_scene_validate` intentionally avoids
+platform/gfx/backend/ImGui/CVar dependencies.
+
+No other CMake consumers of shared `teng` were found at implementation time.
 
 ---
 
@@ -135,7 +149,7 @@ Workstreams can overlap; order minimizes breakage.
 
 ### Workstream A — Shipped-runtime linkage flip (P0)
 
-1. Change `metalrender` to link **`teng_static`** (or a renamed alias such as `teng_runtime` that is **STATIC** and aggregates the same objects).
+1. Change `metalrender` to link **`teng_runtime`**.
 2. Fix **transitivity:** today `PUBLIC teng` may expose includes/libs to dependents of `metalrender`—there are none, but prefer **`PRIVATE`** linkage from exe to static aggregate unless a deliberate plugin boundary exists.
 3. Full clean rebuild and run:
    - `./scripts/agent_verify.sh`
@@ -161,8 +175,7 @@ If keeping shared temporarily:
 
 Motivation: clearer IDE/clangd targets, faster linking granularity, cleaner `PUBLIC`/`PRIVATE` interface propagation.
 
-1. Replace duplicated `_shared` / `_static` OBJECT libraries with **`add_library(teng_core OBJECT ...)`** once, then:
-   - `add_library(teng_runtime STATIC $<TARGET_OBJECTS:teng_core> ...)` OR link OBJECT libs directly into static aggregate (CMake 3.24+ patterns)—pick one consistent pattern.
+1. Replace duplicated `_shared` / `_static` OBJECT libraries with first-class **`add_library(... STATIC)`** component targets.
 2. Re-establish **include directories** and **compile definitions** on each promoted target so `compile_commands.json` stays accurate for tidy.
 
 **Acceptance:** No behavior change; same symbols in final exe; tidy/smokes green.
@@ -178,7 +191,7 @@ Motivation: clearer IDE/clangd targets, faster linking granularity, cleaner `PUB
 
 ### Workstream E — Tooling hooks for Phase 12 (P2, scaffolding)
 
-1. Add **`add_library(teng_scene_validate INTERFACE)`** or empty STATIC target with **link guards** comments—placeholder for GPU-free validate CLI.
+1. Add **`teng_scene_validate`** as an empty/static scaffold target—placeholder for GPU-free validate CLI.
 2. No executable required in Phase 8 unless trivial.
 
 ### Workstream F — Documentation pass (P1)
@@ -192,9 +205,8 @@ Motivation: clearer IDE/clangd targets, faster linking granularity, cleaner `PUB
 
 | Scaffolding | Role today | Retire when |
 |-------------|------------|-------------|
-| Shared `teng` + dual OBJECT lanes | Historical dev flexibility | All exes use static aggregate **and** no planned shared consumer, or shared replaced by narrow `teng_editor_api` |
-| `teng_static` name | Smokes + static aggregate | Renamed for clarity (`teng_runtime`) once stable |
-| `PUBLIC` exe→lib linkage on `metalrender` | Likely unnecessary | `PRIVATE` once confirmed no transitive consumers |
+| `teng_scene_validate` anchor source | Keeps future validate target concrete before a CLI exists | Real validate/migrate library code lands |
+| `teng_runtime` anchor source | Keeps app-facing runtime aggregate concrete after component promotion | Packaging/install rules prove an interface alias is sufficient |
 
 ---
 
@@ -234,6 +246,7 @@ Motivation: clearer IDE/clangd targets, faster linking granularity, cleaner `PUB
 | Step | Command / check |
 |------|-----------------|
 | Configure + build + smoke | `./scripts/agent_verify.sh` |
+| Validation scaffold compile | Covered by `./scripts/agent_verify.sh`, which builds `teng_scene_validate` by default |
 | Bounded runtime | `./build/Debug/bin/metalrender --quit-after-frames 30` |
 | Scene path | `./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml --quit-after-frames 30` |
 | Shaders (ifshader-related CMake touched) | `./build/Debug/bin/teng-shaderc --all` |

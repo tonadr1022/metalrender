@@ -95,7 +95,7 @@ Components (no GPU in serialized gameplay state) → systems → narrow services
 | Render boundary | `src/engine/render/RenderService.*`, `RenderScene.hpp`, `IRenderer.hpp`; design note `plans/render_service_extraction_design.md` |
 | Meshlet renderer | `src/gfx/renderer/MeshletRenderer.*` |
 | Interim scene load | `src/engine/scene/SceneAssetLoader.*` |
-| Build | `apps/CMakeLists.txt` (`metalrender`, `teng-shaderc`, `engine_scene_smoke`); `src/CMakeLists.txt` aggregates static `teng_runtime` |
+| Build | `apps/CMakeLists.txt` (`metalrender`, `teng-shaderc`, `engine_scene_smoke`); `src/CMakeLists.txt` defines static component libs, `teng_scene_validate`, and the static `teng_runtime` aggregate |
 
 ## Destination architecture
 
@@ -118,6 +118,7 @@ Scene = loaded data + registered systems, not a gameplay base class. Editor and 
 |---------|------|
 | `metalrender` | Shipped-style runtime for data scenes; links static `teng_runtime` per linkage plan |
 | `metalrender_editor` (planned) | + authoring UI/libs |
+| `teng_scene_validate` | GPU-free static scaffold for future scene validate/migrate CLIs |
 | `teng-shaderc`, future tools | Minimal link; no full renderer when unnecessary |
 
 Target dependency direction (names may change):

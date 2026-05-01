@@ -8,10 +8,13 @@ set(TENG_CORE_SOURCES
     core/FileUtil.cpp
     core/Util.cpp
     core/StringUtil.cpp
-    core/CVar.cpp
-    core/Console.cpp
     util/Stats.cpp
     util/FuzzyMatch.cpp
+)
+
+set(TENG_CVAR_SOURCES
+    core/CVar.cpp
+    core/Console.cpp
 )
 
 set(TENG_PLATFORM_SOURCES
@@ -19,20 +22,29 @@ set(TENG_PLATFORM_SOURCES
     UI.cpp
 )
 
-set(TENG_ENGINE_SOURCES
-    engine/Engine.cpp
-    engine/ImGuiOverlayLayer.cpp
+set(TENG_ASSETS_SOURCES
     engine/assets/AssetDatabase.cpp
     engine/assets/AssetRegistry.cpp
-    engine/assets/AssetService.cpp
-    engine/render/DebugClearRenderer.cpp
-    engine/render/RenderSceneExtractor.cpp
-    engine/render/RenderService.cpp
+)
+
+set(TENG_SCENE_SOURCES
     engine/scene/Scene.cpp
     engine/scene/SceneAssetLoader.cpp
     engine/scene/SceneComponents.cpp
     engine/scene/SceneIds.cpp
     engine/scene/SceneManager.cpp
+)
+
+set(TENG_RENDER_SOURCES
+    engine/render/DebugClearRenderer.cpp
+    engine/render/RenderSceneExtractor.cpp
+    engine/render/RenderService.cpp
+)
+
+set(TENG_ENGINE_RUNTIME_SOURCES
+    engine/Engine.cpp
+    engine/ImGuiOverlayLayer.cpp
+    engine/assets/AssetService.cpp
 )
 
 set(TENG_GFX_SOURCES
@@ -98,87 +110,64 @@ if(BUILD_METAL)
     )
 endif()
 
-set(TENG_PUBLIC_LIBS
-    teng_shader_compiler
+set(TENG_COMMON_PUBLIC_LIBS
     glm::glm
     project_warnings
-    cgltf
-    meshoptimizer
-    Tracy::TracyClient
-    implot
-    offsetAllocator
-    FastNoise
     bs_thread_pool
-    concurrentqueue
-    ktx
-    fts_fuzzy_match
     tomlplusplus
 )
 
-function(configure_teng_compile_target target_name build_shared)
+set(TENG_BACKEND_LIBS)
+if(BUILD_VULKAN)
+    list(APPEND TENG_BACKEND_LIBS
+        volk::volk
+        GPUOpen::VulkanMemoryAllocator
+        vk-bootstrap::vk-bootstrap
+        spirv-reflect-static
+    )
+endif()
+
+if(BUILD_METAL)
+    list(APPEND TENG_BACKEND_LIBS
+        metal_irconverter_runtime
+        METAL_CPP
+    )
+endif()
+
+function(configure_teng_compile_target target_name)
     target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/resources/shaders)
     target_include_directories(${target_name} PUBLIC ${CMAKE_SOURCE_DIR}/third_party/vendored)
     target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
     target_include_directories(${target_name} PUBLIC ${CMAKE_SOURCE_DIR}/third_party/flecs/include)
 
-    target_compile_definitions(${target_name} PUBLIC TENG_BUILD_SHARED=${build_shared})
-    target_link_libraries(${target_name} PUBLIC ${TENG_PUBLIC_LIBS})
+    target_link_libraries(${target_name} PUBLIC ${TENG_COMMON_PUBLIC_LIBS})
 endfunction()
 
-function(configure_teng_component target_name build_shared)
-    configure_teng_compile_target(${target_name} ${build_shared})
+function(configure_teng_component target_name uses_backend)
+    configure_teng_compile_target(${target_name})
 
-    if(BUILD_VULKAN)
+    if(uses_backend AND BUILD_VULKAN)
         target_compile_definitions(${target_name} PUBLIC VULKAN_BACKEND=1)
-        target_link_libraries(${target_name} PRIVATE
-            volk::volk
-            GPUOpen::VulkanMemoryAllocator
-            vk-bootstrap::vk-bootstrap
-            spirv-reflect-static
-        )
+        target_link_libraries(${target_name} PRIVATE ${TENG_BACKEND_LIBS})
     endif()
 
-    if(BUILD_METAL)
+    if(uses_backend AND BUILD_METAL)
         target_compile_definitions(${target_name} PRIVATE METAL_BACKEND=1)
-        target_link_libraries(${target_name} PRIVATE
-            metal_irconverter_runtime
-            METAL_CPP
-        )
+        target_link_libraries(${target_name} PRIVATE ${TENG_BACKEND_LIBS})
     endif()
 endfunction()
 
-function(add_teng_component component_name)
-    add_library(${component_name} OBJECT ${ARGN})
-    configure_teng_component(${component_name} 0)
+function(add_teng_component component_name uses_backend)
+    add_library(${component_name} STATIC ${ARGN})
+    configure_teng_component(${component_name} ${uses_backend})
 
-    if(BUILD_METAL)
+    if(uses_backend AND BUILD_METAL)
         add_dependencies(${component_name} compile_metal_backend_shaders)
     endif()
 endfunction()
 
-function(configure_teng_aggregate target_name build_shared)
-    configure_teng_compile_target(${target_name} ${build_shared})
-
+function(teng_link_flecs target_name)
     target_link_libraries(${target_name} PRIVATE flecs::flecs_static)
-
-    if(BUILD_VULKAN)
-        target_compile_definitions(${target_name} PUBLIC VULKAN_BACKEND=1)
-        target_link_libraries(${target_name} PRIVATE
-            volk::volk
-            GPUOpen::VulkanMemoryAllocator
-            vk-bootstrap::vk-bootstrap
-            spirv-reflect-static
-        )
-    endif()
-
-    if(BUILD_METAL)
-        target_compile_definitions(${target_name} PRIVATE METAL_BACKEND=1)
-        target_link_libraries(${target_name} PRIVATE
-            metal_irconverter_runtime
-            METAL_CPP
-        )
-        add_dependencies(${target_name} compile_metal_backend_shaders)
-    endif()
 endfunction()
 
 if(BUILD_VULKAN)
@@ -190,20 +179,38 @@ if(BUILD_METAL)
     list(APPEND TENG_GFX_SOURCES ${TENG_METAL_GFX_SOURCES})
 endif()
 
-add_teng_component(teng_core ${TENG_CORE_SOURCES})
-add_teng_component(teng_platform ${TENG_PLATFORM_SOURCES})
-add_teng_component(teng_gfx ${TENG_GFX_SOURCES})
-add_teng_component(teng_engine ${TENG_ENGINE_SOURCES})
+add_teng_component(teng_core OFF ${TENG_CORE_SOURCES})
+add_teng_component(teng_cvars OFF ${TENG_CVAR_SOURCES})
+add_teng_component(teng_platform OFF ${TENG_PLATFORM_SOURCES})
+add_teng_component(teng_gfx ON ${TENG_GFX_SOURCES})
+add_teng_component(teng_assets OFF ${TENG_ASSETS_SOURCES})
+add_teng_component(teng_scene OFF ${TENG_SCENE_SOURCES})
+add_teng_component(teng_scene_validate OFF engine/scene/SceneValidate.cpp)
+add_teng_component(teng_render ON ${TENG_RENDER_SOURCES})
+add_teng_component(teng_engine_runtime ON ${TENG_ENGINE_RUNTIME_SOURCES})
+add_teng_component(teng_runtime OFF engine/RuntimeLink.cpp)
 
-target_link_libraries(teng_platform PUBLIC teng_core)
-target_link_libraries(teng_gfx PUBLIC teng_core teng_platform)
-target_link_libraries(teng_engine PUBLIC teng_core teng_platform teng_gfx)
-target_link_libraries(teng_engine PRIVATE flecs::flecs_static)
-
-add_library(teng_runtime STATIC
-    $<TARGET_OBJECTS:teng_core>
-    $<TARGET_OBJECTS:teng_platform>
-    $<TARGET_OBJECTS:teng_gfx>
-    $<TARGET_OBJECTS:teng_engine>
+target_link_libraries(teng_core PRIVATE fts_fuzzy_match)
+target_link_libraries(teng_cvars PUBLIC teng_core PRIVATE implot Tracy::TracyClient)
+target_link_libraries(teng_platform PUBLIC teng_core glfw PRIVATE imgui Tracy::TracyClient)
+target_link_libraries(teng_gfx
+    PUBLIC teng_core teng_cvars teng_platform imgui offsetAllocator
+    PRIVATE teng_shader_compiler cgltf meshoptimizer ktx Tracy::TracyClient
 )
-configure_teng_aggregate(teng_runtime 0)
+target_link_libraries(teng_assets PUBLIC teng_core)
+target_link_libraries(teng_scene PUBLIC teng_core teng_assets)
+teng_link_flecs(teng_scene)
+target_link_libraries(teng_scene_validate PUBLIC teng_core teng_assets teng_scene)
+target_link_libraries(teng_render PUBLIC teng_core teng_scene teng_gfx PRIVATE Tracy::TracyClient)
+target_link_libraries(teng_engine_runtime PUBLIC
+    teng_core
+    teng_cvars
+    teng_platform
+    teng_gfx
+    teng_assets
+    teng_scene
+    teng_render
+)
+target_link_libraries(teng_engine_runtime PRIVATE implot Tracy::TracyClient)
+add_dependencies(teng_runtime teng_engine_runtime)
+target_link_libraries(teng_runtime INTERFACE teng_engine_runtime Tracy::TracyClient)
