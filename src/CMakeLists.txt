@@ -5,6 +5,7 @@ target_include_directories(teng_shader_compiler PUBLIC ${CMAKE_CURRENT_SOURCE_DI
 target_link_libraries(teng_shader_compiler PUBLIC project_warnings)
 
 set(TENG_CORE_SOURCES
+    core/Diagnostic.cpp
     core/FileUtil.cpp
     core/Util.cpp
     core/StringUtil.cpp

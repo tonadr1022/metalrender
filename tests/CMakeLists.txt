@@ -11,3 +11,8 @@ target_include_directories(teng_engine_smoke
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/smoke
 )
+
+add_executable(teng_core_tests
+    core/DiagnosticTests.cpp
+)
+target_link_libraries(teng_core_tests PRIVATE teng_core Catch2::Catch2WithMain project_warnings)

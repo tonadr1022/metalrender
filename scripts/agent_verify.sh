@@ -18,7 +18,7 @@ changed_paths() {
 PRESET="${CMAKE_PRESET:-Debug}"
 BUILD_DIR="$REPO_ROOT/build/$PRESET"
 BIN_DIR="$BUILD_DIR/bin"
-TARGETS=(metalrender teng-shaderc engine_scene_smoke teng-scene-tool)
+TARGETS=(metalrender teng-shaderc teng_core_tests engine_scene_smoke teng-scene-tool)
 DO_FORMAT=0
 DO_TIDY=1
 
@@ -96,6 +96,7 @@ fi
 cmake --build "$BUILD_DIR" --target "${TARGETS[@]}" "${extra_targets[@]}"
 
 "$BIN_DIR/engine_scene_smoke"
+"$BIN_DIR/teng_core_tests"
 
 # clang-tidy on changed first-party sources/headers (apps/, src/). Uses compile_commands.json from build.
 if [[ "$DO_TIDY" -eq 1 ]]; then
