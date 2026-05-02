@@ -186,73 +186,8 @@ const FpsCameraController* Scene::get_fps_camera_controller(EntityGuid guid) con
   return entity.is_valid() ? entity.try_get<FpsCameraController>() : nullptr;
 }
 
-// Compatibility authoring helpers mutate the Flecs world through an entity handle.
-bool Scene::set_transform(EntityGuid guid, const Transform& transform) const {
-  const flecs::entity entity = find_entity(guid);
-  if (!entity.is_valid()) {
-    return false;
-  }
-  entity.set<Transform>(transform);
-  return true;
-}
-
-bool Scene::set_local_to_world(EntityGuid guid, const LocalToWorld& local_to_world) const {
-  const flecs::entity entity = find_entity(guid);
-  if (!entity.is_valid()) {
-    return false;
-  }
-  entity.set<LocalToWorld>(local_to_world);
-  return true;
-}
-
-bool Scene::set_camera(EntityGuid guid, const Camera& camera) const {
-  const flecs::entity entity = find_entity(guid);
-  if (!entity.is_valid()) {
-    return false;
-  }
-  entity.set<Camera>(camera);
-  return true;
-}
-
-bool Scene::set_fps_camera_controller(EntityGuid guid,
-                                      const FpsCameraController& controller) const {
-  const flecs::entity entity = find_entity(guid);
-  if (!entity.is_valid()) {
-    return false;
-  }
-  entity.set<FpsCameraController>(controller);
-  return true;
-}
-
 void Scene::set_input_snapshot(const EngineInputSnapshot& input) {
   world_.set<EngineInputSnapshot>(input);
-}
-
-bool Scene::set_directional_light(EntityGuid guid, const DirectionalLight& light) const {
-  const flecs::entity entity = find_entity(guid);
-  if (!entity.is_valid()) {
-    return false;
-  }
-  entity.set<DirectionalLight>(light);
-  return true;
-}
-
-bool Scene::set_mesh_renderable(EntityGuid guid, const MeshRenderable& mesh) const {
-  const flecs::entity entity = find_entity(guid);
-  if (!entity.is_valid()) {
-    return false;
-  }
-  entity.set<MeshRenderable>(mesh);
-  return true;
-}
-
-bool Scene::set_sprite_renderable(EntityGuid guid, const SpriteRenderable& sprite) const {
-  const flecs::entity entity = find_entity(guid);
-  if (!entity.is_valid()) {
-    return false;
-  }
-  entity.set<SpriteRenderable>(sprite);
-  return true;
 }
 
 bool Scene::tick(float delta_seconds) { return world_.progress(delta_seconds); }
