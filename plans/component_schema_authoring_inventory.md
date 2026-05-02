@@ -335,8 +335,8 @@ Current scene foundation/render extraction smoke:
 
 Phase 9 replacement/additions:
 
-- Add diagnostics tests in Slice 1.
-- Add registry freeze diagnostics tests in Slice 2.
+- Add diagnostics tests in Slice 1 (done).
+- Add registry freeze diagnostics tests in Slice 2 (done, `tests/core/ComponentRegistryTests.cpp`).
 - Update serialization smoke to JSON v2 in Slice 5.
 - Add test-only component extension proof in Slice 6.
 - Update cook/dump parity for schema-driven cooked v2 in Slice 7.
@@ -372,23 +372,23 @@ Implemented code targets:
 `Result<T>` was intentionally not migrated globally. The diagnostics type is available for registry
 freeze and scene validation reports in later slices.
 
-## Slice 2 handoff
+## Slice 2 completion
 
-The next slice should implement the registry builder/freeze boundary only. It should not switch
-`Scene`, JSON, cook, or demo generation to the registry yet.
+Registry builder/freeze and core registrar landed without wiring `Scene`, JSON, cook, or demo
+generation to the frozen registry.
 
-Recommended first code targets:
+Implemented code targets:
 
-- Add a component schema/registry home under the scene/runtime libraries without introducing editor or
-  renderer dependencies.
-- Add `ComponentRegistryBuilder` and immutable `ComponentRegistry`.
-- Add module metadata registration.
-- Add a first registrar shape such as `register_core_components(ComponentRegistryBuilder&)`, even if
-  the component entries are skeletal until Slice 3 field descriptors.
-- Add stable namespaced component keys and stable cooked component ID generation.
-- Route freeze validation through `core::DiagnosticReport`.
-- Add focused tests for duplicate module/component/field detection, invalid storage policy detection,
-  deterministic ordering, and component ID collision injection.
+- `src/core/ComponentRegistry.hpp`, `src/core/ComponentRegistry.cpp` — builder, frozen registry,
+  `stable_component_id_v1`, freeze diagnostics (`schema.*` codes).
+- `src/engine/scene/CoreComponentRegistrar.hpp`, `src/engine/scene/CoreComponentRegistrar.cpp` —
+  `register_core_components`.
+- `tests/core/ComponentRegistryTests.cpp` — freeze failures and stable codes; deterministic stable IDs.
+
+## Slice 3 handoff
+
+The next slice adds declarative field descriptors and richer registration for core components on top of
+the frozen registry path. It still does not have to switch JSON/cook/Flecs lists until later slices.
 
 Retain existing `SceneSerialization.*`, `Scene::register_components()`, and v1 scene resources until
 their planned slices replace them.

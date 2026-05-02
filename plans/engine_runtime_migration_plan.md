@@ -202,9 +202,10 @@ schema-aware path. **Exit:** a test-only component registered outside core scene
 round-trips through JSON and cook/dump; central `ComponentCodec` and cooked bit enum identity are gone;
 runtime scene creation requires an explicit frozen registry/context. Full editor foundation is deferred.
 
-Slice 1 has landed core structured diagnostics. Slice 2 is the component registry builder/freeze
-boundary; it should feed diagnostics without yet switching scene construction, serialization, cook, or
-demo generation.
+Slice 1 landed core structured diagnostics. Slice 2 landed the component registry builder/freeze
+boundary (`ComponentRegistry` / `ComponentRegistryBuilder`, `register_core_components`, freeze
+validation via `DiagnosticReport`) without switching scene construction, serialization, cook, or demo
+generation. Next Phase 9 implementation slice is declarative field schemas for core components (Slice 3).
 
 ### Phase 10: Editor foundation
 
@@ -235,8 +236,8 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 
 ## Immediate priorities
 
-1. Phase 9 Slice 2 — component registry builder/freeze with module/component/field policy validation
-   and stable diagnostic reports.
+1. Phase 9 Slice 3 — declarative field schema for core components (types, defaults, policies on the
+   frozen registry path).
 2. Phase 10 editor foundation — consume Phase 9 schema/document APIs instead of inventing parallel
    inspector/serialization logic.
 3. Phase 11 2D proof.

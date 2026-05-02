@@ -29,6 +29,26 @@ enum class ComponentStoragePolicy : uint8_t {
   return hash;
 }
 
+enum class ComponentFieldKind : uint32_t {
+  Bool,
+  I32,
+  F32,
+  String,
+  Vec2,
+  Vec3,
+  Vec4,
+  Quat,
+  Mat4,
+  AssetId,
+};
+
+struct ComponentFieldRegistration {
+  std::string key;
+  ComponentFieldKind kind;
+  bool required{true};
+  bool default_on_create{false};
+};
+
 struct ComponentRegistration {
   std::string component_key;
   std::string module_id;
@@ -36,7 +56,7 @@ struct ComponentRegistration {
   uint32_t schema_version{1};
   ComponentStoragePolicy storage{ComponentStoragePolicy::Authored};
   bool default_on_create{false};
-  std::vector<std::string> field_keys;
+  std::vector<ComponentFieldRegistration> fields;
 };
 
 struct FrozenComponentRecord {
@@ -46,7 +66,7 @@ struct FrozenComponentRecord {
   uint32_t schema_version{};
   ComponentStoragePolicy storage{ComponentStoragePolicy::Authored};
   bool default_on_create{false};
-  std::vector<std::string> field_keys;
+  std::vector<ComponentFieldRegistration> fields;
   uint64_t stable_id{};
 };
 

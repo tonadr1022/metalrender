@@ -1,7 +1,8 @@
 # Component schema and authoring implementation plan
 
-**Status:** Phase 9 sequencing plan. Slice 0 inventory and Slice 1 core diagnostics are implemented.
-Next implementation slice: Slice 2, component registry builder and freeze. Architectural contract:
+**Status:** Phase 9 sequencing plan. Slices 0–2 are implemented (inventory, core diagnostics, component
+registry builder/freeze). Next implementation slice: Slice 3, declarative field schema for core
+components. Architectural contract:
 [`component_schema_authoring_model.md`](component_schema_authoring_model.md). Scene byte contract:
 [`scene_serialization_design.md`](scene_serialization_design.md).
 
@@ -71,39 +72,35 @@ Validation:
 
 ## Slice 2: Component registry builder and freeze
 
-**Status:** Next slice.
+**Status:** Complete. Core types live in `teng_core`; core registrar lives in the engine scene layer.
 
 **Purpose:** Create the lifecycle boundary: mutable builder to immutable frozen registry.
 
-Work:
+Implemented:
 
-- Add `ComponentRegistryBuilder`.
-- Add immutable `ComponentRegistry`.
-- Add module metadata registration.
-- Add explicit registrar shape, e.g. `register_core_components(ComponentRegistryBuilder&)`.
-- Implement freeze validation through `core::DiagnosticReport` for duplicate modules, duplicate
-  component keys, duplicate field keys, invalid policies, and deterministic ordering.
-- Add stable component ID generation from namespaced component keys, with collision diagnostics.
-- Keep Flecs registration, field descriptors, JSON, cook, and scene construction on the existing paths
-  until later slices consume the frozen registry.
+- `ComponentRegistryBuilder` and immutable `ComponentRegistry` with `try_freeze(..., DiagnosticReport&)`
+  (`src/core/ComponentRegistry.hpp`, `src/core/ComponentRegistry.cpp`).
+- `ComponentStoragePolicy`, `ComponentRegistration`, `FrozenComponentRecord`; module registration via
+  `register_module`; stable IDs via FNV-1a 64-bit `stable_component_id_v1` with collision reporting
+  (`schema.duplicate_stable_component_id` on both colliding keys).
+- Freeze validation: duplicate module / module version mismatch, duplicate component key, duplicate
+  field key (within a component), unknown module, component `module_version` mismatch, invalid
+  `default_on_create` without `Authored` storage; deterministic sort order by component key before
+  freeze.
+- `register_core_components(ComponentRegistryBuilder&)` in
+  `src/engine/scene/CoreComponentRegistrar.cpp` (module `teng.core` v1; skeletal field lists; policies
+  aligned with the Slice 3 target: authored core renderables, `local_to_world` runtime-derived,
+  `fps_camera_controller` and `engine_input_snapshot` runtime-session).
+- `tests/core/ComponentRegistryTests.cpp` exercises stable ID determinism, happy-path freeze, and
+  diagnostic codes for the failure modes above (assertions on `DiagnosticCode`, not message text).
 
-Exit:
+Not done in this slice (as planned): Flecs, JSON, cook, and `Scene` construction do not consume the
+frozen registry yet; no `engine_scene_smoke` registry integration until Slice 4+.
 
-- A frozen registry can be built for core components, even before all serialization uses it.
-- Production scene creation does not have to switch yet.
-- Freeze failures return stable diagnostic codes and paths suitable for CLI/editor display.
+Validation (as run in repo):
 
-Validation:
-
-- Tests for duplicate component key, duplicate field key, invalid storage policy, and related module /
-  component consistency failures.
-- Freeze implements duplicate stable-component-ID detection when two distinct keys map to the same ID;
-  no test-only collision injection hook (64-bit collisions are impractical to fabricate without heavy
-  boilerplate).
-- No dedicated registry smoke in `engine_scene_smoke` for this slice; registrar happy-path integration
-  lands when the frozen registry is consumed (Slice 4+).
-- Diagnostics use stable codes, not message matching only.
-- Existing scene smoke and serialization behavior still pass unchanged.
+- `teng_core_tests` includes `ComponentRegistryTests`.
+- Existing scene smoke and serialization behavior unchanged.
 
 ## Slice 3: Declarative field schema for core components
 
@@ -327,8 +324,8 @@ Validation:
 Recommended order:
 
 1. diagnostics (done)
-2. registry builder/freeze (next)
-3. core schemas
+2. registry builder/freeze (done)
+3. core schemas (next)
 4. Scene/Flecs context integration
 5. JSON v2
 6. extension proof
