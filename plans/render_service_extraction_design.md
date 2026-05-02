@@ -1,6 +1,6 @@
 # Render service and extraction
 
-**Status:** Shipped: `RenderScene` extraction, `RenderService`, default `gfx::MeshletRenderer`. Forward roadmap: [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) (pillars, Phase 10+, compatibility).
+**Status:** Shipped: `RenderScene` extraction, `RenderService`, default `gfx::MeshletRenderer`. Forward roadmap: [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) (pillars, Phase 11+ 2D path, compatibility).
 
 ## Shipped shape
 

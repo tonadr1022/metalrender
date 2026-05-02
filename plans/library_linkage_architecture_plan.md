@@ -79,7 +79,11 @@ libraries that compile backend code.
 ## Done vs next (this doc’s CMake track)
 
 - **Done:** Invariants documented; shared `teng` retired; `teng_runtime` is the interface aggregate over static runtime component libraries; internal object buckets were promoted to static component libraries; `teng_scene_tool_lib` + `teng-scene-tool` exist as GPU-free scene tooling scaffolds.
-- **Next (aligns engine Phase 9+):** Optional **shared** slices only where a **second major consumer** (e.g. editor hot-reload) needs a narrow stable ABI—not for core simulation. Asset/tool CLIs link minimal `teng_*` where possible. Editor = **separate executable** per engine plan (not `--editor` on the same binary unless you later revisit and update both docs).
+- **Next (aligns engine Phase 9+):** Phase 9 may add schema/authoring/tooling slices, but optional
+  **shared** libraries should appear only where a **second major consumer** needs a narrow stable ABI—not
+  for core simulation. Asset/tool CLIs link minimal `teng_*` where possible. Editor = **separate
+  executable** per engine plan (not `--editor` on the same binary unless you later revisit and update
+  both docs).
 
 ## Risks
 

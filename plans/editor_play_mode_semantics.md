@@ -1,8 +1,9 @@
 # Editor play mode vs edit mode (long-term intent)
 
-**Parent roadmap:** [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) — Phase 9 (editor foundation).
+**Parent roadmap:** [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) — Phase 10 (editor foundation).
 
-**Status:** Intent for architecture and Phase 9 implementation; not all mechanics are specified below—extend this note when editor code lands.
+**Status:** Intent for architecture and editor foundation implementation after the Phase 9 component
+schema/authoring overhaul; not all mechanics are specified below—extend this note when editor code lands.
 
 ---
 
@@ -12,7 +13,9 @@
 
 This matches the usual Unity / Unreal mental model: simulation mutates a **session world**; stopping play **does not** silently redefine what is on disk or what the editor considers the saved scene.
 
-**Edit mode** keeps the **edit world** as the target of hierarchy, inspector, and **Save** (canonical `*.tscene.json` via the scene serialization registry). The edit world is what authors merge in version control.
+**Edit mode** keeps the **edit world** as the target of hierarchy, inspector, and **Save** (canonical
+`*.tscene.json` via the component schema registry and scene serializer). The edit world is what authors
+merge in version control.
 
 ---
 
@@ -30,7 +33,7 @@ This matches the usual Unity / Unreal mental model: simulation mutates a **sessi
 
 ---
 
-## Open points (decide when implementing Phase 9)
+## Open points (decide when implementing editor foundation)
 
 - **Enter play:** Snapshot strategy (deep copy of ECS state vs reload-from-staged JSON buffer)—must preserve `EntityGuid` stability and match serialization semantics.
 - **Reload during play:** Whether “reload scene” affects only play, only edit, or both; error if ambiguous.
@@ -41,6 +44,6 @@ This matches the usual Unity / Unreal mental model: simulation mutates a **sessi
 ## References
 
 - Undo/redo stacks **edit** mutations only; timing vs play mode: [`editor_undo_redo.md`](editor_undo_redo.md).
-- Phase 9 scope and ordering: [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) § Phase 9, § Immediate priorities.
+- Phase 10 scope and ordering: [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) § Phase 10, § Immediate priorities.
 - Serializable vs runtime-only components: [`scene_serialization_design.md` — Authored vs runtime-only](scene_serialization_design.md#authored-vs-runtime-only).
 - Single Flecs **process** / linkage: [`library_linkage_architecture_plan.md`](library_linkage_architecture_plan.md).

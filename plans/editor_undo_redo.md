@@ -1,8 +1,10 @@
 # Editor undo / redo (long-term requirement)
 
-**Parent roadmap:** [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) — Phase 9+.
+**Parent roadmap:** [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) — Phase 10+.
 
-**Status:** Requirement intent only; **not** part of the first Phase 9 merge slice (hierarchy, inspector, play/stop, save). Implement after the edit/play split is working—see [`editor_play_mode_semantics.md`](editor_play_mode_semantics.md).
+**Status:** Requirement intent only. Phase 9 adds the authoring transaction boundary that must not block
+future undo/redo, but the full undo stack is not part of that overhaul. Implement after the edit/play
+split is working—see [`editor_play_mode_semantics.md`](editor_play_mode_semantics.md).
 
 ---
 
@@ -10,7 +12,8 @@
 
 **Undo/redo is an explicit long-term requirement** for editor-grade authoring: authors must be able to reverse mistaken hierarchy edits, inspector changes, and similar **edit-world** mutations without relying on version control alone.
 
-It is **not** a blocking exit criterion for the **initial** Phase 9 foundation milestone (prove editor exe + one vertical slice). Schedule it as the next authoring-depth milestone once scene editing is real.
+It is **not** a blocking exit criterion for Phase 9 or the first editor vertical slice. Schedule it as
+the next authoring-depth milestone once scene editing is real.
 
 ---
 
@@ -41,5 +44,5 @@ It is **not** a blocking exit criterion for the **initial** Phase 9 foundation m
 
 ## References
 
-- Phase 9 sequencing: [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) § Phase 9, § Scope honesty.
+- Phase 9/10 sequencing: [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md) § Phase 9, § Phase 10, § Scope honesty.
 - Edit vs play worlds: [`editor_play_mode_semantics.md`](editor_play_mode_semantics.md).

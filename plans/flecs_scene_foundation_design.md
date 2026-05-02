@@ -8,13 +8,17 @@
 - **`engine::SceneManager`**: owned by **`Engine`**, active scene, ticked from **`Engine::tick()`**, exposed via **`EngineContext::scenes()`**.
 - **Stable IDs:** **`SceneId`**, **`EntityGuid`**, **`AssetId`** (see **`SceneIds.*`**; asset identity policy continues in [`asset_registry_implementation_plan.md`](asset_registry_implementation_plan.md)).
 - **Core components** (authoring): **`EntityGuidComponent`**, **`Name`**, **`Transform`**, **`LocalToWorld`**, **`Camera`**, **`DirectionalLight`**, **`MeshRenderable`**, **`SpriteRenderable`** — renderables store **`AssetId`**, not GPU handles.
-- **Data scenes:** Canonical **`*.tscene.json`** (registry + **`nlohmann/json`**) — [`plans/scene_serialization_design.md`](scene_serialization_design.md). Demo content from **`scripts/generate_demo_scene_assets.py`**.
+- **Data scenes:** Canonical **`*.tscene.json`** (schema registry + **`nlohmann/json`**) —
+  [`plans/scene_serialization_design.md`](scene_serialization_design.md). Phase 9 replaces handwritten
+  Python scene JSON generation with C++ schema-aware generation.
 - **Tests / CI:** **`engine_scene_smoke`** and **`./scripts/agent_verify.sh`**.
 
 ## Deferred / future
 
 - Parent/transform hierarchy (relationships or explicit parent component).
-- **Composable serialization registration** — today codecs are centralized in `SceneSerialization.cpp`; game/editor-defined components should register without editing that TU (`scene_serialization_design.md` **Direction**).
+- **Component schema registry** — today codecs are centralized in `SceneSerialization.cpp`; Phase 9
+  replaces that with the frozen registry described in
+  [`component_schema_authoring_model.md`](component_schema_authoring_model.md).
 - Editor **edit vs play** worlds: [`editor_play_mode_semantics.md`](editor_play_mode_semantics.md). Component registration metadata for tooling (inspector, serialization alignment).
 
 ## Principles (unchanged)
