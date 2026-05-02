@@ -233,11 +233,6 @@ bool ComponentRegistryBuilder::try_freeze(ComponentRegistry& out, DiagnosticRepo
                        "component module_version does not match registered module");
     }
 
-    if (component.default_on_create && component.storage != ComponentStoragePolicy::Authored) {
-      report.add_error(DiagnosticCode{"schema.invalid_storage_policy"}, comp_path,
-                       "default_on_create requires Authored storage policy");
-    }
-
     validate_component_fields(component, report);
   }
 
@@ -272,7 +267,7 @@ bool ComponentRegistryBuilder::try_freeze(ComponentRegistry& out, DiagnosticRepo
         .schema_version = component.schema_version,
         .storage = component.storage,
         .visibility = component.visibility,
-        .default_on_create = component.default_on_create,
+        .add_on_create = component.add_on_create,
         .schema_validation_hook = component.schema_validation_hook,
         .fields = component.fields,
         .stable_id = sid,

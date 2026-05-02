@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <string>
 #include <string_view>
 #include <unordered_map>
 
@@ -10,9 +9,11 @@
 
 namespace teng::engine {
 
+struct SceneComponentContext;
+
 class SceneManager {
  public:
-  SceneManager() = default;
+  explicit SceneManager(const SceneComponentContext& component_ctx);
   SceneManager(const SceneManager&) = delete;
   SceneManager& operator=(const SceneManager&) = delete;
 
@@ -30,6 +31,7 @@ class SceneManager {
   bool tick_active_scene(float delta_seconds);
 
  private:
+  const SceneComponentContext& component_ctx_;
   std::unordered_map<SceneId, std::unique_ptr<Scene>> scenes_;
   SceneId active_scene_id_;
 };

@@ -143,4 +143,15 @@ std::string render_diagnostic_report(const DiagnosticReport& report) {
   return out.str();
 }
 
+std::string DiagnosticReport::to_string() const {
+  std::ostringstream out;
+  for (size_t i = 0; i < diagnostics_.size(); ++i) {
+    if (i != 0) {
+      out << '\n';
+    }
+    out << render_diagnostic(diagnostics_[i]);
+  }
+  return out.str();
+}
+
 }  // namespace TENG_NAMESPACE::core

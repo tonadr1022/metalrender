@@ -9,7 +9,7 @@ From root:
 ```
 
 Configures CMake, builds apps and scaffold libraries, runs first-party CTest tests
-(`teng_core_tests` and `engine_scene_smoke`), changed-file clang-tidy when relevant,
+(`teng_core_tests`, `teng_engine_tests`, and `engine_scene_smoke`), changed-file clang-tidy when relevant,
 and shader compile checks.
 Add `--format` to format changed first-party C/C++ files.
 
@@ -27,6 +27,7 @@ Useful modes:
 metalrender
 teng-shaderc
 teng_core_tests
+teng_engine_tests
 engine_scene_smoke
 teng-scene-tool
 
@@ -72,6 +73,7 @@ Direct test binaries remain useful for local debugging:
 
 ```bash
 ./build/Debug/bin/teng_core_tests
+./build/Debug/bin/teng_engine_tests
 ./build/Debug/bin/engine_scene_smoke
 ```
 

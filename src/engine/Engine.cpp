@@ -11,11 +11,14 @@
 
 #include "Window.hpp"
 #include "core/CVar.hpp"
+#include "core/Diagnostic.hpp"
 #include "core/EAssert.hpp"
 #include "core/Logger.hpp"
 #include "core/TomlUtil.hpp"
 #include "engine/assets/AssetService.hpp"
 #include "engine/render/RenderService.hpp"
+#include "engine/scene/CoreComponentRegistrar.hpp"
+#include "engine/scene/SceneComponentContext.hpp"
 #include "engine/scene/SceneSerialization.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
@@ -122,6 +125,16 @@ void Engine::init() {
   }
   CVarSystem::get().load_from_file((local_resource_dir_ / "cvars.txt").string());
 
+  SceneComponentContextBuilder builder;
+  register_core_scene_component_bindings(builder);
+  core::DiagnosticReport report;
+  frozen_scene_component_ctx_ = std::make_unique<SceneComponentContext>();
+  if (!builder.try_freeze(*frozen_scene_component_ctx_, report)) {
+    LCRITICAL("Failed to freeze scene component context: {}", report.to_string());
+    std::exit(1);
+  }
+  scenes_ = std::make_unique<SceneManager>(*frozen_scene_component_ctx_);
+
   window_ = create_platform_window();
   Window::InitInfo win_init_info{
       .key_callback_fn =
@@ -166,7 +179,7 @@ void Engine::init() {
   });
   (void)assets_->scan();
   context_.assets_ = assets_.get();
-  context_.scenes_ = &scenes_;
+  context_.scenes_ = scenes_.get();
   context_.time_ = &time_;
   context_.input_ = &input_snapshot_;
   context_.imgui_enabled_ = &imgui_enabled_;
@@ -175,7 +188,7 @@ void Engine::init() {
       .device = device_.get(),
       .swapchain = context_.swapchain_,
       .window = window_.get(),
-      .scenes = &scenes_,
+      .scenes = scenes_.get(),
       .assets = assets_.get(),
       .time = &time_,
       .resource_dir = resource_dir_,
@@ -267,7 +280,7 @@ void Engine::clear_transient_input() {
 }
 
 Result<SceneLoadResult> Engine::load_scene(const std::filesystem::path& scene_path) {
-  return teng::engine::load_scene_file(scenes_, scene_path);
+  return teng::engine::load_scene_file(*scenes_, scene_path);
 }
 
 Result<SceneLoadResult> Engine::load_project_startup_scene() {
@@ -308,10 +321,10 @@ bool Engine::tick() {
   have_prev_time_ = true;
   input_snapshot_.delta_seconds = time_.delta_seconds;
 
-  if (Scene* active_scene = scenes_.active_scene()) {
+  if (Scene* active_scene = scenes_->active_scene()) {
     active_scene->set_input_snapshot(input_snapshot_);
   }
-  if (!scenes_.tick_active_scene(time_.delta_seconds)) {
+  if (!scenes_->tick_active_scene(time_.delta_seconds)) {
     return false;
   }
   clear_transient_input();
@@ -320,7 +333,7 @@ bool Engine::tick() {
 
   layers_.update(time_);
   layers_.imgui();
-  if (scenes_.active_scene()) {
+  if (scenes_->active_scene()) {
     renderer_->enqueue_active_scene();
   }
   layers_.render();

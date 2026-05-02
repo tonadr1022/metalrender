@@ -81,6 +81,8 @@ class DiagnosticReport {
   [[nodiscard]] size_t size() const { return diagnostics_.size(); }
   [[nodiscard]] const std::vector<Diagnostic>& diagnostics() const { return diagnostics_; }
 
+  [[nodiscard]] std::string to_string() const;
+
  private:
   std::vector<Diagnostic> diagnostics_;
 };

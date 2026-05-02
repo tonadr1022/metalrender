@@ -10,6 +10,7 @@
 
 #include "core/Result.hpp"
 #include "engine/Input.hpp"
+#include "engine/scene/SceneComponentContext.hpp"
 #include "engine/scene/SceneManager.hpp"
 #include "engine/scene/SceneSerialization.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -146,8 +147,8 @@ class Engine {
   [[nodiscard]] LayerStack& layers() { return layers_; }
   [[nodiscard]] assets::AssetService& assets() { return *assets_; }
   [[nodiscard]] const assets::AssetService& assets() const { return *assets_; }
-  [[nodiscard]] SceneManager& scenes() { return scenes_; }
-  [[nodiscard]] const SceneManager& scenes() const { return scenes_; }
+  [[nodiscard]] SceneManager& scenes() { return *scenes_; }
+  [[nodiscard]] const SceneManager& scenes() const { return *scenes_; }
   [[nodiscard]] RenderService& renderer() { return *renderer_; }
   [[nodiscard]] const RenderService& renderer() const { return *renderer_; }
   [[nodiscard]] const EngineConfig& config() const { return config_; }
@@ -177,7 +178,8 @@ class Engine {
   std::unique_ptr<gfx::rhi::Device> device_;
   gfx::rhi::SwapchainHandleHolder swapchain_;
   std::unique_ptr<assets::AssetService> assets_;
-  SceneManager scenes_;
+  std::unique_ptr<SceneComponentContext> frozen_scene_component_ctx_;
+  std::unique_ptr<SceneManager> scenes_;
   std::unique_ptr<RenderService> renderer_;
   EngineContext context_;
   LayerStack layers_;

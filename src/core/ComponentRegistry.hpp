@@ -120,7 +120,7 @@ struct ComponentRegistration {
   uint32_t schema_version{1};
   ComponentStoragePolicy storage{ComponentStoragePolicy::Authored};
   ComponentSchemaVisibility visibility{ComponentSchemaVisibility::Editable};
-  bool default_on_create{false};
+  bool add_on_create{};
   ComponentSchemaValidationHook schema_validation_hook{nullptr};
   std::vector<ComponentFieldRegistration> fields;
 };
@@ -132,7 +132,7 @@ struct FrozenComponentRecord {
   uint32_t schema_version{};
   ComponentStoragePolicy storage{ComponentStoragePolicy::Authored};
   ComponentSchemaVisibility visibility{ComponentSchemaVisibility::Editable};
-  bool default_on_create{false};
+  bool add_on_create{};
   ComponentSchemaValidationHook schema_validation_hook{nullptr};
   std::vector<ComponentFieldRegistration> fields;
   uint64_t stable_id{};

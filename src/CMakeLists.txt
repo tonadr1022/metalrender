@@ -31,6 +31,7 @@ set(TENG_ASSETS_SOURCES
 
 set(TENG_SCENE_SOURCES
     engine/scene/CoreComponentRegistrar.cpp
+    engine/scene/SceneComponentContext.cpp
     engine/scene/Scene.cpp
     engine/scene/SceneComponents.cpp
     engine/scene/SceneIds.cpp

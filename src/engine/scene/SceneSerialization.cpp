@@ -7,9 +7,11 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <flecs/addons/cpp/entity.hpp>
 #include <fstream>
+#include <glm/ext/matrix_float4x4.hpp>
 #include <iterator>
-#include <limits>
+#include <nlohmann/json.hpp>
 #include <span>
 #include <string>
 #include <string_view>
@@ -17,10 +19,6 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-
-#include <flecs/addons/cpp/entity.hpp>
-#include <glm/ext/matrix_float4x4.hpp>
-#include <nlohmann/json.hpp>
 
 #include "core/Result.hpp"
 #include "engine/scene/SceneComponents.hpp"
@@ -108,7 +106,8 @@ struct ComponentCodec {
   if (!out) {
     return make_unexpected(io_error(path, "write"));
   }
-  out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+  out.write(reinterpret_cast<const char*>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
   return {};
 }
 
@@ -178,8 +177,7 @@ struct ComponentCodec {
   return it->get<std::string>();
 }
 
-[[nodiscard]] Result<std::array<float, 3>> required_vec3(const json& object,
-                                                         std::string_view field,
+[[nodiscard]] Result<std::array<float, 3>> required_vec3(const json& object, std::string_view field,
                                                          std::string_view label) {
   const auto it = object.find(field);
   if (it == object.end() || !it->is_array() || it->size() != 3) {
@@ -197,8 +195,7 @@ struct ComponentCodec {
   return out;
 }
 
-[[nodiscard]] Result<std::array<float, 4>> required_vec4(const json& object,
-                                                         std::string_view field,
+[[nodiscard]] Result<std::array<float, 4>> required_vec4(const json& object, std::string_view field,
                                                          std::string_view label) {
   const auto it = object.find(field);
   if (it == object.end() || !it->is_array() || it->size() != 4) {
@@ -281,8 +278,7 @@ struct ComponentCodec {
   REQUIRED_OR_RETURN(object_ok);
   Result<void> keys_ok = ensure_allowed_keys(payload, keys, "directional_light");
   REQUIRED_OR_RETURN(keys_ok);
-  Result<std::array<float, 3>> direction =
-      required_vec3(payload, "direction", "directional_light");
+  Result<std::array<float, 3>> direction = required_vec3(payload, "direction", "directional_light");
   REQUIRED_OR_RETURN(direction);
   Result<std::array<float, 3>> color = required_vec3(payload, "color", "directional_light");
   REQUIRED_OR_RETURN(color);
@@ -328,7 +324,7 @@ struct ComponentCodec {
 
 [[nodiscard]] Result<SpriteRenderable> parse_sprite_renderable(const json& payload) {
   constexpr std::array<std::string_view, 4> keys{"sorting_layer", "sorting_order", "texture",
-                                                "tint"};
+                                                 "tint"};
   Result<void> object_ok = ensure_object(payload, "sprite_renderable");
   REQUIRED_OR_RETURN(object_ok);
   Result<void> keys_ok = ensure_allowed_keys(payload, keys, "sprite_renderable");
@@ -562,12 +558,12 @@ void derive_local_to_world(Scene& scene) {
     if (components_it == entity.end() || !components_it->is_object()) {
       return make_unexpected(label + ".components must be an object");
     }
-    records.push_back(EntityRecord{.guid = *guid, .name = std::move(name), .components = *components_it});
+    records.push_back(
+        EntityRecord{.guid = *guid, .name = std::move(name), .components = *components_it});
   }
 
-  std::ranges::sort(records, [](const EntityRecord& a, const EntityRecord& b) {
-    return a.guid < b.guid;
-  });
+  std::ranges::sort(records,
+                    [](const EntityRecord& a, const EntityRecord& b) { return a.guid < b.guid; });
   return records;
 }
 
@@ -775,7 +771,8 @@ void write_component_blob(std::vector<std::byte>& out, std::string_view key, con
     REQUIRED_OR_RETURN(z_far);
     Result<uint32_t> primary = read_u32(bytes, offset);
     REQUIRED_OR_RETURN(primary);
-    return camera_json({.fov_y = *fov_y, .z_near = *z_near, .z_far = *z_far, .primary = *primary != 0});
+    return camera_json(
+        {.fov_y = *fov_y, .z_near = *z_near, .z_far = *z_far, .primary = *primary != 0});
   }
   if (key == "directional_light") {
     DirectionalLight light;
@@ -870,7 +867,8 @@ Result<nlohmann::json> serialize_scene_to_json(const Scene& scene) {
     if (const auto* name = entity.try_get<Name>(); name && !name->value.empty()) {
       entity_json["name"] = name->value;
     }
-    entities.push_back(SerializedEntity{.guid = guid_component.guid, .value = std::move(entity_json)});
+    entities.push_back(
+        SerializedEntity{.guid = guid_component.guid, .value = std::move(entity_json)});
   });
 
   std::ranges::sort(entities, [](const SerializedEntity& a, const SerializedEntity& b) {
@@ -1131,9 +1129,8 @@ Result<nlohmann::json> dump_cooked_scene_to_json(std::span<const std::byte> byte
     if (*name_index >= strings.size()) {
       return make_unexpected("cooked scene entity name index is out of range");
     }
-    entities.push_back(DumpEntity{.guid = EntityGuid{*guid},
-                                  .name_index = *name_index,
-                                  .component_mask = *component_mask});
+    entities.push_back(DumpEntity{
+        .guid = EntityGuid{*guid}, .name_index = *name_index, .component_mask = *component_mask});
   }
 
   auto component_read = static_cast<size_t>(*component_offset);
@@ -1164,9 +1161,8 @@ Result<nlohmann::json> dump_cooked_scene_to_json(std::span<const std::byte> byte
   json root{{"registry_version", *registry_version},
             {"scene", json{{"name", strings[*scene_name_index]}}},
             {"entities", json::array()}};
-  std::ranges::sort(entities, [](const DumpEntity& a, const DumpEntity& b) {
-    return a.guid < b.guid;
-  });
+  std::ranges::sort(entities,
+                    [](const DumpEntity& a, const DumpEntity& b) { return a.guid < b.guid; });
   for (const DumpEntity& entity : entities) {
     json entity_json{{"components", entity.components}, {"guid", entity.guid.value}};
     if (!strings[entity.name_index].empty()) {

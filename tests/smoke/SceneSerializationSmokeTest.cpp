@@ -6,8 +6,11 @@
 #include <string_view>
 #include <system_error>
 
+#include "core/Diagnostic.hpp"
+#include "core/Logger.hpp"
 #include "engine/render/RenderScene.hpp"
 #include "engine/render/RenderSceneExtractor.hpp"
+#include "engine/scene/CoreComponentRegistrar.hpp"
 #include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/SceneManager.hpp"
 #include "engine/scene/SceneSerialization.hpp"
@@ -39,16 +42,20 @@ namespace {
          "  \"entities\": [\n"
          "    {\n"
          "      \"components\": {\n"
-         "        \"camera\": { \"fov_y\": 1.04719755, \"primary\": true, \"z_far\": 10000.0, \"z_near\": 0.1 },\n"
-         "        \"transform\": { \"rotation\": [1.0, 0.0, 0.0, 0.0], \"scale\": [1.0, 1.0, 1.0], \"translation\": [0.0, 0.0, 3.0] }\n"
+         "        \"camera\": { \"fov_y\": 1.04719755, \"primary\": true, \"z_far\": 10000.0, "
+         "\"z_near\": 0.1 },\n"
+         "        \"transform\": { \"rotation\": [1.0, 0.0, 0.0, 0.0], \"scale\": [1.0, 1.0, 1.0], "
+         "\"translation\": [0.0, 0.0, 3.0] }\n"
          "      },\n"
          "      \"guid\": 1001,\n"
          "      \"name\": \"camera\"\n"
          "    },\n"
          "    {\n"
          "      \"components\": {\n"
-         "        \"directional_light\": { \"color\": [1.0, 1.0, 1.0], \"direction\": [0.35, 1.0, 0.4], \"intensity\": 1.0 },\n"
-         "        \"transform\": { \"rotation\": [1.0, 0.0, 0.0, 0.0], \"scale\": [1.0, 1.0, 1.0], \"translation\": [0.0, 0.0, 0.0] }\n"
+         "        \"directional_light\": { \"color\": [1.0, 1.0, 1.0], \"direction\": [0.35, 1.0, "
+         "0.4], \"intensity\": 1.0 },\n"
+         "        \"transform\": { \"rotation\": [1.0, 0.0, 0.0, 0.0], \"scale\": [1.0, 1.0, 1.0], "
+         "\"translation\": [0.0, 0.0, 0.0] }\n"
          "      },\n"
          "      \"guid\": 1002,\n"
          "      \"name\": \"light\"\n"
@@ -58,10 +65,12 @@ namespace {
          "        \"mesh_renderable\": { \"model\": \"" +
          test_model_id().to_string() +
          "\" },\n"
-         "        \"sprite_renderable\": { \"sorting_layer\": 1, \"sorting_order\": 2, \"texture\": \"" +
+         "        \"sprite_renderable\": { \"sorting_layer\": 1, \"sorting_order\": 2, "
+         "\"texture\": \"" +
          test_texture_id().to_string() +
          "\", \"tint\": [1.0, 0.5, 0.25, 1.0] },\n"
-         "        \"transform\": { \"rotation\": [1.0, 0.0, 0.0, 0.0], \"scale\": [1.0, 1.0, 1.0], \"translation\": [2.0, 0.0, 0.0] }\n"
+         "        \"transform\": { \"rotation\": [1.0, 0.0, 0.0, 0.0], \"scale\": [1.0, 1.0, 1.0], "
+         "\"translation\": [2.0, 0.0, 0.0] }\n"
          "      },\n"
          "      \"guid\": 1003,\n"
          "      \"name\": \"mesh\"\n"
@@ -87,7 +96,16 @@ bool run_scene_serialization_smoke_test() {
     return false;
   }
 
-  SceneManager scenes;
+  SceneComponentContextBuilder builder;
+  register_core_scene_component_bindings(builder);
+  SceneComponentContext component_ctx;
+  core::DiagnosticReport report;
+  if (!builder.try_freeze(component_ctx, report)) {
+    LERROR("Failed to freeze scene component context: {}", report.to_string());
+    return false;
+  }
+
+  SceneManager scenes(component_ctx);
   Result<SceneLoadResult> loaded = load_scene_file(scenes, valid_path);
   if (!loaded || !(*loaded).scene || scenes.active_scene() != (*loaded).scene ||
       (*loaded).scene->name() != "serialization smoke") {
@@ -122,7 +140,7 @@ bool run_scene_serialization_smoke_test() {
   if (!save_scene_file(scene, round_trip_path)) {
     return false;
   }
-  SceneManager round_trip_scenes;
+  SceneManager round_trip_scenes(component_ctx);
   Result<SceneLoadResult> round_trip_loaded = load_scene_file(round_trip_scenes, round_trip_path);
   if (!round_trip_loaded || !(*round_trip_loaded).scene ||
       !(*round_trip_loaded).scene->has_entity(EntityGuid{1003})) {
@@ -131,15 +149,16 @@ bool run_scene_serialization_smoke_test() {
 
   const std::filesystem::path cooked_path = root / "valid.tscene.bin";
   const std::filesystem::path dumped_path = root / "dumped.tscene.json";
-  if (!cook_scene_file(valid_path, cooked_path) || !dump_cooked_scene_file(cooked_path, dumped_path) ||
-      !validate_scene_file(dumped_path)) {
+  if (!cook_scene_file(valid_path, cooked_path) ||
+      !dump_cooked_scene_file(cooked_path, dumped_path) || !validate_scene_file(dumped_path)) {
     return false;
   }
 
   const std::filesystem::path invalid_path = root / "invalid.tscene.json";
-  if (!write_text_file(invalid_path,
-                       "{ \"registry_version\": 1, \"scene\": { \"name\": \"invalid\" }, "
-                       "\"entities\": [ { \"guid\": 1, \"components\": { \"local_to_world\": {} } } ] }\n")) {
+  if (!write_text_file(
+          invalid_path,
+          "{ \"registry_version\": 1, \"scene\": { \"name\": \"invalid\" }, "
+          "\"entities\": [ { \"guid\": 1, \"components\": { \"local_to_world\": {} } } ] }\n")) {
     return false;
   }
   if (validate_scene_file(invalid_path)) {

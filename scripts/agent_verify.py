@@ -20,6 +20,7 @@ DEFAULT_TARGETS = [
     "metalrender",
     "teng-shaderc",
     "teng_core_tests",
+    "teng_engine_tests",
     "engine_scene_smoke",
     "teng-scene-tool",
 ]

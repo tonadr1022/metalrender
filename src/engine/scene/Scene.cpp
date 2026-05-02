@@ -12,6 +12,7 @@
 
 #include "core/EAssert.hpp"
 #include "engine/Input.hpp"
+#include "engine/scene/SceneComponentContext.hpp"
 #include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/SceneIds.hpp"
 
@@ -37,7 +38,8 @@ namespace {
 
 }  // namespace
 
-Scene::Scene(SceneId id, std::string name) : id_(id), name_(std::move(name)) {
+Scene::Scene(const SceneComponentContext& context, SceneId id, std::string name)
+    : id_(id), name_(std::move(name)), component_ctx_(context) {
   ASSERT(id_.is_valid());
   register_components();
   register_systems();
@@ -46,16 +48,9 @@ Scene::Scene(SceneId id, std::string name) : id_(id), name_(std::move(name)) {
 Scene::~Scene() = default;
 
 void Scene::register_components() {
-  world_.component<EntityGuidComponent>("EntityGuidComponent");
-  world_.component<Name>("Name");
-  world_.component<Transform>("Transform");
-  world_.component<LocalToWorld>("LocalToWorld");
-  world_.component<Camera>("Camera");
-  world_.component<FpsCameraController>("FpsCameraController");
-  world_.component<EngineInputSnapshot>("EngineInputSnapshot");
-  world_.component<DirectionalLight>("DirectionalLight");
-  world_.component<MeshRenderable>("MeshRenderable");
-  world_.component<SpriteRenderable>("SpriteRenderable");
+  for (const RegisterFlecsFn& register_flecs : component_ctx_.flecs_register_fns) {
+    register_flecs(world_);
+  }
 }
 
 void Scene::register_systems() {
@@ -143,10 +138,13 @@ flecs::entity Scene::create_entity(EntityGuid guid, std::string_view name) {
   const std::string entity_name{name};
   flecs::entity entity = entity_name.empty() ? world_.entity() : world_.entity(entity_name.c_str());
   entity.set<EntityGuidComponent>({.guid = guid});
-  entity.set<Transform>({});
-  entity.set<LocalToWorld>({});
+
   if (!entity_name.empty()) {
     entity.set<Name>({.value = entity_name});
+  }
+
+  for (const ApplyOnCreateFn& fn : component_ctx_.apply_on_create_fns) {
+    fn(entity);
   }
 
   entities_by_guid_.emplace(guid, entity);

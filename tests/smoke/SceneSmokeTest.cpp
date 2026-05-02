@@ -4,6 +4,9 @@
 
 #include <cmath>
 
+#include "TestHelpers.hpp"
+#include "core/Logger.hpp"
+#include "engine/Input.hpp"
 #include "engine/render/RenderScene.hpp"
 #include "engine/render/RenderSceneExtractor.hpp"
 #include "engine/scene/Scene.hpp"
@@ -31,7 +34,8 @@ bool matrix_nearly_equal(const auto& a, const auto& b) {
 }  // namespace
 
 bool run_scene_foundation_smoke_test() {
-  SceneManager scenes;
+  SceneComponentContext component_ctx = make_scene_component_context();
+  SceneManager scenes(component_ctx);
   Scene& scene = scenes.create_scene("smoke");
   const EntityGuid guid = make_entity_guid();
   const auto entity = scene.create_entity(guid, "entity");
@@ -70,7 +74,9 @@ bool run_scene_foundation_smoke_test() {
 }
 
 bool run_render_scene_extraction_smoke_test() {
-  Scene scene{SceneId{100}, "render extraction"};
+  SceneComponentContext component_ctx = make_scene_component_context();
+  SceneManager scenes(component_ctx);
+  Scene& scene = scenes.create_scene("render extraction");
 
   const EntityGuid camera_guid{30};
   const auto camera = scene.create_entity(camera_guid, "camera");
@@ -203,7 +209,9 @@ bool run_render_scene_extraction_smoke_test() {
 }
 
 bool run_fps_camera_system_smoke_test() {
-  Scene scene{SceneId{101}, "fps camera"};
+  SceneComponentContext component_ctx = make_scene_component_context();
+  SceneManager scenes(component_ctx);
+  Scene& scene = scenes.create_scene("fps camera");
   const EntityGuid camera_guid{40};
   const auto camera = scene.create_entity(camera_guid, "fps camera");
   camera.set<Camera>({.primary = true});

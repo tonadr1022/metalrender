@@ -1,6 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
-#include <variant>
 
 #include "core/ComponentRegistry.hpp"
 
@@ -58,22 +57,6 @@ TEST_CASE("freeze detects duplicate field key", "[component_registry]") {
   CHECK(!builder.try_freeze(registry, report));
   REQUIRE(report.has_errors());
   CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.duplicate_field_key"});
-}
-
-TEST_CASE("freeze rejects default_on_create without Authored storage", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(
-      ComponentRegistration{.component_key = "teng.core.a",
-                            .module_id = "teng.core",
-                            .storage = ComponentStoragePolicy::RuntimeDerived,
-                            .default_on_create = true});
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  REQUIRE(report.has_errors());
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.invalid_storage_policy"});
 }
 
 TEST_CASE("freeze detects duplicate module registration", "[component_registry]") {
@@ -163,7 +146,7 @@ TEST_CASE("freeze succeeds for valid single component", "[component_registry]") 
   builder.register_component(ComponentRegistration{.component_key = "teng.core.transform",
                                                    .module_id = "teng.core",
                                                    .storage = ComponentStoragePolicy::Authored,
-                                                   .default_on_create = true});
+                                                   .add_on_create = true});
 
   ComponentRegistry registry;
   DiagnosticReport report;
@@ -502,7 +485,7 @@ TEST_CASE("freeze invokes schema validation hook", "[component_registry]") {
   for (const Diagnostic& d : report.diagnostics()) {
     if (d.code == DiagnosticCode{"schema.validation_hook_test"}) {
       saw_hook = true;
-      CHECK(d.message.find("teng.core.a") != std::string::npos);
+      CHECK(d.message.contains("teng.core.a"));
     }
   }
   CHECK(saw_hook);

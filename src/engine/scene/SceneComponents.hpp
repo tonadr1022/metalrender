@@ -1,13 +1,11 @@
 #pragma once
 
-#include <string>
-
 #include <glm/ext/matrix_float4x4.hpp>
 #include <glm/ext/quaternion_float.hpp>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_float4.hpp>
+#include <string>
 
-#include "engine/Input.hpp"
 #include "engine/scene/SceneIds.hpp"
 
 namespace teng::engine {
