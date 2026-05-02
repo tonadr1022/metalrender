@@ -1,9 +1,11 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 #include "core/Config.hpp"
@@ -16,6 +18,12 @@ enum class ComponentStoragePolicy : uint8_t {
   RuntimeDerived,
   RuntimeSession,
   EditorOnly,
+};
+
+enum class ComponentSchemaVisibility : uint8_t {
+  Editable,
+  DebugInspectable,
+  Hidden,
 };
 
 [[nodiscard]] constexpr uint64_t stable_component_id_v1(std::string_view component_key) noexcept {
@@ -32,6 +40,7 @@ enum class ComponentStoragePolicy : uint8_t {
 enum class ComponentFieldKind : uint32_t {
   Bool,
   I32,
+  U32,
   F32,
   String,
   Vec2,
@@ -40,13 +49,68 @@ enum class ComponentFieldKind : uint32_t {
   Quat,
   Mat4,
   AssetId,
+  Enum,
 };
+
+struct ComponentDefaultVec2 {
+  float x{}, y{};
+};
+
+struct ComponentDefaultVec3 {
+  float x{}, y{}, z{};
+};
+
+struct ComponentDefaultVec4 {
+  float x{}, y{}, z{}, w{};
+};
+
+struct ComponentDefaultQuat {
+  float w{1.f}, x{}, y{}, z{};
+};
+
+struct ComponentDefaultMat4 {
+  std::array<float, 16> elements{};
+};
+
+struct ComponentDefaultAssetId {
+  std::string value;
+};
+
+struct ComponentDefaultEnum {
+  std::string key;
+};
+
+using ComponentFieldDefaultValue =
+    std::variant<bool, int64_t, uint64_t, float, std::string, ComponentDefaultVec2,
+                 ComponentDefaultVec3, ComponentDefaultVec4, ComponentDefaultQuat,
+                 ComponentDefaultMat4, ComponentDefaultAssetId, ComponentDefaultEnum>;
+
+struct ComponentAssetFieldMetadata {
+  std::string expected_kind;
+};
+
+struct ComponentEnumValueRegistration {
+  std::string key;
+  int64_t value{};
+};
+
+struct ComponentEnumRegistration {
+  std::string enum_key;
+  std::vector<ComponentEnumValueRegistration> values;
+};
+
+struct FrozenComponentRecord;
+
+using ComponentSchemaValidationHook = void (*)(const FrozenComponentRecord& component,
+                                               DiagnosticReport& report);
 
 struct ComponentFieldRegistration {
   std::string key;
-  ComponentFieldKind kind;
-  bool required{true};
-  bool default_on_create{false};
+  ComponentFieldKind kind{};
+  bool authored_required{true};
+  std::optional<ComponentFieldDefaultValue> default_value;
+  std::optional<ComponentAssetFieldMetadata> asset;
+  std::optional<ComponentEnumRegistration> enumeration;
 };
 
 struct ComponentRegistration {
@@ -55,7 +119,9 @@ struct ComponentRegistration {
   uint32_t module_version{1};
   uint32_t schema_version{1};
   ComponentStoragePolicy storage{ComponentStoragePolicy::Authored};
+  ComponentSchemaVisibility visibility{ComponentSchemaVisibility::Editable};
   bool default_on_create{false};
+  ComponentSchemaValidationHook schema_validation_hook{nullptr};
   std::vector<ComponentFieldRegistration> fields;
 };
 
@@ -65,7 +131,9 @@ struct FrozenComponentRecord {
   uint32_t module_version{};
   uint32_t schema_version{};
   ComponentStoragePolicy storage{ComponentStoragePolicy::Authored};
+  ComponentSchemaVisibility visibility{ComponentSchemaVisibility::Editable};
   bool default_on_create{false};
+  ComponentSchemaValidationHook schema_validation_hook{nullptr};
   std::vector<ComponentFieldRegistration> fields;
   uint64_t stable_id{};
 };

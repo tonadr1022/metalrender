@@ -205,7 +205,9 @@ runtime scene creation requires an explicit frozen registry/context. Full editor
 Slice 1 landed core structured diagnostics. Slice 2 landed the component registry builder/freeze
 boundary (`ComponentRegistry` / `ComponentRegistryBuilder`, `register_core_components`, freeze
 validation via `DiagnosticReport`) without switching scene construction, serialization, cook, or demo
-generation. Next Phase 9 implementation slice is declarative field schemas for core components (Slice 3).
+generation. Slice 3 landed declarative field schemas for core components (visibility, typed defaults,
+asset/enum metadata, validation hooks; still not consumed by JSON/cook/Flecs). Next Phase 9 slice is
+registry-driven Flecs registration and scene context (Slice 4).
 
 ### Phase 10: Editor foundation
 
@@ -236,8 +238,7 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 
 ## Immediate priorities
 
-1. Phase 9 Slice 3 — declarative field schema for core components (types, defaults, policies on the
-   frozen registry path).
+1. Phase 9 Slice 4 — registry-driven Flecs registration and explicit scene/component context.
 2. Phase 10 editor foundation — consume Phase 9 schema/document APIs instead of inventing parallel
    inspector/serialization logic.
 3. Phase 11 2D proof.

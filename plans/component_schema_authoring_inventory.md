@@ -385,10 +385,11 @@ Implemented code targets:
   `register_core_components`.
 - `tests/core/ComponentRegistryTests.cpp` — freeze failures and stable codes; deterministic stable IDs.
 
-## Slice 3 handoff
+## Slice 4 handoff
 
-The next slice adds declarative field descriptors and richer registration for core components on top of
-the frozen registry path. It still does not have to switch JSON/cook/Flecs lists until later slices.
+Slice 3 added declarative fields, visibility, defaults, asset/enum metadata, and hooks on the frozen path
+(without JSON/cook/Flecs consumption). Slice 4 introduces registry-driven Flecs registration and an
+explicit scene/component context.
 
 Retain existing `SceneSerialization.*`, `Scene::register_components()`, and v1 scene resources until
 their planned slices replace them.

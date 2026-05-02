@@ -2,51 +2,29 @@
 
 ## Status and Scope
 
-Planned. This slice completes the typed field-schema layer already started in
-`ComponentRegistry` and `CoreComponentRegistrar`.
-
-This slice is metadata-only. It must not switch Flecs registration, scene JSON,
-cook/dump, runtime scene construction, demo generation, renderer extraction, or
-asset existence validation to schema-driven behavior yet.
-
-The current implementation is directionally right but incomplete:
-
-- `src/core/ComponentRegistry.hpp` has moved toward `fields`, while
-  `src/core/ComponentRegistry.cpp` and tests still reference removed
-  `field_keys`.
-- Field-level `default_on_create` mixes entity creation policy with C++ default
-  value metadata.
-- Some core component schema fields do not match the real structs in
-  `src/engine/scene/SceneComponents.hpp`.
-- Optional authored components such as camera, lights, mesh renderable, and
-  sprite renderable are incorrectly marked `default_on_create`.
-- Runtime-session components need schema exposure metadata so
-  `FpsCameraController` can be debug-inspectable while `EngineInputSnapshot`
-  remains hidden.
+**Done.** Typed field metadata on the registry builder/freeze path and
+`register_core_components`; still metadata-only (no Flecs/JSON/cook/runtime
+construction/renderer/demo consumption of schemas).
 
 ## Relevant Current Code
 
 - `src/core/ComponentRegistry.hpp`
-  - Owns `ComponentFieldKind`, `ComponentFieldRegistration`,
-    `ComponentRegistration`, `FrozenComponentRecord`,
-    `ComponentRegistryBuilder`, and freeze output.
+  - Field kinds (incl. `U32`, `Enum`), `authored_required`, optional typed
+    defaults, asset/enum metadata, `ComponentSchemaVisibility`, freeze-time
+    `ComponentSchemaValidationHook`, `FrozenComponentRecord`.
 - `src/core/ComponentRegistry.cpp`
-  - Performs module/component validation, stable id assignment, deterministic
-    ordering, and frozen registry construction.
-  - Still contains stale `field_keys` references that must be retired.
+  - Freeze validation (field keys, asset/enum rules), hook invocation, copies
+    `fields` and visibility into frozen records.
 - `src/engine/scene/CoreComponentRegistrar.cpp`
-  - Registers `teng.core` components and currently supplies field metadata.
-  - Must be corrected to match `SceneComponents.hpp` defaults and field names.
+  - `teng.core` registrations aligned with `SceneComponents.hpp`.
 - `src/engine/scene/SceneComponents.hpp`
-  - Source of truth for concrete core component C++ defaults in this slice.
+  - C++ default reference for core authored/runtime-derived shapes.
 - `src/engine/Input.hpp`
-  - Source of truth for `EngineInputSnapshot`; unordered key sets must not
-    become authored declarative fields in this slice.
+  - `EngineInputSnapshot` remains without declarative fields here.
 - `tests/core/ComponentRegistryTests.cpp`
-  - Pure `teng_core` registry/freeze tests.
-- Scene-linked test target or file
-  - Needed for `register_core_components` assertions because the registrar
-    lives outside `teng_core`.
+  - Registry/freeze and metadata diagnostics (synthetic registrations). Dedicated
+    `register_core_components` freeze assertions were removed as a separate test
+    target to avoid high-churn duplication with `CoreComponentRegistrar.cpp`.
 
 ## Target Metadata Model
 
@@ -387,10 +365,9 @@ Expected implementation files:
 - Change `src/core/ComponentRegistry.cpp`.
 - Change `src/engine/scene/CoreComponentRegistrar.cpp`.
 - Update `tests/core/ComponentRegistryTests.cpp`.
-- Add a focused scene-linked schema test file, likely
-  `tests/scene/CoreComponentSchemaTests.cpp`, or place equivalent tests in an
-  existing scene-linked target if that is the least disruptive CMake path.
-- Update CMake only as needed to compile the new scene-linked schema test.
+- Optional: reintroduce a narrow scene-linked freeze test for
+  `register_core_components` if catalog drift needs automated guardrails; there is
+  no longer a default `teng_scene_schema_tests` target in-tree.
 
 No implementation code should be added to scene serialization, scene cook,
 runtime `Scene`, `SceneManager`, renderer, asset service, app startup, or demo
@@ -425,27 +402,16 @@ Update `tests/core/ComponentRegistryTests.cpp`:
 - Add visibility preservation test.
 - Keep existing module/component/storage diagnostics covered.
 
-### Scene-Linked Schema Test
+### Scene-linked schema test (optional)
 
-Add a narrow scene-linked schema test, not a runtime smoke test.
+Originally specified as a separate Catch target exercising
+`register_core_components` + freeze with full catalog assertions. That file and
+`CMake` target were removed: catalog checks duplicated the registrar and churned
+on every default tweak.
 
-The test should:
-
-- Build a `ComponentRegistryBuilder`.
-- Call `register_core_components`.
-- Freeze the registry.
-- Assert core component keys and deterministic lookup.
-- Assert storage policies.
-- Assert schema visibility.
-- Assert component `default_on_create` policy.
-- Assert field names, kinds, `authored_required`, defaults, stable IDs, and
-  asset kind metadata.
-- Assert camera, directional light, mesh renderable, and sprite renderable are
-  not default-on-create.
-- Assert `EngineInputSnapshot` is hidden and has no fields.
-
-The test must not launch `metalrender`, tick runtime scenes, validate Flecs
-component registration, load JSON, cook scenes, or touch renderer behavior.
+If drift becomes a problem again, add a **narrow** scene-linked test (same
+constraints as before: no app launch, no Flecs/JSON/cook/renderer), or rely on
+later slices once JSON/cook consumes the frozen registry.
 
 ## Migration Scaffolding and Retirement Criteria
 

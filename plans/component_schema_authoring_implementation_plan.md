@@ -1,8 +1,7 @@
 # Component schema and authoring implementation plan
 
-**Status:** Phase 9 sequencing plan. Slices 0–2 are implemented (inventory, core diagnostics, component
-registry builder/freeze). Next implementation slice: Slice 3, declarative field schema for core
-components. Architectural contract:
+**Status:** Phase 9 sequencing plan. Slices 0–3 are implemented. Next: Slice 4 (registry-driven Flecs +
+scene context). Architectural contract:
 [`component_schema_authoring_model.md`](component_schema_authoring_model.md). Scene byte contract:
 [`scene_serialization_design.md`](scene_serialization_design.md).
 
@@ -88,9 +87,8 @@ Implemented:
   `default_on_create` without `Authored` storage; deterministic sort order by component key before
   freeze.
 - `register_core_components(ComponentRegistryBuilder&)` in
-  `src/engine/scene/CoreComponentRegistrar.cpp` (module `teng.core` v1; skeletal field lists; policies
-  aligned with the Slice 3 target: authored core renderables, `local_to_world` runtime-derived,
-  `fps_camera_controller` and `engine_input_snapshot` runtime-session).
+  `src/engine/scene/CoreComponentRegistrar.cpp` (module `teng.core` v1; full field metadata landed in
+  Slice 3).
 - `tests/core/ComponentRegistryTests.cpp` exercises stable ID determinism, happy-path freeze, and
   diagnostic codes for the failure modes above (assertions on `DiagnosticCode`, not message text).
 
@@ -104,33 +102,20 @@ Validation (as run in repo):
 
 ## Slice 3: Declarative field schema for core components
 
-**Purpose:** Define one schema source for current engine components.
+**Status:** Complete.
 
-Work:
+**Purpose:** One schema source for current engine components on the frozen registry (still not consumed
+by JSON/cook/Flecs).
 
-- Add field descriptors for bool, integer, float, string, vec2/vec3/vec4, quaternion, `AssetId`, and
-  minimal enum metadata.
-- Register current components with policies:
-  - `teng.core.transform` as authored/default-on-create
-  - `teng.core.camera` as authored
-  - `teng.core.directional_light` as authored
-  - `teng.core.mesh_renderable` as authored
-  - `teng.core.sprite_renderable` as authored
-  - `LocalToWorld` as runtime-derived
-  - `FpsCameraController` as runtime-session/debug-inspectable if included
-  - `EngineInputSnapshot` as hidden runtime-session
-- Add default extraction from C++ default construction.
-- Add component-local validation hook support.
+Implemented: field descriptors and `authored_required`; typed defaults (`std::variant`, no GLM in
+`teng_core`); `ComponentSchemaVisibility`; asset/enum metadata + freeze validation; optional
+`ComponentSchemaValidationHook`; `register_core_components` matches `SceneComponents.hpp`;
+`teng_core_tests` (`ComponentRegistryTests.cpp`); core registrar freeze is not
+duplicated in a separate scene-linked test target (avoids mirroring every field
+default in tests).
 
-Exit:
-
-- Core schema can enumerate components, fields, defaults, storage policy, and cooked IDs.
-- No JSON/cook behavior has to switch yet, but schemas are authoritative enough to do so.
-
-Validation:
-
-- Tests for field order, default values, storage policies, and component-local validation.
-- Asset reference fields validate syntax separately from project asset existence.
+Exit (unchanged intent): core schema enumerates components, fields, defaults, storage, stable IDs;
+serialization migration is later slices.
 
 ## Slice 4: Registry-driven Flecs registration and scene context
 
