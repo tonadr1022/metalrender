@@ -6,11 +6,9 @@
 #include <string_view>
 #include <system_error>
 
-#include "core/Diagnostic.hpp"
-#include "core/Logger.hpp"
+#include "TestHelpers.hpp"
 #include "engine/render/RenderScene.hpp"
 #include "engine/render/RenderSceneExtractor.hpp"
-#include "engine/scene/CoreComponentRegistrar.hpp"
 #include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/SceneManager.hpp"
 #include "engine/scene/SceneSerialization.hpp"
@@ -96,14 +94,7 @@ bool run_scene_serialization_smoke_test() {
     return false;
   }
 
-  SceneComponentContextBuilder builder;
-  register_core_scene_component_bindings(builder);
-  SceneComponentContext component_ctx;
-  core::DiagnosticReport report;
-  if (!builder.try_freeze(component_ctx, report)) {
-    LERROR("Failed to freeze scene component context: {}", report.to_string());
-    return false;
-  }
+  SceneComponentContext component_ctx = make_scene_component_context();
 
   SceneManager scenes(component_ctx);
   Result<SceneLoadResult> loaded = load_scene_file(scenes, valid_path);

@@ -2,6 +2,8 @@
 
 #include <unordered_map>
 
+#include "core/ComponentRegistry.hpp"
+
 namespace TENG_NAMESPACE::engine {
 
 namespace {
@@ -14,29 +16,31 @@ namespace {
 
 }  // namespace
 
-void SceneComponentContextBuilder::register_component(
-    core::ComponentRegistration component, FlecsComponentBinding flecs_component_binding) {
+void SceneComponentContextBuilder::register_flecs_component(
+    FlecsComponentBinding flecs_component_binding) {
+  const core::FrozenComponentRecord* component =
+      registry_.find(flecs_component_binding.component_key);
+  if (!component) {
+    diagnostics_.add_error(core::DiagnosticCode{"schema.missing_component"},
+                           path_components_key(flecs_component_binding.component_key),
+                           "component not found in registry");
+    return;
+  }
   flecs_component_register_infos_.push_back(FlecsComponentRegisterInfo{
       .binding = flecs_component_binding,
-      .component_key = component.component_key,
+      .component_key = component->component_key,
   });
-  registry_builder_.register_component(std::move(component));
 }
 
 bool SceneComponentContextBuilder::try_freeze(SceneComponentContext& out,
                                               core::DiagnosticReport& report) const {
-  if (!registry_builder_.try_freeze(out.registry, report)) {
-    out = SceneComponentContext{};
-    return false;
-  }
-
   std::unordered_map<std::string, FlecsComponentBinding> component_key_to_flecs_binding;
   for (const FlecsComponentRegisterInfo& info : flecs_component_register_infos_) {
     component_key_to_flecs_binding.emplace(info.component_key, info.binding);
   }
 
   bool ok = true;
-  for (const core::FrozenComponentRecord& record : out.registry.components()) {
+  for (const core::FrozenComponentRecord& record : registry_.components()) {
     if (record.storage == core::ComponentStoragePolicy::EditorOnly) {
       continue;
     }
@@ -72,10 +76,10 @@ bool SceneComponentContextBuilder::try_freeze(SceneComponentContext& out,
 
   std::vector<ApplyOnCreateFn> apply_on_create_fns;
   std::vector<RegisterFlecsFn> flecs_register_fns;
-  apply_on_create_fns.reserve(out.registry.components().size());
-  flecs_register_fns.reserve(out.registry.components().size());
+  apply_on_create_fns.reserve(registry_.components().size());
+  flecs_register_fns.reserve(registry_.components().size());
 
-  for (const core::FrozenComponentRecord& record : out.registry.components()) {
+  for (const core::FrozenComponentRecord& record : registry_.components()) {
     if (record.storage == core::ComponentStoragePolicy::EditorOnly) {
       continue;
     }
@@ -89,6 +93,7 @@ bool SceneComponentContextBuilder::try_freeze(SceneComponentContext& out,
 
   out.apply_on_create_fns = std::move(apply_on_create_fns);
   out.flecs_register_fns = std::move(flecs_register_fns);
+  out.registry = std::move(registry_);
   return true;
 }
 

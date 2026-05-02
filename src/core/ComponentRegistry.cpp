@@ -289,4 +289,13 @@ bool ComponentRegistryBuilder::try_freeze(ComponentRegistry& out, DiagnosticRepo
   return true;
 }
 
+const ComponentRegistration* ComponentRegistryBuilder::find(std::string_view component_key) const {
+  const auto it = std::ranges::lower_bound(components_, component_key, std::less{},
+                                           &ComponentRegistration::component_key);
+  if (it == components_.end() || it->component_key != component_key) {
+    return nullptr;
+  }
+  return &*it;
+}
+
 }  // namespace TENG_NAMESPACE::core

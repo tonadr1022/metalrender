@@ -166,6 +166,7 @@ class ComponentRegistryBuilder {
     return modules_;
   }
   [[nodiscard]] const std::vector<ComponentRegistration>& components() const { return components_; }
+  [[nodiscard]] const ComponentRegistration* find(std::string_view component_key) const;
 
  private:
   std::vector<std::pair<std::string, uint32_t>> modules_;

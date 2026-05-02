@@ -15,6 +15,20 @@ using core::DiagnosticReport;
 
 namespace {
 
+core::ComponentRegistry make_component_registry(bool add_on_create = false) {
+  core::ComponentRegistryBuilder builder;
+  builder.register_module("teng.test", 1);
+  builder.register_component(ComponentRegistration{.component_key = "teng.test.x",
+                                                   .module_id = "teng.test",
+                                                   .module_version = 1,
+                                                   .add_on_create = add_on_create});
+  core::ComponentRegistry registry;
+  core::DiagnosticReport report;
+  CHECK(builder.try_freeze(registry, report));
+  CHECK(!report.has_errors());
+  return registry;
+}
+
 void check_try_freeze_fails(const SceneComponentContextBuilder& builder) {
   SceneComponentContext out;
   DiagnosticReport report;
@@ -29,34 +43,27 @@ void check_try_freeze_fails(const SceneComponentContextBuilder& builder) {
 
 TEST_CASE("SceneComponentContext freeze rejects component missing Flecs binding",
           "[scene_component_context]") {
-  SceneComponentContextBuilder builder;
-  builder.registry_builder().register_module("teng.test", 1);
-  builder.registry_builder().register_component(ComponentRegistration{
-      .component_key = "teng.test.x", .module_id = "teng.test", .module_version = 1});
+  auto registry = make_component_registry();
+  SceneComponentContextBuilder builder{registry};
   check_try_freeze_fails(builder);
 }
 
 TEST_CASE("SceneComponentContext freeze rejects invalid Flecs bindings",
           "[scene_component_context]") {
   SECTION("null register_flecs_fn") {
-    SceneComponentContextBuilder builder;
-    builder.registry_builder().register_module("teng.test", 1);
-    builder.register_component(
-        ComponentRegistration{
-            .component_key = "teng.test.a", .module_id = "teng.test", .module_version = 1},
-        FlecsComponentBinding{.register_flecs_fn = nullptr, .apply_on_create_fn = nullptr});
+    auto registry = make_component_registry(false);
+    SceneComponentContextBuilder builder{registry};
+    builder.register_flecs_component(FlecsComponentBinding{.component_key = "teng.test.a",
+                                                           .register_flecs_fn = nullptr,
+                                                           .apply_on_create_fn = nullptr});
     check_try_freeze_fails(builder);
   }
 
   SECTION("add_on_create without apply_on_create_fn") {
-    SceneComponentContextBuilder builder;
-    builder.registry_builder().register_module("teng.test", 1);
-    builder.register_component(ComponentRegistration{.component_key = "teng.test.b",
-                                                     .module_id = "teng.test",
-                                                     .module_version = 1,
-                                                     .add_on_create = true},
-                               FlecsComponentBinding{.register_flecs_fn = [](flecs::world&) {},
-                                                     .apply_on_create_fn = nullptr});
+    auto registry = make_component_registry(true);
+    SceneComponentContextBuilder builder{registry};
+    builder.register_flecs_component(FlecsComponentBinding{
+        .register_flecs_fn = [](flecs::world&) {}, .apply_on_create_fn = nullptr});
     check_try_freeze_fails(builder);
   }
 }

@@ -125,14 +125,23 @@ void Engine::init() {
   }
   CVarSystem::get().load_from_file((local_resource_dir_ / "cvars.txt").string());
 
-  SceneComponentContextBuilder builder;
-  register_core_scene_component_bindings(builder);
+  core::ComponentRegistryBuilder component_registry_builder;
+  register_core_components(component_registry_builder);
+  core::ComponentRegistry component_registry;
   core::DiagnosticReport report;
+  if (!component_registry_builder.try_freeze(component_registry, report)) {
+    LCRITICAL("Failed to freeze component registry: {}", report.to_string());
+    std::exit(1);
+  }
+
+  SceneComponentContextBuilder scene_component_context_builder{component_registry};
+  register_flecs_core_components(scene_component_context_builder);
   frozen_scene_component_ctx_ = std::make_unique<SceneComponentContext>();
-  if (!builder.try_freeze(*frozen_scene_component_ctx_, report)) {
+  if (!scene_component_context_builder.try_freeze(*frozen_scene_component_ctx_, report)) {
     LCRITICAL("Failed to freeze scene component context: {}", report.to_string());
     std::exit(1);
   }
+
   scenes_ = std::make_unique<SceneManager>(*frozen_scene_component_ctx_);
 
   window_ = create_platform_window();
