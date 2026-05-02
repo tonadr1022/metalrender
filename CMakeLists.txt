@@ -7,6 +7,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 project(metalrender VERSION 0.1 LANGUAGES C CXX OBJC OBJCXX)
 
+option(BUILD_SHARED_LIBS "Build libraries as shared libraries" OFF)
+
 if (DEFINED APPLE)
     set(BUILD_METAL ON)
 else()
@@ -27,6 +29,7 @@ add_project_warnings(project_warnings)
 set(POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory(third_party)
+include(CTest)
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(apps)

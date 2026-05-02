@@ -6,10 +6,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-BUILD_DIR="$REPO_ROOT/build/Debug"
-BIN_DIR="$BUILD_DIR/bin"
-
-"$BIN_DIR/teng-shaderc" --all
+PRESET="${CMAKE_PRESET:-Debug}"
+BUILD_DIR="$REPO_ROOT/build/$PRESET"
 
 if [[ ! -f "$BUILD_DIR/compile_commands.json" ]]; then
     echo "agent_verify.sh: missing $BUILD_DIR/compile_commands.json (re-run without --skip-configure)" >&2

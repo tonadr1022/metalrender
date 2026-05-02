@@ -16,3 +16,12 @@ add_executable(teng_core_tests
     core/DiagnosticTests.cpp
 )
 target_link_libraries(teng_core_tests PRIVATE teng_core Catch2::Catch2WithMain project_warnings)
+
+if (BUILD_TESTING)
+    include(${PROJECT_SOURCE_DIR}/third_party/Catch2/extras/Catch.cmake)
+    catch_discover_tests(teng_core_tests
+        WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+        PROPERTIES
+            LABELS unit
+    )
+endif()

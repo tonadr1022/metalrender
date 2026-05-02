@@ -8,13 +8,25 @@ From root:
 ./scripts/agent_verify.sh
 ```
 
-Configures CMake, builds apps and scaffold libraries, runs `engine_scene_smoke`, and runs shader compile checks.
-Add `--format` to format.
+Configures CMake, builds apps and scaffold libraries, runs first-party CTest tests
+(`teng_core_tests` and `engine_scene_smoke`), changed-file clang-tidy when relevant,
+and shader compile checks.
+Add `--format` to format changed first-party C/C++ files.
+
+Useful modes:
+
+```bash
+./scripts/agent_verify.sh --quick          # skip clang-tidy
+./scripts/agent_verify.sh --shader-mode all
+./scripts/agent_verify.sh --app-smoke      # bounded metalrender startup + demo scene
+./scripts/agent_verify.sh --full           # full shaders + app smoke
+```
 
 ### Target names
 
 metalrender
 teng-shaderc
+teng_core_tests
 engine_scene_smoke
 teng-scene-tool
 
@@ -27,6 +39,21 @@ by default verification so the GPU-free scene CLI scaffold does not silently bre
 
 ```bash
 ./build/Debug/bin/<target_name>
+```
+
+### CTest
+
+```bash
+ctest --test-dir build/Debug --output-on-failure
+ctest --test-dir build/Debug -L unit --output-on-failure
+ctest --test-dir build/Debug -L smoke --output-on-failure
+```
+
+Direct test binaries remain useful for local debugging:
+
+```bash
+./build/Debug/bin/teng_core_tests
+./build/Debug/bin/engine_scene_smoke
 ```
 
 Smoke test (bounded run; avoids leaving the app open in automation):
