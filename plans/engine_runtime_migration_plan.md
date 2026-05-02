@@ -235,8 +235,8 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 
 ## Immediate priorities
 
-1. Phase 9 Slice 2 — component registry builder/freeze with module/component/field policy validation
-   and stable diagnostic reports.
+1. Phase 9 Slice 3 — declarative typed field schema for core components, replacing the key-only
+   registry field scaffolding from Slice 2.
 2. Phase 10 editor foundation — consume Phase 9 schema/document APIs instead of inventing parallel
    inspector/serialization logic.
 3. Phase 11 2D proof.

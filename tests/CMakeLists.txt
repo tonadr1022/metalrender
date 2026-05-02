@@ -13,9 +13,10 @@ target_include_directories(teng_engine_smoke
 )
 
 add_executable(teng_core_tests
+    core/ComponentRegistryTests.cpp
     core/DiagnosticTests.cpp
 )
-target_link_libraries(teng_core_tests PRIVATE teng_core Catch2::Catch2WithMain project_warnings)
+target_link_libraries(teng_core_tests PRIVATE teng_core teng_scene Catch2::Catch2WithMain project_warnings)
 
 if (BUILD_TESTING)
     include(${PROJECT_SOURCE_DIR}/third_party/Catch2/extras/Catch.cmake)

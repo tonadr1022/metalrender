@@ -1,7 +1,8 @@
 # Component schema and authoring implementation plan
 
-**Status:** Phase 9 sequencing plan. Slice 0 inventory and Slice 1 core diagnostics are implemented.
-Next implementation slice: Slice 2, component registry builder and freeze. Architectural contract:
+**Status:** Phase 9 sequencing plan. Slice 0 inventory, Slice 1 core diagnostics, and Slice 2
+component registry builder/freeze are implemented. Next implementation slice: Slice 3, declarative
+field schema for core components. Architectural contract:
 [`component_schema_authoring_model.md`](component_schema_authoring_model.md). Scene byte contract:
 [`scene_serialization_design.md`](scene_serialization_design.md).
 
@@ -71,7 +72,10 @@ Validation:
 
 ## Slice 2: Component registry builder and freeze
 
-**Status:** Next slice.
+**Status:** Complete initial slice. `src/engine/scene/ComponentRegistry.*` provides the mutable
+builder, immutable frozen registry, module/component descriptors, stable FNV-1a cooked IDs,
+`register_core_components(ComponentRegistryBuilder&)`, and freeze diagnostics. Field descriptors are
+still key-only migration scaffolding until Slice 3 adds typed field kinds/member accessors.
 
 **Purpose:** Create the lifecycle boundary: mutable builder to immutable frozen registry.
 
