@@ -6,14 +6,14 @@
 
 namespace teng::engine {
 
-SceneManager::SceneManager(const SceneComponentContext& component_ctx)
-    : component_ctx_(component_ctx) {}
+SceneManager::SceneManager(const FlecsComponentContext& flecs_component_context)
+    : flecs_component_context_(flecs_component_context) {}
 
 Scene& SceneManager::create_scene(std::string_view name, SceneId id) {
   ASSERT(id.is_valid());
   ASSERT(!scenes_.contains(id));
 
-  auto scene = std::make_unique<Scene>(component_ctx_, id, std::string{name});
+  auto scene = std::make_unique<Scene>(flecs_component_context_, id, std::string{name});
   Scene& scene_ref = *scene;
   scenes_.emplace(id, std::move(scene));
   if (!active_scene_id_.is_valid()) {

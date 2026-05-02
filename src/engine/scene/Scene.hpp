@@ -11,13 +11,13 @@
 
 namespace teng::engine {
 
-struct SceneComponentContext;
+struct FlecsComponentContext;
 
 struct EngineInputSnapshot;
 
 class Scene {
  public:
-  explicit Scene(const SceneComponentContext& context, SceneId id = make_scene_id(),
+  explicit Scene(const FlecsComponentContext& context, SceneId id = make_scene_id(),
                  std::string name = {});
   Scene(const Scene&) = delete;
   Scene& operator=(const Scene&) = delete;
@@ -49,7 +49,7 @@ class Scene {
   SceneId id_;
   std::string name_;
   flecs::world world_;
-  const SceneComponentContext& component_ctx_;
+  const FlecsComponentContext& component_ctx_;
   std::unordered_map<EntityGuid, flecs::entity> entities_by_guid_;
 };
 

@@ -19,24 +19,24 @@ struct FlecsComponentBinding {
   ApplyOnCreateFn apply_on_create_fn{};
 };
 
-struct SceneComponentContext {
-  core::ComponentRegistry registry;
+struct FlecsComponentContext {
   std::vector<ApplyOnCreateFn> apply_on_create_fns;
   std::vector<RegisterFlecsFn> flecs_register_fns;
 };
 
-class SceneComponentContextBuilder {
+class FlecsComponentContextBuilder {
  public:
-  explicit SceneComponentContextBuilder(core::ComponentRegistry& registry) : registry_(registry) {}
+  explicit FlecsComponentContextBuilder(const core::ComponentRegistry& registry)
+      : registry_(registry) {}
 
   void register_flecs_component(FlecsComponentBinding flecs_component_binding);
-  [[nodiscard]] core::ComponentRegistry& registry() { return registry_; }
+  [[nodiscard]] const core::ComponentRegistry& registry() { return registry_; }
 
   /// On failure, clears `out` and appends diagnostics to `report`.
-  [[nodiscard]] bool try_freeze(SceneComponentContext& out, core::DiagnosticReport& report) const;
+  [[nodiscard]] bool try_freeze(FlecsComponentContext& out, core::DiagnosticReport& report) const;
 
  private:
-  core::ComponentRegistry& registry_;
+  const core::ComponentRegistry& registry_;
   core::DiagnosticReport diagnostics_;
 
   struct FlecsComponentRegisterInfo {

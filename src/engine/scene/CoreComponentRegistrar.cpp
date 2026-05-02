@@ -225,7 +225,7 @@ void register_core_components(core::ComponentRegistryBuilder& builder) {
                               .fields = {}});
 }
 
-void register_flecs_core_components(SceneComponentContextBuilder& builder) {
+void register_flecs_core_components(FlecsComponentContextBuilder& builder) {
   builder.register_flecs_component(FlecsComponentBinding{
       .component_key = "teng.core.transform",
       .register_flecs_fn = [](flecs::world& world) { world.component<Transform>(); },

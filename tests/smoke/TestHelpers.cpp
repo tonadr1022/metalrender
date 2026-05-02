@@ -6,7 +6,7 @@
 
 namespace teng::engine {
 
-[[nodiscard]] SceneComponentContext make_scene_component_context() {
+[[nodiscard]] FlecsComponentContext make_scene_component_context() {
   core::ComponentRegistryBuilder component_registry_builder;
   register_core_components(component_registry_builder);
   core::ComponentRegistry component_registry;
@@ -15,9 +15,9 @@ namespace teng::engine {
     LERROR("Failed to freeze component registry: {}", report.to_string());
     std::exit(1);
   }
-  SceneComponentContextBuilder builder{component_registry};
+  FlecsComponentContextBuilder builder{component_registry};
   register_flecs_core_components(builder);
-  SceneComponentContext component_ctx;
+  FlecsComponentContext component_ctx;
   if (!builder.try_freeze(component_ctx, report)) {
     LERROR("Failed to freeze scene component context: {}", report.to_string());
     std::exit(1);

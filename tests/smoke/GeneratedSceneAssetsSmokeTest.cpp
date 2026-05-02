@@ -23,7 +23,7 @@ namespace {
   return {};
 }
 
-[[nodiscard]] bool load_and_check_scene(const SceneComponentContext& component_ctx,
+[[nodiscard]] bool load_and_check_scene(const FlecsComponentContext& component_ctx,
                                         const std::filesystem::path& path, size_t mesh_count) {
   SceneManager scenes(component_ctx);
   Result<SceneLoadResult> loaded = load_scene_file(scenes, path);
@@ -52,7 +52,7 @@ bool run_generated_scene_assets_smoke_test() {
     return false;
   }
 
-  SceneComponentContext component_ctx = make_scene_component_context();
+  FlecsComponentContext component_ctx = make_scene_component_context();
   return load_and_check_scene(component_ctx, root / "resources/scenes/demo_00_cube.tscene.json",
                               1) &&
          load_and_check_scene(component_ctx,

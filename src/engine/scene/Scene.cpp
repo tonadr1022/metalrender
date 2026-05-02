@@ -38,7 +38,7 @@ namespace {
 
 }  // namespace
 
-Scene::Scene(const SceneComponentContext& context, SceneId id, std::string name)
+Scene::Scene(const FlecsComponentContext& context, SceneId id, std::string name)
     : id_(id), name_(std::move(name)), component_ctx_(context) {
   ASSERT(id_.is_valid());
   register_components();

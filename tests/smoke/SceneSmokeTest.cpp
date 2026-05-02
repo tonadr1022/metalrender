@@ -34,7 +34,7 @@ bool matrix_nearly_equal(const auto& a, const auto& b) {
 }  // namespace
 
 bool run_scene_foundation_smoke_test() {
-  SceneComponentContext component_ctx = make_scene_component_context();
+  FlecsComponentContext component_ctx = make_scene_component_context();
   SceneManager scenes(component_ctx);
   Scene& scene = scenes.create_scene("smoke");
   const EntityGuid guid = make_entity_guid();
@@ -74,7 +74,7 @@ bool run_scene_foundation_smoke_test() {
 }
 
 bool run_render_scene_extraction_smoke_test() {
-  SceneComponentContext component_ctx = make_scene_component_context();
+  FlecsComponentContext component_ctx = make_scene_component_context();
   SceneManager scenes(component_ctx);
   Scene& scene = scenes.create_scene("render extraction");
 
@@ -209,7 +209,7 @@ bool run_render_scene_extraction_smoke_test() {
 }
 
 bool run_fps_camera_system_smoke_test() {
-  SceneComponentContext component_ctx = make_scene_component_context();
+  FlecsComponentContext component_ctx = make_scene_component_context();
   SceneManager scenes(component_ctx);
   Scene& scene = scenes.create_scene("fps camera");
   const EntityGuid camera_guid{40};

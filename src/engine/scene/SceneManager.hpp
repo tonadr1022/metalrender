@@ -9,11 +9,11 @@
 
 namespace teng::engine {
 
-struct SceneComponentContext;
+struct FlecsComponentContext;
 
 class SceneManager {
  public:
-  explicit SceneManager(const SceneComponentContext& component_ctx);
+  explicit SceneManager(const FlecsComponentContext& flecs_component_context);
   SceneManager(const SceneManager&) = delete;
   SceneManager& operator=(const SceneManager&) = delete;
 
@@ -31,7 +31,7 @@ class SceneManager {
   bool tick_active_scene(float delta_seconds);
 
  private:
-  const SceneComponentContext& component_ctx_;
+  const FlecsComponentContext& flecs_component_context_;
   std::unordered_map<SceneId, std::unique_ptr<Scene>> scenes_;
   SceneId active_scene_id_;
 };

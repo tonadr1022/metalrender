@@ -94,7 +94,7 @@ bool run_scene_serialization_smoke_test() {
     return false;
   }
 
-  SceneComponentContext component_ctx = make_scene_component_context();
+  FlecsComponentContext component_ctx = make_scene_component_context();
 
   SceneManager scenes(component_ctx);
   Result<SceneLoadResult> loaded = load_scene_file(scenes, valid_path);

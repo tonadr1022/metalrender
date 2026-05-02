@@ -178,7 +178,7 @@ class Engine {
   std::unique_ptr<gfx::rhi::Device> device_;
   gfx::rhi::SwapchainHandleHolder swapchain_;
   std::unique_ptr<assets::AssetService> assets_;
-  std::unique_ptr<SceneComponentContext> frozen_scene_component_ctx_;
+  std::unique_ptr<FlecsComponentContext> frozen_scene_component_ctx_;
   std::unique_ptr<SceneManager> scenes_;
   std::unique_ptr<RenderService> renderer_;
   EngineContext context_;

@@ -4,6 +4,6 @@
 
 namespace teng::engine {
 
-[[nodiscard]] SceneComponentContext make_scene_component_context();
+[[nodiscard]] FlecsComponentContext make_scene_component_context();
 
 }  // namespace teng::engine

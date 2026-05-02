@@ -134,9 +134,9 @@ void Engine::init() {
     std::exit(1);
   }
 
-  SceneComponentContextBuilder scene_component_context_builder{component_registry};
+  FlecsComponentContextBuilder scene_component_context_builder{component_registry};
   register_flecs_core_components(scene_component_context_builder);
-  frozen_scene_component_ctx_ = std::make_unique<SceneComponentContext>();
+  frozen_scene_component_ctx_ = std::make_unique<FlecsComponentContext>();
   if (!scene_component_context_builder.try_freeze(*frozen_scene_component_ctx_, report)) {
     LCRITICAL("Failed to freeze scene component context: {}", report.to_string());
     std::exit(1);

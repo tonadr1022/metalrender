@@ -16,7 +16,7 @@ namespace {
 
 }  // namespace
 
-void SceneComponentContextBuilder::register_flecs_component(
+void FlecsComponentContextBuilder::register_flecs_component(
     FlecsComponentBinding flecs_component_binding) {
   const core::FrozenComponentRecord* component =
       registry_.find(flecs_component_binding.component_key);
@@ -32,7 +32,7 @@ void SceneComponentContextBuilder::register_flecs_component(
   });
 }
 
-bool SceneComponentContextBuilder::try_freeze(SceneComponentContext& out,
+bool FlecsComponentContextBuilder::try_freeze(FlecsComponentContext& out,
                                               core::DiagnosticReport& report) const {
   std::unordered_map<std::string, FlecsComponentBinding> component_key_to_flecs_binding;
   for (const FlecsComponentRegisterInfo& info : flecs_component_register_infos_) {
@@ -70,7 +70,7 @@ bool SceneComponentContextBuilder::try_freeze(SceneComponentContext& out,
   }
 
   if (!ok) {
-    out = SceneComponentContext{};
+    out = FlecsComponentContext{};
     return false;
   }
 
@@ -93,7 +93,6 @@ bool SceneComponentContextBuilder::try_freeze(SceneComponentContext& out,
 
   out.apply_on_create_fns = std::move(apply_on_create_fns);
   out.flecs_register_fns = std::move(flecs_register_fns);
-  out.registry = std::move(registry_);
   return true;
 }
 
