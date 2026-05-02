@@ -10,7 +10,7 @@ Do not reintroduce app-specific scene subclasses, deleted demo bridges, or monol
 
 ## Principles
 
-- `Engine::tick()` is first-class; `run()` is convenience. Editor/play-mode drives `tick()` manually.
+- `Engine::tick()` is first-class; `run()` is convenience. Editor **play mode** drives `tick()` manually against a **runtime copy** of the scene—see [`editor_play_mode_semantics.md`](editor_play_mode_semantics.md).
 - Scenes are **data-first Flecs worlds**, not C++ scene subclasses. Behavior = systems (+ optional services), scripts later.
 - **Editor = separate build target**, same engine libraries, editor-only layers and authoring linkage (`metalrender` stays lean).
 - **Presentation ≠ simulation:** `RenderScene` / `IRenderer` vs ECS; gameplay does not own `RenderGraph` or GPU handles as authored state.
@@ -33,7 +33,7 @@ Lua implementation, polished editor UX v1, full material-graph product, RHI/mesh
 
 ## Temporary non-goals (not permanent endpoints)
 
-- Interim **scene loader + `*.tscene.toml` forever** — Phase 12 replaces/supersedes `SceneAssetLoader` with **JSON** canonical scenes (`*.tscene.json`, `nlohmann/json`) + registry + optional binary cook per [`scene_serialization_design.md`](scene_serialization_design.md). *(Project config such as `project.toml` is unrelated; scenes on disk are JSON after Phase 12.)*
+- **Legacy TOML scene loader** — Retired; canonical scenes are **`*.tscene.json`** per [`scene_serialization_design.md`](scene_serialization_design.md). *(Project config such as `project.toml` stays separate; it only references scene paths.)*
 - Single `RenderScene` / single renderer forever — 2D/voxel milestones may extend or version extraction.
 - Stable **internal** CMake target names — Phase 8+ may rename splits.
 
@@ -43,8 +43,8 @@ The phases below build **architecture** (linkage, editor foundation, serializati
 
 | Area | Reality | Notes |
 |------|---------|--------|
-| **Editor depth** | Phase 9 is **foundation** (hierarchy, inspector, play/stop, reload). | Undo/redo, selection/multi-edit, prefabs/variants/overrides, gizmos, and rich **asset import/browser** UX are **not** scoped in these plans—add focused notes when that work starts. |
-| **Play vs edit worlds** | Required semantics before heavy editor UI. | Short `plans/` note (see Open follow-up plans)—duplicate worlds, mutation during play, what reload means. |
+| **Editor depth** | Phase 9 is **foundation** (hierarchy, inspector, play/stop, reload). | **Undo/redo:** explicit **long-term** requirement, **not** first Phase 9 exit—[`editor_undo_redo.md`](editor_undo_redo.md). Selection/multi-edit, prefabs/variants/overrides, gizmos, rich **asset import/browser** UX remain **not** scoped until separate notes. |
+| **Play vs edit worlds** | Documented intent for Phase 9. | [`editor_play_mode_semantics.md`](editor_play_mode_semantics.md) — play = runtime copy; edit world authoritative for save; stop discards play world by default. |
 | **Scripting** | Phase 11 is **prep** (metadata + scheduling hooks). | No VM choice, ECS binding surface, debug workflow, or sandbox policy—**do not** treat “Lua later” as designed API. |
 | **Scene save vs player save** | Phase 12 is **scene/content** round-trip + cook. | **Player progression** (save games, checkpoints) is a **separate** concern—no format or pipeline here. |
 | **Shipping / distribution** | Plans cover **cooked runtime layout**, **AssetId** closure, and **static player linkage** (`library_linkage_architecture_plan.md`). | Store packaging (Steam/Epic/etc.), codesigning/notarization, crash telemetry, release-only logging, and **release CI** are **outside** current plan docs until explicitly added. |
@@ -60,7 +60,7 @@ The phases below build **architecture** (linkage, editor foundation, serializati
 
 | Area | Likely to break | Keep stable (spirit) |
 |------|-----------------|----------------------|
-| Scene on-disk | Interim layout / loader until Phase 12; then **JSON** canonical + cooked binary per [`scene_serialization_design.md`](scene_serialization_design.md) | Stable **IDs** as authored references |
+| Scene on-disk | **JSON** canonical + optional cooked binary — contract [`scene_serialization_design.md`](scene_serialization_design.md) | Stable **IDs** as authored references |
 | `RenderScene` / extraction | New channels, fields | No `RenderGraph`/GPU in gameplay components |
 | Asset pipeline | DB manifest layout | Scenes use **AssetId**, not paths |
 | Internal CMake | Target names, split topology, removed shared `teng` | One Flecs/runtime process; `agent_verify` workflows; **long-term** shipped player = **static** ECS + core (`library_linkage_architecture_plan.md`) |
@@ -104,7 +104,7 @@ Runtime exe     → EngineConfig, runtime/debug layers, scene/cooked load, run()
 Editor exe      → + editor layers/tooling, manual tick for edit/play
 Tools/scripts   → asset/scene cook & validate; no window/device unless needed
 Engine          → platform, time, input, resources, scenes, RenderService, LayerStack, tick()
-SceneManager    → load/unload, active world, reload / play-mode (editor)
+SceneManager    → load/unload, active world, reload; editor: edit vs play worlds per [`editor_play_mode_semantics.md`](editor_play_mode_semantics.md)
 Scene           → Flecs world, stable entity IDs, core + registered components
 RenderService   → extract RenderScene, invoke IRenderer, present
 IRenderer       → Meshlet (today), 2D, voxel/custom later
@@ -171,7 +171,7 @@ Flecs scene → extract → RenderScene → IRenderer → RenderGraph / RHI
 
 ### Phase 9: Editor foundation
 
-`metalrender_editor`, editor lib, `EditorLayer`, hierarchy, inspector, play/stop, reload; shared serialization/asset/render with runtime. **Exit:** edit data scene, play without restart, runtime exe without editor libs. **Before heavy UI:** play-mode semantics note in `plans/`.
+`metalrender_editor`, editor lib, `EditorLayer`, hierarchy, inspector, play/stop, reload; shared serialization/asset/render with runtime. **Exit:** edit data scene, play without restart, runtime exe without editor libs. **Semantics:** [`editor_play_mode_semantics.md`](editor_play_mode_semantics.md) (play = runtime scene copy; edit world owns save). **Undo/redo:** required for serious authoring but **after** the first foundation slice—[`editor_undo_redo.md`](editor_undo_redo.md).
 
 ### Phase 10: 2D path
 
@@ -183,7 +183,7 @@ Metadata + scheduling hooks for future Lua (or other) without replacing scene/la
 
 ### Phase 12: Serialization + cooked runtime
 
-Round-trip save/load, schema versioning, component contract (reflection/tables/codegen), **canonical JSON** vs cooked binary, GPU-free validate/migrate where practical. **No backward-compat requirement** for interim scene v1 (`*.tscene.toml`)—replace or bulk-migrate wholesale to **`*.tscene.json`**. **Implementation spec (agents):** [`plans/scene_serialization_design.md`](scene_serialization_design.md) — registry, **`nlohmann/json`**, on-disk layouts, cook/validate CLI, CMake splits, sub-phases 12-A–E, exit criteria.
+**Shipped:** Round-trip JSON, `registry_version`, cook/dump/migrate hooks, GPU-free **`teng-scene-tool`**, `SceneSerialization.*`. **Ongoing / next:** composable per-component registration (engine + game + tooling) so codecs and cooked masks do not live in one monolithic TU — see **Direction** in [`plans/scene_serialization_design.md`](scene_serialization_design.md). Optional: reflection/codegen from a single schema. **Contract + semantics:** same doc (canonical JSON, IDs, what is never on disk).
 
 ### Phase 13: Simulation modules spine
 
@@ -191,8 +191,8 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 
 ## Immediate priorities
 
-1. Phase 12 slice — prove one component through shared serialize/deserialize before inspector / hand-maintained loader sprawl.
-2. Phase 9 — editor exe + basics (after play-mode semantics stub).
+1. Serialization extensibility — registry composition (macros / static registration / codegen / Flecs metadata TBD) per [`scene_serialization_design.md`](scene_serialization_design.md) **Direction**; reduces inspector and game-module friction.
+2. Phase 9 — editor exe + basics (follow [`editor_play_mode_semantics.md`](editor_play_mode_semantics.md) when wiring play/stop).
 3. Phase 10 — 2D proof.
 
 **Smoke:** `./scripts/agent_verify.sh`; `metalrender --quit-after-frames 30`; `--scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30`. Shaders: `agent_verify` runs `teng-shaderc --all`.
@@ -203,8 +203,9 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 |-------|--------|--------|
 | Flecs / CMake pin | Done enough | `plans/flecs_scene_foundation_design.md` |
 | Asset registry / cooked | Partial | `plans/asset_registry_implementation_plan.md` |
-| Scene serialization v2 | Spec ready (Phase 12) | `plans/scene_serialization_design.md` |
-| Editor play-mode | Before Phase 9 | Short `plans/` note |
+| Scene serialization | Canonical JSON + tools shipped; composable registry follow-up | `plans/scene_serialization_design.md` |
+| Editor play-mode | Intent documented | [`editor_play_mode_semantics.md`](editor_play_mode_semantics.md) |
+| Editor undo/redo | Long-term requirement (post–foundation slice) | [`editor_undo_redo.md`](editor_undo_redo.md) |
 | RenderScene evolution | Ongoing | `plans/render_service_extraction_design.md` |
 | Metal parity checklist | Future | Before claiming Metal for new renderer work |
 | Voxel vertical | Unscoped | Dedicated milestone when started |

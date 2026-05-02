@@ -62,7 +62,7 @@ teng_runtime -> teng_engine_runtime -> teng_render -> teng_gfx -> teng_platform 
                                       -> teng_cvars -> teng_core
                                       -> teng_scene -> teng_assets -> teng_core
 
-teng_scene_tool_lib -> teng_scene + teng_assets + teng_core (+ `nlohmann_json::nlohmann_json` once Phase 12 scene tools parse JSON — see [`scene_serialization_design.md`](scene_serialization_design.md))
+teng_scene_tool_lib -> teng_scene + teng_assets + teng_core + `nlohmann_json::nlohmann_json` (canonical scene JSON — [`scene_serialization_design.md`](scene_serialization_design.md))
 teng-scene-tool -> teng_scene_tool_lib
 ```
 
