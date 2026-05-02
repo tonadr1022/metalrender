@@ -31,8 +31,7 @@ Here's the first meshlet-rendered Suzanne with the new RHI, with a transparent w
 git clone https://github.com/tonadr1022/metalrender
 cd metalrender
 git submodule update --init --recursive
-cmake --preset Release
-cmake --build build/Release --target metalrender
+cmake --workflow --preset release
 
 # Optional broader demo assets: https://github.com/KhronosGroup/glTF-Sample-Assets
 ./scripts/download_gltf_models.sh $HOME/gltf_sample_assets

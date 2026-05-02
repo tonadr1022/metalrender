@@ -41,7 +41,26 @@ by default verification so the GPU-free scene CLI scaffold does not silently bre
 ./build/Debug/bin/<target_name>
 ```
 
+### CMake presets (configure → build → test)
+
+```bash
+cmake --workflow --preset debug
+cmake --workflow --preset release
+```
+
+Sanitizer build: `cmake --workflow --preset debug-asan`. Xcode generator has no workflow preset (CMake does not support `condition` on workflows); use `cmake --preset DebugXcode`, then `cmake --build --preset DebugXcode`, then `ctest --preset DebugXcode` on macOS.
+
+For partial runs, `cmake --preset Debug`, `cmake --build --preset Debug`, and `ctest --preset Debug` still apply.
+
 ### CTest
+
+```bash
+ctest --preset Debug
+ctest --preset Debug -L unit
+ctest --preset Debug -L smoke
+```
+
+Manual tree path (e.g. after non-preset configure):
 
 ```bash
 ctest --test-dir build/Debug --output-on-failure
@@ -115,6 +134,26 @@ For design-note and spec tasks:
 - Mark migration scaffolding clearly and include retirement criteria.
 - Include phased implementation steps, risks, validation, and unresolved questions.
 - Keep plans specific to this repository.
+
+### Architecture Slice Implementation Planning
+
+For any roadmap phase/slice, engine/runtime/scene/renderer/editor architecture change, or change that
+adds new public systems/classes, do not jump directly from the high-level roadmap into code. First
+inspect the relevant current code and write a concrete implementation outline before file edits. This
+applies even when the user asks to implement a slice and does not explicitly ask for a plan.
+
+The outline should cover:
+
+- Files and targets to add, change, or remove.
+- New classes, structs, functions, and ownership/lifetime responsibilities.
+- Public API shape, call flow, and integration points with existing systems.
+- Library/CMake boundary impact, especially runtime vs editor/tooling separation.
+- Test additions or updates and the exact validation command.
+- Migration scaffolding, compatibility breakage, and retirement criteria where relevant.
+- Explicit non-goals for the slice so nearby roadmap work does not leak in.
+
+After presenting the outline, wait for confirmation before editing unless the user has explicitly
+asked to proceed without review.
 
 ### Cpp Coding Tips
 

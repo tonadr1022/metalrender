@@ -1,8 +1,9 @@
 {
-  "version": 3,
+  "version": 8,
+  "$schema": "https://cmake.org/cmake/help/latest/_downloads/3e2d73bff478d88a7de0de736ba5e361/schema.json",
   "cmakeMinimumRequired": {
     "major": 3,
-    "minor": 21,
+    "minor": 28,
     "patch": 0
   },
   "configurePresets": [
@@ -19,6 +20,7 @@
     },
     {
       "name": "Debug",
+      "displayName": "Debug (Ninja)",
       "inherits": "default",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
@@ -26,22 +28,35 @@
     },
     {
       "name": "DebugXcode",
+      "displayName": "Debug (Xcode)",
       "generator": "Xcode",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
       }
     },
     {
       "name": "ReleaseXcode",
+      "displayName": "Release (Xcode)",
       "generator": "Xcode",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
       }
     },
     {
       "name": "Release",
+      "displayName": "Release (Ninja)",
       "inherits": "default",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
@@ -49,6 +64,7 @@
     },
     {
       "name": "RelWithDebInfo",
+      "displayName": "RelWithDebInfo (Ninja)",
       "inherits": "default",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
@@ -67,6 +83,169 @@
         "CMAKE_SHARED_LINKER_FLAGS": "-fsanitize=address,undefined",
         "CMAKE_MODULE_LINKER_FLAGS": "-fsanitize=address,undefined"
       }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "Debug",
+      "configurePreset": "Debug"
+    },
+    {
+      "name": "Release",
+      "configurePreset": "Release"
+    },
+    {
+      "name": "RelWithDebInfo",
+      "configurePreset": "RelWithDebInfo"
+    },
+    {
+      "name": "DebugASan",
+      "configurePreset": "DebugASan"
+    },
+    {
+      "name": "DebugXcode",
+      "configurePreset": "DebugXcode",
+      "configuration": "Debug",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "ReleaseXcode",
+      "configurePreset": "ReleaseXcode",
+      "configuration": "Release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "_test-output-base",
+      "hidden": true,
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "Debug",
+      "inherits": "_test-output-base",
+      "configurePreset": "Debug"
+    },
+    {
+      "name": "Release",
+      "inherits": "_test-output-base",
+      "configurePreset": "Release"
+    },
+    {
+      "name": "RelWithDebInfo",
+      "inherits": "_test-output-base",
+      "configurePreset": "RelWithDebInfo"
+    },
+    {
+      "name": "DebugASan",
+      "inherits": "_test-output-base",
+      "configurePreset": "DebugASan"
+    },
+    {
+      "name": "DebugXcode",
+      "inherits": "_test-output-base",
+      "configurePreset": "DebugXcode",
+      "configuration": "Debug",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    },
+    {
+      "name": "ReleaseXcode",
+      "inherits": "_test-output-base",
+      "configurePreset": "ReleaseXcode",
+      "configuration": "Release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      }
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "debug",
+      "displayName": "Configure, build, test (Debug)",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "Debug"
+        },
+        {
+          "type": "build",
+          "name": "Debug"
+        },
+        {
+          "type": "test",
+          "name": "Debug"
+        }
+      ]
+    },
+    {
+      "name": "release",
+      "displayName": "Configure, build, test (Release)",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "Release"
+        },
+        {
+          "type": "build",
+          "name": "Release"
+        },
+        {
+          "type": "test",
+          "name": "Release"
+        }
+      ]
+    },
+    {
+      "name": "relwithdebinfo",
+      "displayName": "Configure, build, test (RelWithDebInfo)",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "RelWithDebInfo"
+        },
+        {
+          "type": "build",
+          "name": "RelWithDebInfo"
+        },
+        {
+          "type": "test",
+          "name": "RelWithDebInfo"
+        }
+      ]
+    },
+    {
+      "name": "debug-asan",
+      "displayName": "Configure, build, test (Debug + ASan/UBSan)",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "DebugASan"
+        },
+        {
+          "type": "build",
+          "name": "DebugASan"
+        },
+        {
+          "type": "test",
+          "name": "DebugASan"
+        }
+      ]
     }
   ]
 }
