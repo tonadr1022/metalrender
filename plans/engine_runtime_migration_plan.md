@@ -203,11 +203,15 @@ round-trips through JSON and cook/dump; central `ComponentCodec` and cooked bit 
 runtime scene creation requires an explicit frozen registry/context. Full editor foundation is deferred.
 
 Slice 1 landed core structured diagnostics. Slice 2 landed the component registry builder/freeze
-boundary (`ComponentRegistry` / `ComponentRegistryBuilder`, `register_core_components`, freeze
-validation via `DiagnosticReport`) without switching scene construction, serialization, cook, or demo
-generation. Slice 3 landed declarative field schemas for core components (visibility, typed defaults,
-asset/enum metadata, validation hooks; still not consumed by JSON/cook/Flecs). Next Phase 9 slice is
-registry-driven Flecs registration and scene context (Slice 4).
+boundary (`ComponentRegistry` / `ComponentRegistryBuilder`, freeze validation via `DiagnosticReport`)
+without switching scene construction, serialization, cook, or demo generation. Slice 3 landed
+declarative field schemas for core components (visibility, typed defaults, asset/enum metadata,
+validation hooks). Slice 4 landed explicit `SceneComponentContext`, context-required `Scene` /
+`SceneManager` construction, registry-driven Flecs registration, and schema/context-driven
+`Transform` / `LocalToWorld` add-on-create policy. Next Phase 9 slice is schema-driven JSON v2
+validation and serialization (Slice 5). Slice 5 should account for the current Flecs-bound core
+registration entry point by adding or splitting out a registry-only schema path for serialization and
+GPU-free tools.
 
 ### Phase 10: Editor foundation
 
@@ -238,7 +242,7 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 
 ## Immediate priorities
 
-1. Phase 9 Slice 4 — registry-driven Flecs registration and explicit scene/component context.
+1. Phase 9 Slice 5 — schema-driven JSON v2 validation and serialization.
 2. Phase 10 editor foundation — consume Phase 9 schema/document APIs instead of inventing parallel
    inspector/serialization logic.
 3. Phase 11 2D proof.

@@ -354,7 +354,7 @@ Remove or replace before Phase 9 exits:
 - [ ] `ComponentCodec` as a hand-maintained central component list.
 - [ ] handwritten per-component JSON parser/serializer functions as the source of truth.
 - [ ] handwritten per-component cooked key branches as the source of truth.
-- [ ] manual `Scene::register_components()` list as authoritative Flecs registration.
+- [x] manual `Scene::register_components()` list as authoritative Flecs registration.
 - [ ] Python construction of canonical scene component JSON.
 - [ ] checked-in v1 demo scene resources.
 
@@ -385,11 +385,14 @@ Implemented code targets:
   `register_core_components`.
 - `tests/core/ComponentRegistryTests.cpp` — freeze failures and stable codes; deterministic stable IDs.
 
-## Slice 4 handoff
+## Slice 4 completion and Slice 5 handoff
 
-Slice 3 added declarative fields, visibility, defaults, asset/enum metadata, and hooks on the frozen path
-(without JSON/cook/Flecs consumption). Slice 4 introduces registry-driven Flecs registration and an
-explicit scene/component context.
+Slice 4 added registry-driven Flecs registration and an explicit scene/component context.
+`Scene` and `SceneManager` now require a frozen context, and normal entity creation applies
+`Transform` plus runtime-derived `LocalToWorld` through context `add_on_create` functions.
 
-Retain existing `SceneSerialization.*`, `Scene::register_components()`, and v1 scene resources until
-their planned slices replace them.
+Retain existing `SceneSerialization.*` and v1 scene resources until their planned slices replace them.
+Before or during Slice 5, split or supplement the current Flecs-bound
+`register_core_scene_component_bindings(SceneComponentContextBuilder&)` entry point with a registry-only
+schema construction path so JSON v2 validation/serialization and GPU-free tools do not have to depend on
+scene-runtime Flecs bindings.

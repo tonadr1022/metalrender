@@ -1,7 +1,7 @@
 # Component schema and authoring implementation plan
 
-**Status:** Phase 9 sequencing plan. Slices 0–3 are implemented. Next: Slice 4 (registry-driven Flecs +
-scene context). Architectural contract:
+**Status:** Phase 9 sequencing plan. Slices 0–4 are implemented. Next: Slice 5 (schema-driven JSON v2
+validation and serialization). Architectural contract:
 [`component_schema_authoring_model.md`](component_schema_authoring_model.md). Scene byte contract:
 [`scene_serialization_design.md`](scene_serialization_design.md).
 
@@ -119,6 +119,11 @@ serialization migration is later slices.
 
 ## Slice 4: Registry-driven Flecs registration and scene context
 
+**Status:** Complete. `SceneComponentContext` is frozen from `SceneComponentContextBuilder`;
+`Scene` and `SceneManager` require an explicit context; core Flecs bindings are registered through
+`register_core_scene_component_bindings`; `Transform` and runtime-derived `LocalToWorld` are added
+through context `add_on_create` policy.
+
 **Purpose:** Remove manual Flecs component registration as the authoritative list.
 
 Work:
@@ -145,6 +150,11 @@ Validation:
 ## Slice 5: Schema-driven JSON v2 validation and serialization
 
 **Purpose:** Replace central component JSON logic with schema-driven canonical JSON v2.
+
+Handoff note from Slice 4: core schema registration is currently exposed through the Flecs-bound
+`register_core_scene_component_bindings(SceneComponentContextBuilder&)` path. Slice 5 should add or
+split out a registry-only schema construction path for JSON validation/serialization and GPU-free tools,
+while keeping Flecs bindings as the scene-runtime integration layer.
 
 Work:
 
