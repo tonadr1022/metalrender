@@ -1,0 +1,3531 @@
+{
+  "entities": [
+    {
+      "components": {
+        "camera": {
+          "fov_y": 1.04719755,
+          "primary": true,
+          "z_far": 10000.0,
+          "z_near": 0.1
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            40.0
+          ]
+        }
+      },
+      "guid": 210001,
+      "name": "camera"
+    },
+    {
+      "components": {
+        "directional_light": {
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "direction": [
+            0.35,
+            1.0,
+            0.4
+          ],
+          "intensity": 1.0
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "guid": 210002,
+      "name": "directional light"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            133.03899396150717,
+            -27.864367016148094,
+            -39.04682992965431
+          ]
+        }
+      },
+      "guid": 211001,
+      "name": "mesh 0"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -1.0503348187979498,
+            -46.29275395792477,
+            -64.960617034581
+          ]
+        }
+      },
+      "guid": 211002,
+      "name": "mesh 1"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999997,
+            4.999999999999998,
+            4.999999999999999
+          ],
+          "translation": [
+            85.13744171162745,
+            -58.895064138169346,
+            -149.77769670625986
+          ]
+        }
+      },
+      "guid": 211003,
+      "name": "mesh 2"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            4.999999999999999
+          ],
+          "translation": [
+            -2.2944366410477812,
+            29.76836377520138,
+            -41.961167903659884
+          ]
+        }
+      },
+      "guid": 211004,
+      "name": "mesh 3"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000002,
+            5.000000000000001
+          ],
+          "translation": [
+            -126.69859933878719,
+            57.302592464740854,
+            133.39911684680288
+          ]
+        }
+      },
+      "guid": 211005,
+      "name": "mesh 4"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999998,
+            4.999999999999998,
+            4.999999999999997
+          ],
+          "translation": [
+            -70.05235532567494,
+            84.96477869681001,
+            134.97970401940722
+          ]
+        }
+      },
+      "guid": 211006,
+      "name": "mesh 5"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999999,
+            5.0,
+            4.999999999999999
+          ],
+          "translation": [
+            142.03374868502812,
+            56.76476716738463,
+            -41.77758757761181
+          ]
+        }
+      },
+      "guid": 211007,
+      "name": "mesh 6"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999999,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            137.0623524356518,
+            -144.53696873408845,
+            -68.65634088780179
+          ]
+        }
+      },
+      "guid": 211008,
+      "name": "mesh 7"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            4.999999999999999,
+            5.0
+          ],
+          "translation": [
+            66.29947876204355,
+            -39.22532996058803,
+            100.01729122456146
+          ]
+        }
+      },
+      "guid": 211009,
+      "name": "mesh 8"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999997,
+            4.999999999999998,
+            4.999999999999998
+          ],
+          "translation": [
+            112.96696556833973,
+            21.03320022161148,
+            138.88966558168886
+          ]
+        }
+      },
+      "guid": 211010,
+      "name": "mesh 9"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -48.154940964709496,
+            127.81913796506876,
+            69.07419584013337
+          ]
+        }
+      },
+      "guid": 211011,
+      "name": "mesh 10"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            45.76051351479501,
+            149.85920505012683,
+            -25.44668743059728
+          ]
+        }
+      },
+      "guid": 211012,
+      "name": "mesh 11"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -33.56220562193995,
+            -40.799184460680564,
+            -92.79461339843212
+          ]
+        }
+      },
+      "guid": 211013,
+      "name": "mesh 12"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -74.43442442120457,
+            -107.58126355116681,
+            103.24150071805371
+          ]
+        }
+      },
+      "guid": 211014,
+      "name": "mesh 13"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -17.10460215678748,
+            -32.643722138856106,
+            49.4417697279392
+          ]
+        }
+      },
+      "guid": 211015,
+      "name": "mesh 14"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999999,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -119.4882029540619,
+            100.92892957086619,
+            -127.81986017095574
+          ]
+        }
+      },
+      "guid": 211016,
+      "name": "mesh 15"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -117.32039355584885,
+            -127.63573157379264,
+            52.24990413378603
+          ]
+        }
+      },
+      "guid": 211017,
+      "name": "mesh 16"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            4.292192628596922,
+            -69.6560202402035,
+            -36.30699978067226
+          ]
+        }
+      },
+      "guid": 211018,
+      "name": "mesh 17"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.0
+          ],
+          "translation": [
+            86.034964149232,
+            115.81306060010331,
+            -30.486247202262575
+          ]
+        }
+      },
+      "guid": 211019,
+      "name": "mesh 18"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            4.999999999999999,
+            5.000000000000001
+          ],
+          "translation": [
+            -60.95711856662432,
+            -49.254361298496946,
+            30.32215024722663
+          ]
+        }
+      },
+      "guid": 211020,
+      "name": "mesh 19"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999999,
+            5.0,
+            4.999999999999999
+          ],
+          "translation": [
+            13.668519625392065,
+            115.51504473384244,
+            92.38199862637939
+          ]
+        }
+      },
+      "guid": 211021,
+      "name": "mesh 20"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.0
+          ],
+          "translation": [
+            142.53255830955925,
+            122.87630167310277,
+            114.94432568653758
+          ]
+        }
+      },
+      "guid": 211022,
+      "name": "mesh 21"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.0
+          ],
+          "translation": [
+            68.48461603279986,
+            73.88944486829439,
+            84.21699179469033
+          ]
+        }
+      },
+      "guid": 211023,
+      "name": "mesh 22"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.000000000000001
+          ],
+          "translation": [
+            102.99367371215493,
+            -6.808948293814211,
+            -64.52263934949758
+          ]
+        }
+      },
+      "guid": 211024,
+      "name": "mesh 23"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.000000000000001
+          ],
+          "translation": [
+            -119.20198104522186,
+            7.327780517464873,
+            68.3177643197196
+          ]
+        }
+      },
+      "guid": 211025,
+      "name": "mesh 24"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            138.2996281720674,
+            -40.656814037905804,
+            15.38190269598715
+          ]
+        }
+      },
+      "guid": 211026,
+      "name": "mesh 25"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            60.81307196808052,
+            -62.6625778294334,
+            -113.90115002848762
+          ]
+        }
+      },
+      "guid": 211027,
+      "name": "mesh 26"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000002,
+            5.000000000000002
+          ],
+          "translation": [
+            -80.77602806386177,
+            -114.176188483668,
+            -6.20454640727408
+          ]
+        }
+      },
+      "guid": 211028,
+      "name": "mesh 27"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999998,
+            4.999999999999999,
+            4.999999999999999
+          ],
+          "translation": [
+            46.26419652391593,
+            66.15348790294462,
+            104.1515933150001
+          ]
+        }
+      },
+      "guid": 211029,
+      "name": "mesh 28"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            47.71050811357736,
+            -96.12287717592424,
+            143.86401409310093
+          ]
+        }
+      },
+      "guid": 211030,
+      "name": "mesh 29"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            4.999999999999999,
+            4.999999999999999
+          ],
+          "translation": [
+            2.4404035504324213,
+            113.50577343504375,
+            -18.435882741480754
+          ]
+        }
+      },
+      "guid": 211031,
+      "name": "mesh 30"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            141.17266671330492,
+            13.191246754801142,
+            -18.155850320545795
+          ]
+        }
+      },
+      "guid": 211032,
+      "name": "mesh 31"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -67.20907962680141,
+            51.004290633082746,
+            91.78583944800053
+          ]
+        }
+      },
+      "guid": 211033,
+      "name": "mesh 32"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -26.517094066435703,
+            26.720681415349674,
+            69.24630175393241
+          ]
+        }
+      },
+      "guid": 211034,
+      "name": "mesh 33"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000002,
+            5.0
+          ],
+          "translation": [
+            17.31529872200383,
+            35.38192928640882,
+            -144.43871536122592
+          ]
+        }
+      },
+      "guid": 211035,
+      "name": "mesh 34"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            31.04235310979317,
+            128.96325824712375,
+            2.520844841319388
+          ]
+        }
+      },
+      "guid": 211036,
+      "name": "mesh 35"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -78.51800062268724,
+            81.9989392733618,
+            -118.24830685531684
+          ]
+        }
+      },
+      "guid": 211037,
+      "name": "mesh 36"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            16.2440166462373,
+            58.44754181797711,
+            80.83157435163548
+          ]
+        }
+      },
+      "guid": 211038,
+      "name": "mesh 37"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            4.999999999999999,
+            5.0
+          ],
+          "translation": [
+            72.8007202361654,
+            -109.081145898661,
+            -70.96998493014817
+          ]
+        }
+      },
+      "guid": 211039,
+      "name": "mesh 38"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.000000000000002
+          ],
+          "translation": [
+            75.567295241827,
+            20.46693545879708,
+            0.7213102469326031
+          ]
+        }
+      },
+      "guid": 211040,
+      "name": "mesh 39"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            4.999999999999999,
+            5.0
+          ],
+          "translation": [
+            108.95209385050902,
+            -146.2993015953969,
+            109.52489657966697
+          ]
+        }
+      },
+      "guid": 211041,
+      "name": "mesh 40"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.000000000000001
+          ],
+          "translation": [
+            147.5566268309716,
+            119.6035129215283,
+            -74.52642182291007
+          ]
+        }
+      },
+      "guid": 211042,
+      "name": "mesh 41"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            145.1118512524344,
+            143.2771893013105,
+            -113.4676573282956
+          ]
+        }
+      },
+      "guid": 211043,
+      "name": "mesh 42"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -63.73933858759952,
+            -133.26895719954766,
+            63.40326257520968
+          ]
+        }
+      },
+      "guid": 211044,
+      "name": "mesh 43"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            95.61615409284809,
+            106.82087425727354,
+            -101.65026860384263
+          ]
+        }
+      },
+      "guid": 211045,
+      "name": "mesh 44"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            86.05041991933211,
+            124.70782060534293,
+            -48.27537279392044
+          ]
+        }
+      },
+      "guid": 211046,
+      "name": "mesh 45"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.000000000000001,
+            5.0,
+            5.000000000000001
+          ],
+          "translation": [
+            2.8268579208631763,
+            -62.07175538015555,
+            -73.10751616255632
+          ]
+        }
+      },
+      "guid": 211047,
+      "name": "mesh 46"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            38.29134198167782,
+            92.02317218448565,
+            107.35677320442664
+          ]
+        }
+      },
+      "guid": 211048,
+      "name": "mesh 47"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.000000000000001,
+            5.0,
+            5.000000000000001
+          ],
+          "translation": [
+            75.32894611732897,
+            -125.45946314767394,
+            -132.43852755422455
+          ]
+        }
+      },
+      "guid": 211049,
+      "name": "mesh 48"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            4.999999999999998,
+            5.0
+          ],
+          "translation": [
+            -104.31702231156032,
+            -74.58832204188445,
+            99.6560484511082
+          ]
+        }
+      },
+      "guid": 211050,
+      "name": "mesh 49"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            2.110047964875264,
+            -126.23621216756474,
+            -136.19049185657752
+          ]
+        }
+      },
+      "guid": 211051,
+      "name": "mesh 50"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.000000000000002
+          ],
+          "translation": [
+            -97.02439416222113,
+            -71.7668598052313,
+            -32.948473922580106
+          ]
+        }
+      },
+      "guid": 211052,
+      "name": "mesh 51"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -0.8285049407163285,
+            -34.21172810195799,
+            -50.72629994786796
+          ]
+        }
+      },
+      "guid": 211053,
+      "name": "mesh 52"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999999,
+            4.999999999999999,
+            5.0
+          ],
+          "translation": [
+            -15.14978180629123,
+            56.780563305035656,
+            120.0724241256687
+          ]
+        }
+      },
+      "guid": 211054,
+      "name": "mesh 53"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            46.11714517127217,
+            97.67659962144717,
+            23.187326317556256
+          ]
+        }
+      },
+      "guid": 211055,
+      "name": "mesh 54"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -62.64501182672993,
+            35.542430124854576,
+            28.881003430176776
+          ]
+        }
+      },
+      "guid": 211056,
+      "name": "mesh 55"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            123.847533841916,
+            112.19804504874804,
+            -25.647579928839974
+          ]
+        }
+      },
+      "guid": 211057,
+      "name": "mesh 56"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -94.05066255354177,
+            -11.291742120435686,
+            121.13419822918485
+          ]
+        }
+      },
+      "guid": 211058,
+      "name": "mesh 57"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -134.78570160495184,
+            45.715132448811545,
+            -121.93700433050327
+          ]
+        }
+      },
+      "guid": 211059,
+      "name": "mesh 58"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -81.23406898928152,
+            -22.0747472976322,
+            131.11396271763715
+          ]
+        }
+      },
+      "guid": 211060,
+      "name": "mesh 59"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            82.45523203397107,
+            -140.94096581980605,
+            54.6652251971895
+          ]
+        }
+      },
+      "guid": 211061,
+      "name": "mesh 60"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            78.74859860383327,
+            -28.106534260514906,
+            31.514269442859757
+          ]
+        }
+      },
+      "guid": 211062,
+      "name": "mesh 61"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            77.1558911681486,
+            93.9369453708255,
+            -47.54052659135408
+          ]
+        }
+      },
+      "guid": 211063,
+      "name": "mesh 62"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -104.04619570098772,
+            55.41982801750717,
+            122.37800163669027
+          ]
+        }
+      },
+      "guid": 211064,
+      "name": "mesh 63"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            22.481058053730493,
+            -63.83694166036959,
+            108.68741475642378
+          ]
+        }
+      },
+      "guid": 211065,
+      "name": "mesh 64"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -88.66507796247896,
+            -104.3874124967146,
+            -38.53422583944483
+          ]
+        }
+      },
+      "guid": 211066,
+      "name": "mesh 65"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            4.999999999999999
+          ],
+          "translation": [
+            112.93602322009832,
+            104.33012319056323,
+            89.00772823634429
+          ]
+        }
+      },
+      "guid": 211067,
+      "name": "mesh 66"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.000000000000001
+          ],
+          "translation": [
+            54.858576718564336,
+            129.63351383541823,
+            -61.28607780883523
+          ]
+        }
+      },
+      "guid": 211068,
+      "name": "mesh 67"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -75.03681340249612,
+            -85.12691640314449,
+            1.6397953596856496
+          ]
+        }
+      },
+      "guid": 211069,
+      "name": "mesh 68"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999998,
+            4.999999999999998,
+            4.999999999999998
+          ],
+          "translation": [
+            66.99101326240506,
+            48.858467724504294,
+            57.56236266356032
+          ]
+        }
+      },
+      "guid": 211070,
+      "name": "mesh 69"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            53.544786854149095,
+            18.317718728178676,
+            -91.27274263471432
+          ]
+        }
+      },
+      "guid": 211071,
+      "name": "mesh 70"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            91.70124431357968,
+            113.73790618476625,
+            -114.34303207852358
+          ]
+        }
+      },
+      "guid": 211072,
+      "name": "mesh 71"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            98.43896058729081,
+            -17.133882555597495,
+            80.23446882391065
+          ]
+        }
+      },
+      "guid": 211073,
+      "name": "mesh 72"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.000000000000002,
+            5.0,
+            5.000000000000001
+          ],
+          "translation": [
+            38.89636969331218,
+            -4.423369299262333,
+            -104.48662036672535
+          ]
+        }
+      },
+      "guid": 211074,
+      "name": "mesh 73"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            23.708680410565393,
+            -148.65459780069392,
+            -6.365359347346413
+          ]
+        }
+      },
+      "guid": 211075,
+      "name": "mesh 74"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.0
+          ],
+          "translation": [
+            -0.7467316330009623,
+            120.43442564987527,
+            -144.77922036011725
+          ]
+        }
+      },
+      "guid": 211076,
+      "name": "mesh 75"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            73.84240072885527,
+            102.82183885840655,
+            -98.92117165354475
+          ]
+        }
+      },
+      "guid": 211077,
+      "name": "mesh 76"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.000000000000002,
+            5.000000000000001,
+            5.000000000000002
+          ],
+          "translation": [
+            -41.12197276167902,
+            -7.505508049222868,
+            76.50175512205618
+          ]
+        }
+      },
+      "guid": 211078,
+      "name": "mesh 77"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            4.999999999999999
+          ],
+          "translation": [
+            106.24184413809775,
+            -1.3961948764013243,
+            53.443830117023055
+          ]
+        }
+      },
+      "guid": 211079,
+      "name": "mesh 78"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            90.15260534677452,
+            40.67514060427271,
+            -79.86330396233959
+          ]
+        }
+      },
+      "guid": 211080,
+      "name": "mesh 79"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            142.8671585716495,
+            110.54633171795604,
+            62.277243297627166
+          ]
+        }
+      },
+      "guid": 211081,
+      "name": "mesh 80"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -89.90087289889112,
+            -7.9885272496139805,
+            72.02286639363336
+          ]
+        }
+      },
+      "guid": 211082,
+      "name": "mesh 81"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            4.999999999999999,
+            5.0
+          ],
+          "translation": [
+            -51.941552596114946,
+            -101.6121434382395,
+            -52.33876395612748
+          ]
+        }
+      },
+      "guid": 211083,
+      "name": "mesh 82"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999999,
+            5.0,
+            4.999999999999999
+          ],
+          "translation": [
+            128.51199544994859,
+            51.686472976801724,
+            -48.37663608047656
+          ]
+        }
+      },
+      "guid": 211084,
+      "name": "mesh 83"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            72.07529918850511,
+            23.533032278517453,
+            -11.467139823447695
+          ]
+        }
+      },
+      "guid": 211085,
+      "name": "mesh 84"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.000000000000001
+          ],
+          "translation": [
+            9.27981293393583,
+            -36.0924029057462,
+            43.40632906785493
+          ]
+        }
+      },
+      "guid": 211086,
+      "name": "mesh 85"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.000000000000001
+          ],
+          "translation": [
+            -127.01802464730855,
+            -115.37609861322694,
+            -5.022071775382528
+          ]
+        }
+      },
+      "guid": 211087,
+      "name": "mesh 86"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -30.5094667064279,
+            -67.41513675274446,
+            -36.72010179915469
+          ]
+        }
+      },
+      "guid": 211088,
+      "name": "mesh 87"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -3.0799372093162845,
+            50.01826859240319,
+            22.24912006429514
+          ]
+        }
+      },
+      "guid": 211089,
+      "name": "mesh 88"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -58.43317481972767,
+            82.2991186641029,
+            -69.29068269326142
+          ]
+        }
+      },
+      "guid": 211090,
+      "name": "mesh 89"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -42.60859577929469,
+            86.44515103602976,
+            -149.29702707050524
+          ]
+        }
+      },
+      "guid": 211091,
+      "name": "mesh 90"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            4.999999999999999
+          ],
+          "translation": [
+            38.21826744259624,
+            -62.7887519957561,
+            29.55566644756192
+          ]
+        }
+      },
+      "guid": 211092,
+      "name": "mesh 91"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999999,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            71.08910923352352,
+            94.10661877658191,
+            -43.84968072120256
+          ]
+        }
+      },
+      "guid": 211093,
+      "name": "mesh 92"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -53.621215646050274,
+            -1.2644467861512965,
+            61.93459836971414
+          ]
+        }
+      },
+      "guid": 211094,
+      "name": "mesh 93"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            71.52214255774615,
+            125.47375918949177,
+            -127.03892860605526
+          ]
+        }
+      },
+      "guid": 211095,
+      "name": "mesh 94"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.000000000000001,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -18.180698767169503,
+            146.88414712552378,
+            10.773663984889566
+          ]
+        }
+      },
+      "guid": 211096,
+      "name": "mesh 95"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999999,
+            4.999999999999998,
+            5.0
+          ],
+          "translation": [
+            128.61397082621744,
+            -115.97655666255923,
+            121.10203425757743
+          ]
+        }
+      },
+      "guid": 211097,
+      "name": "mesh 96"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.000000000000001,
+            5.000000000000002,
+            5.000000000000001
+          ],
+          "translation": [
+            74.49871481209865,
+            -130.2578926812415,
+            125.68009085000205
+          ]
+        }
+      },
+      "guid": 211098,
+      "name": "mesh 97"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000002,
+            5.000000000000001
+          ],
+          "translation": [
+            -45.36255749057196,
+            -13.670251322582146,
+            99.971409227847
+          ]
+        }
+      },
+      "guid": 211099,
+      "name": "mesh 98"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999998,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -89.50262125761063,
+            109.30604249834732,
+            45.62238655490495
+          ]
+        }
+      },
+      "guid": 211100,
+      "name": "mesh 99"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999998,
+            4.999999999999998,
+            4.999999999999999
+          ],
+          "translation": [
+            -86.23550782869799,
+            -83.34795558192292,
+            -17.28309454235847
+          ]
+        }
+      },
+      "guid": 211101,
+      "name": "mesh 100"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            32.171120249812105,
+            99.72210501178779,
+            45.68373971287295
+          ]
+        }
+      },
+      "guid": 211102,
+      "name": "mesh 101"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -62.975838920576905,
+            -46.024604358597955,
+            112.18401679076516
+          ]
+        }
+      },
+      "guid": 211103,
+      "name": "mesh 102"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            38.022482685748685,
+            -111.40091260913522,
+            -137.20176232929137
+          ]
+        }
+      },
+      "guid": 211104,
+      "name": "mesh 103"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.0
+          ],
+          "translation": [
+            -33.331164351167175,
+            -55.70028121487745,
+            -134.31746212654966
+          ]
+        }
+      },
+      "guid": 211105,
+      "name": "mesh 104"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999998,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            117.97305451389684,
+            -121.58656986053826,
+            -6.367164581341001
+          ]
+        }
+      },
+      "guid": 211106,
+      "name": "mesh 105"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -34.94256242278887,
+            12.07575171850661,
+            -113.74759505946614
+          ]
+        }
+      },
+      "guid": 211107,
+      "name": "mesh 106"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -144.88344843620675,
+            -128.82473512223538,
+            -15.261321577845479
+          ]
+        }
+      },
+      "guid": 211108,
+      "name": "mesh 107"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            123.48078796485191,
+            -80.72675819660041,
+            10.503823890183014
+          ]
+        }
+      },
+      "guid": 211109,
+      "name": "mesh 108"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.000000000000001,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            21.85448218348492,
+            79.52518976690203,
+            85.51445568519225
+          ]
+        }
+      },
+      "guid": 211110,
+      "name": "mesh 109"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -55.347164466725346,
+            -3.755739576953289,
+            -53.27524983645958
+          ]
+        }
+      },
+      "guid": 211111,
+      "name": "mesh 110"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            51.248019121978615,
+            -29.22987380624906,
+            147.0855239400085
+          ]
+        }
+      },
+      "guid": 211112,
+      "name": "mesh 111"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            37.77161128520376,
+            -104.0450609759766,
+            109.55186056088166
+          ]
+        }
+      },
+      "guid": 211113,
+      "name": "mesh 112"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999999,
+            4.999999999999998,
+            4.999999999999999
+          ],
+          "translation": [
+            -119.0875816067208,
+            54.54313800030883,
+            -112.98696010435174
+          ]
+        }
+      },
+      "guid": 211114,
+      "name": "mesh 113"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.000000000000001
+          ],
+          "translation": [
+            95.7187356630586,
+            148.14020606656146,
+            -17.37450320836456
+          ]
+        }
+      },
+      "guid": 211115,
+      "name": "mesh 114"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999999,
+            4.999999999999998,
+            4.999999999999999
+          ],
+          "translation": [
+            72.5780512065725,
+            -11.456601540090674,
+            -129.42474718731705
+          ]
+        }
+      },
+      "guid": 211116,
+      "name": "mesh 115"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000002,
+            5.000000000000001
+          ],
+          "translation": [
+            -104.55901750568108,
+            -45.05386760943472,
+            -93.69870743645407
+          ]
+        }
+      },
+      "guid": 211117,
+      "name": "mesh 116"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            4.999999999999998,
+            4.999999999999999,
+            4.999999999999998
+          ],
+          "translation": [
+            86.85437952306597,
+            131.65605244901792,
+            30.819993311698084
+          ]
+        }
+      },
+      "guid": 211118,
+      "name": "mesh 117"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            23.485852737281135,
+            96.3406659941117,
+            19.47139118619654
+          ]
+        }
+      },
+      "guid": 211119,
+      "name": "mesh 118"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            14.715528275586024,
+            -47.48667268023006,
+            -16.396665894103847
+          ]
+        }
+      },
+      "guid": 211120,
+      "name": "mesh 119"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.000000000000001,
+            5.0
+          ],
+          "translation": [
+            92.30155249332336,
+            66.23258181122344,
+            13.505141555458522
+          ]
+        }
+      },
+      "guid": 211121,
+      "name": "mesh 120"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            4.999999999999999,
+            5.0
+          ],
+          "translation": [
+            142.18594131603214,
+            -24.73692816147343,
+            -112.32458091732569
+          ]
+        }
+      },
+      "guid": 211122,
+      "name": "mesh 121"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.000000000000001,
+            5.0,
+            5.000000000000002
+          ],
+          "translation": [
+            51.749434415094925,
+            145.00224755528802,
+            92.35747506175059
+          ]
+        }
+      },
+      "guid": 211123,
+      "name": "mesh 122"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.000000000000001,
+            5.0,
+            5.000000000000002
+          ],
+          "translation": [
+            98.13107373922685,
+            133.21808418746974,
+            1.7953432600806423
+          ]
+        }
+      },
+      "guid": 211124,
+      "name": "mesh 123"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -93.63649899764192,
+            -71.07694175325169,
+            -27.02827373024344
+          ]
+        }
+      },
+      "guid": 211125,
+      "name": "mesh 124"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -24.13087826144607,
+            -78.4289703529965,
+            -21.578168294028018
+          ]
+        }
+      },
+      "guid": 211126,
+      "name": "mesh 125"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.0,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -20.383401017750373,
+            -26.343389979475432,
+            -36.01236759644196
+          ]
+        }
+      },
+      "guid": 211127,
+      "name": "mesh 126"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            5.000000000000001,
+            5.0,
+            5.0
+          ],
+          "translation": [
+            -38.88821015623111,
+            145.08460036498002,
+            103.42118546034754
+          ]
+        }
+      },
+      "guid": 211128,
+      "name": "mesh 127"
+    }
+  ],
+  "registry_version": 1,
+  "scene": {
+    "name": "demo random cubes"
+  }
+}

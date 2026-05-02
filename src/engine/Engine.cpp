@@ -16,7 +16,7 @@
 #include "core/TomlUtil.hpp"
 #include "engine/assets/AssetService.hpp"
 #include "engine/render/RenderService.hpp"
-#include "engine/scene/SceneAssetLoader.hpp"
+#include "engine/scene/SceneSerialization.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/Swapchain.hpp"
 #include "imgui.h"
@@ -266,11 +266,11 @@ void Engine::clear_transient_input() {
   input_snapshot_.cursor_delta = {};
 }
 
-Result<SceneAssetLoadResult> Engine::load_scene_asset(const std::filesystem::path& scene_path) {
-  return teng::engine::load_scene_asset(scenes_, scene_path);
+Result<SceneLoadResult> Engine::load_scene(const std::filesystem::path& scene_path) {
+  return teng::engine::load_scene_file(scenes_, scene_path);
 }
 
-Result<SceneAssetLoadResult> Engine::load_project_startup_scene() {
+Result<SceneLoadResult> Engine::load_project_startup_scene() {
   const std::filesystem::path project_path = resource_dir_ / "project.toml";
   Result<toml::table> project = parse_toml_file(project_path);
   if (!project) {
@@ -287,7 +287,7 @@ Result<SceneAssetLoadResult> Engine::load_project_startup_scene() {
   if (!startup_scene || startup_scene->empty()) {
     return make_unexpected("project config is missing startup_scene");
   }
-  return load_scene_asset(*startup_scene);
+  return load_scene(*startup_scene);
 }
 
 bool Engine::tick() {

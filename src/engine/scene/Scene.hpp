@@ -38,6 +38,7 @@ class Scene {
   bool set_fps_camera_controller(EntityGuid guid, const FpsCameraController& controller) const;
   bool set_directional_light(EntityGuid guid, const DirectionalLight& light) const;
   bool set_mesh_renderable(EntityGuid guid, const MeshRenderable& mesh) const;
+  bool set_sprite_renderable(EntityGuid guid, const SpriteRenderable& sprite) const;
   void set_input_snapshot(const EngineInputSnapshot& input);
 
   bool tick(float delta_seconds);

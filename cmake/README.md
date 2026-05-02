@@ -13,6 +13,10 @@ Tests and tools that need the full runtime should link `teng_runtime`. Minimal t
 their own narrow libraries instead of pulling the runtime aggregate; `teng-shaderc` is the current
 example and links only `teng_shader_compiler`.
 
+Scene serialization uses `nlohmann_json::nlohmann_json`, pinned through `FetchContent` in
+`third_party/CMakeLists.txt` at v3.11.3. Canonical scene files are JSON-only; project configuration
+and asset sidecars may still use TOML.
+
 The current component DAG is:
 
 ```text

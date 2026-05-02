@@ -10,8 +10,8 @@
 
 #include "core/Result.hpp"
 #include "engine/Input.hpp"
-#include "engine/scene/SceneAssetLoader.hpp"
 #include "engine/scene/SceneManager.hpp"
+#include "engine/scene/SceneSerialization.hpp"
 #include "gfx/rhi/Device.hpp"
 #include "gfx/rhi/GFXTypes.hpp"
 
@@ -138,9 +138,8 @@ class Engine {
   bool tick();
   void run();
   void shutdown();
-  [[nodiscard]] Result<SceneAssetLoadResult> load_scene_asset(
-      const std::filesystem::path& scene_path);
-  [[nodiscard]] Result<SceneAssetLoadResult> load_project_startup_scene();
+  [[nodiscard]] Result<SceneLoadResult> load_scene(const std::filesystem::path& scene_path);
+  [[nodiscard]] Result<SceneLoadResult> load_project_startup_scene();
 
   [[nodiscard]] EngineContext& context() { return context_; }
   [[nodiscard]] const EngineContext& context() const { return context_; }

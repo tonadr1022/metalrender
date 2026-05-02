@@ -5,8 +5,8 @@
 
 #include "engine/render/RenderScene.hpp"
 #include "engine/render/RenderSceneExtractor.hpp"
-#include "engine/scene/SceneAssetLoader.hpp"
 #include "engine/scene/SceneManager.hpp"
+#include "engine/scene/SceneSerialization.hpp"
 
 namespace teng::engine {
 namespace {
@@ -24,7 +24,7 @@ namespace {
 
 [[nodiscard]] bool load_and_check_scene(const std::filesystem::path& path, size_t mesh_count) {
   SceneManager scenes;
-  Result<SceneAssetLoadResult> loaded = load_scene_asset(scenes, path);
+  Result<SceneLoadResult> loaded = load_scene_file(scenes, path);
   if (!loaded || !(*loaded).scene || scenes.active_scene() != (*loaded).scene) {
     return false;
   }
@@ -50,8 +50,8 @@ bool run_generated_scene_assets_smoke_test() {
     return false;
   }
 
-  return load_and_check_scene(root / "resources/scenes/demo_00_cube.tscene.toml", 1) &&
-         load_and_check_scene(root / "resources/scenes/demo_01_cube_grid.tscene.toml", 81);
+  return load_and_check_scene(root / "resources/scenes/demo_00_cube.tscene.json", 1) &&
+         load_and_check_scene(root / "resources/scenes/demo_01_cube_grid.tscene.json", 81);
 }
 
 }  // namespace teng::engine

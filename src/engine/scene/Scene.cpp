@@ -246,6 +246,15 @@ bool Scene::set_mesh_renderable(EntityGuid guid, const MeshRenderable& mesh) con
   return true;
 }
 
+bool Scene::set_sprite_renderable(EntityGuid guid, const SpriteRenderable& sprite) const {
+  const flecs::entity entity = find_entity(guid);
+  if (!entity.is_valid()) {
+    return false;
+  }
+  entity.set<SpriteRenderable>(sprite);
+  return true;
+}
+
 bool Scene::tick(float delta_seconds) { return world_.progress(delta_seconds); }
 
 }  // namespace teng::engine

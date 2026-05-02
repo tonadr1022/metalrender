@@ -4,7 +4,7 @@
 #include "AssetRegistrySmokeTest.hpp"
 #include "AssetServiceSmokeTest.hpp"
 #include "GeneratedSceneAssetsSmokeTest.hpp"
-#include "SceneAssetLoaderSmokeTest.hpp"
+#include "SceneSerializationSmokeTest.hpp"
 #include "SceneSmokeTest.hpp"
 
 int main() {
@@ -20,8 +20,8 @@ int main() {
     std::cerr << "engine_scene_smoke: fps camera system smoke test failed\n";
     return 1;
   }
-  if (!teng::engine::run_scene_asset_loader_smoke_test()) {
-    std::cerr << "engine_scene_smoke: scene asset loader smoke test failed\n";
+  if (!teng::engine::run_scene_serialization_smoke_test()) {
+    std::cerr << "engine_scene_smoke: scene serialization smoke test failed\n";
     return 1;
   }
   if (!teng::engine::run_generated_scene_assets_smoke_test()) {

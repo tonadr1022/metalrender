@@ -29,10 +29,10 @@ set(TENG_ASSETS_SOURCES
 
 set(TENG_SCENE_SOURCES
     engine/scene/Scene.cpp
-    engine/scene/SceneAssetLoader.cpp
     engine/scene/SceneComponents.cpp
     engine/scene/SceneIds.cpp
     engine/scene/SceneManager.cpp
+    engine/scene/SceneSerialization.cpp
 )
 
 set(TENG_RENDER_SOURCES
@@ -115,6 +115,7 @@ set(TENG_COMMON_PUBLIC_LIBS
     project_warnings
     bs_thread_pool
     tomlplusplus
+    nlohmann_json::nlohmann_json
 )
 
 set(TENG_BACKEND_LIBS)

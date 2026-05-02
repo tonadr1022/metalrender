@@ -40,11 +40,11 @@ cmake --build build/Release --target metalrender
 ln -s $HOME/gltf_sample_assets/models/gltf ./resources/models/gltf
 
 # Run the runtime app. Without --scene it loads resources/project.toml
-# startup_scene, currently resources/scenes/demo_00_cube.tscene.toml.
+# startup_scene, currently resources/scenes/demo_00_cube.tscene.json.
 ./build/Release/bin/metalrender
 
 # Override the startup scene explicitly.
-./build/Release/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml
+./build/Release/bin/metalrender --scene resources/scenes/demo_cube.tscene.json
 
 # Bounded smoke run
 ./build/Release/bin/metalrender --quit-after-frames 30

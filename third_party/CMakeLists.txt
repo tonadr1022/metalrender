@@ -1,5 +1,7 @@
 set(CMAKE_CXX_STANDARD 23)
 
+add_subdirectory(nlohmann_json)
+
 if (BUILD_METAL)
     add_subdirectory(metal-cpp)
     add_subdirectory(metal_irconverter_runtime)

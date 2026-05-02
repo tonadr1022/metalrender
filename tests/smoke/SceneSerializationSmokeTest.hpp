@@ -2,6 +2,6 @@
 
 namespace teng::engine {
 
-[[nodiscard]] bool run_scene_asset_loader_smoke_test();
+[[nodiscard]] bool run_scene_serialization_smoke_test();
 
 }  // namespace teng::engine

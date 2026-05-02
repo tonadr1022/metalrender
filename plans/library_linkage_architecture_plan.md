@@ -33,7 +33,7 @@ RHI/renderer rewrites for CMake only; full consumer packaging (Steam, etc.). **E
 | `teng_core` | **STATIC** | Core utilities and process-wide runtime helpers |
 | `teng_cvars` | **STATIC** | CVar/console/debug UI helpers; kept out of GPU-free scene validation |
 | `teng_assets` | **STATIC** | GPU-free asset IDs, registry, and database |
-| `teng_scene` | **STATIC** | Flecs scene, components, IDs, manager; interim `SceneAssetLoader` until Phase 12 — then registry + **`nlohmann/json`** canonical scenes ([`scene_serialization_design.md`](scene_serialization_design.md)) |
+| `teng_scene` | **STATIC** | Flecs scene, components, IDs, manager, registry + **`nlohmann/json`** canonical scenes ([`scene_serialization_design.md`](scene_serialization_design.md)) |
 | `teng_scene_tool_lib` | **STATIC** | GPU-free scene validate/migrate/cook library (`teng-scene-tool` exe) |
 | `teng_platform` | **STATIC** | Window/UI platform support |
 | `teng_gfx` | **STATIC** | RHI, RenderGraph, model loading, and meshlet renderer implementation |

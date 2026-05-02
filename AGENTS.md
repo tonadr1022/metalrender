@@ -33,14 +33,14 @@ Smoke test (bounded run; avoids leaving the app open in automation):
 
 ```bash
 ./build/Debug/bin/metalrender --quit-after-frames 30
-./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml --quit-after-frames 30
+./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
 ```
 
 Run without a frame limit (interactive, until the window is closed):
 
 ```bash
 ./build/Debug/bin/metalrender
-./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.toml
+./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.json
 ```
 
 ### Shader compiler (single files or ad hoc)

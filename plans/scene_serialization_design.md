@@ -44,18 +44,18 @@ An agent can consider Phase 12 **complete** when all of the following are true:
 | Scene ECS host | `Scene`, `SceneManager`, Flecs world | `src/engine/scene/Scene.hpp`, `Scene.cpp`, `SceneManager.*` |
 | Components | C++ structs registered on the world | `src/engine/scene/SceneComponents.hpp` |
 | Stable IDs | `SceneId`, `EntityGuid`, `AssetId` | `src/engine/scene/SceneIds.*` — `EntityGuid` is **`uint64_t value`** with **`operator<`** = unsigned numeric order on `value` |
-| Interim load-only text loader | Legacy subset of components (to be removed) | `src/engine/scene/SceneAssetLoader.*` |
+| Scene serialization | Registry-driven JSON load/save + cooked codec | `src/engine/scene/SceneSerialization.*` |
 | Extraction | ECS → `RenderScene` | `src/engine/render/RenderSceneExtractor.cpp`, `RenderScene.hpp` |
 | App entry | `--scene`, `project.toml` startup paths | `apps/metalrender/main.cpp`, `resources/project.toml` |
 | Demo generation | Writes legacy scene files + registry (migrate to JSON) | `scripts/generate_demo_scene_assets.py` |
 | GPU-free tool library | Static lib (validate/migrate/cook implementation grows here) | **`teng_scene_tool_lib`** → `src/engine/scene/SceneValidate.cpp` (expand beyond stub as needed) |
 | Scene CLI | Thin executable, subcommands | **`teng-scene-tool`** → `apps/teng-scene-tool/` |
-| Smoke | Loader + assets | `tests/smoke/SceneAssetLoaderSmokeTest.cpp`, `GeneratedSceneAssetsSmokeTest.cpp`, `apps/engine_scene_smoke` |
+| Smoke | Serialization + generated assets | `tests/smoke/SceneSerializationSmokeTest.cpp`, `GeneratedSceneAssetsSmokeTest.cpp`, `apps/engine_scene_smoke` |
 
-**Known drift (must be fixed by design, not ad hoc):**
+**Known drift fixed by this phase:**
 
-- `SceneAssetLoader` does **not** load `SpriteRenderable`, `FpsCameraController`, or other components present in `Scene::register_components()`.
-- `EngineInputSnapshot` is a **singleton-style** world component for input; it must **not** be serialized as per-entity state (§5.2).
+- The removed TOML `SceneAssetLoader` did **not** load `SpriteRenderable`; canonical JSON now does.
+- `EngineInputSnapshot` remains a **singleton-style** world component for input and is **not** serialized as per-entity state (§5.2).
 - **`LocalToWorld` is never authored on disk** (§5.3); it is rebuilt after load.
 
 ---
@@ -433,8 +433,7 @@ Parallel documentation: update **`AGENTS.md`** smoke examples if paths or flags 
 
 Record answers here when closed:
 
-1. Default `metalrender --scene` file type: canonical JSON vs cooked binary.
-2. Whether **entity hierarchy** (parent/child) appears in Phase 12 or a follow-up — if not in ECS yet, **omit** from v1 format (Transform semantics §5.5 until then).
+All initial Phase 12 implementation decisions are recorded below. Future hierarchy, editor, and shipped cooked-runtime integration can reopen this section with a dedicated plan slice.
 
 ---
 
@@ -455,3 +454,5 @@ _Update this subsection as the team locks choices during implementation._
 - **Pre-hierarchy `Transform`:** **Parent-local** with implicit world root (§5.5).
 - **Parse diagnostics:** Report **byte offset and character/context position** when available (§6.3).
 - **Forward-compat defaults:** **Strict error** on unknown keys for validate, runtime load, and editor default (§7.5).
+- **Runtime `--scene` default:** canonical JSON (`*.tscene.json`); cooked binary is available through `teng-scene-tool cook` / `dump` and remains an explicit tool/runtime integration follow-up.
+- **Entity hierarchy:** omitted from v1; every serialized `Transform` is parent-local under the implicit world root.

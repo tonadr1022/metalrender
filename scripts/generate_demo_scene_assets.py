@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
 import math
 import random
 import re
@@ -101,7 +102,7 @@ def matrix_from_trs(
     wy = w * y
     wz = w * z
 
-    # Column-major, matching glm::mat4 serialization in SceneAssetLoader.
+    # Column-major, matching glm::mat4 / Transform conventions in the scene module.
     return (
         (1.0 - 2.0 * (yy + zz)) * scale[0],
         (2.0 * (xy + wz)) * scale[0],
@@ -217,26 +218,19 @@ def array(values: Iterable[float]) -> str:
     return "[" + ", ".join(fmt_float(v) for v in values) + "]"
 
 
-def write_entity(out: list[str], guid: int, name: str, transform, local_to_world: tuple[float, ...]) -> None:
+def entity_record(guid: int, name: str, transform) -> dict:
     translation, rotation, scale = transform
-    out.extend(
-        [
-            "[[entities]]",
-            f"guid = {guid}",
-            f'name = "{name}"',
-            "",
-            "[entities.transform]",
-            f"translation = {array(translation)}",
-            f"rotation = {array(rotation)}",
-            f"scale = {array(scale)}",
-            "",
-            "[entities.local_to_world]",
-            "matrix = [",
-        ]
-    )
-    for i in range(0, 16, 4):
-        out.append("  " + ", ".join(fmt_float(v) for v in local_to_world[i : i + 4]) + ",")
-    out.extend(["]", ""])
+    return {
+        "guid": guid,
+        "name": name,
+        "components": {
+            "transform": {
+                "translation": list(translation),
+                "rotation": list(rotation),
+                "scale": list(scale),
+            }
+        },
+    }
 
 
 def camera_matrix(camera: Camera) -> tuple[float, ...]:
@@ -256,47 +250,45 @@ def write_scene(resource_dir: Path, scene_dir: Path, index: int, preset: ScenePr
         return None
 
     scene_dir.mkdir(parents=True, exist_ok=True)
-    path = scene_dir / f"demo_{index:02d}_{slug(preset.name.removeprefix('demo '))}.tscene.toml"
-    lines = ["schema_version = 1", f'name = "{preset.name}"', ""]
+    path = scene_dir / f"demo_{index:02d}_{slug(preset.name.removeprefix('demo '))}.tscene.json"
+    scene = {
+        "registry_version": 1,
+        "scene": {"name": preset.name},
+        "entities": [],
+    }
 
     camera_guid = 10_000 + index * 100_000 + 1
     light_guid = camera_guid + 1
     cam_matrix = camera_matrix(preset.camera)
-    write_entity(lines, camera_guid, "camera", transform_from_matrix(cam_matrix), cam_matrix)
-    lines.extend(
-        [
-            "[entities.camera]",
-            "fov_y = 1.04719755",
-            "z_near = 0.1",
-            "z_far = 10000.0",
-            "primary = true",
-            "",
-        ]
-    )
+    camera = entity_record(camera_guid, "camera", transform_from_matrix(cam_matrix))
+    camera["components"]["camera"] = {
+        "fov_y": 1.04719755,
+        "z_near": 0.1,
+        "z_far": 10000.0,
+        "primary": True,
+    }
+    scene["entities"].append(camera)
 
     light_matrix = translation_matrix(0.0, 0.0, 0.0)
-    write_entity(lines, light_guid, "directional light", transform_from_matrix(light_matrix), light_matrix)
-    lines.extend(
-        [
-            "[entities.directional_light]",
-            "direction = [0.35, 1.0, 0.4]",
-            "color = [1.0, 1.0, 1.0]",
-            "intensity = 1.0",
-            "",
-        ]
-    )
+    light = entity_record(light_guid, "directional light", transform_from_matrix(light_matrix))
+    light["components"]["directional_light"] = {
+        "direction": [0.35, 1.0, 0.4],
+        "color": [1.0, 1.0, 1.0],
+        "intensity": 1.0,
+    }
+    scene["entities"].append(light)
 
     mesh_index = 0
     for batch in available_batches:
         asset_id = asset_id_for_source(batch.source_path)
         for transform in batch.transforms:
-            translation, rotation, scale = transform
-            local_to_world = matrix_from_trs(translation, rotation, scale)
-            write_entity(lines, camera_guid + 1000 + mesh_index, f"mesh {mesh_index}", transform, local_to_world)
-            lines.extend(["[entities.mesh_renderable]", f'model = "{asset_id}"', ""])
+            mesh = entity_record(camera_guid + 1000 + mesh_index, f"mesh {mesh_index}", transform)
+            mesh["components"]["mesh_renderable"] = {"model": asset_id}
+            scene["entities"].append(mesh)
             mesh_index += 1
 
-    path.write_text("\n".join(lines))
+    scene["entities"].sort(key=lambda entity: entity["guid"])
+    path.write_text(json.dumps(scene, indent=2, sort_keys=True) + "\n")
     return path
 
 
@@ -311,6 +303,8 @@ def main() -> int:
     scene_dir.mkdir(parents=True, exist_ok=True)
     for old_scene in scene_dir.glob("demo_*.tscene.toml"):
         old_scene.unlink()
+    for old_scene in scene_dir.glob("demo_*.tscene.json"):
+        old_scene.unlink()
 
     written = []
     for i, preset in enumerate(presets()):
@@ -318,7 +312,7 @@ def main() -> int:
         if path:
             written.append(path)
             if i == 0:
-                (scene_dir / "demo_cube.tscene.toml").write_text(path.read_text())
+                (scene_dir / "demo_cube.tscene.json").write_text(path.read_text())
             print(f"wrote {path}")
     print(f"wrote {len(written)} scene asset(s)")
     return 0

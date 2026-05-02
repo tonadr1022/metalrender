@@ -21,7 +21,7 @@ struct RuntimeOptions {
 
 void usage(const char* argv0) {
   std::cout << "usage: " << argv0 << " [--scene <path>] [--quit-after-frames <n>]\n"
-            << "  --scene              Load a TOML scene asset instead of project startup_scene\n"
+            << "  --scene              Load a canonical JSON scene instead of project startup_scene\n"
             << "  --quit-after-frames  Exit after completing n frames (n >= 1)\n"
             << "  -h, --help           Show this help\n";
 }
@@ -88,9 +88,9 @@ int main(int argc, char* argv[]) {
       .enable_imgui = true,
       .quit_after_frames = options->quit_after_frames,
   });
-  teng::Result<teng::engine::SceneAssetLoadResult> loaded =
+  teng::Result<teng::engine::SceneLoadResult> loaded =
       options->scene_path.empty() ? engine.load_project_startup_scene()
-                                  : engine.load_scene_asset(options->scene_path);
+                                  : engine.load_scene(options->scene_path);
   if (!loaded) {
     std::cerr << "metalrender: failed to load scene: " << loaded.error() << '\n';
     return 1;

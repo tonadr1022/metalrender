@@ -2,7 +2,7 @@
 
 **North-star:** runtime, editor, tools, and shipped games on one architecture—genre-capable (platformers, 2D, later voxel-scale verticals), not only a meshlet demo host.
 
-**Snapshot (today):** `apps/metalrender` hosts `engine::Engine`; default renderer is `gfx::MeshletRenderer` via `RenderService`. `AssetId`, registry/DB, `AssetService`, and render-side model residency exist. **Interim** scene files (`*.tscene.toml`) load via `SceneAssetLoader` (`--scene`, `resources/project.toml` `startup_scene`). **Canonical scenes (Phase 12):** UTF-8 JSON `*.tscene.json`, registry-driven load/save — [`plans/scene_serialization_design.md`](scene_serialization_design.md). Demo data: `scripts/generate_demo_scene_assets.py`.
+**Snapshot (today):** `apps/metalrender` hosts `engine::Engine`; default renderer is `gfx::MeshletRenderer` via `RenderService`. `AssetId`, registry/DB, `AssetService`, and render-side model residency exist. Canonical scene files (`*.tscene.json`) load/save through registry-driven JSON serialization; GPU-free validation/cook/dump lives in `teng-scene-tool`. Demo data: `scripts/generate_demo_scene_assets.py`.
 
 **Forward work** will **break** narrow on-disk formats, `RenderScene` shape, and internal CMake where the plan says so—see [Compatibility](#compatibility-and-intentional-breakage).
 
@@ -94,7 +94,7 @@ Components (no GPU in serialized gameplay state) → systems → narrow services
 | Scene / ECS | `src/engine/scene/Scene.hpp`, `SceneComponents.hpp`, `SceneManager.hpp` |
 | Render boundary | `src/engine/render/RenderService.*`, `RenderScene.hpp`, `IRenderer.hpp`; design note `plans/render_service_extraction_design.md` |
 | Meshlet renderer | `src/gfx/renderer/MeshletRenderer.*` |
-| Interim scene load | `src/engine/scene/SceneAssetLoader.*` |
+| Scene serialization | `src/engine/scene/SceneSerialization.*` |
 | Build | `apps/CMakeLists.txt` (`metalrender`, `teng-shaderc`, `engine_scene_smoke`, `teng-scene-tool`); `src/CMakeLists.txt` defines static component libs, `teng_scene_tool_lib`, and the `teng_runtime` interface aggregate |
 
 ## Destination architecture
@@ -145,7 +145,7 @@ Flecs scene → extract → RenderScene → IRenderer → RenderGraph / RHI
 
 ## Interim authoring (demos)
 
-**Until Phase 12:** `scripts/generate_demo_scene_assets.py` → `resources/scenes/*.tscene.toml` → `SceneAssetLoader`. **After Phase 12:** generator emits **canonical JSON** `*.tscene.json`; runtime and tools use the registry + **`nlohmann/json`** only for scene bytes — see [`scene_serialization_design.md`](scene_serialization_design.md). Adding components: keep ECS, extraction, loader/generator, and docs aligned—or document gaps.
+`scripts/generate_demo_scene_assets.py` emits **canonical JSON** `*.tscene.json`; runtime and tools use the registry + **`nlohmann/json`** only for scene bytes — see [`scene_serialization_design.md`](scene_serialization_design.md). Adding components: keep ECS, extraction, loader/generator, and docs aligned—or document gaps.
 
 ### Scene format v1 (interim, TOML — retired by Phase 12)
 
@@ -195,7 +195,7 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 2. Phase 9 — editor exe + basics (after play-mode semantics stub).
 3. Phase 10 — 2D proof.
 
-**Smoke:** `./scripts/agent_verify.sh`; `metalrender --quit-after-frames 30`; `--scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30` once Phase 12 migrates demos *(until then, interim `*.tscene.toml` paths remain in `AGENTS.md` and `project.toml`)*. Shaders: `agent_verify` runs `teng-shaderc --all`.
+**Smoke:** `./scripts/agent_verify.sh`; `metalrender --quit-after-frames 30`; `--scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30`. Shaders: `agent_verify` runs `teng-shaderc --all`.
 
 ## Open follow-up plans
 
