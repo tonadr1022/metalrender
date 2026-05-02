@@ -358,17 +358,37 @@ Remove or replace before Phase 9 exits:
 - [ ] Python construction of canonical scene component JSON.
 - [ ] checked-in v1 demo scene resources.
 
-## Slice 1 handoff
+## Slice 1 completion
 
-The next slice should implement core diagnostics only. It should not start the registry or serializer
-refactor yet.
+Core diagnostics landed as the first Phase 9 implementation slice.
+
+Implemented code targets:
+
+- `src/core/Diagnostic.hpp`
+- `src/core/Diagnostic.cpp`
+- `tests/core/DiagnosticTests.cpp`
+- CMake/test wiring through `teng_core_tests` and the default verification script.
+
+`Result<T>` was intentionally not migrated globally. The diagnostics type is available for registry
+freeze and scene validation reports in later slices.
+
+## Slice 2 handoff
+
+The next slice should implement the registry builder/freeze boundary only. It should not switch
+`Scene`, JSON, cook, or demo generation to the registry yet.
 
 Recommended first code targets:
 
-- Add diagnostics primitives under `src/core`.
-- Add diagnostics source file to `TENG_CORE_SOURCES`.
-- Add focused smoke/unit coverage under `tests/smoke` or a new test helper.
-- Wire the diagnostics test into `engine_scene_smoke` if following the current smoke-test pattern.
+- Add a component schema/registry home under the scene/runtime libraries without introducing editor or
+  renderer dependencies.
+- Add `ComponentRegistryBuilder` and immutable `ComponentRegistry`.
+- Add module metadata registration.
+- Add a first registrar shape such as `register_core_components(ComponentRegistryBuilder&)`, even if
+  the component entries are skeletal until Slice 3 field descriptors.
+- Add stable namespaced component keys and stable cooked component ID generation.
+- Route freeze validation through `core::DiagnosticReport`.
+- Add focused tests for duplicate module/component/field detection, invalid storage policy detection,
+  deterministic ordering, and component ID collision injection.
 
-Do not migrate `Result<T>` globally in Slice 1. The diagnostics type should be available for registry
-freeze and scene validation reports in later slices.
+Retain existing `SceneSerialization.*`, `Scene::register_components()`, and v1 scene resources until
+their planned slices replace them.

@@ -202,6 +202,10 @@ schema-aware path. **Exit:** a test-only component registered outside core scene
 round-trips through JSON and cook/dump; central `ComponentCodec` and cooked bit enum identity are gone;
 runtime scene creation requires an explicit frozen registry/context. Full editor foundation is deferred.
 
+Slice 1 has landed core structured diagnostics. Slice 2 is the component registry builder/freeze
+boundary; it should feed diagnostics without yet switching scene construction, serialization, cook, or
+demo generation.
+
 ### Phase 10: Editor foundation
 
 `metalrender_editor`, editor lib, `EditorLayer`, hierarchy/inspector basics, play/stop, reload/save
@@ -231,8 +235,8 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 
 ## Immediate priorities
 
-1. Phase 9 component schema and authoring model overhaul — frozen registry, declarative schemas,
-   schema-driven JSON/cook, diagnostics, authoring transaction boundary, C++ demo generation.
+1. Phase 9 Slice 2 — component registry builder/freeze with module/component/field policy validation
+   and stable diagnostic reports.
 2. Phase 10 editor foundation — consume Phase 9 schema/document APIs instead of inventing parallel
    inspector/serialization logic.
 3. Phase 11 2D proof.

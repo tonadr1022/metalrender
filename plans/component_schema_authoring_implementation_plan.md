@@ -1,6 +1,7 @@
 # Component schema and authoring implementation plan
 
-**Status:** Phase 9 sequencing plan. Architectural contract:
+**Status:** Phase 9 sequencing plan. Slice 0 inventory and Slice 1 core diagnostics are implemented.
+Next implementation slice: Slice 2, component registry builder and freeze. Architectural contract:
 [`component_schema_authoring_model.md`](component_schema_authoring_model.md). Scene byte contract:
 [`scene_serialization_design.md`](scene_serialization_design.md).
 
@@ -14,6 +15,9 @@ Phase 9 exits only when schema-driven component registration, JSON v2, cooked v2
 authoring transactions, and C++ demo scene generation are all in place.
 
 ## Slice 0: Inventory and fixtures
+
+**Status:** Complete enough for Phase 9 continuation. Keep the inventory as a retirement checklist until
+Slice 10 cleanup.
 
 **Purpose:** Establish exact before-state and test fixtures before refactoring.
 
@@ -38,6 +42,10 @@ Validation:
 
 ## Slice 1: Core diagnostics primitives
 
+**Status:** Complete initial slice. `src/core/Diagnostic.*` now provides severity, stable string codes,
+typed paths, reports, and render helpers. `tests/core/DiagnosticTests.cpp` covers stable rendering and
+multi-diagnostic reports. Do not broaden this slice by migrating `Result<T>` call sites globally.
+
 **Purpose:** Provide structured validation output before registry/schema validation starts.
 
 Work:
@@ -53,15 +61,17 @@ Work:
 
 Exit:
 
-- Registry/scene validation can return multiple structured diagnostics.
+- Registry/scene validation has a reusable report type that can collect multiple structured diagnostics.
 - Diagnostics render stable codes and useful paths.
 
 Validation:
 
-- Unit/smoke tests for path rendering and multi-error reports.
+- Unit tests for path rendering and multi-error reports.
 - Existing `Result<T>` users remain unaffected.
 
 ## Slice 2: Component registry builder and freeze
+
+**Status:** Next slice.
 
 **Purpose:** Create the lifecycle boundary: mutable builder to immutable frozen registry.
 
@@ -71,20 +81,24 @@ Work:
 - Add immutable `ComponentRegistry`.
 - Add module metadata registration.
 - Add explicit registrar shape, e.g. `register_core_components(ComponentRegistryBuilder&)`.
-- Implement freeze validation for duplicate modules, duplicate component keys, duplicate field keys,
-  invalid policies, and deterministic ordering.
+- Implement freeze validation through `core::DiagnosticReport` for duplicate modules, duplicate
+  component keys, duplicate field keys, invalid policies, and deterministic ordering.
 - Add stable component ID generation from namespaced component keys, with collision diagnostics.
+- Keep Flecs registration, field descriptors, JSON, cook, and scene construction on the existing paths
+  until later slices consume the frozen registry.
 
 Exit:
 
 - A frozen registry can be built for core components, even before all serialization uses it.
 - Production scene creation does not have to switch yet.
+- Freeze failures return stable diagnostic codes and paths suitable for CLI/editor display.
 
 Validation:
 
 - Tests for duplicate component key, duplicate field key, invalid storage policy, and component ID
   collision injection/test hook.
 - Diagnostics use stable codes, not message matching only.
+- Existing scene smoke and serialization behavior still pass unchanged.
 
 ## Slice 3: Declarative field schema for core components
 
@@ -308,8 +322,8 @@ Validation:
 
 Recommended order:
 
-1. diagnostics
-2. registry builder/freeze
+1. diagnostics (done)
+2. registry builder/freeze (next)
 3. core schemas
 4. Scene/Flecs context integration
 5. JSON v2
