@@ -1,0 +1,102 @@
+{
+  "entities": [
+    {
+      "components": {
+        "camera": {
+          "fov_y": 1.04719755,
+          "primary": true,
+          "z_far": 10000.0,
+          "z_near": 0.1
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "translation": [
+            0.4,
+            0.4,
+            0.4
+          ]
+        }
+      },
+      "guid": 510001,
+      "name": "camera"
+    },
+    {
+      "components": {
+        "directional_light": {
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "direction": [
+            0.35,
+            1.0,
+            0.4
+          ],
+          "intensity": 1.0
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "guid": 510002,
+      "name": "directional light"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "d0099fd8-5d59-ac83-ddec-af7c4ca6c652"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "guid": 511001,
+      "name": "mesh 0"
+    }
+  ],
+  "registry_version": 1,
+  "scene": {
+    "name": "demo chessboard"
+  }
+}

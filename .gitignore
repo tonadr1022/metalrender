@@ -10,6 +10,7 @@ build-debug
 .DS_Store
 # ignore local models
 resources/models/gltf
+resources/models/gltf_*
 resources/local/
 build*
 .cache

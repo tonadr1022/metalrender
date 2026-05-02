@@ -29,7 +29,9 @@ class Camera:
 @dataclass(frozen=True)
 class ModelBatch:
     source_path: str
-    transforms: tuple[tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]], ...]
+    transforms: tuple[
+        tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]], ...
+    ]
 
 
 @dataclass(frozen=True)
@@ -48,8 +50,12 @@ def fnv1a64(data: bytes) -> str:
 
 
 def asset_id_for_source(source_path: str) -> str:
-    digest = hashlib.sha256(f"metalrender-demo-model:{source_path}".encode("utf-8")).hexdigest()
-    return f"{digest[0:8]}-{digest[8:12]}-{digest[12:16]}-{digest[16:20]}-{digest[20:32]}"
+    digest = hashlib.sha256(
+        f"metalrender-demo-model:{source_path}".encode("utf-8")
+    ).hexdigest()
+    return (
+        f"{digest[0:8]}-{digest[8:12]}-{digest[12:16]}-{digest[16:20]}-{digest[20:32]}"
+    )
 
 
 def slug(text: str) -> str:
@@ -57,7 +63,9 @@ def slug(text: str) -> str:
     return out or "scene"
 
 
-def translation_matrix(x: float, y: float, z: float, scale: float = 1.0) -> tuple[float, ...]:
+def translation_matrix(
+    x: float, y: float, z: float, scale: float = 1.0
+) -> tuple[float, ...]:
     return (
         scale,
         0.0,
@@ -78,7 +86,9 @@ def translation_matrix(x: float, y: float, z: float, scale: float = 1.0) -> tupl
     )
 
 
-def quat_from_axis_angle(axis: tuple[float, float, float], angle: float) -> tuple[float, float, float, float]:
+def quat_from_axis_angle(
+    axis: tuple[float, float, float], angle: float
+) -> tuple[float, float, float, float]:
     length = math.sqrt(axis[0] * axis[0] + axis[1] * axis[1] + axis[2] * axis[2])
     if length == 0.0:
         return (1.0, 0.0, 0.0, 0.0)
@@ -123,15 +133,26 @@ def matrix_from_trs(
     )
 
 
-def transform_from_matrix(matrix: tuple[float, ...]) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
-    sx = math.sqrt(matrix[0] * matrix[0] + matrix[1] * matrix[1] + matrix[2] * matrix[2])
-    sy = math.sqrt(matrix[4] * matrix[4] + matrix[5] * matrix[5] + matrix[6] * matrix[6])
-    sz = math.sqrt(matrix[8] * matrix[8] + matrix[9] * matrix[9] + matrix[10] * matrix[10])
+def transform_from_matrix(
+    matrix: tuple[float, ...],
+) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, ...]]:
+    sx = math.sqrt(
+        matrix[0] * matrix[0] + matrix[1] * matrix[1] + matrix[2] * matrix[2]
+    )
+    sy = math.sqrt(
+        matrix[4] * matrix[4] + matrix[5] * matrix[5] + matrix[6] * matrix[6]
+    )
+    sz = math.sqrt(
+        matrix[8] * matrix[8] + matrix[9] * matrix[9] + matrix[10] * matrix[10]
+    )
     return ((matrix[12], matrix[13], matrix[14]), (1.0, 0.0, 0.0, 0.0), (sx, sy, sz))
 
 
 def model_batch(source_path: str, matrices: Iterable[tuple[float, ...]]) -> ModelBatch:
-    return ModelBatch(source_path=source_path, transforms=tuple(transform_from_matrix(m) for m in matrices))
+    return ModelBatch(
+        source_path=source_path,
+        transforms=tuple(transform_from_matrix(m) for m in matrices),
+    )
 
 
 def cube_grid(size: int, spacing: float, scale: float) -> tuple[float, ...]:
@@ -147,7 +168,11 @@ def random_cube_transforms(count: int) -> tuple[tuple[float, ...], ...]:
     transforms = []
     for _ in range(count):
         radius = 150.0
-        pos = (rng.uniform(-radius, radius), rng.uniform(-radius, radius), rng.uniform(-radius, radius))
+        pos = (
+            rng.uniform(-radius, radius),
+            rng.uniform(-radius, radius),
+            rng.uniform(-radius, radius),
+        )
         axis = (rng.uniform(-1.0, 1.0), rng.uniform(-1.0, 1.0), rng.uniform(-1.0, 1.0))
         quat = quat_from_axis_angle(axis, rng.uniform(0.0, math.tau))
         transforms.append(matrix_from_trs(pos, quat, (5.0, 5.0, 5.0)))
@@ -156,23 +181,49 @@ def random_cube_transforms(count: int) -> tuple[tuple[float, ...], ...]:
 
 def presets() -> tuple[ScenePreset, ...]:
     cube = "models/Cube/glTF/Cube.gltf"
-    sponza = "models/gltf/Models/Sponza/glTF_ktx2/Sponza.gltf"
-    chess = "models/gltf/Models/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf"
-    suzanne = "models/gltf/Models/Suzanne/glTF_ktx2/Suzanne.gltf"
+    sponza = "models/gltf_local/Sponza/glTF_ktx2/Sponza.gltf"
+    chess = "models/gltf_local/ABeautifulGame/glTF_ktx2/ABeautifulGame.gltf"
+    suzanne = "models/gltf_local/Suzanne/glTF_ktx2/Suzanne.gltf"
     return (
-        ScenePreset("demo cube", Camera((0.0, 0.0, 3.0)), (model_batch(cube, (translation_matrix(0.0, 0.0, 0.0),)),)),
-        ScenePreset("demo cube grid", Camera((10.0, 8.0, 18.0), pitch=-25.0, yaw=225.0, move_speed=4.0), (model_batch(cube, cube_grid(4, 2.0, 1.0)),)),
-        ScenePreset("demo random cubes", Camera((0.0, 0.0, 40.0), move_speed=10.0), (model_batch(cube, random_cube_transforms(128)),)),
-        ScenePreset("demo suzanne", Camera((0.0, 0.0, 3.0)), (model_batch(suzanne, (translation_matrix(0.0, 0.0, 0.0),)),)),
-        ScenePreset("demo sponza", Camera((-6.0, 2.5, 0.0), yaw=0.0, move_speed=2.0), (model_batch(sponza, (translation_matrix(0.0, 0.0, 0.0),)),)),
-        ScenePreset("demo chessboard", Camera((0.4, 0.4, 0.4), pitch=-30.0, yaw=-130.0, move_speed=0.25), (model_batch(chess, (translation_matrix(0.0, 0.0, 0.0),)),)),
+        ScenePreset(
+            "demo cube",
+            Camera((0.0, 0.0, 3.0)),
+            (model_batch(cube, (translation_matrix(0.0, 0.0, 0.0),)),),
+        ),
+        ScenePreset(
+            "demo cube grid",
+            Camera((10.0, 8.0, 18.0), pitch=-25.0, yaw=225.0, move_speed=4.0),
+            (model_batch(cube, cube_grid(4, 2.0, 1.0)),),
+        ),
+        ScenePreset(
+            "demo random cubes",
+            Camera((0.0, 0.0, 40.0), move_speed=10.0),
+            (model_batch(cube, random_cube_transforms(128)),),
+        ),
+        ScenePreset(
+            "demo suzanne",
+            Camera((0.0, 0.0, 3.0)),
+            (model_batch(suzanne, (translation_matrix(0.0, 0.0, 0.0),)),),
+        ),
+        ScenePreset(
+            "demo sponza",
+            Camera((-6.0, 2.5, 0.0), yaw=0.0, move_speed=2.0),
+            (model_batch(sponza, (translation_matrix(0.0, 0.0, 0.0),)),),
+        ),
+        ScenePreset(
+            "demo chessboard",
+            Camera((0.4, 0.4, 0.4), pitch=-30.0, yaw=-130.0, move_speed=0.25),
+            (model_batch(chess, (translation_matrix(0.0, 0.0, 0.0),)),),
+        ),
     )
 
 
 def write_sidecar(resource_dir: Path, source_path: str) -> bool:
     rel = Path(source_path)
     if rel.is_absolute() or ".." in rel.parts:
-        print(f"warning: skipping unsafe model path (must be relative, no '..'): {source_path}")
+        print(
+            f"warning: skipping unsafe model path (must be relative, no '..'): {source_path}"
+        )
         return False
     source = resource_dir / rel
     if not source.is_file():
@@ -237,11 +288,15 @@ def camera_matrix(camera: Camera) -> tuple[float, ...]:
     return translation_matrix(camera.pos[0], camera.pos[1], camera.pos[2])
 
 
-def write_scene(resource_dir: Path, scene_dir: Path, index: int, preset: ScenePreset) -> Path | None:
+def write_scene(
+    resource_dir: Path, scene_dir: Path, index: int, preset: ScenePreset
+) -> Path | None:
     available_batches = []
     for batch in preset.models:
         if not write_sidecar(resource_dir, batch.source_path):
-            print(f"warning: skipping missing model for {preset.name}: {batch.source_path}")
+            print(
+                f"warning: skipping missing model for {preset.name}: {batch.source_path}"
+            )
             continue
         available_batches.append(batch)
 
@@ -250,7 +305,10 @@ def write_scene(resource_dir: Path, scene_dir: Path, index: int, preset: ScenePr
         return None
 
     scene_dir.mkdir(parents=True, exist_ok=True)
-    path = scene_dir / f"demo_{index:02d}_{slug(preset.name.removeprefix('demo '))}.tscene.json"
+    path = (
+        scene_dir
+        / f"demo_{index:02d}_{slug(preset.name.removeprefix('demo '))}.tscene.json"
+    )
     scene = {
         "registry_version": 1,
         "scene": {"name": preset.name},
@@ -270,7 +328,9 @@ def write_scene(resource_dir: Path, scene_dir: Path, index: int, preset: ScenePr
     scene["entities"].append(camera)
 
     light_matrix = translation_matrix(0.0, 0.0, 0.0)
-    light = entity_record(light_guid, "directional light", transform_from_matrix(light_matrix))
+    light = entity_record(
+        light_guid, "directional light", transform_from_matrix(light_matrix)
+    )
     light["components"]["directional_light"] = {
         "direction": [0.35, 1.0, 0.4],
         "color": [1.0, 1.0, 1.0],
@@ -282,7 +342,9 @@ def write_scene(resource_dir: Path, scene_dir: Path, index: int, preset: ScenePr
     for batch in available_batches:
         asset_id = asset_id_for_source(batch.source_path)
         for transform in batch.transforms:
-            mesh = entity_record(camera_guid + 1000 + mesh_index, f"mesh {mesh_index}", transform)
+            mesh = entity_record(
+                camera_guid + 1000 + mesh_index, f"mesh {mesh_index}", transform
+            )
             mesh["components"]["mesh_renderable"] = {"model": asset_id}
             scene["entities"].append(mesh)
             mesh_index += 1

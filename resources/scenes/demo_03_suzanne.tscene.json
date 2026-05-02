@@ -1,0 +1,102 @@
+{
+  "entities": [
+    {
+      "components": {
+        "camera": {
+          "fov_y": 1.04719755,
+          "primary": true,
+          "z_far": 10000.0,
+          "z_near": 0.1
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            3.0
+          ]
+        }
+      },
+      "guid": 310001,
+      "name": "camera"
+    },
+    {
+      "components": {
+        "directional_light": {
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "direction": [
+            0.35,
+            1.0,
+            0.4
+          ],
+          "intensity": 1.0
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "guid": 310002,
+      "name": "directional light"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "0c619510-7fc7-aa1d-1e06-e1dcaa3b4d1e"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "guid": 311001,
+      "name": "mesh 0"
+    }
+  ],
+  "registry_version": 1,
+  "scene": {
+    "name": "demo suzanne"
+  }
+}

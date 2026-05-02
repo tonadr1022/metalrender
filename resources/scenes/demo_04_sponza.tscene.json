@@ -1,0 +1,102 @@
+{
+  "entities": [
+    {
+      "components": {
+        "camera": {
+          "fov_y": 1.04719755,
+          "primary": true,
+          "z_far": 10000.0,
+          "z_near": 0.1
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "translation": [
+            -6.0,
+            2.5,
+            0.0
+          ]
+        }
+      },
+      "guid": 410001,
+      "name": "camera"
+    },
+    {
+      "components": {
+        "directional_light": {
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "direction": [
+            0.35,
+            1.0,
+            0.4
+          ],
+          "intensity": 1.0
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "guid": 410002,
+      "name": "directional light"
+    },
+    {
+      "components": {
+        "mesh_renderable": {
+          "model": "deffc540-3fa5-09e9-9819-c724ced8ecd0"
+        },
+        "transform": {
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "guid": 411001,
+      "name": "mesh 0"
+    }
+  ],
+  "registry_version": 1,
+  "scene": {
+    "name": "demo sponza"
+  }
+}
