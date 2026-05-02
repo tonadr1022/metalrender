@@ -95,8 +95,13 @@ Exit:
 
 Validation:
 
-- Tests for duplicate component key, duplicate field key, invalid storage policy, and component ID
-  collision injection/test hook.
+- Tests for duplicate component key, duplicate field key, invalid storage policy, and related module /
+  component consistency failures.
+- Freeze implements duplicate stable-component-ID detection when two distinct keys map to the same ID;
+  no test-only collision injection hook (64-bit collisions are impractical to fabricate without heavy
+  boilerplate).
+- No dedicated registry smoke in `engine_scene_smoke` for this slice; registrar happy-path integration
+  lands when the frozen registry is consumed (Slice 4+).
 - Diagnostics use stable codes, not message matching only.
 - Existing scene smoke and serialization behavior still pass unchanged.
 
@@ -237,7 +242,6 @@ Validation:
 - Cook/dump JSON parity for core fixture.
 - Cook/dump parity for test-module component.
 - Unknown/newer component schema version rejection.
-- Component ID collision freeze test remains in registry tests.
 
 ## Slice 8: Scene authoring library and transaction boundary
 
