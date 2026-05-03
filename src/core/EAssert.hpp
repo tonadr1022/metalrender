@@ -1,7 +1,9 @@
 #pragma once
 
-#include <cstdio>
 #include <cstdlib>
+#include <format>
+#include <print>
+#include <utility>
 
 #include "core/Config.hpp"
 
@@ -20,12 +22,23 @@ namespace TENG_NAMESPACE {
 class AlwaysAssert {
  public:
   static void fail(const char* expr, const char* file, int line) {
-    std::fprintf(stderr, "Assertion failed: (%s), file %s, line %d\n", expr, file, line);
+    std::println(stderr, "Assertion failed: ({}), file {}, line {}", expr, file, line);
     std::abort();
   }
 
   static void fail(const char* expr, const char* file, int line, const char* msg) {
-    std::fprintf(stderr, "Assertion failed: (%s), file %s, line %d: %s\n", expr, file, line, msg);
+    std::println(stderr, "Assertion failed: ({}), file {}, line {}: {}", expr, file, line, msg);
+    std::abort();
+  }
+
+  template <typename... Args>
+  static void fail(const char* expr,
+                   const char* file,
+                   int line,
+                   std::format_string<Args...> fmt,
+                   Args&&... args) {
+    std::print(stderr, "Assertion failed: ({}), file {}, line {}: ", expr, file, line);
+    std::println(stderr, fmt, std::forward<Args>(args)...);
     std::abort();
   }
 };

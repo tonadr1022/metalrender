@@ -21,6 +21,7 @@ TEST_CASE("freeze succeeds for empty builder", "[component_registry]") {
   CHECK(builder.try_freeze(registry, report));
   CHECK(!report.has_errors());
   CHECK(registry.components().empty());
+  CHECK(registry.modules().empty());
 }
 
 TEST_CASE("freeze detects duplicate component key", "[component_registry]") {
@@ -38,27 +39,6 @@ TEST_CASE("freeze detects duplicate component key", "[component_registry]") {
   CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.duplicate_component_key"});
 }
 
-TEST_CASE("freeze detects duplicate field key", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "teng.core.a",
-      .module_id = "teng.core",
-      .fields =
-          {
-              {.key = "x", .kind = ComponentFieldKind::I32, .authored_required = true},
-              {.key = "y", .kind = ComponentFieldKind::I32, .authored_required = true},
-              {.key = "x", .kind = ComponentFieldKind::I32, .authored_required = true},
-          },
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  REQUIRE(report.has_errors());
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.duplicate_field_key"});
-}
-
 TEST_CASE("freeze detects duplicate module registration", "[component_registry]") {
   ComponentRegistryBuilder builder;
   builder.register_module("teng.core", 1);
@@ -69,6 +49,7 @@ TEST_CASE("freeze detects duplicate module registration", "[component_registry]"
   CHECK(!builder.try_freeze(registry, report));
   REQUIRE(report.has_errors());
   CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.duplicate_module"});
+  CHECK(registry.modules().empty());
 }
 
 TEST_CASE("freeze detects module version mismatch across registrations", "[component_registry]") {
@@ -81,6 +62,7 @@ TEST_CASE("freeze detects module version mismatch across registrations", "[compo
   CHECK(!builder.try_freeze(registry, report));
   REQUIRE(report.has_errors());
   CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.module_version_mismatch"});
+  CHECK(registry.modules().empty());
 }
 
 TEST_CASE("freeze detects unknown module on component", "[component_registry]") {
@@ -94,36 +76,6 @@ TEST_CASE("freeze detects unknown module on component", "[component_registry]") 
   CHECK(!builder.try_freeze(registry, report));
   REQUIRE(report.has_errors());
   CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.unknown_module"});
-}
-
-TEST_CASE("unknown module still validates field metadata", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "game.foo.bad_fields",
-      .module_id = "game.missing",
-      .fields =
-          {
-              {.key = "", .kind = ComponentFieldKind::Bool, .authored_required = true},
-          },
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  REQUIRE(report.size() >= 2);
-  bool saw_unknown = false;
-  bool saw_invalid_key = false;
-  for (const Diagnostic& d : report.diagnostics()) {
-    if (d.code == DiagnosticCode{"schema.unknown_module"}) {
-      saw_unknown = true;
-    }
-    if (d.code == DiagnosticCode{"schema.invalid_field_key"}) {
-      saw_invalid_key = true;
-    }
-  }
-  CHECK(saw_unknown);
-  CHECK(saw_invalid_key);
 }
 
 TEST_CASE("freeze detects component module_version mismatch", "[component_registry]") {
@@ -156,6 +108,52 @@ TEST_CASE("freeze succeeds for valid single component", "[component_registry]") 
   CHECK(registry.components().front().component_key == "teng.core.transform");
   CHECK(registry.stable_component_id("teng.core.transform") ==
         stable_component_id_v1("teng.core.transform"));
+  REQUIRE(registry.modules().size() == 1);
+  CHECK(registry.modules().front().module_id == "teng.core");
+  CHECK(registry.modules().front().version == 1);
+  const FrozenModuleRecord* mod = registry.find_module("teng.core");
+  REQUIRE(mod != nullptr);
+  CHECK(mod->version == 1);
+  CHECK(registry.find_module("teng.missing") == nullptr);
+}
+
+TEST_CASE("frozen modules are sorted by module id", "[component_registry]") {
+  ComponentRegistryBuilder builder;
+  builder.register_module("teng.game", 3);
+  builder.register_module("teng.core", 1);
+  builder.register_module("teng.audio", 2);
+  builder.register_component(
+      ComponentRegistration{.component_key = "teng.core.a", .module_id = "teng.core"});
+  builder.register_component(ComponentRegistration{
+      .component_key = "teng.game.b", .module_id = "teng.game", .module_version = 3});
+  builder.register_component(ComponentRegistration{
+      .component_key = "teng.audio.c", .module_id = "teng.audio", .module_version = 2});
+
+  ComponentRegistry registry;
+  DiagnosticReport report;
+  REQUIRE(builder.try_freeze(registry, report));
+  REQUIRE(registry.modules().size() == 3);
+  CHECK(registry.modules()[0] == FrozenModuleRecord{"teng.audio", 2});
+  CHECK(registry.modules()[1] == FrozenModuleRecord{"teng.core", 1});
+  CHECK(registry.modules()[2] == FrozenModuleRecord{"teng.game", 3});
+  REQUIRE(registry.find_module("teng.game") != nullptr);
+  CHECK(registry.find_module("teng.game")->version == 3);
+  CHECK(registry.find_module("teng.core")->version == 1);
+  CHECK(registry.find_module("teng.audio")->version == 2);
+}
+
+TEST_CASE("freeze retains frozen modules when no components", "[component_registry]") {
+  ComponentRegistryBuilder builder;
+  builder.register_module("teng.core", 1);
+  builder.register_module("teng.game", 2);
+
+  ComponentRegistry registry;
+  DiagnosticReport report;
+  REQUIRE(builder.try_freeze(registry, report));
+  CHECK(registry.components().empty());
+  REQUIRE(registry.modules().size() == 2);
+  CHECK(registry.modules()[0].module_id == "teng.core");
+  CHECK(registry.modules()[1].module_id == "teng.game");
 }
 
 TEST_CASE("freeze preserves field order", "[component_registry]") {
@@ -262,199 +260,6 @@ TEST_CASE("freeze preserves default values", "[component_registry]") {
 
   REQUIRE(rec->fields[5].default_value.has_value());
   CHECK(std::get<ComponentDefaultEnum>(*rec->fields[5].default_value).key == "pro");
-}
-
-TEST_CASE("freeze rejects empty field key", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "teng.core.a",
-      .module_id = "teng.core",
-      .fields = {{.key = "", .kind = ComponentFieldKind::I32, .authored_required = true}},
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.invalid_field_key"});
-}
-
-TEST_CASE("freeze rejects invalid asset expected_kind", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "teng.core.a",
-      .module_id = "teng.core",
-      .fields = {{.key = "m",
-                  .kind = ComponentFieldKind::AssetId,
-                  .authored_required = true,
-                  .asset = ComponentAssetFieldMetadata{.expected_kind = "Model"}}},
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.invalid_asset_field_metadata"});
-}
-
-TEST_CASE("freeze rejects asset metadata on non-asset field", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "teng.core.a",
-      .module_id = "teng.core",
-      .fields = {{.key = "v",
-                  .kind = ComponentFieldKind::Vec3,
-                  .authored_required = true,
-                  .asset = ComponentAssetFieldMetadata{.expected_kind = "model"}}},
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.invalid_asset_field_metadata"});
-}
-
-TEST_CASE("freeze rejects enum field without enum metadata", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "teng.core.a",
-      .module_id = "teng.core",
-      .fields = {{.key = "e", .kind = ComponentFieldKind::Enum, .authored_required = true}},
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.invalid_enum_metadata"});
-}
-
-TEST_CASE("freeze rejects enum metadata on non-enum field", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "teng.core.a",
-      .module_id = "teng.core",
-      .fields = {{
-          .key = "n",
-          .kind = ComponentFieldKind::I32,
-          .authored_required = true,
-          .enumeration =
-              ComponentEnumRegistration{.enum_key = "k", .values = {{.key = "a", .value = 0}}},
-      }},
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.invalid_enum_metadata"});
-}
-
-TEST_CASE("freeze rejects empty enum key", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "teng.core.a",
-      .module_id = "teng.core",
-      .fields = {{
-          .key = "e",
-          .kind = ComponentFieldKind::Enum,
-          .authored_required = true,
-          .enumeration =
-              ComponentEnumRegistration{.enum_key = "", .values = {{.key = "a", .value = 0}}},
-      }},
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.invalid_enum_metadata"});
-}
-
-TEST_CASE("freeze rejects empty enum value key", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "teng.core.a",
-      .module_id = "teng.core",
-      .fields = {{
-          .key = "e",
-          .kind = ComponentFieldKind::Enum,
-          .authored_required = true,
-          .enumeration =
-              ComponentEnumRegistration{.enum_key = "ek", .values = {{.key = "", .value = 0}}},
-      }},
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.invalid_enum_metadata"});
-}
-
-TEST_CASE("freeze rejects duplicate enum value keys", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "teng.core.a",
-      .module_id = "teng.core",
-      .fields = {{
-          .key = "e",
-          .kind = ComponentFieldKind::Enum,
-          .authored_required = true,
-          .enumeration = ComponentEnumRegistration{.enum_key = "ek",
-                                                   .values = {{.key = "dup", .value = 0},
-                                                              {.key = "dup", .value = 1}}},
-      }},
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.invalid_enum_metadata"});
-}
-
-TEST_CASE("freeze rejects duplicate enum numeric values", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "teng.core.a",
-      .module_id = "teng.core",
-      .fields = {{
-          .key = "e",
-          .kind = ComponentFieldKind::Enum,
-          .authored_required = true,
-          .enumeration =
-              ComponentEnumRegistration{
-                  .enum_key = "ek", .values = {{.key = "a", .value = 3}, {.key = "b", .value = 3}}},
-      }},
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.invalid_enum_metadata"});
-}
-
-TEST_CASE("freeze rejects enum with no values", "[component_registry]") {
-  ComponentRegistryBuilder builder;
-  builder.register_module("teng.core", 1);
-  builder.register_component(ComponentRegistration{
-      .component_key = "teng.core.a",
-      .module_id = "teng.core",
-      .fields = {{
-          .key = "e",
-          .kind = ComponentFieldKind::Enum,
-          .authored_required = true,
-          .enumeration = ComponentEnumRegistration{.enum_key = "ek", .values = {}},
-      }},
-  });
-
-  ComponentRegistry registry;
-  DiagnosticReport report;
-  CHECK(!builder.try_freeze(registry, report));
-  CHECK(report.diagnostics().front().code == DiagnosticCode{"schema.invalid_enum_metadata"});
 }
 
 namespace {

@@ -6,6 +6,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "core/EAssert.hpp"
+
 namespace TENG_NAMESPACE::core {
 
 const char* component_storage_policy_to_string(ComponentStoragePolicy policy) {
@@ -75,16 +77,6 @@ namespace {
   return path;
 }
 
-[[nodiscard]] DiagnosticPath path_components_field(std::string_view component_key,
-                                                   std::string_view field_key) {
-  DiagnosticPath path;
-  path.object_key("components")
-      .object_key(std::string{component_key})
-      .object_key("fields")
-      .object_key(std::string{field_key});
-  return path;
-}
-
 [[nodiscard]] bool is_valid_asset_expected_kind(std::string_view kind) {
   if (kind.empty()) {
     return false;
@@ -103,86 +95,64 @@ namespace {
   return true;
 }
 
-void validate_component_fields(const ComponentRegistration& component, DiagnosticReport& report) {
+void validate_component_fields(const ComponentRegistration& component) {
   const std::string_view comp_key = component.component_key;
 
   for (const ComponentFieldRegistration& field : component.fields) {
-    if (field.key.empty()) {
-      report.add_error(DiagnosticCode{"schema.invalid_field_key"},
-                       path_components_field(comp_key, field.key), "field key must be non-empty");
-    }
+    ASSERT(!field.key.empty(), "Component schema '{}' has an empty field key", comp_key);
   }
 
   if (component.fields.size() > 1) {
     std::vector<std::string> keys;
     keys.reserve(component.fields.size());
     for (const ComponentFieldRegistration& field : component.fields) {
-      if (!field.key.empty()) {
-        keys.push_back(field.key);
-      }
+      keys.push_back(field.key);
     }
     std::ranges::sort(keys);
     const auto dup = std::ranges::adjacent_find(keys);
-    if (dup != keys.end()) {
-      report.add_error(DiagnosticCode{"schema.duplicate_field_key"},
-                       path_components_field(comp_key, *dup),
-                       "duplicate field key in component schema");
-    }
+    ASSERT(dup == keys.end(), "Component schema '{}' registers duplicate field key '{}'", comp_key,
+           *dup);
   }
 
   for (const ComponentFieldRegistration& field : component.fields) {
-    const DiagnosticPath field_path = path_components_field(comp_key, field.key);
-
     if (field.asset.has_value()) {
-      if (field.kind != ComponentFieldKind::AssetId) {
-        report.add_error(DiagnosticCode{"schema.invalid_asset_field_metadata"}, field_path,
-                         "asset field metadata is only allowed on AssetId fields");
-      } else {
-        const std::string& expected = field.asset->expected_kind;
-        if (!is_valid_asset_expected_kind(expected)) {
-          report.add_error(DiagnosticCode{"schema.invalid_asset_field_metadata"}, field_path,
-                           "asset expected_kind must be a non-empty lowercase identifier");
-        }
-      }
+      ASSERT(field.kind == ComponentFieldKind::AssetId,
+             "Component schema '{}.{}' has asset metadata on a '{}' field", comp_key, field.key,
+             component_field_kind_to_string(field.kind));
+      const std::string& expected = field.asset->expected_kind;
+      ASSERT(is_valid_asset_expected_kind(expected),
+             "Component schema '{}.{}' has invalid asset expected_kind '{}'", comp_key, field.key,
+             expected);
     }
 
     if (field.kind == ComponentFieldKind::Enum) {
-      if (!field.enumeration.has_value()) {
-        report.add_error(DiagnosticCode{"schema.invalid_enum_metadata"}, field_path,
-                         "Enum fields require enum metadata");
-      } else {
-        const ComponentEnumRegistration& en = *field.enumeration;
-        if (en.enum_key.empty()) {
-          report.add_error(DiagnosticCode{"schema.invalid_enum_metadata"}, field_path,
-                           "enum_key must be non-empty");
-        }
-        if (en.values.empty()) {
-          report.add_error(DiagnosticCode{"schema.invalid_enum_metadata"}, field_path,
-                           "enum must declare at least one value");
-        }
-        std::unordered_set<std::string> value_keys;
-        std::unordered_set<int64_t> numeric_values;
-        for (const ComponentEnumValueRegistration& ev : en.values) {
-          if (ev.key.empty()) {
-            report.add_error(DiagnosticCode{"schema.invalid_enum_metadata"}, field_path,
-                             "enum value key must be non-empty");
-            continue;
-          }
-          const auto [it_key, ins_key] = value_keys.insert(ev.key);
-          if (!ins_key) {
-            report.add_error(DiagnosticCode{"schema.invalid_enum_metadata"}, field_path,
-                             "duplicate enum value key");
-          }
-          const auto [it_num, ins_num] = numeric_values.insert(ev.value);
-          if (!ins_num) {
-            report.add_error(DiagnosticCode{"schema.invalid_enum_metadata"}, field_path,
-                             "duplicate enum numeric value");
-          }
-        }
+      ASSERT(field.enumeration.has_value(),
+             "Component schema '{}.{}' is an enum field without enum metadata", comp_key,
+             field.key);
+
+      const ComponentEnumRegistration& en = *field.enumeration;
+      ASSERT(!en.enum_key.empty(), "Component schema '{}.{}' has an empty enum_key", comp_key,
+             field.key);
+      ASSERT(!en.values.empty(), "Component schema '{}.{}' declares an enum with no values",
+             comp_key, field.key);
+
+      std::unordered_set<std::string> value_keys;
+      std::unordered_set<int64_t> numeric_values;
+      for (const ComponentEnumValueRegistration& ev : en.values) {
+        ASSERT(!ev.key.empty(), "Component schema '{}.{}' has an enum value with an empty key",
+               comp_key, field.key);
+        const auto inserted_key = value_keys.insert(ev.key);
+        ASSERT(inserted_key.second,
+               "Component schema '{}.{}' registers duplicate enum value key '{}'", comp_key,
+               field.key, ev.key);
+        const auto inserted_number = numeric_values.insert(ev.value);
+        ASSERT(inserted_number.second,
+               "Component schema '{}.{}' registers duplicate enum numeric value {}", comp_key,
+               field.key, ev.value);
       }
     } else if (field.enumeration.has_value()) {
-      report.add_error(DiagnosticCode{"schema.invalid_enum_metadata"}, field_path,
-                       "enum metadata is only allowed on Enum fields");
+      ASSERT(false, "Component schema '{}.{}' has enum metadata on a '{}' field", comp_key,
+             field.key, component_field_kind_to_string(field.kind));
     }
   }
 }
@@ -193,6 +163,15 @@ const FrozenComponentRecord* ComponentRegistry::find(std::string_view component_
   const auto it = std::ranges::lower_bound(components_, component_key, std::less{},
                                            &FrozenComponentRecord::component_key);
   if (it == components_.end() || it->component_key != component_key) {
+    return nullptr;
+  }
+  return &*it;
+}
+
+const FrozenModuleRecord* ComponentRegistry::find_module(std::string_view module_id) const {
+  const auto it =
+      std::ranges::lower_bound(modules_, module_id, std::less{}, &FrozenModuleRecord::module_id);
+  if (it == modules_.end() || it->module_id != module_id) {
     return nullptr;
   }
   return &*it;
@@ -286,7 +265,7 @@ bool ComponentRegistryBuilder::try_freeze(ComponentRegistry& out, DiagnosticRepo
                        "component module_version does not match registered module");
     }
 
-    validate_component_fields(component, report);
+    validate_component_fields(component);
   }
 
   if (report.has_errors()) {
@@ -338,6 +317,14 @@ bool ComponentRegistryBuilder::try_freeze(ComponentRegistry& out, DiagnosticRepo
     return false;
   }
 
+  std::vector<FrozenModuleRecord> frozen_modules;
+  frozen_modules.reserve(resolved_module_version.size());
+  for (const auto& [module_id, version] : resolved_module_version) {
+    frozen_modules.push_back(FrozenModuleRecord{.module_id = module_id, .version = version});
+  }
+  std::ranges::sort(frozen_modules, {}, &FrozenModuleRecord::module_id);
+
+  out.modules_ = std::move(frozen_modules);
   out.components_ = std::move(frozen);
   return true;
 }

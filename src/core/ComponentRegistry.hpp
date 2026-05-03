@@ -132,6 +132,15 @@ struct ComponentRegistration {
   std::vector<ComponentFieldRegistration> fields;
 };
 
+struct FrozenModuleRecord {
+  std::string module_id;
+  uint32_t version{};
+
+  bool operator==(const FrozenModuleRecord& other) const {
+    return module_id == other.module_id && version == other.version;
+  }
+};
+
 struct FrozenComponentRecord {
   std::string component_key;
   std::string module_id;
@@ -150,13 +159,16 @@ class ComponentRegistry {
   ComponentRegistry() = default;
 
   [[nodiscard]] const FrozenComponentRecord* find(std::string_view component_key) const;
+  [[nodiscard]] const FrozenModuleRecord* find_module(std::string_view module_id) const;
   [[nodiscard]] std::optional<uint64_t> stable_component_id(std::string_view component_key) const;
 
+  [[nodiscard]] const std::vector<FrozenModuleRecord>& modules() const { return modules_; }
   [[nodiscard]] const std::vector<FrozenComponentRecord>& components() const { return components_; }
 
  private:
   friend class ComponentRegistryBuilder;
 
+  std::vector<FrozenModuleRecord> modules_;
   std::vector<FrozenComponentRecord> components_;
 };
 
@@ -165,8 +177,9 @@ class ComponentRegistryBuilder {
   void register_module(std::string module_id, uint32_t version);
   void register_component(ComponentRegistration component);
 
-  /// Builds a frozen registry when there are no errors. On failure, `out` is cleared and
-  /// diagnostics are appended to `report`.
+  /// Builds a frozen registry from trusted first-party/generated registrations.
+  /// Internal component field schema invariants assert; registry composition conflicts and
+  /// validation hooks append diagnostics to `report`.
   [[nodiscard]] bool try_freeze(ComponentRegistry& out, DiagnosticReport& report) const;
 
   [[nodiscard]] const std::vector<std::pair<std::string, uint32_t>>& modules() const {
