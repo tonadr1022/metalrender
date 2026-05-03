@@ -105,7 +105,7 @@ narrow services as needed → schema-derived serialization/cook/editor metadata.
 | Scene / ECS | `src/engine/scene/Scene.hpp`, `SceneComponents.hpp`, `SceneManager.hpp` |
 | Render boundary | `src/engine/render/RenderService.*`, `RenderScene.hpp`, `IRenderer.hpp`; design note `plans/render_service_extraction_design.md` |
 | Meshlet renderer | `src/gfx/renderer/MeshletRenderer.*` |
-| Component schema / authoring model | Design target `plans/component_schema_authoring_model.md`; current implementation still centralized in `src/engine/scene/SceneSerialization.*` |
+| Component schema / authoring model | Design target `plans/component_schema_authoring_model.md`; registry/Flecs split has started, while JSON/cook still run through `src/engine/scene/SceneSerialization.*` |
 | Scene serialization | v2 contract `plans/scene_serialization_design.md`; current code `src/engine/scene/SceneSerialization.*` |
 | Build | `apps/CMakeLists.txt` (`metalrender`, `teng-shaderc`, `engine_scene_smoke`, `teng-scene-tool`); `src/CMakeLists.txt` defines static component libs, `teng_scene_tool_lib`, and the `teng_runtime` interface aggregate |
 
@@ -202,16 +202,14 @@ schema-aware path. **Exit:** a test-only component registered outside core scene
 round-trips through JSON and cook/dump; central `ComponentCodec` and cooked bit enum identity are gone;
 runtime scene creation requires an explicit frozen registry/context. Full editor foundation is deferred.
 
-Slice 1 landed core structured diagnostics. Slice 2 landed the component registry builder/freeze
-boundary (`ComponentRegistry` / `ComponentRegistryBuilder`, freeze validation via `DiagnosticReport`)
-without switching scene construction, serialization, cook, or demo generation. Slice 3 landed
-declarative field schemas for core components (visibility, typed defaults, asset/enum metadata,
-validation hooks). Slice 4 landed explicit `SceneComponentContext`, context-required `Scene` /
-`SceneManager` construction, registry-driven Flecs registration, and schema/context-driven
-`Transform` / `LocalToWorld` add-on-create policy. Next Phase 9 slice is schema-driven JSON v2
-validation and serialization (Slice 5). Slice 5 should account for the current Flecs-bound core
-registration entry point by adding or splitting out a registry-only schema path for serialization and
-GPU-free tools.
+Current state: core diagnostics, frozen `ComponentRegistry`, declarative core schemas, and
+registry-driven Flecs registration have landed. Schema registration is split from runtime Flecs
+bindings: `register_core_components(ComponentRegistryBuilder&)` builds the registry-only schema path,
+and `register_flecs_core_components(FlecsComponentContextBuilder&)` wires scene-runtime Flecs behavior.
+
+Next: Slice 5 replaces central JSON logic with schema-driven JSON v2. It should consume the frozen
+`ComponentRegistry` directly for serialization and GPU-free tools, and introduce durable registry
+ownership where needed instead of folding schema data back into `FlecsComponentContext`.
 
 ### Phase 10: Editor foundation
 

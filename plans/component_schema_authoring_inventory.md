@@ -1,348 +1,17 @@
 # Component schema authoring inventory
 
-**Status:** Slice 0 current-state inventory for Phase 9. Sequencing plan:
-[`component_schema_authoring_implementation_plan.md`](component_schema_authoring_implementation_plan.md).
+**Status:** Phase 9 retirement checklist. This is intentionally implementation-facing and should be
+deleted or reduced to a short historical note during Slice 10 cleanup.
 
-This document tracks the concrete code paths that the component schema and authoring overhaul must
-replace. It is intentionally implementation-facing and may be retired when Phase 9 cleanup is complete.
+Sequencing plan: [`component_schema_authoring_implementation_plan.md`](component_schema_authoring_implementation_plan.md).
 
-## Current central serialization sites
+## Purpose
 
-Primary files:
+Track old serialization/cook/demo paths that must be replaced by the component schema and authoring
+overhaul. Do not add slice diary entries here; future slices should update checklist state and remove
+retired items.
 
-- `src/engine/scene/SceneSerialization.hpp`
-- `src/engine/scene/SceneSerialization.cpp`
-
-Current public scene serialization surface:
-
-- `serialize_scene_to_json`
-- `deserialize_scene_json`
-- `save_scene_file`
-- `load_scene_file`
-- `validate_scene_file`
-- `cook_scene_to_memory`
-- `cook_scene_file`
-- `dump_cooked_scene_to_json`
-- `dump_cooked_scene_file`
-- `migrate_scene_file`
-
-Current version symbols:
-
-- `k_scene_registry_version = 1`
-- `k_scene_binary_format_version = 1`
-
-Retirement target:
-
-- Replace the single `registry_version` semantic with `scene_format_version`, module metadata,
-  per-component schema versions, and cooked `binary_format_version`.
-
-## Current component payload logic
-
-All authored component payload behavior is centralized in `SceneSerialization.cpp`.
-
-Current parse/JSON helpers:
-
-- `parse_transform`
-- `transform_json`
-- `parse_camera`
-- `camera_json`
-- `parse_directional_light`
-- `directional_light_json`
-- `parse_mesh_renderable`
-- `mesh_renderable_json`
-- `parse_sprite_renderable`
-- `sprite_renderable_json`
-- shared field helpers such as `required_float`, `required_int`, `required_bool`, `required_vec3`,
-  `required_vec4`, and `parse_asset_id_field`
-
-Current validation wrappers:
-
-- `validate_transform_payload`
-- `validate_camera_payload`
-- `validate_directional_light_payload`
-- `validate_mesh_renderable_payload`
-- `validate_sprite_renderable_payload`
-
-Current serialization callbacks:
-
-- `serialize_transform_payload`
-- `serialize_camera_payload`
-- `serialize_directional_light_payload`
-- `serialize_mesh_renderable_payload`
-- `serialize_sprite_renderable_payload`
-
-Current deserialization callbacks:
-
-- `deserialize_transform_payload`
-- `deserialize_camera_payload`
-- `deserialize_directional_light_payload`
-- `deserialize_mesh_renderable_payload`
-- `deserialize_sprite_renderable_payload`
-
-Current central codec table:
-
-- `ComponentCodec`
-- `component_codecs()`
-- `find_component_codec()`
-
-Current v1 component keys:
-
-- `transform`
-- `camera`
-- `directional_light`
-- `mesh_renderable`
-- `sprite_renderable`
-
-Phase 9 replacement:
-
-- Core component schemas with namespaced keys:
-  - `teng.core.transform`
-  - `teng.core.camera`
-  - `teng.core.directional_light`
-  - `teng.core.mesh_renderable`
-  - `teng.core.sprite_renderable`
-- Declarative fields become the source for validation, JSON, cook, defaults, and editor/tool metadata.
-- Adding a test-only component outside core must not require editing `SceneSerialization.cpp`.
-
-## Current envelope and strictness logic
-
-Current envelope parsing and validation is in:
-
-- `parse_json_file`
-- `ensure_object`
-- `ensure_allowed_keys`
-- `parse_guid`
-- `parse_entity_records`
-- `validate_envelope`
-
-Current v1 top-level keys:
-
-- `registry_version`
-- `scene`
-- `entities`
-
-Current entity keys:
-
-- `guid`
-- `name`
-- `components`
-
-Current special runtime-only rejection:
-
-- `local_to_world` is rejected by explicit string check in `validate_envelope`.
-
-Phase 9 replacement:
-
-- JSON v2 envelope from [`scene_serialization_design.md`](scene_serialization_design.md).
-- Strictness uses frozen registry lookup and structured diagnostics.
-- Runtime-only rejection comes from component storage policy, not a single hard-coded key check.
-
-## Current cooked scene sites
-
-Cooked scene implementation is centralized in `SceneSerialization.cpp`.
-
-Current fixed identity model:
-
-- `enum ComponentBit`
-- `k_transform_bit`
-- `k_camera_bit`
-- `k_directional_light_bit`
-- `k_mesh_renderable_bit`
-- `k_sprite_renderable_bit`
-- `CookEntity::component_mask`
-- `component_bit()`
-
-Current cooked component blob functions:
-
-- `write_component_blob`
-- `read_component_blob`
-- `write_transform_blob`
-- `read_transform_blob`
-- inline key branches for camera, directional light, mesh renderable, and sprite renderable
-
-Current cooked file flow:
-
-- `cook_scene_to_memory`
-- `cook_scene_file`
-- `dump_cooked_scene_to_json`
-- `dump_cooked_scene_file`
-
-Current cooked file constraints:
-
-- `k_cooked_magic`
-- `k_cooked_header_size`
-- little-endian only
-- version pair checks against `k_scene_binary_format_version` and `k_scene_registry_version`
-
-Phase 9 replacement:
-
-- Stable component IDs derived from namespaced component keys.
-- Component schema version carried per component record.
-- Field blobs encoded from schema declaration order.
-- No hand-assigned global component bit enum as the identity model.
-- Cook/dump parity must include the test-only registered component.
-
-## Current runtime scene component registration
-
-Current file:
-
-- `src/engine/scene/Scene.cpp`
-
-Current manual component list:
-
-- `Scene::register_components()`
-- `EntityGuidComponent`
-- `Name`
-- `Transform`
-- `LocalToWorld`
-- `Camera`
-- `FpsCameraController`
-- `EngineInputSnapshot`
-- `DirectionalLight`
-- `MeshRenderable`
-- `SpriteRenderable`
-
-Related default-on-create behavior:
-
-- `Scene::create_entity()` always sets `EntityGuidComponent`.
-- `Scene::create_entity()` always sets `Transform`.
-- `Scene::create_entity()` always sets `LocalToWorld`.
-- `Name` is set when entity name is non-empty.
-
-Phase 9 replacement:
-
-- `Scene` and `SceneManager` require a frozen registry/context.
-- Flecs component registration is driven by the frozen registry.
-- Default-on-create policy is expressed by schema/context.
-- `EntityGuidComponent` and `Name` remain identity/document metadata, not normal authored component
-  payloads.
-
-## Current scene generation sites
-
-Primary file:
-
-- `scripts/generate_demo_scene_assets.py`
-
-Current responsibilities:
-
-- Generates demo model sidecars.
-- Deletes old `demo_*.tscene.toml`.
-- Deletes old `demo_*.tscene.json`.
-- Constructs canonical scene JSON by hand.
-- Emits `registry_version = 1`.
-- Emits short component keys:
-  - `transform`
-  - `camera`
-  - `directional_light`
-  - `mesh_renderable`
-- Writes `resources/scenes/demo_cube.tscene.json` as a copy of demo 00.
-
-Specific handwritten scene JSON helpers:
-
-- `entity_record`
-- `write_scene`
-- direct component dict construction in `write_scene`
-- `json.dumps(scene, indent=2, sort_keys=True)`
-
-Phase 9 replacement:
-
-- Python may continue non-scene asset orchestration if useful.
-- Python must not construct canonical scene component JSON.
-- Demo scenes should be generated by C++ schema-aware authoring code and saved through the canonical
-  serializer.
-
-## Current checked-in scene resources
-
-Current v1 JSON scene files:
-
-- `resources/scenes/demo_00_cube.tscene.json`
-- `resources/scenes/demo_01_cube_grid.tscene.json`
-- `resources/scenes/demo_02_random_cubes.tscene.json`
-- `resources/scenes/demo_03_suzanne.tscene.json`
-- `resources/scenes/demo_04_sponza.tscene.json`
-- `resources/scenes/demo_05_chessboard.tscene.json`
-- `resources/scenes/demo_cube.tscene.json`
-
-Current project startup reference:
-
-- `resources/project.toml` points at `resources/scenes/demo_00_cube.tscene.json`.
-
-Phase 9 replacement:
-
-- Regenerate or replace checked-in scenes as JSON v2.
-- Runtime v1 support is not required.
-- Keep project startup scene path valid after regeneration.
-
-## Current scene tool sites
-
-Primary files:
-
-- `apps/teng-scene-tool/main.cpp`
-- `src/engine/scene/SceneValidate.cpp`
-
-Current CLI commands:
-
-- `validate`
-- `migrate`
-- `cook`
-- `dump`
-
-Current CLI error model:
-
-- `Result<void>` with string rendering to stderr.
-
-Phase 9 replacement:
-
-- CLI should render structured diagnostics where validation/freeze reports provide them.
-- `migrate` remains future migration entry point, but v1 preservation is not required unless a real
-  authored-content need appears.
-- Tool remains GPU-free.
-
-## Current tests and fixtures
-
-Primary smoke target:
-
-- `engine_scene_smoke`
-
-Current scene serialization smoke:
-
-- `tests/smoke/SceneSerializationSmokeTest.cpp`
-- Builds v1 JSON text by hand in `valid_scene_text`.
-- Uses short component keys and `registry_version`.
-- Exercises:
-  - `load_scene_file`
-  - render extraction after load
-  - `save_scene_file`
-  - round-trip load
-  - `cook_scene_file`
-  - `dump_cooked_scene_file`
-  - `validate_scene_file`
-  - rejection of `local_to_world`
-
-Current generated scene assets smoke:
-
-- `tests/smoke/GeneratedSceneAssetsSmokeTest.cpp`
-- Loads:
-  - `resources/scenes/demo_00_cube.tscene.json`
-  - `resources/scenes/demo_01_cube_grid.tscene.json`
-- Checks camera/light/mesh extraction counts.
-
-Current scene foundation/render extraction smoke:
-
-- `tests/smoke/SceneSmokeTest.cpp`
-- Creates scenes/components directly through current `Scene` API.
-- Exercises default `Transform`/`LocalToWorld`, render extraction, and FPS camera system.
-
-Phase 9 replacement/additions:
-
-- Add diagnostics tests in Slice 1 (done).
-- Add registry freeze diagnostics tests in Slice 2 (done, `tests/core/ComponentRegistryTests.cpp`).
-- Update serialization smoke to JSON v2 in Slice 5.
-- Add test-only component extension proof in Slice 6.
-- Update cook/dump parity for schema-driven cooked v2 in Slice 7.
-- Update generated scene assets smoke after C++ schema-aware generation in Slice 9.
-
-## Retirement checklist
+## Active retirement checklist
 
 Remove or replace before Phase 9 exits:
 
@@ -358,41 +27,46 @@ Remove or replace before Phase 9 exits:
 - [ ] Python construction of canonical scene component JSON.
 - [ ] checked-in v1 demo scene resources.
 
-## Slice 1 completion
+## Current code to inspect
 
-Core diagnostics landed as the first Phase 9 implementation slice.
+Use this section as a starting map only. Inspect the code before implementing a slice.
 
-Implemented code targets:
+| Area | Current files / symbols | Replacement direction |
+|------|-------------------------|-----------------------|
+| Scene serialization API | `src/engine/scene/SceneSerialization.*`; `serialize_scene_to_json`, `deserialize_scene_json`, `save_scene_file`, `load_scene_file`, `validate_scene_file` | JSON v2 from frozen `ComponentRegistry` and structured diagnostics |
+| JSON component payloads | `SceneSerialization.cpp`; `ComponentCodec`, `component_codecs()`, `find_component_codec()`, per-component parse/serialize helpers | Schema field traversal using namespaced component keys |
+| JSON envelope | `registry_version`, `scene`, `entities`; hard-coded runtime-only rejection for `local_to_world` | v2 envelope from `scene_serialization_design.md`; storage-policy-driven rejection |
+| Cooked scenes | `cook_scene_to_memory`, `cook_scene_file`, `dump_cooked_scene_to_json`, `dump_cooked_scene_file`; `ComponentBit`, component masks, fixed key branches | Stable component IDs from schema keys; schema-versioned field blobs |
+| Runtime Flecs registration | `src/engine/scene/SceneComponentContext.*`, `CoreComponentRegistrar.*`, `Scene.*`, `SceneManager.*` | Already split: schema registration via `ComponentRegistry`, Flecs bindings via `FlecsComponentContext` |
+| Demo generation | `scripts/generate_demo_scene_assets.py` writes canonical scene JSON by hand | C++ schema-aware authoring/generation path; Python only for non-scene orchestration if useful |
+| Checked-in scenes | `resources/scenes/*.tscene.json`, especially demo scenes and `resources/project.toml` startup reference | Regenerate as JSON v2; runtime v1 compatibility is not required |
+| Scene tool | `apps/teng-scene-tool/main.cpp`, `src/engine/scene/SceneValidate.cpp` | GPU-free validate/canonicalize/migrate/cook/dump using schema diagnostics |
+| Smoke tests | `tests/smoke/SceneSerializationSmokeTest.cpp`, `GeneratedSceneAssetsSmokeTest.cpp`, `SceneSmokeTest.cpp` | Update to JSON v2, schema cook/dump, and C++ generated scene assets |
 
-- `src/core/Diagnostic.hpp`
-- `src/core/Diagnostic.cpp`
-- `tests/core/DiagnosticTests.cpp`
-- CMake/test wiring through `teng_core_tests` and the default verification script.
+## Current v1 authored component keys
 
-`Result<T>` was intentionally not migrated globally. The diagnostics type is available for registry
-freeze and scene validation reports in later slices.
+Short keys to retire from canonical scene files:
 
-## Slice 2 completion
+- `transform`
+- `camera`
+- `directional_light`
+- `mesh_renderable`
+- `sprite_renderable`
 
-Registry builder/freeze and core registrar landed without wiring `Scene`, JSON, cook, or demo
-generation to the frozen registry.
+Canonical replacements are namespaced schema keys, e.g.:
 
-Implemented code targets:
+- `teng.core.transform`
+- `teng.core.camera`
+- `teng.core.directional_light`
+- `teng.core.mesh_renderable`
+- `teng.core.sprite_renderable`
 
-- `src/core/ComponentRegistry.hpp`, `src/core/ComponentRegistry.cpp` — builder, frozen registry,
-  `stable_component_id_v1`, freeze diagnostics (`schema.*` codes).
-- `src/engine/scene/CoreComponentRegistrar.hpp`, `src/engine/scene/CoreComponentRegistrar.cpp` —
-  `register_core_components`.
-- `tests/core/ComponentRegistryTests.cpp` — freeze failures and stable codes; deterministic stable IDs.
+## Slice 5 handoff
 
-## Slice 4 completion and Slice 5 handoff
+The registry-only core schema path exists through `register_core_components(ComponentRegistryBuilder&)`.
+Flecs bindings are isolated behind `register_flecs_core_components(FlecsComponentContextBuilder&)`.
 
-Slice 4 added registry-driven Flecs registration and an explicit scene/component context.
-`Scene` and `SceneManager` now require a frozen context, and normal entity creation applies
-`Transform` plus runtime-derived `LocalToWorld` through context `add_on_create` functions.
-
-Retain existing `SceneSerialization.*` and v1 scene resources until their planned slices replace them.
-Before or during Slice 5, split or supplement the current Flecs-bound
-`register_core_scene_component_bindings(SceneComponentContextBuilder&)` entry point with a registry-only
-schema construction path so JSON v2 validation/serialization and GPU-free tools do not have to depend on
-scene-runtime Flecs bindings.
+During Slice 5, route JSON v2 validation/serialization and GPU-free tools through the frozen
+`ComponentRegistry` directly. Runtime startup currently builds the registry before freezing
+`FlecsComponentContext`; if Slice 5 needs runtime-side schema access, give that registry explicit
+durable ownership rather than making `FlecsComponentContext` carry schema data again.
