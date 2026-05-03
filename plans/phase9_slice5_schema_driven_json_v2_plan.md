@@ -10,6 +10,10 @@ Parent plans:
 - [`component_schema_authoring_model.md`](component_schema_authoring_model.md)
 - [`scene_serialization_design.md`](scene_serialization_design.md)
 
+Execution/delegation companion:
+
+- [`phase9_slice5_agent_work_chunks.md`](phase9_slice5_agent_work_chunks.md)
+
 ## Goal
 
 Replace the current hand-maintained JSON scene component table with canonical JSON v2 driven by the
