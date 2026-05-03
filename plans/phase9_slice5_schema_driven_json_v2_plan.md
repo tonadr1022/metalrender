@@ -79,8 +79,7 @@ Slice 5 should split the responsibilities into three GPU-free pieces inside `ten
    - New files: `src/engine/scene/SceneSerializationContext.hpp` and `.cpp`, or equivalent.
    - Constructed from a frozen `ComponentRegistry`.
    - Holds registry reference plus per-component JSON/Flecs bindings keyed by namespaced component key.
-   - Validates that every non-`EditorOnly` registry component with authored/runtime scene relevance has
-     a binding when needed.
+   - Validates that every built-in `Authored` registry component has a binding when needed.
    - Does not replace `FlecsComponentContext`; it is a sibling context for load/save.
 
 3. **JSON v2 serializer**
@@ -274,7 +273,7 @@ Slice 5 should retain the frozen registry for the process lifetime:
 
 Tests and tools should use a shared helper that builds:
 
-- frozen core `ComponentRegistry`
+- frozen built-in component `ComponentRegistry`
 - `FlecsComponentContext`
 - `SceneSerializationContext`
 
@@ -347,7 +346,7 @@ Avoid adding rendering, platform, or `teng_engine_runtime` dependencies to `teng
 2. **Move schema metadata JSON export**
    - Move `serialize_schema_to_json` out of the unnamed namespace in `SceneSerialization.cpp`.
    - Put it in `ComponentSchemaJson.*` as `serialize_component_schema_to_json`.
-   - Add or update a focused test that exports core schema metadata.
+   - Add or update a focused test that exports built-in component schema metadata.
    - This is a cleanup step, not the scene JSON v2 implementation.
 
 3. **Add serialization context and typed bindings**
@@ -398,7 +397,7 @@ Avoid adding rendering, platform, or `teng_engine_runtime` dependencies to `teng
 
 Add or update tests for:
 
-- Core JSON v2 round trip with `Transform`, `Camera`, `DirectionalLight`, `MeshRenderable`, and
+- Built-in JSON v2 round trip with `Transform`, `Camera`, `DirectionalLight`, `MeshRenderable`, and
   `SpriteRenderable`.
 - Strict v1 rejection: `registry_version` files fail runtime/tool load.
 - Unknown top-level key rejection.
