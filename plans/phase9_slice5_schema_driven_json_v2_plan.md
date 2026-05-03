@@ -127,6 +127,18 @@ Keep `SceneManager` focused on scene lifetime. It should retain only `FlecsCompo
 serialization APIs receive `SceneSerializationContext` explicitly. Do not introduce a broader
 `SceneRuntimeContext` in Slice 5.
 
+## Diagnostics boundary
+
+Validation and load/save errors should be **structured inside the serialization stack** (stable codes,
+paths, and `Diagnostic`-style records as in Slice 1), then **rendered to strings at the public
+boundary** where APIs still return `Result<T>` with a message. That matches
+[`component_schema_authoring_model.md`](component_schema_authoring_model.md): Phase 9 adds structured
+diagnostics without forcing every `Result` call site to migrate in Slice 5.
+
+`teng-scene-tool validate` and runtime load use the same validation pipeline; “validate through
+structured diagnostics” means the pipeline produces structured diagnostics internally, not that the
+CLI or every engine API must expose a structured diagnostic type yet.
+
 ## Component binding design
 
 Add explicit typed bindings, registered in new built-in scene serialization files:
@@ -287,7 +299,9 @@ and block Slice 6 extension tests.
 - It should build/freeze the built-in component registry in the CLI process.
 - It should build the scene serialization context without creating a window, renderer, asset service,
   or Flecs world unless the subcommand actually loads into ECS.
-- `validate` should validate JSON v2 through the frozen registry and serialization context.
+- `validate` should run the same JSON v2 validation pipeline as runtime load (frozen registry and
+  serialization context), structured internally and surfaced as human-readable diagnostics at the
+  tool boundary.
 - Remove `migrate` until there is a real migration source/target.
 - Remove `cook` and `dump` from the supported CLI surface, or leave them as commands that fail with a
   clear "cooked scenes are not supported until Phase 9 Slice 7" diagnostic. Do not preserve v1 cooked
@@ -361,8 +375,9 @@ Avoid adding rendering, platform, or `teng_engine_runtime` dependencies to `teng
    - Reject unknown fields, missing fields, unknown component keys, unsupported schema versions,
      missing/unsupported modules, unused required modules/components, and non-`Authored` payload
      components.
-   - Return structured diagnostics internally where practical; existing `Result<void>` APIs may render
-     diagnostics to strings until broader `Result` migration happens.
+   - **Structured internally, string at boundary:** build validation errors as structured diagnostics
+     inside the codec; existing `Result<void>` (and similar) APIs stringify them at the return edge until
+     a broader `Result`/API migration carries structured types through call sites.
 
 5. **Implement JSON v2 save**
    - Serialize entity metadata.
@@ -450,7 +465,8 @@ iterations, but the final slice should run the full verification command.
 Temporary scaffolding allowed:
 
 - A `SceneSerializationContext` with handwritten built-in typed bindings.
-- A rendered diagnostic bridge from structured diagnostics to `Result` strings.
+- A small diagnostic bridge that stringifies structured diagnostics for `Result` and CLI output (same
+  “structured internally, string at boundary” rule as runtime APIs).
 
 Retire by end of Slice 5:
 
@@ -486,9 +502,9 @@ Retire by future codegen/schema consolidation:
   cooked data.
 - **Object ordering with `nlohmann::json`.** Canonical human-readable ordering should use
   `ordered_json` at the output boundary. Load should not reject files only because object order differs.
-- **Diagnostics migration size.** Full structured diagnostic plumbing could expand the slice. Keep
-  stable diagnostic codes internally, but allow public `Result` string rendering if that keeps the
-  slice mergeable.
+- **Diagnostics migration size.** Carrying structured diagnostics through every public API could
+  expand the slice. Prefer stable codes and structured records inside validation; keep public `Result`
+  string rendering at the boundary until call sites migrate deliberately.
 - **Naming debt.** `register_core_components` and `src/core/ComponentRegistry.*` are not ideal long-term
   names/locations for scene component schema work. Slice 5 should avoid mixing broad naming migration
   into JSON v2 unless it becomes necessary.
@@ -516,3 +532,5 @@ Retire by future codegen/schema consolidation:
 - Runtime-only/debug components are rejected by canonical JSON v2; no debug export path in Slice 5.
 - Built-in JSON bindings live in `BuiltinSceneSerialization.*`, not `src/core`.
 - `scene_format_version` remains the top-level format version key.
+- Scene JSON validation produces structured diagnostics internally; public `Result` APIs and the scene
+  tool stringify at the boundary (aligned with the authoring model and the Slice 5 sequencing plan).

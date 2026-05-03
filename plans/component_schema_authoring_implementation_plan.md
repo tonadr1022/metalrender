@@ -54,7 +54,8 @@ Work:
   - `entities`
 - Use namespaced component keys in entity component payloads.
 - Generate complete component payloads from schema fields.
-- Validate JSON through frozen registry and structured diagnostics.
+- Validate JSON through the frozen registry using structured diagnostics **inside** the codec, with
+  existing `Result`/CLI surfaces unchanged (**string at the public boundary** until broader migration).
 - Emit canonical order: entity GUID, component key, field declaration order.
 - Reject non-authored/runtime-only components in canonical payloads based on storage policy.
 - Keep `teng-scene-tool` GPU-free.

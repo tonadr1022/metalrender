@@ -20,11 +20,16 @@ enum class ComponentStoragePolicy : uint8_t {
   EditorOnly,
 };
 
+[[nodiscard]] const char* component_storage_policy_to_string(ComponentStoragePolicy policy);
+
 enum class ComponentSchemaVisibility : uint8_t {
   Editable,
   DebugInspectable,
   Hidden,
 };
+
+[[nodiscard]] const char* component_schema_visibility_to_string(
+    ComponentSchemaVisibility visibility);
 
 [[nodiscard]] constexpr uint64_t stable_component_id_v1(std::string_view component_key) noexcept {
   constexpr uint64_t offset_basis = 14695981039346656037ULL;
@@ -51,6 +56,8 @@ enum class ComponentFieldKind : uint32_t {
   AssetId,
   Enum,
 };
+
+[[nodiscard]] const char* component_field_kind_to_string(ComponentFieldKind kind);
 
 struct ComponentDefaultVec2 {
   float x{}, y{};

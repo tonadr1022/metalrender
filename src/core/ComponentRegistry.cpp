@@ -8,6 +8,59 @@
 
 namespace TENG_NAMESPACE::core {
 
+const char* component_storage_policy_to_string(ComponentStoragePolicy policy) {
+  switch (policy) {
+    case ComponentStoragePolicy::Authored:
+      return "authored";
+    case ComponentStoragePolicy::RuntimeDerived:
+      return "runtime_derived";
+    case ComponentStoragePolicy::RuntimeSession:
+      return "runtime_session";
+    case ComponentStoragePolicy::EditorOnly:
+      return "editor_only";
+  }
+}
+
+const char* component_schema_visibility_to_string(ComponentSchemaVisibility visibility) {
+  switch (visibility) {
+    case ComponentSchemaVisibility::Editable:
+      return "editable";
+    case ComponentSchemaVisibility::DebugInspectable:
+      return "debug_inspectable";
+    case ComponentSchemaVisibility::Hidden:
+      return "hidden";
+  }
+}
+
+const char* component_field_kind_to_string(ComponentFieldKind kind) {
+  switch (kind) {
+    case ComponentFieldKind::Bool:
+      return "bool";
+    case ComponentFieldKind::I32:
+      return "i32";
+    case ComponentFieldKind::U32:
+      return "u32";
+    case ComponentFieldKind::F32:
+      return "f32";
+    case ComponentFieldKind::String:
+      return "string";
+    case ComponentFieldKind::Vec2:
+      return "vec2";
+    case ComponentFieldKind::Vec3:
+      return "vec3";
+    case ComponentFieldKind::Vec4:
+      return "vec4";
+    case ComponentFieldKind::Quat:
+      return "quat";
+    case ComponentFieldKind::Mat4:
+      return "mat4";
+    case ComponentFieldKind::AssetId:
+      return "asset_id";
+    case ComponentFieldKind::Enum:
+      return "enum";
+  }
+}
+
 namespace {
 
 [[nodiscard]] DiagnosticPath path_modules_key(std::string_view module_id) {
