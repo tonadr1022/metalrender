@@ -21,7 +21,7 @@
 #include <utility>
 #include <vector>
 
-#include "core/ComponentRegistry.hpp"
+#include "core/Diagnostic.hpp"
 #include "core/Result.hpp"
 #include "engine/scene/SceneComponents.hpp"
 
@@ -130,6 +130,12 @@ struct ComponentCodec {
 [[nodiscard]] Result<void> ensure_object(const json& value, std::string_view label) {
   if (!value.is_object()) {
     return make_unexpected(std::string(label) + " must be an object");
+  }
+  return {};
+}
+[[nodiscard]] Result<void> ensure_array(const json& value, std::string_view label) {
+  if (!value.is_array()) {
+    return make_unexpected(std::string(label) + " must be an array");
   }
   return {};
 }
@@ -849,82 +855,6 @@ void append_section(std::vector<std::byte>& out, const std::vector<std::byte>& s
   out.insert(out.end(), section.begin(), section.end());
 }
 
-[[nodiscard]] json component_field_default_value_to_json(
-    const core::ComponentFieldDefaultValue& value) {
-  return std::visit(
-      [](const auto& v) -> json {
-        using T = std::decay_t<decltype(v)>;
-        if constexpr (std::is_same_v<T, bool> || std::is_same_v<T, int64_t> ||
-                      std::is_same_v<T, uint64_t> || std::is_same_v<T, float> ||
-                      std::is_same_v<T, std::string>) {
-          return v;
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultVec2>) {
-          return json::array({v.x, v.y});
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultVec3>) {
-          return json::array({v.x, v.y, v.z});
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultVec4>) {
-          return json::array({v.x, v.y, v.z, v.w});
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultQuat>) {
-          return json::array({v.w, v.x, v.y, v.z});
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultMat4>) {
-          return json(v.elements);
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultAssetId>) {
-          return json(v.value);
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultEnum>) {
-          return json(v.key);
-        } else {
-          static_assert(sizeof(T) == 0, "unhandled ComponentFieldDefaultValue alternative");
-        }
-      },
-      value);
-}
-
-json asset_field_metadata_to_json(const core::ComponentAssetFieldMetadata& metadata) {
-  return json{{"expected_kind", metadata.expected_kind}};
-}
-
-Result<json> serialize_schema_to_json(const core::ComponentRegistry& registry) {
-  json schema = json::object();
-  schema["components"] = json::object();
-  auto& components = schema["components"];
-  for (const auto& component : registry.components()) {
-    json component_json = json::object();
-    component_json["module_id"] = component.module_id;
-    component_json["module_version"] = component.module_version;
-    component_json["schema_version"] = component.schema_version;
-    component_json["storage"] = component_storage_policy_to_string(component.storage);
-    component_json["visibility"] = component_schema_visibility_to_string(component.visibility);
-    component_json["add_on_create"] = component.add_on_create;
-    component_json["stable_id"] = component.stable_id;
-    component_json["fields"] = json::array();
-    auto& fields = component_json["fields"];
-    for (const auto& field : component.fields) {
-      json field_json = json::object();
-      field_json["key"] = field.key;
-      field_json["kind"] = component_field_kind_to_string(field.kind);
-      field_json["authored_required"] = field.authored_required;
-      if (field.default_value) {
-        field_json["default_value"] = component_field_default_value_to_json(*field.default_value);
-      }
-      field_json["asset"] = field.asset ? asset_field_metadata_to_json(*field.asset) : nullptr;
-
-      if (field.enumeration) {
-        json enum_values = json::array();
-        for (const core::ComponentEnumValueRegistration& ev : field.enumeration->values) {
-          enum_values.push_back(json{{"key", ev.key}, {"value", ev.value}});
-        }
-        field_json["enumeration"] =
-            json{{"enum_key", field.enumeration->enum_key}, {"values", std::move(enum_values)}};
-      } else {
-        field_json["enumeration"] = nullptr;
-      }
-      fields.push_back(std::move(field_json));
-    }
-    components[component.component_key] = std::move(component_json);
-  }
-  return schema;
-}
-
 }  // namespace
 
 Result<nlohmann::json> serialize_scene_to_json(const Scene& scene) {
@@ -1002,277 +932,85 @@ Result<void> validate_scene_file(const std::filesystem::path& path) {
   REQUIRED_OR_RETURN(scene_json);
   return validate_envelope(*scene_json);
 }
+namespace {
 
-Result<std::vector<std::byte>> cook_scene_to_memory(const nlohmann::json& scene_json) {
-  if (std::endian::native != std::endian::little) {
-    return make_unexpected("cooked scenes are little-endian only");
-  }
-  Result<void> validated = validate_envelope(scene_json);
-  REQUIRED_OR_RETURN(validated);
-  Result<std::vector<EntityRecord>> records = parse_entity_records(scene_json);
-  REQUIRED_OR_RETURN(records);
+using DiagnosticPath = core::DiagnosticPath;
 
-  std::vector<std::string> strings;
-  std::unordered_map<std::string, uint32_t> string_indices;
-  const uint32_t scene_name_index =
-      intern_string(strings, string_indices, scene_json["scene"]["name"].get<std::string>());
-  std::vector<CookEntity> entities;
-  std::vector<CookComponent> components;
-  std::vector<std::byte> blobs;
-  std::vector<AssetId> assets;
-  std::unordered_set<AssetId> seen_assets;
-
-  for (size_t entity_index = 0; entity_index < (*records).size(); ++entity_index) {
-    const EntityRecord& record = (*records)[entity_index];
-    CookEntity cooked_entity{.guid = record.guid,
-                             .name_index = intern_string(strings, string_indices, record.name),
-                             .component_mask = 0};
-    for (const auto& [key, payload] : record.components.items()) {
-      const uint32_t key_index = intern_string(strings, string_indices, key);
-      const uint64_t offset = blobs.size();
-      write_component_blob(blobs, key, payload);
-      cooked_entity.component_mask |= component_bit(key);
-      components.push_back(CookComponent{.entity_index = static_cast<uint32_t>(entity_index),
-                                         .key_index = key_index,
-                                         .blob_offset = offset,
-                                         .blob_size = blobs.size() - offset});
-      if (key == "mesh_renderable") {
-        const MeshRenderable mesh = *parse_mesh_renderable(payload);
-        if (!seen_assets.contains(mesh.model)) {
-          seen_assets.insert(mesh.model);
-          assets.push_back(mesh.model);
-        }
-      } else if (key == "sprite_renderable") {
-        const SpriteRenderable sprite = *parse_sprite_renderable(payload);
-        if (!seen_assets.contains(sprite.texture)) {
-          seen_assets.insert(sprite.texture);
-          assets.push_back(sprite.texture);
-        }
-      }
-    }
-    entities.push_back(cooked_entity);
-  }
-  std::ranges::sort(assets, [](AssetId a, AssetId b) { return a < b; });
-
-  std::vector<std::byte> string_section;
-  for (const std::string& text : strings) {
-    write_u32(string_section, static_cast<uint32_t>(text.size()));
-    string_section.insert(string_section.end(), reinterpret_cast<const std::byte*>(text.data()),
-                          reinterpret_cast<const std::byte*>(text.data() + text.size()));
-  }
-
-  std::vector<std::byte> asset_section;
-  for (const AssetId asset : assets) {
-    write_asset_id(asset_section, asset);
-  }
-
-  std::vector<std::byte> entity_section;
-  for (const CookEntity& entity : entities) {
-    write_u64(entity_section, entity.guid.value);
-    write_u32(entity_section, entity.name_index);
-    write_u32(entity_section, entity.component_mask);
-  }
-
-  std::vector<std::byte> component_section;
-  for (const CookComponent& component : components) {
-    write_u32(component_section, component.entity_index);
-    write_u32(component_section, component.key_index);
-    write_u64(component_section, component.blob_offset);
-    write_u64(component_section, component.blob_size);
-  }
-
-  const uint64_t string_offset = k_cooked_header_size;
-  const uint64_t asset_offset = string_offset + string_section.size();
-  const uint64_t entity_offset = asset_offset + asset_section.size();
-  const uint64_t component_offset = entity_offset + entity_section.size();
-  const uint64_t blob_offset = component_offset + component_section.size();
-
-  std::vector<std::byte> out;
-  out.reserve(static_cast<size_t>(blob_offset) + blobs.size());
-  for (const char c : k_cooked_magic) {
-    out.push_back(static_cast<std::byte>(c));
-  }
-  write_u32(out, k_scene_binary_format_version);
-  write_u32(out, k_scene_registry_version);
-  write_u32(out, 0);
-  write_u32(out, scene_name_index);
-  write_u64(out, string_offset);
-  write_u32(out, static_cast<uint32_t>(strings.size()));
-  write_u64(out, asset_offset);
-  write_u32(out, static_cast<uint32_t>(assets.size()));
-  write_u64(out, entity_offset);
-  write_u32(out, static_cast<uint32_t>(entities.size()));
-  write_u64(out, component_offset);
-  write_u32(out, static_cast<uint32_t>(components.size()));
-  write_u64(out, blob_offset);
-  write_u64(out, static_cast<uint64_t>(blobs.size()));
-  append_section(out, string_section);
-  append_section(out, asset_section);
-  append_section(out, entity_section);
-  append_section(out, component_section);
-  append_section(out, blobs);
-  return out;
+[[nodiscard]] DiagnosticPath path_modules_key(std::string_view module_id) {
+  DiagnosticPath path;
+  path.object_key("modules").object_key(std::string{module_id});
+  return path;
 }
 
-Result<void> cook_scene_file(const std::filesystem::path& input_path,
-                             const std::filesystem::path& output_path) {
-  Result<json> scene_json = parse_json_file(input_path);
-  REQUIRED_OR_RETURN(scene_json);
-  Result<std::vector<std::byte>> bytes = cook_scene_to_memory(*scene_json);
-  REQUIRED_OR_RETURN(bytes);
-  return write_binary_file(output_path, *bytes);
+[[nodiscard]] DiagnosticPath path_components_key(std::string_view component_key) {
+  DiagnosticPath path;
+  path.object_key("components").object_key(std::string{component_key});
+  return path;
 }
 
-Result<nlohmann::json> dump_cooked_scene_to_json(std::span<const std::byte> bytes) {
-  if (bytes.size() < k_cooked_header_size) {
-    return make_unexpected("cooked scene is smaller than the header");
-  }
-  for (size_t i = 0; i < k_cooked_magic.size(); ++i) {
-    if (static_cast<char>(bytes[i]) != k_cooked_magic[i]) {
-      return make_unexpected("cooked scene has invalid magic");
-    }
-  }
-  size_t offset = k_cooked_magic.size();
-  Result<uint32_t> binary_version = read_u32(bytes, offset);
-  REQUIRED_OR_RETURN(binary_version);
-  Result<uint32_t> registry_version = read_u32(bytes, offset);
-  REQUIRED_OR_RETURN(registry_version);
-  Result<uint32_t> flags = read_u32(bytes, offset);
-  REQUIRED_OR_RETURN(flags);
-  (void)flags;
-  Result<uint32_t> scene_name_index = read_u32(bytes, offset);
-  REQUIRED_OR_RETURN(scene_name_index);
-  Result<uint64_t> string_offset = read_u64(bytes, offset);
-  REQUIRED_OR_RETURN(string_offset);
-  Result<uint32_t> string_count = read_u32(bytes, offset);
-  REQUIRED_OR_RETURN(string_count);
-  Result<uint64_t> asset_offset = read_u64(bytes, offset);
-  REQUIRED_OR_RETURN(asset_offset);
-  Result<uint32_t> asset_count = read_u32(bytes, offset);
-  REQUIRED_OR_RETURN(asset_count);
-  Result<uint64_t> entity_offset = read_u64(bytes, offset);
-  REQUIRED_OR_RETURN(entity_offset);
-  Result<uint32_t> entity_count = read_u32(bytes, offset);
-  REQUIRED_OR_RETURN(entity_count);
-  Result<uint64_t> component_offset = read_u64(bytes, offset);
-  REQUIRED_OR_RETURN(component_offset);
-  Result<uint32_t> component_count = read_u32(bytes, offset);
-  REQUIRED_OR_RETURN(component_count);
-  Result<uint64_t> blob_offset = read_u64(bytes, offset);
-  REQUIRED_OR_RETURN(blob_offset);
-  Result<uint64_t> blob_size = read_u64(bytes, offset);
-  REQUIRED_OR_RETURN(blob_size);
+}  // namespace
 
-  if (*binary_version != k_scene_binary_format_version ||
-      *registry_version != k_scene_registry_version) {
-    return make_unexpected("cooked scene version pair is not supported");
-  }
-  if (*blob_offset + *blob_size > bytes.size()) {
-    return make_unexpected("cooked scene blob section is out of bounds");
+#define REQUIRED_OR_REPORT(result, report, code, path, do_return)                 \
+  do {                                                                            \
+    if (!(result)) {                                                              \
+      (report).add_error(core::DiagnosticCode{(code)}, (path), (result).error()); \
+      if (do_return) return make_unexpected((report));                            \
+    }                                                                             \
+  } while (false)
+
+#define REQUIRED_OR_REPORT_JSON(result, report, path, do_return) \
+  REQUIRED_OR_REPORT(result, report, "scene.serialization.invalid_schema", path, do_return)
+
+Result<void, core::DiagnosticReport> validate_scene_file(
+    const SceneSerializationContext& serialization, const nlohmann::json& scene_json) {
+  core::DiagnosticReport report;
+  Result<void> result;
+
+  REQUIRED_OR_REPORT_JSON(ensure_object(scene_json, "scene JSON"), report, DiagnosticPath{}, true);
+
+  const std::string_view top_keys[] = {"scene_format_version", "schema", "scene", "entities"};
+  REQUIRED_OR_REPORT_JSON(ensure_allowed_keys(scene_json, top_keys, "scene JSON"), report,
+                          DiagnosticPath{}, true);
+  REQUIRED_OR_REPORT_JSON(ensure_object(scene_json["schema"], "schema JSON"), report,
+                          DiagnosticPath{}.object_key("schema"), true);
+  REQUIRED_OR_REPORT_JSON(ensure_object(scene_json["scene"], "scene JSON"), report,
+                          DiagnosticPath{}.object_key("scene"), true);
+  REQUIRED_OR_REPORT_JSON(ensure_array(scene_json["entities"], "entities JSON"), report,
+                          DiagnosticPath{}.object_key("entities"), true);
+
+  const auto& schema_json = scene_json["schema"];
+  if (schema_json["scene_format_version"].get<int>() != 2) {
+    report.add_error(core::DiagnosticCode{"scene.serialization.invalid_schema"},
+                     DiagnosticPath{}.object_key("scene_format_version"), "");
+    return make_unexpected(report);
   }
 
-  std::vector<std::string> strings;
-  auto string_read = static_cast<size_t>(*string_offset);
-  for (uint32_t i = 0; i < *string_count; ++i) {
-    Result<uint32_t> size = read_u32(bytes, string_read);
-    REQUIRED_OR_RETURN(size);
-    if (string_read + *size > bytes.size()) {
-      return make_unexpected("cooked scene string table is out of bounds");
-    }
-    strings.emplace_back(reinterpret_cast<const char*>(bytes.data() + string_read), *size);
-    string_read += *size;
-  }
-  if (*scene_name_index >= strings.size()) {
-    return make_unexpected("cooked scene name string index is out of range");
-  }
+  REQUIRED_OR_REPORT_JSON(ensure_object(schema_json, "schema JSON"), report, DiagnosticPath{},
+                          true);
+  REQUIRED_OR_REPORT_JSON(
+      ensure_allowed_keys(schema_json,
+                          std::initializer_list<std::string_view>{"registry_fingerprint",
+                                                                  "required_modules", "components"},
+                          "schema JSON"),
+      report, DiagnosticPath{}, true);
 
-  auto asset_read = static_cast<size_t>(*asset_offset);
-  for (uint32_t i = 0; i < *asset_count; ++i) {
-    Result<AssetId> asset = read_asset_id(bytes, asset_read);
-    REQUIRED_OR_RETURN(asset);
-  }
+  REQUIRED_OR_REPORT(
+      ensure_object(schema_json["registry_fingerprint"], "schema.registry_fingerprint"), report,
+      "scene.serialization.invalid_schema", DiagnosticPath{}, true);
 
-  struct DumpEntity {
-    EntityGuid guid;
-    uint32_t name_index;
-    uint32_t component_mask;
-    json components = json::object();
-  };
-  std::vector<DumpEntity> entities;
-  auto entity_read = static_cast<size_t>(*entity_offset);
-  for (uint32_t i = 0; i < *entity_count; ++i) {
-    Result<uint64_t> guid = read_u64(bytes, entity_read);
-    REQUIRED_OR_RETURN(guid);
-    Result<uint32_t> name_index = read_u32(bytes, entity_read);
-    REQUIRED_OR_RETURN(name_index);
-    Result<uint32_t> component_mask = read_u32(bytes, entity_read);
-    REQUIRED_OR_RETURN(component_mask);
-    if (*name_index >= strings.size()) {
-      return make_unexpected("cooked scene entity name index is out of range");
-    }
-    entities.push_back(DumpEntity{
-        .guid = EntityGuid{*guid}, .name_index = *name_index, .component_mask = *component_mask});
-  }
+  REQUIRED_OR_REPORT(ensure_object(schema_json["required_modules"], "schema.required_modules"),
+                     report, "scene.serialization.invalid_schema", DiagnosticPath{}, true);
 
-  auto component_read = static_cast<size_t>(*component_offset);
-  for (uint32_t i = 0; i < *component_count; ++i) {
-    Result<uint32_t> entity_index = read_u32(bytes, component_read);
-    REQUIRED_OR_RETURN(entity_index);
-    Result<uint32_t> key_index = read_u32(bytes, component_read);
-    REQUIRED_OR_RETURN(key_index);
-    Result<uint64_t> component_blob_offset = read_u64(bytes, component_read);
-    REQUIRED_OR_RETURN(component_blob_offset);
-    Result<uint64_t> component_blob_size = read_u64(bytes, component_read);
-    REQUIRED_OR_RETURN(component_blob_size);
-    if (*entity_index >= entities.size() || *key_index >= strings.size() ||
-        *component_blob_offset + *component_blob_size > *blob_size) {
-      return make_unexpected("cooked scene component record is out of bounds");
-    }
-    const std::string& key = strings[*key_index];
-    const auto payload_offset = static_cast<size_t>(*blob_offset + *component_blob_offset);
-    Result<json> payload = read_component_blob(
-        key, bytes.subspan(payload_offset, static_cast<size_t>(*component_blob_size)));
-    REQUIRED_OR_RETURN(payload);
-    entities[*entity_index].components[key] = *payload;
-    if ((entities[*entity_index].component_mask & component_bit(key)) == 0) {
-      return make_unexpected("cooked scene component mask does not match component records");
-    }
-  }
+  // TODO: the rest.
 
-  json root{{"registry_version", *registry_version},
-            {"scene", json{{"name", strings[*scene_name_index]}}},
-            {"entities", json::array()}};
-  std::ranges::sort(entities,
-                    [](const DumpEntity& a, const DumpEntity& b) { return a.guid < b.guid; });
-  for (const DumpEntity& entity : entities) {
-    json entity_json{{"components", entity.components}, {"guid", entity.guid.value}};
-    if (!strings[entity.name_index].empty()) {
-      entity_json["name"] = strings[entity.name_index];
-    }
-    root["entities"].push_back(std::move(entity_json));
+  if (report.has_errors()) {
+    return make_unexpected(report);
   }
-  Result<void> validated = validate_envelope(root);
-  REQUIRED_OR_RETURN(validated);
-  return root;
+  return {};
 }
 
-Result<void> dump_cooked_scene_file(const std::filesystem::path& input_path,
-                                    const std::filesystem::path& output_path) {
-  Result<std::vector<std::byte>> bytes = read_binary_file(input_path);
-  REQUIRED_OR_RETURN(bytes);
-  Result<json> scene_json = dump_cooked_scene_to_json(*bytes);
-  REQUIRED_OR_RETURN(scene_json);
-  return write_text_file(output_path, (*scene_json).dump(2) + "\n");
-}
-
-Result<void> migrate_scene_file(const std::filesystem::path& input_path,
-                                const std::filesystem::path& output_path) {
-  Result<json> scene_json = parse_json_file(input_path);
-  REQUIRED_OR_RETURN(scene_json);
-  Result<void> validated = validate_envelope(*scene_json);
-  REQUIRED_OR_RETURN(validated);
-  return write_text_file(output_path, (*scene_json).dump(2) + "\n");
-}
+#undef REQUIRED_OR_REPORT
+#undef REQUIRED_OR_REPORT_JSON
 
 }  // namespace engine
 

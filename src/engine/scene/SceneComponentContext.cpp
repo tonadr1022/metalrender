@@ -18,25 +18,14 @@ namespace {
 
 void FlecsComponentContextBuilder::register_flecs_component(
     FlecsComponentBinding flecs_component_binding) {
-  const core::FrozenComponentRecord* component =
-      registry_.find(flecs_component_binding.component_key);
-  if (!component) {
-    diagnostics_.add_error(core::DiagnosticCode{"schema.missing_component"},
-                           path_components_key(flecs_component_binding.component_key),
-                           "component not found in registry");
-    return;
-  }
-  flecs_component_register_infos_.push_back(FlecsComponentRegisterInfo{
-      .binding = flecs_component_binding,
-      .component_key = component->component_key,
-  });
+  flecs_component_bindings_.push_back(flecs_component_binding);
 }
 
 bool FlecsComponentContextBuilder::try_freeze(FlecsComponentContext& out,
                                               core::DiagnosticReport& report) const {
   std::unordered_map<std::string, FlecsComponentBinding> component_key_to_flecs_binding;
-  for (const FlecsComponentRegisterInfo& info : flecs_component_register_infos_) {
-    component_key_to_flecs_binding.emplace(info.component_key, info.binding);
+  for (const FlecsComponentBinding& binding : flecs_component_bindings_) {
+    component_key_to_flecs_binding.emplace(binding.component_key, binding);
   }
 
   bool ok = true;

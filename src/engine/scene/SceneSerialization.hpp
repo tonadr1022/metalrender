@@ -9,7 +9,13 @@
 #include "engine/scene/SceneIds.hpp"
 #include "engine/scene/SceneManager.hpp"
 
+namespace teng::core {
+class DiagnosticReport;
+}  // namespace teng::core
+
 namespace teng::engine {
+
+struct SceneSerializationContext;
 
 inline constexpr int k_scene_registry_version = 1;
 inline constexpr uint32_t k_scene_binary_format_version = 1;
@@ -25,6 +31,8 @@ struct SceneLoadResult {
 [[nodiscard]] Result<SceneLoadResult> load_scene_file(SceneManager& scenes,
                                                       const std::filesystem::path& path);
 [[nodiscard]] Result<void> validate_scene_file(const std::filesystem::path& path);
+[[nodiscard]] Result<void, core::DiagnosticReport> validate_scene_file(
+    const SceneSerializationContext& serialization, const nlohmann::json& scene_json);
 
 [[nodiscard]] Result<std::vector<std::byte>> cook_scene_to_memory(const nlohmann::json& json);
 [[nodiscard]] Result<void> cook_scene_file(const std::filesystem::path& input_path,

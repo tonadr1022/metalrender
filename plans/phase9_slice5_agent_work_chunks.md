@@ -23,59 +23,17 @@
 
 ## Chunk 1: Registry module retention
 
-**Owns:**
-
-- `src/core/ComponentRegistry.hpp`
-- `src/core/ComponentRegistry.cpp`
-- `tests/core/ComponentRegistryTests.cpp`
+Done
 
 **Goal:** Retain deterministic frozen module records in `ComponentRegistry` so JSON v2 validation and
 schema export can reason from the frozen registry instead of the builder.
 
-**Depends on:** Nothing.
-
-**Tasks:**
-
-- Add a frozen module record type, or equivalent, with module id and version.
-- Store sorted frozen module records in `ComponentRegistry`.
-- Expose deterministic `modules()` and `find_module()` APIs.
-- Preserve existing duplicate module and module version mismatch diagnostics.
-- Keep `teng_core` free of JSON dependencies.
-
-**Acceptance:**
-
-- Frozen modules are sorted by module id.
-- Lookup returns the frozen module version.
-- Existing duplicate and version mismatch behavior still fails freeze.
-- Tests cover sorting, lookup, and duplicate/version behavior.
-
 ## Chunk 2: Schema metadata JSON export
 
-**Owns:**
-
-- `src/engine/scene/ComponentSchemaJson.hpp`
-- `src/engine/scene/ComponentSchemaJson.cpp`
-- `src/engine/scene/SceneSerialization.cpp`
-- `src/CMakeLists.txt`
-- focused schema export tests
+Done
 
 **Goal:** Move the hidden schema metadata exporter out of `SceneSerialization.cpp` and make it a
 reusable scene/tool-layer operation.
-
-**Depends on:** Chunk 1.
-
-**Tasks:**
-
-- Add `serialize_component_schema_to_json(const core::ComponentRegistry&)`.
-- Move the current `serialize_schema_to_json` behavior into `ComponentSchemaJson.*`.
-- Include frozen module records in the exported schema metadata.
-- Keep canonical scene-file load/save separate from schema metadata export.
-
-**Acceptance:**
-
-- `SceneSerialization.cpp` no longer owns hidden schema-export logic.
-- `ComponentSchemaJson.*` lives in `teng_scene`.
-- Tests can export built-in schema metadata without loading or saving a scene file.
 
 ## Chunk 3: Serialization context and built-in binding skeleton
 

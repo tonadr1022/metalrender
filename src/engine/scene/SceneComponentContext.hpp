@@ -6,7 +6,6 @@
 #include <vector>
 
 #include "core/ComponentRegistry.hpp"
-#include "core/Diagnostic.hpp"
 
 namespace TENG_NAMESPACE::engine {
 
@@ -37,14 +36,8 @@ class FlecsComponentContextBuilder {
 
  private:
   const core::ComponentRegistry& registry_;
-  core::DiagnosticReport diagnostics_;
 
-  struct FlecsComponentRegisterInfo {
-    FlecsComponentBinding binding;
-    std::string component_key;
-  };
-
-  std::vector<FlecsComponentRegisterInfo> flecs_component_register_infos_;
+  std::vector<FlecsComponentBinding> flecs_component_bindings_;
 };
 
 }  // namespace TENG_NAMESPACE::engine
