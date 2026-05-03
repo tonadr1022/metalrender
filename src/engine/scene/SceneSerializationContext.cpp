@@ -5,6 +5,21 @@
 
 namespace teng::engine {
 
+const core::ComponentRegistry& SceneSerializationContext::component_registry() const {
+  ALWAYS_ASSERT(registry, "scene serialization context is missing component registry");
+  return *registry;
+}
+
+const ComponentSerializationBinding* SceneSerializationContext::find_binding(
+    std::string_view component_key) const {
+  for (const ComponentSerializationBinding& binding : component_bindings) {
+    if (binding.component_key == component_key) {
+      return &binding;
+    }
+  }
+  return nullptr;
+}
+
 void SceneSerializationContextBuilder::register_component(
     ComponentSerializationBinding component_binding) {
   component_bindings_.push_back(component_binding);
@@ -12,6 +27,7 @@ void SceneSerializationContextBuilder::register_component(
 
 SceneSerializationContext SceneSerializationContextBuilder::freeze() const {
   SceneSerializationContext context;
+  context.registry = &registry_;
   for (const ComponentSerializationBinding& binding : component_bindings_) {
     const auto* component = registry_.find(binding.component_key);
     ALWAYS_ASSERT(component, "component not found in registry for key {}", binding.component_key);

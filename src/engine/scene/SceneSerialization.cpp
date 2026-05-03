@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <array>
-#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -16,14 +15,15 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
 
+#include "core/ComponentRegistry.hpp"
 #include "core/Diagnostic.hpp"
 #include "core/Result.hpp"
 #include "engine/scene/SceneComponents.hpp"
+#include "engine/scene/SceneSerializationContext.hpp"
 
 namespace teng {
 
@@ -34,8 +34,6 @@ namespace {
 using json = nlohmann::json;
 
 constexpr uint64_t k_max_json_safe_integer = 9007199254740991ull;
-constexpr std::array<char, 8> k_cooked_magic{'T', 'S', 'C', 'N', 'C', 'O', 'O', 'K'};
-constexpr uint32_t k_cooked_header_size = 88;
 
 enum ComponentBit : uint32_t {
   k_transform_bit = 1u << 0u,
@@ -84,17 +82,6 @@ struct ComponentCodec {
   return std::string{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}};
 }
 
-[[nodiscard]] Result<std::vector<std::byte>> read_binary_file(const std::filesystem::path& path) {
-  std::ifstream in(path, std::ios::binary);
-  if (!in) {
-    return make_unexpected(io_error(path, "open"));
-  }
-  std::vector<char> chars{std::istreambuf_iterator<char>{in}, std::istreambuf_iterator<char>{}};
-  std::vector<std::byte> bytes(chars.size());
-  std::memcpy(bytes.data(), chars.data(), chars.size());
-  return bytes;
-}
-
 [[nodiscard]] Result<void> write_text_file(const std::filesystem::path& path,
                                            std::string_view text) {
   std::ofstream out(path, std::ios::binary | std::ios::trunc);
@@ -102,17 +89,6 @@ struct ComponentCodec {
     return make_unexpected(io_error(path, "write"));
   }
   out.write(text.data(), static_cast<std::streamsize>(text.size()));
-  return {};
-}
-
-[[nodiscard]] Result<void> write_binary_file(const std::filesystem::path& path,
-                                             std::span<const std::byte> bytes) {
-  std::ofstream out(path, std::ios::binary | std::ios::trunc);
-  if (!out) {
-    return make_unexpected(io_error(path, "write"));
-  }
-  out.write(reinterpret_cast<const char*>(bytes.data()),
-            static_cast<std::streamsize>(bytes.size()));
   return {};
 }
 
@@ -130,12 +106,6 @@ struct ComponentCodec {
 [[nodiscard]] Result<void> ensure_object(const json& value, std::string_view label) {
   if (!value.is_object()) {
     return make_unexpected(std::string(label) + " must be an object");
-  }
-  return {};
-}
-[[nodiscard]] Result<void> ensure_array(const json& value, std::string_view label) {
-  if (!value.is_array()) {
-    return make_unexpected(std::string(label) + " must be an array");
   }
   return {};
 }
@@ -624,237 +594,6 @@ void derive_local_to_world(Scene& scene) {
   return {};
 }
 
-void write_u32(std::vector<std::byte>& out, uint32_t value) {
-  for (uint32_t shift = 0; shift < 32; shift += 8) {
-    out.push_back(static_cast<std::byte>((value >> shift) & 0xffu));
-  }
-}
-
-void write_i32(std::vector<std::byte>& out, int value) {
-  write_u32(out, static_cast<uint32_t>(value));
-}
-
-void write_u64(std::vector<std::byte>& out, uint64_t value) {
-  for (uint32_t shift = 0; shift < 64; shift += 8) {
-    out.push_back(static_cast<std::byte>((value >> shift) & 0xffu));
-  }
-}
-
-void write_float(std::vector<std::byte>& out, float value) {
-  write_u32(out, std::bit_cast<uint32_t>(value));
-}
-
-void write_asset_id(std::vector<std::byte>& out, AssetId id) {
-  write_u64(out, id.high);
-  write_u64(out, id.low);
-}
-
-[[nodiscard]] Result<uint32_t> read_u32(std::span<const std::byte> bytes, size_t& offset) {
-  if (offset + 4 > bytes.size()) {
-    return make_unexpected("cooked scene truncated while reading u32");
-  }
-  uint32_t value{};
-  for (uint32_t shift = 0; shift < 32; shift += 8) {
-    value |= static_cast<uint32_t>(bytes[offset++]) << shift;
-  }
-  return value;
-}
-
-[[nodiscard]] Result<int> read_i32(std::span<const std::byte> bytes, size_t& offset) {
-  Result<uint32_t> value = read_u32(bytes, offset);
-  REQUIRED_OR_RETURN(value);
-  return static_cast<int>(*value);
-}
-
-[[nodiscard]] Result<uint64_t> read_u64(std::span<const std::byte> bytes, size_t& offset) {
-  if (offset + 8 > bytes.size()) {
-    return make_unexpected("cooked scene truncated while reading u64");
-  }
-  uint64_t value{};
-  for (uint32_t shift = 0; shift < 64; shift += 8) {
-    value |= static_cast<uint64_t>(bytes[offset++]) << shift;
-  }
-  return value;
-}
-
-[[nodiscard]] Result<float> read_float(std::span<const std::byte> bytes, size_t& offset) {
-  Result<uint32_t> value = read_u32(bytes, offset);
-  REQUIRED_OR_RETURN(value);
-  return std::bit_cast<float>(*value);
-}
-
-[[nodiscard]] Result<AssetId> read_asset_id(std::span<const std::byte> bytes, size_t& offset) {
-  Result<uint64_t> high = read_u64(bytes, offset);
-  REQUIRED_OR_RETURN(high);
-  Result<uint64_t> low = read_u64(bytes, offset);
-  REQUIRED_OR_RETURN(low);
-  return AssetId::from_parts(*high, *low);
-}
-
-void write_transform_blob(std::vector<std::byte>& out, const json& payload) {
-  const Transform transform = *parse_transform(payload);
-  write_float(out, transform.translation.x);
-  write_float(out, transform.translation.y);
-  write_float(out, transform.translation.z);
-  write_float(out, transform.rotation.w);
-  write_float(out, transform.rotation.x);
-  write_float(out, transform.rotation.y);
-  write_float(out, transform.rotation.z);
-  write_float(out, transform.scale.x);
-  write_float(out, transform.scale.y);
-  write_float(out, transform.scale.z);
-}
-
-[[nodiscard]] Result<json> read_transform_blob(std::span<const std::byte> bytes) {
-  size_t offset = 0;
-  Transform transform;
-  Result<float> tx = read_float(bytes, offset);
-  REQUIRED_OR_RETURN(tx);
-  Result<float> ty = read_float(bytes, offset);
-  REQUIRED_OR_RETURN(ty);
-  Result<float> tz = read_float(bytes, offset);
-  REQUIRED_OR_RETURN(tz);
-  Result<float> rw = read_float(bytes, offset);
-  REQUIRED_OR_RETURN(rw);
-  Result<float> rx = read_float(bytes, offset);
-  REQUIRED_OR_RETURN(rx);
-  Result<float> ry = read_float(bytes, offset);
-  REQUIRED_OR_RETURN(ry);
-  Result<float> rz = read_float(bytes, offset);
-  REQUIRED_OR_RETURN(rz);
-  Result<float> sx = read_float(bytes, offset);
-  REQUIRED_OR_RETURN(sx);
-  Result<float> sy = read_float(bytes, offset);
-  REQUIRED_OR_RETURN(sy);
-  Result<float> sz = read_float(bytes, offset);
-  REQUIRED_OR_RETURN(sz);
-  transform.translation = {*tx, *ty, *tz};
-  transform.rotation = {*rw, *rx, *ry, *rz};
-  transform.scale = {*sx, *sy, *sz};
-  return transform_json(transform);
-}
-
-void write_component_blob(std::vector<std::byte>& out, std::string_view key, const json& payload) {
-  if (key == "transform") {
-    write_transform_blob(out, payload);
-  } else if (key == "camera") {
-    const Camera camera = *parse_camera(payload);
-    write_float(out, camera.fov_y);
-    write_float(out, camera.z_near);
-    write_float(out, camera.z_far);
-    write_u32(out, camera.primary ? 1u : 0u);
-  } else if (key == "directional_light") {
-    const DirectionalLight light = *parse_directional_light(payload);
-    write_float(out, light.direction.x);
-    write_float(out, light.direction.y);
-    write_float(out, light.direction.z);
-    write_float(out, light.color.x);
-    write_float(out, light.color.y);
-    write_float(out, light.color.z);
-    write_float(out, light.intensity);
-  } else if (key == "mesh_renderable") {
-    const MeshRenderable mesh = *parse_mesh_renderable(payload);
-    write_asset_id(out, mesh.model);
-  } else if (key == "sprite_renderable") {
-    const SpriteRenderable sprite = *parse_sprite_renderable(payload);
-    write_asset_id(out, sprite.texture);
-    write_float(out, sprite.tint.x);
-    write_float(out, sprite.tint.y);
-    write_float(out, sprite.tint.z);
-    write_float(out, sprite.tint.w);
-    write_i32(out, sprite.sorting_layer);
-    write_i32(out, sprite.sorting_order);
-  }
-}
-
-[[nodiscard]] Result<json> read_component_blob(std::string_view key,
-                                               std::span<const std::byte> bytes) {
-  if (key == "transform") {
-    return read_transform_blob(bytes);
-  }
-  size_t offset = 0;
-  if (key == "camera") {
-    Result<float> fov_y = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(fov_y);
-    Result<float> z_near = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(z_near);
-    Result<float> z_far = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(z_far);
-    Result<uint32_t> primary = read_u32(bytes, offset);
-    REQUIRED_OR_RETURN(primary);
-    return camera_json(
-        {.fov_y = *fov_y, .z_near = *z_near, .z_far = *z_far, .primary = *primary != 0});
-  }
-  if (key == "directional_light") {
-    DirectionalLight light;
-    Result<float> dx = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(dx);
-    Result<float> dy = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(dy);
-    Result<float> dz = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(dz);
-    Result<float> cx = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(cx);
-    Result<float> cy = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(cy);
-    Result<float> cz = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(cz);
-    Result<float> intensity = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(intensity);
-    light.direction = {*dx, *dy, *dz};
-    light.color = {*cx, *cy, *cz};
-    light.intensity = *intensity;
-    return directional_light_json(light);
-  }
-  if (key == "mesh_renderable") {
-    Result<AssetId> model = read_asset_id(bytes, offset);
-    REQUIRED_OR_RETURN(model);
-    return mesh_renderable_json({.model = *model});
-  }
-  if (key == "sprite_renderable") {
-    Result<AssetId> texture = read_asset_id(bytes, offset);
-    REQUIRED_OR_RETURN(texture);
-    Result<float> r = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(r);
-    Result<float> g = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(g);
-    Result<float> b = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(b);
-    Result<float> a = read_float(bytes, offset);
-    REQUIRED_OR_RETURN(a);
-    Result<int> sorting_layer = read_i32(bytes, offset);
-    REQUIRED_OR_RETURN(sorting_layer);
-    Result<int> sorting_order = read_i32(bytes, offset);
-    REQUIRED_OR_RETURN(sorting_order);
-    return sprite_renderable_json({.texture = *texture,
-                                   .tint = {*r, *g, *b, *a},
-                                   .sorting_layer = *sorting_layer,
-                                   .sorting_order = *sorting_order});
-  }
-  return make_unexpected("cooked scene has unknown component key '" + std::string(key) + "'");
-}
-
-[[nodiscard]] uint32_t component_bit(std::string_view key) {
-  const ComponentCodec* codec = find_component_codec(key);
-  return codec ? codec->bit : 0;
-}
-
-[[nodiscard]] uint32_t intern_string(std::vector<std::string>& strings,
-                                     std::unordered_map<std::string, uint32_t>& indices,
-                                     std::string text) {
-  if (const auto it = indices.find(text); it != indices.end()) {
-    return it->second;
-  }
-  const auto index = static_cast<uint32_t>(strings.size());
-  indices.emplace(text, index);
-  strings.push_back(std::move(text));
-  return index;
-}
-
-void append_section(std::vector<std::byte>& out, const std::vector<std::byte>& section) {
-  out.insert(out.end(), section.begin(), section.end());
-}
-
 }  // namespace
 
 Result<nlohmann::json> serialize_scene_to_json(const Scene& scene) {
@@ -935,73 +674,447 @@ Result<void> validate_scene_file(const std::filesystem::path& path) {
 namespace {
 
 using DiagnosticPath = core::DiagnosticPath;
+using FieldRecord = core::ComponentFieldRegistration;
 
-[[nodiscard]] DiagnosticPath path_modules_key(std::string_view module_id) {
-  DiagnosticPath path;
-  path.object_key("modules").object_key(std::string{module_id});
+[[nodiscard]] DiagnosticPath path_with_key(DiagnosticPath path, std::string_view key) {
+  path.object_key(std::string{key});
   return path;
 }
 
-[[nodiscard]] DiagnosticPath path_components_key(std::string_view component_key) {
-  DiagnosticPath path;
-  path.object_key("components").object_key(std::string{component_key});
+[[nodiscard]] DiagnosticPath path_with_index(DiagnosticPath path, size_t index) {
+  path.array_index(index);
   return path;
+}
+
+void add_validation_error(core::DiagnosticReport& report, DiagnosticPath path,
+                          std::string message) {
+  report.add_error(core::DiagnosticCode{"scene.serialization.invalid_schema"}, std::move(path),
+                   std::move(message));
+}
+
+[[nodiscard]] bool require_object(core::DiagnosticReport& report, const json& value,
+                                  DiagnosticPath path, std::string_view label) {
+  if (value.is_object()) {
+    return true;
+  }
+  add_validation_error(report, std::move(path), std::string{label} + " must be an object");
+  return false;
+}
+
+[[nodiscard]] bool require_array(core::DiagnosticReport& report, const json& value,
+                                 DiagnosticPath path, std::string_view label) {
+  if (value.is_array()) {
+    return true;
+  }
+  add_validation_error(report, std::move(path), std::string{label} + " must be an array");
+  return false;
+}
+
+[[nodiscard]] bool require_string(core::DiagnosticReport& report, const json& value,
+                                  DiagnosticPath path, std::string_view label) {
+  if (value.is_string()) {
+    return true;
+  }
+  add_validation_error(report, std::move(path), std::string{label} + " must be a string");
+  return false;
+}
+
+[[nodiscard]] bool require_uint(core::DiagnosticReport& report, const json& value,
+                                DiagnosticPath path, std::string_view label) {
+  if (value.is_number_unsigned() || (value.is_number_integer() && value.get<int64_t>() >= 0)) {
+    return true;
+  }
+  add_validation_error(report, std::move(path),
+                       std::string{label} + " must be an unsigned integer");
+  return false;
+}
+
+[[nodiscard]] const json* find_required(core::DiagnosticReport& report, const json& object,
+                                        std::string_view key, DiagnosticPath path,
+                                        std::string_view label) {
+  const auto it = object.find(key);
+  if (it != object.end()) {
+    return &*it;
+  }
+  add_validation_error(report, std::move(path), std::string{label} + " is required");
+  return nullptr;
+}
+
+[[nodiscard]] bool is_fixed_lower_hex_guid(std::string_view text) {
+  return text.size() == 16 && std::ranges::all_of(text, [](char c) {
+           return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+         });
+}
+
+[[nodiscard]] uint32_t json_uint32_value(const json& value) {
+  if (value.is_number_unsigned()) {
+    return value.get<uint32_t>();
+  }
+  return static_cast<uint32_t>(value.get<int64_t>());
+}
+
+[[nodiscard]] bool json_unsigned_fits_u32(const json& value) {
+  if (value.is_number_unsigned()) {
+    return value.get<uint64_t>() <= UINT32_MAX;
+  }
+  return value.is_number_integer() && value.get<int64_t>() >= 0 &&
+         value.get<int64_t>() <= UINT32_MAX;
+}
+
+void validate_numeric_array(core::DiagnosticReport& report, const json& value, size_t expected_size,
+                            DiagnosticPath path, std::string_view label) {
+  if (!value.is_array() || value.size() != expected_size) {
+    add_validation_error(
+        report, std::move(path),
+        std::string{label} + " must be a " + std::to_string(expected_size) + "-number array");
+    return;
+  }
+  for (size_t i = 0; i < value.size(); ++i) {
+    if (!value[i].is_number()) {
+      add_validation_error(report, path_with_index(path, i),
+                           std::string{label} + " element must be a number");
+    }
+  }
+}
+
+void validate_field_value(core::DiagnosticReport& report, const json& value,
+                          const FieldRecord& field, DiagnosticPath path, std::string_view label) {
+  using core::ComponentFieldKind;
+  switch (field.kind) {
+    case ComponentFieldKind::Bool:
+      if (!value.is_boolean()) {
+        add_validation_error(report, std::move(path), std::string{label} + " must be a boolean");
+      }
+      return;
+    case ComponentFieldKind::I32:
+      if (!value.is_number_integer() ||
+          (value.is_number_unsigned() && value.get<uint64_t>() > INT32_MAX) ||
+          (!value.is_number_unsigned() &&
+           (value.get<int64_t>() < INT32_MIN || value.get<int64_t>() > INT32_MAX))) {
+        add_validation_error(report, std::move(path), std::string{label} + " must be an i32");
+      }
+      return;
+    case ComponentFieldKind::U32:
+      if (!json_unsigned_fits_u32(value)) {
+        add_validation_error(report, std::move(path), std::string{label} + " must be a u32");
+      }
+      return;
+    case ComponentFieldKind::F32:
+      if (!value.is_number()) {
+        add_validation_error(report, std::move(path), std::string{label} + " must be a number");
+      }
+      return;
+    case ComponentFieldKind::String:
+      if (!value.is_string()) {
+        add_validation_error(report, std::move(path), std::string{label} + " must be a string");
+      }
+      return;
+    case ComponentFieldKind::Vec2:
+      validate_numeric_array(report, value, 2, std::move(path), label);
+      return;
+    case ComponentFieldKind::Vec3:
+      validate_numeric_array(report, value, 3, std::move(path), label);
+      return;
+    case ComponentFieldKind::Vec4:
+    case ComponentFieldKind::Quat:
+      validate_numeric_array(report, value, 4, std::move(path), label);
+      return;
+    case ComponentFieldKind::Mat4:
+      validate_numeric_array(report, value, 16, std::move(path), label);
+      return;
+    case ComponentFieldKind::AssetId:
+      if (!value.is_string() || !AssetId::parse(value.get<std::string>())) {
+        add_validation_error(report, std::move(path),
+                             std::string{label} + " must be a valid AssetId string");
+      }
+      return;
+    case ComponentFieldKind::Enum: {
+      if (!value.is_string()) {
+        add_validation_error(report, std::move(path), std::string{label} + " must be an enum key");
+        return;
+      }
+      const std::string key = value.get<std::string>();
+      const bool known_value =
+          field.enumeration &&
+          std::ranges::any_of(field.enumeration->values,
+                              [&key](const auto& enum_value) { return enum_value.key == key; });
+      if (!known_value) {
+        add_validation_error(report, std::move(path),
+                             std::string{label} + " must be a known enum key");
+      }
+      return;
+    }
+  }
+}
+
+[[nodiscard]] const FieldRecord* find_field(const core::FrozenComponentRecord& component,
+                                            std::string_view key) {
+  const auto it = std::ranges::find(component.fields, key, &FieldRecord::key);
+  return it == component.fields.end() ? nullptr : &*it;
+}
+
+void validate_component_payload(core::DiagnosticReport& report,
+                                const SceneSerializationContext& serialization,
+                                const core::FrozenComponentRecord& component, const json& payload,
+                                DiagnosticPath path) {
+  if (!require_object(report, payload, path, "component payload")) {
+    return;
+  }
+
+  for (const auto& [field_key, value] : payload.items()) {
+    const FieldRecord* field = find_field(component, field_key);
+    if (!field) {
+      continue;
+    }
+    validate_field_value(report, value, *field, path_with_key(path, field_key),
+                         "component field '" + component.component_key + "." + field_key + "'");
+  }
+
+  for (const FieldRecord& field : component.fields) {
+    if (!payload.contains(field.key)) {
+      add_validation_error(report, path_with_key(path, field.key),
+                           "component '" + component.component_key +
+                               "' is missing required field '" + field.key + "'");
+    }
+  }
+
+  if (!serialization.find_binding(component.component_key)) {
+    add_validation_error(
+        report, std::move(path),
+        "component '" + component.component_key + "' does not have a JSON serialization binding");
+  }
+}
+
+struct SchemaUse {
+  std::vector<std::string> component_keys;
+  std::vector<std::string> module_ids;
+};
+
+void add_unique_sorted(std::vector<std::string>& values, std::string value) {
+  if (std::ranges::find(values, value) == values.end()) {
+    values.push_back(std::move(value));
+    std::ranges::sort(values);
+  }
+}
+
+void validate_schema_summary(core::DiagnosticReport& report,
+                             const core::ComponentRegistry& registry, const json& required_modules,
+                             const json& required_components, const SchemaUse& use) {
+  std::vector<std::string> declared_modules;
+  for (size_t i = 0; i < required_modules.size(); ++i) {
+    const json& module = required_modules[i];
+    const DiagnosticPath module_path =
+        path_with_index(DiagnosticPath{}.object_key("schema").object_key("required_modules"), i);
+    if (!require_object(report, module, module_path, "schema.required_modules[]")) {
+      continue;
+    }
+    const json* id = find_required(report, module, "id", path_with_key(module_path, "id"),
+                                   "schema.required_modules[].id");
+    const json* version =
+        find_required(report, module, "version", path_with_key(module_path, "version"),
+                      "schema.required_modules[].version");
+    if (!id || !version ||
+        !require_string(report, *id, path_with_key(module_path, "id"),
+                        "schema.required_modules[].id") ||
+        !require_uint(report, *version, path_with_key(module_path, "version"),
+                      "schema.required_modules[].version")) {
+      continue;
+    }
+
+    const std::string module_id = id->get<std::string>();
+    if (std::ranges::find(declared_modules, module_id) != declared_modules.end()) {
+      add_validation_error(report, path_with_key(module_path, "id"),
+                           "required module '" + module_id + "' is duplicated");
+    }
+    add_unique_sorted(declared_modules, module_id);
+    const core::FrozenModuleRecord* record = registry.find_module(module_id);
+    if (!record) {
+      add_validation_error(report, path_with_key(module_path, "id"),
+                           "required module '" + module_id + "' is not registered");
+    } else if (!json_unsigned_fits_u32(*version) ||
+               json_uint32_value(*version) != record->version) {
+      add_validation_error(report, path_with_key(module_path, "version"),
+                           "required module '" + module_id + "' has unsupported version");
+    }
+  }
+
+  for (const std::string& module_id : use.module_ids) {
+    if (std::ranges::find(declared_modules, module_id) == declared_modules.end()) {
+      add_validation_error(report,
+                           DiagnosticPath{}
+                               .object_key("schema")
+                               .object_key("required_modules")
+                               .object_key(module_id),
+                           "required module '" + module_id + "' is missing");
+    }
+  }
+
+  std::vector<std::string> declared_components;
+  for (const auto& [component_key, version] : required_components.items()) {
+    add_unique_sorted(declared_components, component_key);
+    const DiagnosticPath version_path = DiagnosticPath{}
+                                            .object_key("schema")
+                                            .object_key("required_components")
+                                            .object_key(component_key);
+    if (!require_uint(report, version, version_path, "schema.required_components value")) {
+      continue;
+    }
+    const core::FrozenComponentRecord* record = registry.find(component_key);
+    if (!record) {
+      add_validation_error(report, version_path,
+                           "required component '" + component_key + "' is not registered");
+    } else if (!json_unsigned_fits_u32(version) ||
+               json_uint32_value(version) != record->schema_version) {
+      add_validation_error(
+          report, version_path,
+          "required component '" + component_key + "' has unsupported schema version");
+    }
+  }
+
+  for (const std::string& component_key : use.component_keys) {
+    if (std::ranges::find(declared_components, component_key) == declared_components.end()) {
+      add_validation_error(report,
+                           DiagnosticPath{}
+                               .object_key("schema")
+                               .object_key("required_components")
+                               .object_key(component_key),
+                           "required component '" + component_key + "' is missing");
+    }
+  }
 }
 
 }  // namespace
 
-#define REQUIRED_OR_REPORT(result, report, code, path, do_return)                 \
-  do {                                                                            \
-    if (!(result)) {                                                              \
-      (report).add_error(core::DiagnosticCode{(code)}, (path), (result).error()); \
-      if (do_return) return make_unexpected((report));                            \
-    }                                                                             \
-  } while (false)
-
-#define REQUIRED_OR_REPORT_JSON(result, report, path, do_return) \
-  REQUIRED_OR_REPORT(result, report, "scene.serialization.invalid_schema", path, do_return)
-
 Result<void, core::DiagnosticReport> validate_scene_file(
     const SceneSerializationContext& serialization, const nlohmann::json& scene_json) {
   core::DiagnosticReport report;
-  Result<void> result;
+  const core::ComponentRegistry& registry = serialization.component_registry();
 
-  REQUIRED_OR_REPORT_JSON(ensure_object(scene_json, "scene JSON"), report, DiagnosticPath{}, true);
-
-  const std::string_view top_keys[] = {"scene_format_version", "schema", "scene", "entities"};
-  REQUIRED_OR_REPORT_JSON(ensure_allowed_keys(scene_json, top_keys, "scene JSON"), report,
-                          DiagnosticPath{}, true);
-  REQUIRED_OR_REPORT_JSON(ensure_object(scene_json["schema"], "schema JSON"), report,
-                          DiagnosticPath{}.object_key("schema"), true);
-  REQUIRED_OR_REPORT_JSON(ensure_object(scene_json["scene"], "scene JSON"), report,
-                          DiagnosticPath{}.object_key("scene"), true);
-  REQUIRED_OR_REPORT_JSON(ensure_array(scene_json["entities"], "entities JSON"), report,
-                          DiagnosticPath{}.object_key("entities"), true);
-
-  const auto& schema_json = scene_json["schema"];
-  if (schema_json["scene_format_version"].get<int>() != 2) {
-    report.add_error(core::DiagnosticCode{"scene.serialization.invalid_schema"},
-                     DiagnosticPath{}.object_key("scene_format_version"), "");
+  if (!require_object(report, scene_json, DiagnosticPath{}, "scene JSON")) {
     return make_unexpected(report);
   }
 
-  REQUIRED_OR_REPORT_JSON(ensure_object(schema_json, "schema JSON"), report, DiagnosticPath{},
-                          true);
-  REQUIRED_OR_REPORT_JSON(
-      ensure_allowed_keys(schema_json,
-                          std::initializer_list<std::string_view>{"registry_fingerprint",
-                                                                  "required_modules", "components"},
-                          "schema JSON"),
-      report, DiagnosticPath{}, true);
+  const json* version =
+      find_required(report, scene_json, "scene_format_version",
+                    DiagnosticPath{}.object_key("scene_format_version"), "scene_format_version");
+  if (version) {
+    if (!json_unsigned_fits_u32(*version) || json_uint32_value(*version) != 2) {
+      add_validation_error(report, DiagnosticPath{}.object_key("scene_format_version"),
+                           "scene_format_version must be 2");
+    }
+  }
 
-  REQUIRED_OR_REPORT(
-      ensure_object(schema_json["registry_fingerprint"], "schema.registry_fingerprint"), report,
-      "scene.serialization.invalid_schema", DiagnosticPath{}, true);
+  const json* schema =
+      find_required(report, scene_json, "schema", DiagnosticPath{}.object_key("schema"), "schema");
+  const json* scene =
+      find_required(report, scene_json, "scene", DiagnosticPath{}.object_key("scene"), "scene");
+  const json* entities = find_required(report, scene_json, "entities",
+                                       DiagnosticPath{}.object_key("entities"), "entities");
 
-  REQUIRED_OR_REPORT(ensure_object(schema_json["required_modules"], "schema.required_modules"),
-                     report, "scene.serialization.invalid_schema", DiagnosticPath{}, true);
+  const json* required_modules = nullptr;
+  const json* required_components = nullptr;
+  if (schema && require_object(report, *schema, DiagnosticPath{}.object_key("schema"), "schema")) {
+    required_modules =
+        find_required(report, *schema, "required_modules",
+                      DiagnosticPath{}.object_key("schema").object_key("required_modules"),
+                      "schema.required_modules");
+    required_components =
+        find_required(report, *schema, "required_components",
+                      DiagnosticPath{}.object_key("schema").object_key("required_components"),
+                      "schema.required_components");
+    if (required_modules) {
+      (void)require_array(report, *required_modules,
+                          DiagnosticPath{}.object_key("schema").object_key("required_modules"),
+                          "schema.required_modules");
+    }
+    if (required_components) {
+      (void)require_object(report, *required_components,
+                           DiagnosticPath{}.object_key("schema").object_key("required_components"),
+                           "schema.required_components");
+    }
+  }
 
-  // TODO: the rest.
+  if (scene && require_object(report, *scene, DiagnosticPath{}.object_key("scene"), "scene")) {
+    const json* name =
+        find_required(report, *scene, "name",
+                      DiagnosticPath{}.object_key("scene").object_key("name"), "scene.name");
+    if (name &&
+        require_string(report, *name, DiagnosticPath{}.object_key("scene").object_key("name"),
+                       "scene.name") &&
+        name->get<std::string>().empty()) {
+      add_validation_error(report, DiagnosticPath{}.object_key("scene").object_key("name"),
+                           "scene.name must be non-empty");
+    }
+  }
+
+  SchemaUse use;
+  std::unordered_set<std::string> seen_guids;
+  if (entities &&
+      require_array(report, *entities, DiagnosticPath{}.object_key("entities"), "entities")) {
+    for (size_t i = 0; i < entities->size(); ++i) {
+      const json& entity = (*entities)[i];
+      const DiagnosticPath entity_path = DiagnosticPath{}.object_key("entities").array_index(i);
+      if (!require_object(report, entity, entity_path, "entity")) {
+        continue;
+      }
+
+      const json* guid =
+          find_required(report, entity, "guid", path_with_key(entity_path, "guid"), "entity.guid");
+      if (guid &&
+          require_string(report, *guid, path_with_key(entity_path, "guid"), "entity.guid")) {
+        const std::string guid_text = guid->get<std::string>();
+        if (!is_fixed_lower_hex_guid(guid_text) || guid_text == "0000000000000000") {
+          add_validation_error(report, path_with_key(entity_path, "guid"),
+                               "entity.guid must be a non-zero 16-character lowercase hex string");
+        } else if (!seen_guids.insert(guid_text).second) {
+          add_validation_error(report, path_with_key(entity_path, "guid"),
+                               "entity.guid duplicates another entity");
+        }
+      }
+
+      if (const auto name = entity.find("name"); name != entity.end()) {
+        if (require_string(report, *name, path_with_key(entity_path, "name"), "entity.name") &&
+            name->get<std::string>().empty()) {
+          add_validation_error(report, path_with_key(entity_path, "name"),
+                               "entity.name must be non-empty when present");
+        }
+      }
+
+      const json* components =
+          find_required(report, entity, "components", path_with_key(entity_path, "components"),
+                        "entity.components");
+      if (!components ||
+          !require_object(report, *components, path_with_key(entity_path, "components"),
+                          "entity.components")) {
+        continue;
+      }
+
+      for (const auto& [component_key, payload] : components->items()) {
+        const DiagnosticPath component_path =
+            path_with_key(path_with_key(entity_path, "components"), component_key);
+        const core::FrozenComponentRecord* component = registry.find(component_key);
+        if (!component) {
+          add_validation_error(report, component_path,
+                               "entity component '" + component_key + "' is not registered");
+          continue;
+        }
+        if (component->storage != core::ComponentStoragePolicy::Authored) {
+          add_validation_error(report, component_path,
+                               "entity component '" + component_key + "' is not authored");
+          continue;
+        }
+
+        add_unique_sorted(use.component_keys, component->component_key);
+        add_unique_sorted(use.module_ids, component->module_id);
+        validate_component_payload(report, serialization, *component, payload, component_path);
+      }
+    }
+  }
+
+  if (required_modules && required_modules->is_array() && required_components &&
+      required_components->is_object()) {
+    validate_schema_summary(report, registry, *required_modules, *required_components, use);
+  }
 
   if (report.has_errors()) {
     return make_unexpected(report);
@@ -1009,8 +1122,41 @@ Result<void, core::DiagnosticReport> validate_scene_file(
   return {};
 }
 
-#undef REQUIRED_OR_REPORT
-#undef REQUIRED_OR_REPORT_JSON
+Result<std::vector<std::byte>> cook_scene_to_memory(const nlohmann::json& json) {
+  (void)json;
+  return make_unexpected(
+      "cooked scenes are not supported while JSON v2 serialization is being rebuilt");
+}
+
+Result<void> cook_scene_file(const std::filesystem::path& input_path,
+                             const std::filesystem::path& output_path) {
+  (void)input_path;
+  (void)output_path;
+  return make_unexpected(
+      "cooked scenes are not supported while JSON v2 serialization is being rebuilt");
+}
+
+Result<nlohmann::json> dump_cooked_scene_to_json(std::span<const std::byte> bytes) {
+  (void)bytes;
+  return make_unexpected(
+      "cooked scenes are not supported while JSON v2 serialization is being rebuilt");
+}
+
+Result<void> dump_cooked_scene_file(const std::filesystem::path& input_path,
+                                    const std::filesystem::path& output_path) {
+  (void)input_path;
+  (void)output_path;
+  return make_unexpected(
+      "cooked scenes are not supported while JSON v2 serialization is being rebuilt");
+}
+
+Result<void> migrate_scene_file(const std::filesystem::path& input_path,
+                                const std::filesystem::path& output_path) {
+  (void)input_path;
+  (void)output_path;
+  return make_unexpected(
+      "scene migration is not supported until a JSON v2 migration target exists");
+}
 
 }  // namespace engine
 

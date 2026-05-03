@@ -3,11 +3,14 @@
 #include <flecs.h>
 
 #include <nlohmann/json_fwd.hpp>
+#include <string_view>
+#include <vector>
 
 namespace teng {
 
 namespace core {
 class ComponentRegistry;
+struct FrozenComponentRecord;
 }  // namespace core
 
 namespace engine {
@@ -24,7 +27,12 @@ struct ComponentSerializationBinding {
 };
 
 struct SceneSerializationContext {
+  const core::ComponentRegistry* registry{};
   std::vector<ComponentSerializationBinding> component_bindings;
+
+  [[nodiscard]] const core::ComponentRegistry& component_registry() const;
+  [[nodiscard]] const ComponentSerializationBinding* find_binding(
+      std::string_view component_key) const;
 };
 
 class SceneSerializationContextBuilder {

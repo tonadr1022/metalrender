@@ -94,7 +94,7 @@ bool run_scene_serialization_smoke_test() {
     return false;
   }
 
-  FlecsComponentContext component_ctx = make_scene_component_context();
+  const FlecsComponentContext component_ctx = make_scene_component_context();
 
   SceneManager scenes(component_ctx);
   Result<SceneLoadResult> loaded = load_scene_file(scenes, valid_path);
@@ -135,13 +135,6 @@ bool run_scene_serialization_smoke_test() {
   Result<SceneLoadResult> round_trip_loaded = load_scene_file(round_trip_scenes, round_trip_path);
   if (!round_trip_loaded || !(*round_trip_loaded).scene ||
       !(*round_trip_loaded).scene->has_entity(EntityGuid{1003})) {
-    return false;
-  }
-
-  const std::filesystem::path cooked_path = root / "valid.tscene.bin";
-  const std::filesystem::path dumped_path = root / "dumped.tscene.json";
-  if (!cook_scene_file(valid_path, cooked_path) ||
-      !dump_cooked_scene_file(cooked_path, dumped_path) || !validate_scene_file(dumped_path)) {
     return false;
   }
 

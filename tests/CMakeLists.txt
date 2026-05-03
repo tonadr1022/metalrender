@@ -21,6 +21,7 @@ target_link_libraries(teng_core_tests PRIVATE teng_core Catch2::Catch2WithMain p
 
 add_executable(teng_engine_tests
     smoke/SceneComponentContextTests.cpp
+    smoke/SceneSerializationValidationTests.cpp
 )
 target_link_libraries(teng_engine_tests PRIVATE teng_engine_smoke Catch2::Catch2WithMain project_warnings)
 
