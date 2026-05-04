@@ -25,9 +25,12 @@ struct SceneLoadResult {
   Scene* scene{};
 };
 
-[[nodiscard]] Result<nlohmann::json> serialize_scene_to_json(const Scene& scene);
+[[nodiscard]] Result<nlohmann::ordered_json> serialize_scene_to_json(
+    const Scene& scene, const SceneSerializationContext& serialization);
 [[nodiscard]] Result<void> deserialize_scene_json(SceneManager& scenes, const nlohmann::json& json);
-[[nodiscard]] Result<void> save_scene_file(const Scene& scene, const std::filesystem::path& path);
+[[nodiscard]] Result<void> save_scene_file(const Scene& scene,
+                                           const SceneSerializationContext& serialization,
+                                           const std::filesystem::path& path);
 [[nodiscard]] Result<SceneLoadResult> load_scene_file(SceneManager& scenes,
                                                       const std::filesystem::path& path);
 [[nodiscard]] Result<void> validate_scene_file(const std::filesystem::path& path);

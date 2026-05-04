@@ -7,20 +7,24 @@
 #include <cstring>
 #include <filesystem>
 #include <flecs/addons/cpp/entity.hpp>
+#include <format>
 #include <fstream>
 #include <glm/ext/matrix_float4x4.hpp>
 #include <iterator>
 #include <nlohmann/json.hpp>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
 #include <type_traits>
 #include <unordered_set>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "core/ComponentRegistry.hpp"
 #include "core/Diagnostic.hpp"
+#include "core/EAssert.hpp"
 #include "core/Result.hpp"
 #include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/SceneSerializationContext.hpp"
@@ -594,36 +598,169 @@ void derive_local_to_world(Scene& scene) {
   return {};
 }
 
+[[nodiscard]] std::string entity_guid_lower_hex(EntityGuid guid) {
+  return std::format("{:016x}", guid.value);
+}
+
+[[nodiscard]] json field_default_to_json(const core::ComponentFieldRegistration& field) {
+  if (!field.default_value) {
+    return {nullptr};
+  }
+  return std::visit(
+      [](const auto& v) -> json {
+        using T = std::decay_t<decltype(v)>;
+        if constexpr (std::is_same_v<T, bool>) {
+          return json(v);
+        }
+        if constexpr (std::is_same_v<T, int64_t> || std::is_same_v<T, uint64_t>) {
+          return json(v);
+        }
+        if constexpr (std::is_same_v<T, float>) {
+          return json(v);
+        }
+        if constexpr (std::is_same_v<T, std::string>) {
+          return json(v);
+        }
+        if constexpr (std::is_same_v<T, core::ComponentDefaultVec2>) {
+          return json::array({v.x, v.y});
+        }
+        if constexpr (std::is_same_v<T, core::ComponentDefaultVec3>) {
+          return json::array({v.x, v.y, v.z});
+        }
+        if constexpr (std::is_same_v<T, core::ComponentDefaultVec4>) {
+          return json::array({v.x, v.y, v.z, v.w});
+        }
+        if constexpr (std::is_same_v<T, core::ComponentDefaultQuat>) {
+          return json::array({v.w, v.x, v.y, v.z});
+        }
+        if constexpr (std::is_same_v<T, core::ComponentDefaultMat4>) {
+          json elements = json::array();
+          for (const float f : v.elements) {
+            elements.push_back(f);
+          }
+          return elements;
+        }
+        if constexpr (std::is_same_v<T, core::ComponentDefaultAssetId>) {
+          return json(v.value);
+        }
+        if constexpr (std::is_same_v<T, core::ComponentDefaultEnum>) {
+          return json(v.key);
+        }
+        return {nullptr};
+      },
+      *field.default_value);
+}
+
+[[nodiscard]] nlohmann::ordered_json canonical_component_payload(
+    const core::FrozenComponentRecord& record, json binding_payload) {
+  nlohmann::ordered_json out;
+  for (const core::ComponentFieldRegistration& field : record.fields) {
+    const auto it = binding_payload.find(field.key);
+    if (it != binding_payload.end()) {
+      out[std::string{field.key}] = *it;
+    } else {
+      out[std::string{field.key}] = field_default_to_json(field);
+    }
+  }
+  return out;
+}
+
 }  // namespace
 
-Result<nlohmann::json> serialize_scene_to_json(const Scene& scene) {
-  json root{{"registry_version", k_scene_registry_version},
-            {"scene", json{{"name", scene.name()}}},
-            {"entities", json::array()}};
+Result<nlohmann::ordered_json> serialize_scene_to_json(
+    const Scene& scene, const SceneSerializationContext& serialization) {
+  using ordered_json = nlohmann::ordered_json;
+  const core::ComponentRegistry& registry = serialization.component_registry();
 
   struct SerializedEntity {
     EntityGuid guid;
-    json value;
+    ordered_json value;
   };
   std::vector<SerializedEntity> entities;
+  std::set<std::string> all_used_component_keys;
 
-  scene.world().each([&entities](flecs::entity entity, const EntityGuidComponent& guid_component) {
-    json components = json::object();
-    for (const ComponentCodec& codec : component_codecs()) {
-      codec.serialize(entity, components);
+  std::vector<const ComponentSerializationBinding*> sorted_bindings;
+  sorted_bindings.reserve(serialization.component_bindings.size());
+  for (const ComponentSerializationBinding& binding : serialization.component_bindings) {
+    sorted_bindings.push_back(&binding);
+  }
+  std::ranges::sort(sorted_bindings, {}, &ComponentSerializationBinding::component_key);
+
+  scene.world().each([&](flecs::entity entity, const EntityGuidComponent& guid_component) {
+    ordered_json components = ordered_json::object();
+
+    for (const ComponentSerializationBinding* binding : sorted_bindings) {
+      ALWAYS_ASSERT(binding->has_component_fn, "has_component_fn is required for component key {}",
+                    binding->component_key);
+      if (!binding->has_component_fn(entity) || !binding->serialize_fn) {
+        continue;
+      }
+      const core::FrozenComponentRecord* record = registry.find(binding->component_key);
+      ASSERT(record);
+      ASSERT(record->storage == core::ComponentStoragePolicy::Authored);
+      json binding_payload = binding->serialize_fn(entity);
+      const std::string component_key{binding->component_key};
+      components[component_key] = canonical_component_payload(*record, std::move(binding_payload));
+      all_used_component_keys.insert(component_key);
     }
 
-    json entity_json{{"components", std::move(components)}, {"guid", guid_component.guid.value}};
+    ordered_json entity_json;
+    entity_json["guid"] = entity_guid_lower_hex(guid_component.guid);
     if (const auto* name = entity.try_get<Name>(); name && !name->value.empty()) {
       entity_json["name"] = name->value;
     }
+    entity_json["components"] = std::move(components);
     entities.push_back(
         SerializedEntity{.guid = guid_component.guid, .value = std::move(entity_json)});
   });
 
-  std::ranges::sort(entities, [](const SerializedEntity& a, const SerializedEntity& b) {
-    return a.guid < b.guid;
-  });
+  std::ranges::sort(entities, {}, &SerializedEntity::guid);
+
+  struct ModuleRef {
+    std::string id;
+    uint32_t version{};
+  };
+  std::vector<ModuleRef> modules;
+  for (const std::string& component_key : all_used_component_keys) {
+    const core::FrozenComponentRecord* record = registry.find(component_key);
+    ASSERT(record);
+    const core::FrozenModuleRecord* module = registry.find_module(record->module_id);
+    ASSERT(module);
+    const auto existing = std::ranges::find_if(
+        modules, [&](const ModuleRef& m) { return m.id == module->module_id; });
+    if (existing == modules.end()) {
+      modules.push_back(ModuleRef{.id = module->module_id, .version = module->version});
+    }
+  }
+  std::ranges::sort(modules, {}, &ModuleRef::id);
+
+  ordered_json required_components = ordered_json::object();
+  for (const std::string& component_key : all_used_component_keys) {
+    const core::FrozenComponentRecord* record = registry.find(component_key);
+    ASSERT(record);
+    required_components[component_key] = record->schema_version;
+  }
+
+  ordered_json required_modules = ordered_json::array();
+  for (const ModuleRef& module : modules) {
+    ordered_json module_json = ordered_json::object();
+    module_json["id"] = module.id;
+    module_json["version"] = module.version;
+    required_modules.push_back(std::move(module_json));
+  }
+
+  ordered_json schema;
+  schema["required_modules"] = std::move(required_modules);
+  schema["required_components"] = std::move(required_components);
+
+  ordered_json scene_obj;
+  scene_obj["name"] = scene.name().empty() ? "Untitled Scene" : scene.name();
+
+  ordered_json root;
+  root["scene_format_version"] = 2;
+  root["schema"] = std::move(schema);
+  root["scene"] = std::move(scene_obj);
+  root["entities"] = ordered_json::array();
   for (SerializedEntity& entity : entities) {
     root["entities"].push_back(std::move(entity.value));
   }
@@ -651,8 +788,9 @@ Result<void> deserialize_scene_json(SceneManager& scenes, const nlohmann::json& 
   return {};
 }
 
-Result<void> save_scene_file(const Scene& scene, const std::filesystem::path& path) {
-  Result<json> scene_json = serialize_scene_to_json(scene);
+Result<void> save_scene_file(const Scene& scene, const SceneSerializationContext& serialization,
+                             const std::filesystem::path& path) {
+  Result<nlohmann::ordered_json> scene_json = serialize_scene_to_json(scene, serialization);
   REQUIRED_OR_RETURN(scene_json);
   return write_text_file(path, (*scene_json).dump(2) + "\n");
 }

@@ -3,6 +3,8 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
+#include <nlohmann/json.hpp>
 #include <string_view>
 #include <system_error>
 
@@ -94,9 +96,9 @@ bool run_scene_serialization_smoke_test() {
     return false;
   }
 
-  const FlecsComponentContext component_ctx = make_scene_component_context();
+  const SceneTestContexts test_contexts = make_scene_test_contexts();
 
-  SceneManager scenes(component_ctx);
+  SceneManager scenes(test_contexts.flecs_components);
   Result<SceneLoadResult> loaded = load_scene_file(scenes, valid_path);
   if (!loaded || !(*loaded).scene || scenes.active_scene() != (*loaded).scene ||
       (*loaded).scene->name() != "serialization smoke") {
@@ -127,14 +129,39 @@ bool run_scene_serialization_smoke_test() {
     return false;
   }
 
-  const std::filesystem::path round_trip_path = root / "round_trip.tscene.json";
-  if (!save_scene_file(scene, round_trip_path)) {
+  const std::filesystem::path round_trip_path = root / "saved_v2.tscene.json";
+  if (!save_scene_file(scene, test_contexts.scene_serialization, round_trip_path)) {
     return false;
   }
-  SceneManager round_trip_scenes(component_ctx);
-  Result<SceneLoadResult> round_trip_loaded = load_scene_file(round_trip_scenes, round_trip_path);
-  if (!round_trip_loaded || !(*round_trip_loaded).scene ||
-      !(*round_trip_loaded).scene->has_entity(EntityGuid{1003})) {
+  std::ifstream in(round_trip_path);
+  if (!in) {
+    return false;
+  }
+  const std::string saved_text(std::istreambuf_iterator<char>{in},
+                               std::istreambuf_iterator<char>{});
+  nlohmann::json saved_json;
+  try {
+    saved_json = nlohmann::json::parse(saved_text);
+  } catch (const nlohmann::json::parse_error&) {
+    return false;
+  }
+  if (!validate_scene_file(test_contexts.scene_serialization, saved_json).has_value()) {
+    return false;
+  }
+  if (saved_json.contains("registry_version") || saved_json.value("scene_format_version", 0) != 2) {
+    return false;
+  }
+  if (!saved_json.contains("schema") || !saved_json["schema"].contains("required_components")) {
+    return false;
+  }
+  const auto& req = saved_json["schema"]["required_components"];
+  if (!req.contains("teng.core.transform") || !req.contains("teng.core.camera")) {
+    return false;
+  }
+  if (!saved_json["entities"].is_array() || saved_json["entities"].size() != 3) {
+    return false;
+  }
+  if (!saved_json["entities"][0]["guid"].is_string()) {
     return false;
   }
 

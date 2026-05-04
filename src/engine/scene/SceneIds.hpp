@@ -1,5 +1,6 @@
 #pragma once
 
+#include <compare>
 #include <cstdint>
 #include <filesystem>
 #include <functional>
@@ -14,6 +15,7 @@ struct SceneId {
 
   [[nodiscard]] bool is_valid() const { return value != 0; }
   explicit operator bool() const { return is_valid(); }
+  constexpr auto operator<=>(const SceneId&) const = default;
 };
 
 struct EntityGuid {
@@ -21,6 +23,8 @@ struct EntityGuid {
 
   [[nodiscard]] bool is_valid() const { return value != 0; }
   explicit operator bool() const { return is_valid(); }
+
+  constexpr auto operator<=>(const EntityGuid&) const = default;
 };
 
 struct AssetId {
@@ -41,14 +45,6 @@ struct AssetId {
 [[nodiscard]] SceneId make_scene_id();
 [[nodiscard]] EntityGuid make_entity_guid();
 [[nodiscard]] AssetId make_asset_id();
-
-[[nodiscard]] constexpr bool operator==(SceneId a, SceneId b) { return a.value == b.value; }
-[[nodiscard]] constexpr bool operator!=(SceneId a, SceneId b) { return !(a == b); }
-[[nodiscard]] constexpr bool operator<(SceneId a, SceneId b) { return a.value < b.value; }
-
-[[nodiscard]] constexpr bool operator==(EntityGuid a, EntityGuid b) { return a.value == b.value; }
-[[nodiscard]] constexpr bool operator!=(EntityGuid a, EntityGuid b) { return !(a == b); }
-[[nodiscard]] constexpr bool operator<(EntityGuid a, EntityGuid b) { return a.value < b.value; }
 
 [[nodiscard]] constexpr bool operator==(AssetId a, AssetId b) {
   return a.high == b.high && a.low == b.low;

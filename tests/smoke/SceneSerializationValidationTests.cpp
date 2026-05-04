@@ -2,6 +2,8 @@
 #include <nlohmann/json.hpp>
 
 #include "TestHelpers.hpp"
+#include "engine/scene/Scene.hpp"
+#include "engine/scene/SceneManager.hpp"
 #include "engine/scene/SceneSerialization.hpp"
 
 namespace teng::engine {
@@ -154,6 +156,48 @@ TEST_CASE("JSON v2 scene validation rejects invalid component payloads", "[scene
     scene_json["entities"][0]["components"]["teng.core.mesh_renderable"]["model"] = "bad";
     CHECK_FALSE(validate(scene_json));
   }
+}
+
+TEST_CASE("JSON v2 scene save is deterministic and schema-valid", "[scene_serialization]") {
+  const SceneTestContexts contexts = make_scene_test_contexts();
+  SceneManager scenes(contexts.flecs_components);
+  Scene& scene = scenes.create_scene("save determinism");
+  scene.create_entity(EntityGuid{2}, "b");
+  scene.create_entity(EntityGuid{0x10}, "a");
+
+  Result<nlohmann::ordered_json> once_result =
+      serialize_scene_to_json(scene, contexts.scene_serialization);
+  Result<nlohmann::ordered_json> twice_result =
+      serialize_scene_to_json(scene, contexts.scene_serialization);
+  REQUIRE(once_result.has_value());
+  REQUIRE(twice_result.has_value());
+  const nlohmann::ordered_json& once = *once_result;
+  const nlohmann::ordered_json& twice = *twice_result;
+  CHECK(once.dump() == twice.dump());
+  CHECK(validate_scene_file(contexts.scene_serialization, once).has_value());
+  CHECK_FALSE(once.contains("registry_version"));
+  CHECK(once.value("scene_format_version", 0) == 2);
+
+  std::vector<std::string> top_level;
+  for (const auto& [key, value] : once.items()) {
+    (void)value;
+    top_level.emplace_back(key);
+  }
+  CHECK(top_level ==
+        std::vector<std::string>{"scene_format_version", "schema", "scene", "entities"});
+
+  const auto& entities = once["entities"];
+  REQUIRE(entities.size() == 2);
+  CHECK(entities[0]["guid"].get<std::string>() == "0000000000000002");
+  CHECK(entities[1]["guid"].get<std::string>() == "0000000000000010");
+
+  const auto& transform = entities[0]["components"]["teng.core.transform"];
+  const std::string transform_blob = transform.dump();
+  const auto pos_translation = transform_blob.find("\"translation\"");
+  const auto pos_rotation = transform_blob.find("\"rotation\"");
+  const auto pos_scale = transform_blob.find("\"scale\"");
+  CHECK(pos_translation < pos_rotation);
+  CHECK(pos_rotation < pos_scale);
 }
 
 TEST_CASE("JSON v2 scene validation allows non-canonical extra data", "[scene_serialization]") {
