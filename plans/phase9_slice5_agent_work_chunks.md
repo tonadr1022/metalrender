@@ -37,100 +37,24 @@ reusable scene/tool-layer operation.
 
 ## Chunk 3: Serialization context and built-in binding skeleton
 
-**Owns:**
-
-- `src/engine/scene/SceneSerializationContext.hpp`
-- `src/engine/scene/SceneSerializationContext.cpp`
-- `src/engine/scene/BuiltinSceneSerialization.hpp`
-- `src/engine/scene/BuiltinSceneSerialization.cpp`
-- `src/CMakeLists.txt`
+Done
 
 **Goal:** Add a serialization context sibling to `FlecsComponentContext`, backed by the frozen
 registry and keyed by namespaced component keys.
 
-**Depends on:** Chunk 1.
-
-**Tasks:**
-
-- Add `SceneComponentJsonBinding` with typed `has`, `serialize`, and `deserialize` function pointers.
-- Add `SceneSerializationContextBuilder`.
-- Validate that each binding key exists in the frozen registry.
-- Validate canonical bindings only target `Authored` components.
-- Validate every built-in authored component has a binding when freezing the built-in context.
-- Make binding registration order irrelevant for canonical ordering.
-- Add `register_builtin_scene_serialization(SceneSerializationContextBuilder&)`.
-
-**Acceptance:**
-
-- Builder rejects unknown component keys.
-- Builder rejects canonical bindings for runtime-only components.
-- Built-in context freezes only when all built-in authored components have bindings.
-- No JSON v2 save/load rewrite is required in this chunk.
-
 ## Chunk 4: Typed built-in component JSON bindings
 
-**Owns:**
-
-- `src/engine/scene/BuiltinSceneSerialization.hpp`
-- `src/engine/scene/BuiltinSceneSerialization.cpp`
-- component binding tests, if separated from smoke tests
+Done
 
 **Goal:** Implement typed JSON bindings for built-in authored scene components without using the old
 central `ComponentCodec` vocabulary.
 
-**Depends on:** Chunk 3.
-
-**Tasks:**
-
-- Implement bindings for `teng.core.transform`.
-- Implement bindings for `teng.core.camera`.
-- Implement bindings for `teng.core.directional_light`.
-- Implement bindings for `teng.core.mesh_renderable`.
-- Implement bindings for `teng.core.sprite_renderable`.
-- Keep runtime-only/debug components out of canonical bindings.
-- Return `Result` from typed parse/apply functions so malformed data can still fail at apply time.
-
-**Acceptance:**
-
-- Each built-in authored component can be serialized from a Flecs entity through the context.
-- Each built-in authored component can be deserialized onto a Flecs entity through the context.
-- Short keys such as `transform` are not introduced in the new binding path.
-
 ## Chunk 5: Schema-driven JSON v2 validation
 
-**Owns:**
-
-- `src/engine/scene/SceneSerialization.hpp`
-- `src/engine/scene/SceneSerialization.cpp`
-- validation-focused tests
+Done
 
 **Goal:** Validate JSON v2 scene files from registry metadata and serialization bindings before scene
 creation.
-
-**Depends on:** Chunks 1 and 3. Chunk 4 is needed for typed apply coverage, but pure shape validation
-can start earlier if coordinated.
-
-**Tasks:**
-
-- Change validation APIs to accept `const SceneSerializationContext&`.
-- Validate top-level `scene_format_version == 2`.
-- Reject `registry_version` and unknown top-level, `schema`, `scene`, entity, component, and field
-  keys.
-- Validate exact/minimal `schema.required_modules` and `schema.required_components`.
-- Validate required non-empty `scene.name`.
-- Validate fixed-width lowercase hex entity GUID strings.
-- Require `entities[].components` to be an object, including `{}` for empty entities.
-- Validate component keys exist, are `Authored`, and match supported schema versions.
-- Validate complete field sets from `FrozenComponentRecord::fields`.
-- Validate JSON field kinds, enum stable keys, and `AssetId` text syntax.
-- Produce structured diagnostics internally and stringify at the existing public `Result` boundary.
-
-**Acceptance:**
-
-- Invalid v1 files fail validation.
-- Unknown, missing, or wrong-type fields fail validation before scene creation.
-- Runtime-only payload components such as `teng.core.local_to_world` fail validation.
-- Load/save behavior can still be incomplete in this chunk if validation tests are isolated.
 
 ## Chunk 6: JSON v2 save
 
