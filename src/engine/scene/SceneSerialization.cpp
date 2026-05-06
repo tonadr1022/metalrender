@@ -507,6 +507,34 @@ void derive_local_to_world(Scene& scene) {
   return EntityGuid{value};
 }
 
+[[nodiscard]] Result<EntityGuid> parse_hex_guid(const json& entity, std::string_view label) {
+  const auto it = entity.find("guid");
+  if (it == entity.end() || !it->is_string()) {
+    return make_unexpected(std::string(label) + ".guid must be a string");
+  }
+  const std::string text = it->get<std::string>();
+  if (text.size() != 16) {
+    return make_unexpected(std::string(label) +
+                           ".guid must be a 16-character lowercase hex string");
+  }
+  uint64_t value{};
+  for (const char c : text) {
+    value <<= 4u;
+    if (c >= '0' && c <= '9') {
+      value |= static_cast<uint64_t>(c - '0');
+    } else if (c >= 'a' && c <= 'f') {
+      value |= static_cast<uint64_t>(c - 'a' + 10);
+    } else {
+      return make_unexpected(std::string(label) +
+                             ".guid must be a 16-character lowercase hex string");
+    }
+  }
+  if (value == 0) {
+    return make_unexpected(std::string(label) + ".guid must be non-zero");
+  }
+  return EntityGuid{value};
+}
+
 [[nodiscard]] Result<std::vector<EntityRecord>> parse_entity_records(const json& root) {
   const auto entities_it = root.find("entities");
   if (entities_it == root.end() || !entities_it->is_array()) {
@@ -545,6 +573,38 @@ void derive_local_to_world(Scene& scene) {
     }
     records.push_back(
         EntityRecord{.guid = *guid, .name = std::move(name), .components = *components_it});
+  }
+
+  std::ranges::sort(records,
+                    [](const EntityRecord& a, const EntityRecord& b) { return a.guid < b.guid; });
+  return records;
+}
+
+[[nodiscard]] Result<std::vector<EntityRecord>> parse_entity_records_v2(const json& root) {
+  const auto entities_it = root.find("entities");
+  if (entities_it == root.end() || !entities_it->is_array()) {
+    return make_unexpected("scene JSON must contain entities array");
+  }
+
+  std::vector<EntityRecord> records;
+  std::unordered_set<EntityGuid> seen;
+  for (size_t i = 0; i < entities_it->size(); ++i) {
+    const json& entity = (*entities_it)[i];
+    const std::string label = "entities[" + std::to_string(i) + "]";
+    Result<EntityGuid> guid = parse_hex_guid(entity, label);
+    REQUIRED_OR_RETURN(guid);
+    if (seen.contains(*guid)) {
+      return make_unexpected(label + ".guid duplicates another entity");
+    }
+    seen.insert(*guid);
+
+    std::string name;
+    if (const auto name_it = entity.find("name"); name_it != entity.end()) {
+      name = name_it->get<std::string>();
+    }
+
+    records.push_back(
+        EntityRecord{.guid = *guid, .name = std::move(name), .components = entity["components"]});
   }
 
   std::ranges::sort(records,
@@ -788,6 +848,43 @@ Result<void> deserialize_scene_json(SceneManager& scenes, const nlohmann::json& 
   return {};
 }
 
+Result<void> deserialize_scene_json(SceneManager& scenes,
+                                    const SceneSerializationContext& serialization,
+                                    const nlohmann::json& scene_json) {
+  Result<void, core::DiagnosticReport> validated = validate_scene_file(serialization, scene_json);
+  if (!validated) {
+    return make_unexpected(validated.error().to_string());
+  }
+
+  const std::string name = scene_json["scene"]["name"].get<std::string>();
+  Result<std::vector<EntityRecord>> records = parse_entity_records_v2(scene_json);
+  REQUIRED_OR_RETURN(records);
+
+  Scene& scene = scenes.create_scene(name);
+  for (const EntityRecord& record : *records) {
+    const flecs::entity entity = scene.create_entity(record.guid, record.name);
+    for (const auto& [key, payload] : record.components.items()) {
+      const ComponentSerializationBinding* binding = serialization.find_binding(key);
+      ALWAYS_ASSERT(binding, "validated component key {} is missing a serialization binding", key);
+      ALWAYS_ASSERT(binding->deserialize_fn,
+                    "validated component key {} is missing a deserialization binding", key);
+      binding->deserialize_fn(entity, payload);
+    }
+  }
+
+  // Temporary compatibility fixup: render extraction currently expects LocalToWorld to be current
+  // immediately after load. A dedicated transform propagation/dirty system should retire this.
+  derive_local_to_world(scene);
+  scenes.set_active_scene(scene.id());
+  return {};
+}
+
+Result<void> deserialize_scene_json2(SceneManager& scenes,
+                                     const SceneSerializationContext& serialization,
+                                     const nlohmann::json& scene_json) {
+  return deserialize_scene_json(scenes, serialization, scene_json);
+}
+
 Result<void> save_scene_file(const Scene& scene, const SceneSerializationContext& serialization,
                              const std::filesystem::path& path) {
   Result<nlohmann::ordered_json> scene_json = serialize_scene_to_json(scene, serialization);
@@ -804,11 +901,34 @@ Result<SceneLoadResult> load_scene_file(SceneManager& scenes, const std::filesys
   return SceneLoadResult{.scene_id = scene->id(), .scene = scene};
 }
 
+Result<SceneLoadResult> load_scene_file(SceneManager& scenes,
+                                        const SceneSerializationContext& serialization,
+                                        const std::filesystem::path& path) {
+  Result<json> scene_json = parse_json_file(path);
+  REQUIRED_OR_RETURN(scene_json);
+  Result<void> loaded = deserialize_scene_json(scenes, serialization, *scene_json);
+  REQUIRED_OR_RETURN(loaded);
+  Scene* scene = scenes.active_scene();
+  return SceneLoadResult{.scene_id = scene->id(), .scene = scene};
+}
+
 Result<void> validate_scene_file(const std::filesystem::path& path) {
   Result<json> scene_json = parse_json_file(path);
   REQUIRED_OR_RETURN(scene_json);
   return validate_envelope(*scene_json);
 }
+
+Result<void> validate_scene_file(const SceneSerializationContext& serialization,
+                                 const std::filesystem::path& path) {
+  Result<json> scene_json = parse_json_file(path);
+  REQUIRED_OR_RETURN(scene_json);
+  Result<void, core::DiagnosticReport> validated = validate_scene_file(serialization, *scene_json);
+  if (!validated) {
+    return make_unexpected(validated.error().to_string());
+  }
+  return {};
+}
+
 namespace {
 
 using DiagnosticPath = core::DiagnosticPath;

@@ -58,37 +58,9 @@ creation.
 
 ## Chunk 6: JSON v2 save
 
-**Owns:**
-
-- `src/engine/scene/SceneSerialization.hpp`
-- `src/engine/scene/SceneSerialization.cpp`
-- save/ordering tests
+Done
 
 **Goal:** Emit canonical JSON v2 from a scene using `SceneSerializationContext`.
-
-**Depends on:** Chunks 3 and 4. Chunk 5 is strongly preferred first.
-
-**Tasks:**
-
-- Change `serialize_scene_to_json` and `save_scene_file` to accept `const SceneSerializationContext&`.
-- Emit `scene_format_version`.
-- Emit exact/minimal `schema.required_modules` and `schema.required_components` from serialized
-  components.
-- Emit required `scene.name`.
-- Emit fixed-width lowercase hex entity GUID strings.
-- Emit optional non-empty entity names.
-- Emit required `components` objects with namespaced component keys.
-- Emit complete component field payloads, including defaults.
-- Sort entities by `EntityGuid::value`, components by key, modules by id, and required components by
-  key.
-- Use `nlohmann::ordered_json` at the canonical output boundary.
-
-**Acceptance:**
-
-- Saved files contain no `registry_version`.
-- Saved files contain no short component keys.
-- Repeated saves are deterministic.
-- Field order follows registry declaration order.
 
 ## Chunk 7: JSON v2 load
 

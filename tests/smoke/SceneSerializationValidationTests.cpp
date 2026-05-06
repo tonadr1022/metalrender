@@ -174,7 +174,8 @@ TEST_CASE("JSON v2 scene save is deterministic and schema-valid", "[scene_serial
   const nlohmann::ordered_json& once = *once_result;
   const nlohmann::ordered_json& twice = *twice_result;
   CHECK(once.dump() == twice.dump());
-  CHECK(validate_scene_file(contexts.scene_serialization, once).has_value());
+  CHECK(validate_scene_file(contexts.scene_serialization, nlohmann::json::parse(once.dump()))
+            .has_value());
   CHECK_FALSE(once.contains("registry_version"));
   CHECK(once.value("scene_format_version", 0) == 2);
 

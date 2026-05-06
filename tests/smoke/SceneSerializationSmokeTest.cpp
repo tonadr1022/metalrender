@@ -18,6 +18,8 @@
 namespace teng::engine {
 namespace {
 
+using json = nlohmann::json;
+
 [[nodiscard]] AssetId test_model_id() {
   return AssetId::from_parts(0x123456789abcdef0ull, 0x0000000000000001ull);
 }
@@ -38,47 +40,83 @@ namespace {
 }
 
 [[nodiscard]] std::string valid_scene_text() {
-  return "{\n"
-         "  \"entities\": [\n"
-         "    {\n"
-         "      \"components\": {\n"
-         "        \"camera\": { \"fov_y\": 1.04719755, \"primary\": true, \"z_far\": 10000.0, "
-         "\"z_near\": 0.1 },\n"
-         "        \"transform\": { \"rotation\": [1.0, 0.0, 0.0, 0.0], \"scale\": [1.0, 1.0, 1.0], "
-         "\"translation\": [0.0, 0.0, 3.0] }\n"
-         "      },\n"
-         "      \"guid\": 1001,\n"
-         "      \"name\": \"camera\"\n"
-         "    },\n"
-         "    {\n"
-         "      \"components\": {\n"
-         "        \"directional_light\": { \"color\": [1.0, 1.0, 1.0], \"direction\": [0.35, 1.0, "
-         "0.4], \"intensity\": 1.0 },\n"
-         "        \"transform\": { \"rotation\": [1.0, 0.0, 0.0, 0.0], \"scale\": [1.0, 1.0, 1.0], "
-         "\"translation\": [0.0, 0.0, 0.0] }\n"
-         "      },\n"
-         "      \"guid\": 1002,\n"
-         "      \"name\": \"light\"\n"
-         "    },\n"
-         "    {\n"
-         "      \"components\": {\n"
-         "        \"mesh_renderable\": { \"model\": \"" +
-         test_model_id().to_string() +
-         "\" },\n"
-         "        \"sprite_renderable\": { \"sorting_layer\": 1, \"sorting_order\": 2, "
-         "\"texture\": \"" +
-         test_texture_id().to_string() +
-         "\", \"tint\": [1.0, 0.5, 0.25, 1.0] },\n"
-         "        \"transform\": { \"rotation\": [1.0, 0.0, 0.0, 0.0], \"scale\": [1.0, 1.0, 1.0], "
-         "\"translation\": [2.0, 0.0, 0.0] }\n"
-         "      },\n"
-         "      \"guid\": 1003,\n"
-         "      \"name\": \"mesh\"\n"
-         "    }\n"
-         "  ],\n"
-         "  \"registry_version\": 1,\n"
-         "  \"scene\": { \"name\": \"serialization smoke\" }\n"
-         "}\n";
+  return R"scene({
+  "scene_format_version": 2,
+  "schema": {
+    "required_modules": [
+      {
+        "id": "teng.core",
+        "version": 1
+      }
+    ],
+    "required_components": {
+      "teng.core.camera": 1,
+      "teng.core.directional_light": 1,
+      "teng.core.mesh_renderable": 1,
+      "teng.core.sprite_renderable": 1,
+      "teng.core.transform": 1
+    }
+  },
+  "scene": {
+    "name": "serialization smoke"
+  },
+  "entities": [
+    {
+      "guid": "00000000000003e9",
+      "name": "camera",
+      "components": {
+        "teng.core.camera": {
+          "fov_y": 1.04719755,
+          "z_near": 0.1,
+          "z_far": 10000.0,
+          "primary": true
+        },
+        "teng.core.transform": {
+          "translation": [0.0, 0.0, 3.0],
+          "rotation": [1.0, 0.0, 0.0, 0.0],
+          "scale": [1.0, 1.0, 1.0]
+        }
+      }
+    },
+    {
+      "guid": "00000000000003ea",
+      "name": "light",
+      "components": {
+        "teng.core.directional_light": {
+          "direction": [0.35, 1.0, 0.4],
+          "color": [1.0, 1.0, 1.0],
+          "intensity": 1.0
+        },
+        "teng.core.transform": {
+          "translation": [0.0, 0.0, 0.0],
+          "rotation": [1.0, 0.0, 0.0, 0.0],
+          "scale": [1.0, 1.0, 1.0]
+        }
+      }
+    },
+    {
+      "guid": "00000000000003eb",
+      "name": "mesh",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "12345678-9abc-def0-0000-000000000001"
+        },
+        "teng.core.sprite_renderable": {
+          "texture": "12345678-9abc-def0-0000-000000000002",
+          "tint": [1.0, 0.5, 0.25, 1.0],
+          "sorting_layer": 1,
+          "sorting_order": 2
+        },
+        "teng.core.transform": {
+          "translation": [2.0, 0.0, 0.0],
+          "rotation": [1.0, 0.0, 0.0, 0.0],
+          "scale": [1.0, 1.0, 1.0]
+        }
+      }
+    }
+  ]
+})scene"
+         "\n";
 }
 
 [[nodiscard]] bool approx(float a, float b) { return std::abs(a - b) < 0.0001f; }
@@ -99,7 +137,8 @@ bool run_scene_serialization_smoke_test() {
   const SceneTestContexts test_contexts = make_scene_test_contexts();
 
   SceneManager scenes(test_contexts.flecs_components);
-  Result<SceneLoadResult> loaded = load_scene_file(scenes, valid_path);
+  Result<SceneLoadResult> loaded =
+      load_scene_file(scenes, test_contexts.scene_serialization, valid_path);
   if (!loaded || !(*loaded).scene || scenes.active_scene() != (*loaded).scene ||
       (*loaded).scene->name() != "serialization smoke") {
     return false;
@@ -128,6 +167,10 @@ bool run_scene_serialization_smoke_test() {
       render_scene.sprites.front().texture != test_texture_id()) {
     return false;
   }
+  const auto* const camera = scene.find_entity(EntityGuid{1001}).try_get<Camera>();
+  if (!camera || !camera->primary) {
+    return false;
+  }
 
   const std::filesystem::path round_trip_path = root / "saved_v2.tscene.json";
   if (!save_scene_file(scene, test_contexts.scene_serialization, round_trip_path)) {
@@ -139,10 +182,10 @@ bool run_scene_serialization_smoke_test() {
   }
   const std::string saved_text(std::istreambuf_iterator<char>{in},
                                std::istreambuf_iterator<char>{});
-  nlohmann::json saved_json;
+  json saved_json;
   try {
-    saved_json = nlohmann::json::parse(saved_text);
-  } catch (const nlohmann::json::parse_error&) {
+    saved_json = json::parse(saved_text);
+  } catch (const json::parse_error&) {
     return false;
   }
   if (!validate_scene_file(test_contexts.scene_serialization, saved_json).has_value()) {
@@ -164,15 +207,24 @@ bool run_scene_serialization_smoke_test() {
   if (!saved_json["entities"][0]["guid"].is_string()) {
     return false;
   }
-
-  const std::filesystem::path invalid_path = root / "invalid.tscene.json";
-  if (!write_text_file(
-          invalid_path,
-          "{ \"registry_version\": 1, \"scene\": { \"name\": \"invalid\" }, "
-          "\"entities\": [ { \"guid\": 1, \"components\": { \"local_to_world\": {} } } ] }\n")) {
+  SceneManager round_trip_scenes(test_contexts.flecs_components);
+  Result<SceneLoadResult> round_trip_loaded =
+      load_scene_file(round_trip_scenes, test_contexts.scene_serialization, round_trip_path);
+  if (!round_trip_loaded || !(*round_trip_loaded).scene) {
     return false;
   }
-  if (validate_scene_file(invalid_path)) {
+
+  const std::filesystem::path invalid_path = root / "invalid.tscene.json";
+  if (!write_text_file(invalid_path,
+                       "{ \"scene_format_version\": 2, \"schema\": { \"required_modules\": [], "
+                       "\"required_components\": {} }, \"scene\": { \"name\": \"invalid\" }, "
+                       "\"entities\": [ { \"guid\": \"0000000000000001\", \"components\": { "
+                       "\"teng.core.local_to_world\": {} } } ] }\n")) {
+    return false;
+  }
+  SceneManager invalid_scenes(test_contexts.flecs_components);
+  if (load_scene_file(invalid_scenes, test_contexts.scene_serialization, invalid_path) ||
+      invalid_scenes.active_scene()) {
     return false;
   }
 
