@@ -15,17 +15,17 @@ retired items.
 
 Remove or replace before Phase 9 exits:
 
-- [ ] `k_scene_registry_version` as the single scene/component semantic version.
-- [ ] v1 `registry_version` JSON envelope.
-- [ ] short component keys in canonical scene files.
-- [ ] `ComponentBit` enum as global cooked component identity.
-- [ ] `CookEntity::component_mask` as fixed global-bit identity.
-- [ ] `ComponentCodec` as a hand-maintained central component list.
-- [ ] handwritten per-component JSON parser/serializer functions as the source of truth.
-- [ ] handwritten per-component cooked key branches as the source of truth.
+- [X] `k_scene_registry_version` as the single scene/component semantic version.
+- [X] v1 `registry_version` JSON envelope.
+- [X] short component keys in canonical scene files.
+- [X] `ComponentBit` enum as global cooked component identity.
+- [X] `CookEntity::component_mask` as fixed global-bit identity.
+- [X] `ComponentCodec` as a hand-maintained central component list.
+- [X] handwritten per-component JSON parser/serializer functions as the source of truth.
+- [X] handwritten per-component cooked key branches as the source of truth.
 - [x] manual `Scene::register_components()` list as authoritative Flecs registration.
-- [ ] Python construction of canonical scene component JSON.
-- [ ] checked-in v1 demo scene resources.
+- [X] Python construction of canonical scene component JSON. KEEPING for now for utility.
+- [X] checked-in v1 demo scene resources.
 
 ## Current code to inspect
 

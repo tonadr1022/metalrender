@@ -63,11 +63,14 @@ int main(int argc, char** argv) {
     const SceneTestContexts contexts = make_scene_test_contexts();
     result = teng::engine::validate_scene_file(contexts.scene_serialization, argv[2]);
   } else if (command == "migrate" && argc == 4) {
-    result = teng::engine::migrate_scene_file(argv[2], argv[3]);
+    std::cerr << "migrate is not supported\n";
+    // result = teng::engine::migrate_scene_file(argv[2], argv[3]);
   } else if (command == "cook" && argc == 4) {
-    result = teng::engine::cook_scene_file(argv[2], argv[3]);
+    std::cerr << "cook is not supported\n";
+    // result = teng::engine::cook_scene_file(argv[2], argv[3]);
   } else if (command == "dump" && argc == 4) {
-    result = teng::engine::dump_cooked_scene_file(argv[2], argv[3]);
+    std::cerr << "dump is not supported\n";
+    // result = teng::engine::dump_cooked_scene_file(argv[2], argv[3]);
   } else {
     usage();
     return 1;
