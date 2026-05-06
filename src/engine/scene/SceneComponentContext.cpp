@@ -2,7 +2,7 @@
 
 #include <unordered_map>
 
-#include "core/ComponentRegistry.hpp"
+#include "engine/scene/ComponentRegistry.hpp"
 
 namespace TENG_NAMESPACE::engine {
 
@@ -29,8 +29,8 @@ bool FlecsComponentContextBuilder::try_freeze(FlecsComponentContext& out,
   }
 
   bool ok = true;
-  for (const core::FrozenComponentRecord& record : registry_.components()) {
-    if (record.storage == core::ComponentStoragePolicy::EditorOnly) {
+  for (const scene::FrozenComponentRecord& record : registry_.components()) {
+    if (record.storage == scene::ComponentStoragePolicy::EditorOnly) {
       continue;
     }
 
@@ -68,8 +68,8 @@ bool FlecsComponentContextBuilder::try_freeze(FlecsComponentContext& out,
   apply_on_create_fns.reserve(registry_.components().size());
   flecs_register_fns.reserve(registry_.components().size());
 
-  for (const core::FrozenComponentRecord& record : registry_.components()) {
-    if (record.storage == core::ComponentStoragePolicy::EditorOnly) {
+  for (const scene::FrozenComponentRecord& record : registry_.components()) {
+    if (record.storage == scene::ComponentStoragePolicy::EditorOnly) {
       continue;
     }
     const FlecsComponentBinding& binding =

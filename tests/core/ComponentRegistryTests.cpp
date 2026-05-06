@@ -1,9 +1,14 @@
 #include <catch2/catch_test_macros.hpp>
 #include <string>
 
-#include "core/ComponentRegistry.hpp"
+#include "core/Diagnostic.hpp"
+#include "engine/scene/ComponentRegistry.hpp"
 
-namespace teng::core {
+using teng::core::Diagnostic;
+using teng::core::DiagnosticCode;
+using teng::core::DiagnosticPath;
+using teng::core::DiagnosticReport;
+using namespace teng::engine::scene;
 
 // NOLINTBEGIN(misc-use-anonymous-namespace): Catch2 TEST_CASE expands to static functions.
 
@@ -333,5 +338,3 @@ TEST_CASE("freeze preserves schema visibility", "[component_registry]") {
 }
 
 // NOLINTEND(misc-use-anonymous-namespace)
-
-}  // namespace teng::core

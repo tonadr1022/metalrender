@@ -1,8 +1,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "TestHelpers.hpp"
-#include "core/ComponentRegistry.hpp"
 #include "core/Diagnostic.hpp"
+#include "engine/scene/ComponentRegistry.hpp"
 #include "engine/scene/Scene.hpp"
 #include "engine/scene/SceneComponentContext.hpp"
 #include "engine/scene/SceneComponents.hpp"
@@ -10,19 +10,19 @@
 
 namespace teng::engine {
 
-using core::ComponentRegistration;
 using core::DiagnosticReport;
+using scene::ComponentRegistration;
 
 namespace {
 
-core::ComponentRegistry make_component_registry(bool add_on_create = false) {
-  core::ComponentRegistryBuilder builder;
+scene::ComponentRegistry make_component_registry(bool add_on_create = false) {
+  scene::ComponentRegistryBuilder builder;
   builder.register_module("teng.test", 1);
   builder.register_component(ComponentRegistration{.component_key = "teng.test.x",
                                                    .module_id = "teng.test",
                                                    .module_version = 1,
                                                    .add_on_create = add_on_create});
-  core::ComponentRegistry registry;
+  scene::ComponentRegistry registry;
   core::DiagnosticReport report;
   CHECK(builder.try_freeze(registry, report));
   CHECK(!report.has_errors());

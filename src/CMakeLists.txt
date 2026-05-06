@@ -5,7 +5,6 @@ target_include_directories(teng_shader_compiler PUBLIC ${CMAKE_CURRENT_SOURCE_DI
 target_link_libraries(teng_shader_compiler PUBLIC project_warnings)
 
 set(TENG_CORE_SOURCES
-    core/ComponentRegistry.cpp
     core/Diagnostic.cpp
     core/FileUtil.cpp
     core/Util.cpp
@@ -31,6 +30,7 @@ set(TENG_ASSETS_SOURCES
 
 set(TENG_SCENE_SOURCES
     engine/scene/BuiltInComponentSerialization.cpp
+    engine/scene/ComponentRegistry.cpp
     engine/scene/CoreComponentRegistrar.cpp
     engine/scene/ComponentSchema.cpp
     engine/scene/SceneComponentContext.cpp

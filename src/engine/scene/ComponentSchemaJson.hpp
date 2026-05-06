@@ -5,14 +5,14 @@
 
 namespace teng {
 
-namespace core {
+namespace engine::scene {
 class ComponentRegistry;
 }
 
 namespace engine {
 
 [[nodiscard]] Result<nlohmann::json> serialize_component_schema_to_json(
-    const core::ComponentRegistry& registry);
+    const scene::ComponentRegistry& registry);
 
 }  // namespace engine
 

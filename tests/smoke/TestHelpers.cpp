@@ -8,9 +8,9 @@
 namespace teng::engine {
 
 [[nodiscard]] SceneTestContexts make_scene_test_contexts() {
-  core::ComponentRegistryBuilder component_registry_builder;
+  scene::ComponentRegistryBuilder component_registry_builder;
   register_core_components(component_registry_builder);
-  auto component_registry = std::make_unique<core::ComponentRegistry>();
+  auto component_registry = std::make_unique<scene::ComponentRegistry>();
   core::DiagnosticReport report;
   if (!component_registry_builder.try_freeze(*component_registry, report)) {
     LERROR("Failed to freeze component registry: {}", report.to_string());

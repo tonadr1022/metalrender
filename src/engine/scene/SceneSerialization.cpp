@@ -21,10 +21,10 @@
 #include <variant>
 #include <vector>
 
-#include "core/ComponentRegistry.hpp"
 #include "core/Diagnostic.hpp"
 #include "core/EAssert.hpp"
 #include "core/Result.hpp"
+#include "engine/scene/ComponentRegistry.hpp"
 #include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/SceneSerializationContext.hpp"
 
@@ -145,7 +145,7 @@ void derive_local_to_world(Scene& scene) {
   return std::format("{:016x}", guid.value);
 }
 
-[[nodiscard]] json field_default_to_json(const core::ComponentFieldRegistration& field) {
+[[nodiscard]] json field_default_to_json(const scene::ComponentFieldRegistration& field) {
   if (!field.default_value) {
     return {nullptr};
   }
@@ -164,29 +164,29 @@ void derive_local_to_world(Scene& scene) {
         if constexpr (std::is_same_v<T, std::string>) {
           return json(v);
         }
-        if constexpr (std::is_same_v<T, core::ComponentDefaultVec2>) {
+        if constexpr (std::is_same_v<T, scene::ComponentDefaultVec2>) {
           return json::array({v.x, v.y});
         }
-        if constexpr (std::is_same_v<T, core::ComponentDefaultVec3>) {
+        if constexpr (std::is_same_v<T, scene::ComponentDefaultVec3>) {
           return json::array({v.x, v.y, v.z});
         }
-        if constexpr (std::is_same_v<T, core::ComponentDefaultVec4>) {
+        if constexpr (std::is_same_v<T, scene::ComponentDefaultVec4>) {
           return json::array({v.x, v.y, v.z, v.w});
         }
-        if constexpr (std::is_same_v<T, core::ComponentDefaultQuat>) {
+        if constexpr (std::is_same_v<T, scene::ComponentDefaultQuat>) {
           return json::array({v.w, v.x, v.y, v.z});
         }
-        if constexpr (std::is_same_v<T, core::ComponentDefaultMat4>) {
+        if constexpr (std::is_same_v<T, scene::ComponentDefaultMat4>) {
           json elements = json::array();
           for (const float f : v.elements) {
             elements.push_back(f);
           }
           return elements;
         }
-        if constexpr (std::is_same_v<T, core::ComponentDefaultAssetId>) {
+        if constexpr (std::is_same_v<T, scene::ComponentDefaultAssetId>) {
           return json(v.value);
         }
-        if constexpr (std::is_same_v<T, core::ComponentDefaultEnum>) {
+        if constexpr (std::is_same_v<T, scene::ComponentDefaultEnum>) {
           return json(v.key);
         }
         return {nullptr};
@@ -195,9 +195,9 @@ void derive_local_to_world(Scene& scene) {
 }
 
 [[nodiscard]] nlohmann::ordered_json canonical_component_payload(
-    const core::FrozenComponentRecord& record, json binding_payload) {
+    const scene::FrozenComponentRecord& record, json binding_payload) {
   nlohmann::ordered_json out;
-  for (const core::ComponentFieldRegistration& field : record.fields) {
+  for (const scene::ComponentFieldRegistration& field : record.fields) {
     const auto it = binding_payload.find(field.key);
     if (it != binding_payload.end()) {
       out[std::string{field.key}] = *it;
@@ -213,7 +213,7 @@ void derive_local_to_world(Scene& scene) {
 Result<nlohmann::ordered_json> serialize_scene_to_json(
     const Scene& scene, const SceneSerializationContext& serialization) {
   using ordered_json = nlohmann::ordered_json;
-  const core::ComponentRegistry& registry = serialization.component_registry();
+  const scene::ComponentRegistry& registry = serialization.component_registry();
 
   struct SerializedEntity {
     EntityGuid guid;
@@ -238,9 +238,9 @@ Result<nlohmann::ordered_json> serialize_scene_to_json(
       if (!binding->has_component_fn(entity) || !binding->serialize_fn) {
         continue;
       }
-      const core::FrozenComponentRecord* record = registry.find(binding->component_key);
+      const scene::FrozenComponentRecord* record = registry.find(binding->component_key);
       ASSERT(record);
-      ASSERT(record->storage == core::ComponentStoragePolicy::Authored);
+      ASSERT(record->storage == scene::ComponentStoragePolicy::Authored);
       json binding_payload = binding->serialize_fn(entity);
       const std::string component_key{binding->component_key};
       components[component_key] = canonical_component_payload(*record, std::move(binding_payload));
@@ -265,9 +265,9 @@ Result<nlohmann::ordered_json> serialize_scene_to_json(
   };
   std::vector<ModuleRef> modules;
   for (const std::string& component_key : all_used_component_keys) {
-    const core::FrozenComponentRecord* record = registry.find(component_key);
+    const scene::FrozenComponentRecord* record = registry.find(component_key);
     ASSERT(record);
-    const core::FrozenModuleRecord* module = registry.find_module(record->module_id);
+    const scene::FrozenModuleRecord* module = registry.find_module(record->module_id);
     ASSERT(module);
     const auto existing = std::ranges::find_if(
         modules, [&](const ModuleRef& m) { return m.id == module->module_id; });
@@ -279,7 +279,7 @@ Result<nlohmann::ordered_json> serialize_scene_to_json(
 
   ordered_json required_components = ordered_json::object();
   for (const std::string& component_key : all_used_component_keys) {
-    const core::FrozenComponentRecord* record = registry.find(component_key);
+    const scene::FrozenComponentRecord* record = registry.find(component_key);
     ASSERT(record);
     required_components[component_key] = record->schema_version;
   }
@@ -381,7 +381,7 @@ Result<void> validate_scene_file(const SceneSerializationContext& serialization,
 namespace {
 
 using DiagnosticPath = core::DiagnosticPath;
-using FieldRecord = core::ComponentFieldRegistration;
+using FieldRecord = scene::ComponentFieldRegistration;
 
 [[nodiscard]] DiagnosticPath path_with_key(DiagnosticPath path, std::string_view key) {
   path.object_key(std::string{key});
@@ -486,7 +486,7 @@ void validate_numeric_array(core::DiagnosticReport& report, const json& value, s
 
 void validate_field_value(core::DiagnosticReport& report, const json& value,
                           const FieldRecord& field, DiagnosticPath path, std::string_view label) {
-  using core::ComponentFieldKind;
+  using scene::ComponentFieldKind;
   switch (field.kind) {
     case ComponentFieldKind::Bool:
       if (!value.is_boolean()) {
@@ -554,7 +554,7 @@ void validate_field_value(core::DiagnosticReport& report, const json& value,
   }
 }
 
-[[nodiscard]] const FieldRecord* find_field(const core::FrozenComponentRecord& component,
+[[nodiscard]] const FieldRecord* find_field(const scene::FrozenComponentRecord& component,
                                             std::string_view key) {
   const auto it = std::ranges::find(component.fields, key, &FieldRecord::key);
   return it == component.fields.end() ? nullptr : &*it;
@@ -562,7 +562,7 @@ void validate_field_value(core::DiagnosticReport& report, const json& value,
 
 void validate_component_payload(core::DiagnosticReport& report,
                                 const SceneSerializationContext& serialization,
-                                const core::FrozenComponentRecord& component, const json& payload,
+                                const scene::FrozenComponentRecord& component, const json& payload,
                                 DiagnosticPath path) {
   if (!require_object(report, payload, path, "component payload")) {
     return;
@@ -605,7 +605,7 @@ void add_unique_sorted(std::vector<std::string>& values, std::string value) {
 }
 
 void validate_schema_summary(core::DiagnosticReport& report,
-                             const core::ComponentRegistry& registry, const json& required_modules,
+                             const scene::ComponentRegistry& registry, const json& required_modules,
                              const json& required_components, const SchemaUse& use) {
   std::vector<std::string> declared_modules;
   for (size_t i = 0; i < required_modules.size(); ++i) {
@@ -634,7 +634,7 @@ void validate_schema_summary(core::DiagnosticReport& report,
                            "required module '" + module_id + "' is duplicated");
     }
     add_unique_sorted(declared_modules, module_id);
-    const core::FrozenModuleRecord* record = registry.find_module(module_id);
+    const scene::FrozenModuleRecord* record = registry.find_module(module_id);
     if (!record) {
       add_validation_error(report, path_with_key(module_path, "id"),
                            "required module '" + module_id + "' is not registered");
@@ -666,7 +666,7 @@ void validate_schema_summary(core::DiagnosticReport& report,
     if (!require_uint(report, version, version_path, "schema.required_components value")) {
       continue;
     }
-    const core::FrozenComponentRecord* record = registry.find(component_key);
+    const scene::FrozenComponentRecord* record = registry.find(component_key);
     if (!record) {
       add_validation_error(report, version_path,
                            "required component '" + component_key + "' is not registered");
@@ -695,7 +695,7 @@ void validate_schema_summary(core::DiagnosticReport& report,
 Result<void, core::DiagnosticReport> validate_scene_file_full_report(
     const SceneSerializationContext& serialization, const nlohmann::json& scene_json) {
   core::DiagnosticReport report;
-  const core::ComponentRegistry& registry = serialization.component_registry();
+  const scene::ComponentRegistry& registry = serialization.component_registry();
 
   if (!require_object(report, scene_json, DiagnosticPath{}, "scene JSON")) {
     return make_unexpected(report);
@@ -799,13 +799,13 @@ Result<void, core::DiagnosticReport> validate_scene_file_full_report(
       for (const auto& [component_key, payload] : components->items()) {
         const DiagnosticPath component_path =
             path_with_key(path_with_key(entity_path, "components"), component_key);
-        const core::FrozenComponentRecord* component = registry.find(component_key);
+        const scene::FrozenComponentRecord* component = registry.find(component_key);
         if (!component) {
           add_validation_error(report, component_path,
                                "entity component '" + component_key + "' is not registered");
           continue;
         }
-        if (component->storage != core::ComponentStoragePolicy::Authored) {
+        if (component->storage != scene::ComponentStoragePolicy::Authored) {
           add_validation_error(report, component_path,
                                "entity component '" + component_key + "' is not authored");
           continue;

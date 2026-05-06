@@ -8,10 +8,10 @@
 
 namespace teng {
 
-namespace core {
+namespace engine::scene {
 class ComponentRegistry;
 struct FrozenComponentRecord;
-}  // namespace core
+}  // namespace engine::scene
 
 namespace engine {
 
@@ -27,24 +27,24 @@ struct ComponentSerializationBinding {
 };
 
 struct SceneSerializationContext {
-  const core::ComponentRegistry* registry{};
+  const scene::ComponentRegistry* registry{};
   std::vector<ComponentSerializationBinding> component_bindings;
 
-  [[nodiscard]] const core::ComponentRegistry& component_registry() const;
+  [[nodiscard]] const scene::ComponentRegistry& component_registry() const;
   [[nodiscard]] const ComponentSerializationBinding* find_binding(
       std::string_view component_key) const;
 };
 
 class SceneSerializationContextBuilder {
  public:
-  explicit SceneSerializationContextBuilder(const core::ComponentRegistry& registry)
+  explicit SceneSerializationContextBuilder(const scene::ComponentRegistry& registry)
       : registry_(registry) {}
 
   void register_component(ComponentSerializationBinding component_binding);
   [[nodiscard]] SceneSerializationContext freeze() const;
 
  private:
-  const core::ComponentRegistry& registry_;
+  const scene::ComponentRegistry& registry_;
   std::vector<ComponentSerializationBinding> component_bindings_;
 };
 

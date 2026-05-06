@@ -127,10 +127,10 @@ void Engine::init() {
   }
   CVarSystem::get().load_from_file((local_resource_dir_ / "cvars.txt").string());
 
-  core::ComponentRegistryBuilder component_registry_builder;
+  scene::ComponentRegistryBuilder component_registry_builder;
   register_core_components(component_registry_builder);
   core::DiagnosticReport report;
-  component_registry_ = std::make_unique<core::ComponentRegistry>();
+  component_registry_ = std::make_unique<scene::ComponentRegistry>();
   if (!component_registry_builder.try_freeze(*component_registry_, report)) {
     LCRITICAL("Failed to freeze component registry: {}", report.to_string());
     std::exit(1);

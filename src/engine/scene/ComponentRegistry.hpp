@@ -8,10 +8,9 @@
 #include <variant>
 #include <vector>
 
-#include "core/Config.hpp"
 #include "core/Diagnostic.hpp"
 
-namespace TENG_NAMESPACE::core {
+namespace teng::engine::scene {
 
 enum class ComponentStoragePolicy : uint8_t {
   Authored,
@@ -35,7 +34,7 @@ enum class ComponentSchemaVisibility : uint8_t {
   constexpr uint64_t offset_basis = 14695981039346656037ULL;
   constexpr uint64_t prime = 1099511628211ULL;
   uint64_t hash = offset_basis;
-  for (unsigned char byte : component_key) {
+  for (const unsigned char byte : component_key) {
     hash ^= byte;
     hash *= prime;
   }
@@ -109,7 +108,7 @@ struct ComponentEnumRegistration {
 struct FrozenComponentRecord;
 
 using ComponentSchemaValidationHook = void (*)(const FrozenComponentRecord& component,
-                                               DiagnosticReport& report);
+                                               core::DiagnosticReport& report);
 
 struct ComponentFieldRegistration {
   std::string key;
@@ -180,7 +179,7 @@ class ComponentRegistryBuilder {
   /// Builds a frozen registry from trusted first-party/generated registrations.
   /// Internal component field schema invariants assert; registry composition conflicts and
   /// validation hooks append diagnostics to `report`.
-  [[nodiscard]] bool try_freeze(ComponentRegistry& out, DiagnosticReport& report) const;
+  [[nodiscard]] bool try_freeze(ComponentRegistry& out, core::DiagnosticReport& report) const;
 
   [[nodiscard]] const std::vector<std::pair<std::string, uint32_t>>& modules() const {
     return modules_;
@@ -193,4 +192,4 @@ class ComponentRegistryBuilder {
   std::vector<ComponentRegistration> components_;
 };
 
-}  // namespace TENG_NAMESPACE::core
+}  // namespace teng::engine::scene

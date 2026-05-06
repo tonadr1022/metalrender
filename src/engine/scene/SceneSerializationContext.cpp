@@ -1,11 +1,11 @@
 #include "SceneSerializationContext.hpp"
 
-#include "core/ComponentRegistry.hpp"
 #include "core/EAssert.hpp"
+#include "engine/scene/ComponentRegistry.hpp"
 
 namespace teng::engine {
 
-const core::ComponentRegistry& SceneSerializationContext::component_registry() const {
+const scene::ComponentRegistry& SceneSerializationContext::component_registry() const {
   ALWAYS_ASSERT(registry, "scene serialization context is missing component registry");
   return *registry;
 }
@@ -31,7 +31,7 @@ SceneSerializationContext SceneSerializationContextBuilder::freeze() const {
   for (const ComponentSerializationBinding& binding : component_bindings_) {
     const auto* component = registry_.find(binding.component_key);
     ALWAYS_ASSERT(component, "component not found in registry for key {}", binding.component_key);
-    if (component->storage == core::ComponentStoragePolicy::Authored) {
+    if (component->storage == scene::ComponentStoragePolicy::Authored) {
       ALWAYS_ASSERT(binding.has_component_fn, "has_component_fn is required for component key {}",
                     binding.component_key);
       ALWAYS_ASSERT(binding.serialize_fn, "serialize_fn is required for component key {}",

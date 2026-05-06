@@ -1,7 +1,7 @@
 #include <nlohmann/json.hpp>
 
 #include "ComponentSchemaJson.hpp"
-#include "core/ComponentRegistry.hpp"
+#include "engine/scene/ComponentRegistry.hpp"
 
 namespace teng::engine {
 
@@ -10,7 +10,7 @@ using json = nlohmann::json;
 namespace {
 
 [[nodiscard]] json component_field_default_value_to_json(
-    const core::ComponentFieldDefaultValue& value) {
+    const scene::ComponentFieldDefaultValue& value) {
   return std::visit(
       [](const auto& v) -> json {
         using T = std::decay_t<decltype(v)>;
@@ -18,19 +18,19 @@ namespace {
                       std::is_same_v<T, uint64_t> || std::is_same_v<T, float> ||
                       std::is_same_v<T, std::string>) {
           return v;
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultVec2>) {
+        } else if constexpr (std::is_same_v<T, scene::ComponentDefaultVec2>) {
           return json::array({v.x, v.y});
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultVec3>) {
+        } else if constexpr (std::is_same_v<T, scene::ComponentDefaultVec3>) {
           return json::array({v.x, v.y, v.z});
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultVec4>) {
+        } else if constexpr (std::is_same_v<T, scene::ComponentDefaultVec4>) {
           return json::array({v.x, v.y, v.z, v.w});
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultQuat>) {
+        } else if constexpr (std::is_same_v<T, scene::ComponentDefaultQuat>) {
           return json::array({v.w, v.x, v.y, v.z});
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultMat4>) {
+        } else if constexpr (std::is_same_v<T, scene::ComponentDefaultMat4>) {
           return json(v.elements);
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultAssetId>) {
+        } else if constexpr (std::is_same_v<T, scene::ComponentDefaultAssetId>) {
           return json(v.value);
-        } else if constexpr (std::is_same_v<T, core::ComponentDefaultEnum>) {
+        } else if constexpr (std::is_same_v<T, scene::ComponentDefaultEnum>) {
           return json(v.key);
         } else {
           static_assert(sizeof(T) == 0, "unhandled ComponentFieldDefaultValue alternative");
@@ -39,13 +39,14 @@ namespace {
       value);
 }
 
-json asset_field_metadata_to_json(const core::ComponentAssetFieldMetadata& metadata) {
+json asset_field_metadata_to_json(const scene::ComponentAssetFieldMetadata& metadata) {
   return json{{"expected_kind", metadata.expected_kind}};
 }
 
 }  // namespace
 
-Result<nlohmann::json> serialize_component_schema_to_json(const core::ComponentRegistry& registry) {
+Result<nlohmann::json> serialize_component_schema_to_json(
+    const scene::ComponentRegistry& registry) {
   json schema = json::object();
   schema["components"] = json::object();
   auto& components = schema["components"];
@@ -72,7 +73,7 @@ Result<nlohmann::json> serialize_component_schema_to_json(const core::ComponentR
 
       if (field.enumeration) {
         json enum_values = json::array();
-        for (const core::ComponentEnumValueRegistration& ev : field.enumeration->values) {
+        for (const scene::ComponentEnumValueRegistration& ev : field.enumeration->values) {
           enum_values.push_back(json{{"key", ev.key}, {"value", ev.value}});
         }
         field_json["enumeration"] =

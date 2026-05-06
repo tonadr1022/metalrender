@@ -1,23 +1,23 @@
 #include "engine/scene/CoreComponentRegistrar.hpp"
 
-#include "core/ComponentRegistry.hpp"
 #include "engine/Input.hpp"
+#include "engine/scene/ComponentRegistry.hpp"
 #include "engine/scene/SceneComponents.hpp"
 
 namespace TENG_NAMESPACE::engine {
 
 namespace {
 
-using core::ComponentAssetFieldMetadata;
-using core::ComponentDefaultAssetId;
-using core::ComponentDefaultMat4;
-using core::ComponentDefaultQuat;
-using core::ComponentDefaultVec3;
-using core::ComponentDefaultVec4;
-using core::ComponentFieldDefaultValue;
-using core::ComponentFieldKind;
-using core::ComponentSchemaVisibility;
-using core::ComponentStoragePolicy;
+using scene::ComponentAssetFieldMetadata;
+using scene::ComponentDefaultAssetId;
+using scene::ComponentDefaultMat4;
+using scene::ComponentDefaultQuat;
+using scene::ComponentDefaultVec3;
+using scene::ComponentDefaultVec4;
+using scene::ComponentFieldDefaultValue;
+using scene::ComponentFieldKind;
+using scene::ComponentSchemaVisibility;
+using scene::ComponentStoragePolicy;
 
 [[nodiscard]] ComponentDefaultMat4 mat4_identity_default() {
   ComponentDefaultMat4 m{};
@@ -30,7 +30,7 @@ using core::ComponentStoragePolicy;
 
 }  // namespace
 
-void register_core_components(core::ComponentRegistryBuilder& builder) {
+void register_core_components(scene::ComponentRegistryBuilder& builder) {
   builder.register_module("teng.core", 1);
   builder.register_component({
       .component_key = "teng.core.transform",

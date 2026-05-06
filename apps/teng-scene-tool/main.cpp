@@ -2,9 +2,9 @@
 #include <iostream>
 #include <string_view>
 
-#include "core/ComponentRegistry.hpp"
 #include "core/Logger.hpp"
 #include "engine/scene/BuiltinComponentSerialization.hpp"
+#include "engine/scene/ComponentRegistry.hpp"
 #include "engine/scene/CoreComponentRegistrar.hpp"
 #include "engine/scene/SceneComponentContext.hpp"
 #include "engine/scene/SceneSerialization.hpp"
@@ -23,13 +23,13 @@ void usage() {
 }
 
 struct SceneTestContexts {
-  core::ComponentRegistry component_registry;
+  scene::ComponentRegistry component_registry;
   engine::FlecsComponentContext flecs_components;
   engine::SceneSerializationContext scene_serialization;
 };
 
 [[nodiscard]] SceneTestContexts make_scene_test_contexts() {
-  core::ComponentRegistryBuilder component_registry_builder;
+  scene::ComponentRegistryBuilder component_registry_builder;
   register_core_components(component_registry_builder);
   SceneTestContexts contexts{};
   core::DiagnosticReport report;

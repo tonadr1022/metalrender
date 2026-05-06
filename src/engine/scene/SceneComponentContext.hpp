@@ -5,7 +5,7 @@
 #include <string_view>
 #include <vector>
 
-#include "core/ComponentRegistry.hpp"
+#include "engine/scene/ComponentRegistry.hpp"
 
 namespace TENG_NAMESPACE::engine {
 
@@ -25,17 +25,17 @@ struct FlecsComponentContext {
 
 class FlecsComponentContextBuilder {
  public:
-  explicit FlecsComponentContextBuilder(const core::ComponentRegistry& registry)
+  explicit FlecsComponentContextBuilder(const scene::ComponentRegistry& registry)
       : registry_(registry) {}
 
   void register_flecs_component(FlecsComponentBinding flecs_component_binding);
-  [[nodiscard]] const core::ComponentRegistry& registry() { return registry_; }
+  [[nodiscard]] const scene::ComponentRegistry& registry() { return registry_; }
 
   /// On failure, clears `out` and appends diagnostics to `report`.
   [[nodiscard]] bool try_freeze(FlecsComponentContext& out, core::DiagnosticReport& report) const;
 
  private:
-  const core::ComponentRegistry& registry_;
+  const scene::ComponentRegistry& registry_;
 
   std::vector<FlecsComponentBinding> flecs_component_bindings_;
 };

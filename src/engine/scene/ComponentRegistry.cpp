@@ -1,4 +1,4 @@
-#include "core/ComponentRegistry.hpp"
+#include "ComponentRegistry.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -8,7 +8,11 @@
 
 #include "core/EAssert.hpp"
 
-namespace TENG_NAMESPACE::core {
+namespace teng::engine::scene {
+
+using DiagnosticPath = core::DiagnosticPath;
+using DiagnosticReport = core::DiagnosticReport;
+using DiagnosticCode = core::DiagnosticCode;
 
 const char* component_storage_policy_to_string(ComponentStoragePolicy policy) {
   switch (policy) {
@@ -338,4 +342,4 @@ const ComponentRegistration* ComponentRegistryBuilder::find(std::string_view com
   return &*it;
 }
 
-}  // namespace TENG_NAMESPACE::core
+}  // namespace teng::engine::scene
