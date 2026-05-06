@@ -129,14 +129,14 @@ void Engine::init() {
 
   core::ComponentRegistryBuilder component_registry_builder;
   register_core_components(component_registry_builder);
-  core::ComponentRegistry component_registry;
   core::DiagnosticReport report;
-  if (!component_registry_builder.try_freeze(component_registry, report)) {
+  component_registry_ = std::make_unique<core::ComponentRegistry>();
+  if (!component_registry_builder.try_freeze(*component_registry_, report)) {
     LCRITICAL("Failed to freeze component registry: {}", report.to_string());
     std::exit(1);
   }
 
-  FlecsComponentContextBuilder scene_component_context_builder{component_registry};
+  FlecsComponentContextBuilder scene_component_context_builder{*component_registry_};
   register_flecs_core_components(scene_component_context_builder);
   frozen_scene_component_ctx_ = std::make_unique<FlecsComponentContext>();
   if (!scene_component_context_builder.try_freeze(*frozen_scene_component_ctx_, report)) {
@@ -144,7 +144,7 @@ void Engine::init() {
     std::exit(1);
   }
 
-  SceneSerializationContextBuilder scene_serialization_context_builder{component_registry};
+  SceneSerializationContextBuilder scene_serialization_context_builder{*component_registry_};
   register_builtin_component_serialization(scene_serialization_context_builder);
   scene_serialization_ctx_ =
       std::make_unique<SceneSerializationContext>(scene_serialization_context_builder.freeze());

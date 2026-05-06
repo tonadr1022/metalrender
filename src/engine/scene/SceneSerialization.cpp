@@ -1,7 +1,6 @@
 #include "engine/scene/SceneSerialization.hpp"
 
 #include <algorithm>
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -37,41 +36,10 @@ namespace {
 
 using json = nlohmann::json;
 
-constexpr uint64_t k_max_json_safe_integer = 9007199254740991ull;
-
-enum ComponentBit : uint32_t {
-  k_transform_bit = 1u << 0u,
-  k_camera_bit = 1u << 1u,
-  k_directional_light_bit = 1u << 2u,
-  k_mesh_renderable_bit = 1u << 3u,
-  k_sprite_renderable_bit = 1u << 4u,
-};
-
 struct EntityRecord {
   EntityGuid guid;
   std::string name;
   json components;
-};
-
-struct CookEntity {
-  EntityGuid guid;
-  uint32_t name_index{};
-  uint32_t component_mask{};
-};
-
-struct CookComponent {
-  uint32_t entity_index{};
-  uint32_t key_index{};
-  uint64_t blob_offset{};
-  uint64_t blob_size{};
-};
-
-struct ComponentCodec {
-  std::string_view key;
-  uint32_t bit;
-  Result<void> (*validate)(const json& payload);
-  bool (*serialize)(flecs::entity entity, json& components);
-  Result<void> (*deserialize)(flecs::entity entity, const json& payload);
 };
 
 [[nodiscard]] std::string io_error(const std::filesystem::path& path, std::string_view action) {
@@ -107,404 +75,10 @@ struct ComponentCodec {
   }
 }
 
-[[nodiscard]] Result<void> ensure_object(const json& value, std::string_view label) {
-  if (!value.is_object()) {
-    return make_unexpected(std::string(label) + " must be an object");
-  }
-  return {};
-}
-
-[[nodiscard]] Result<void> ensure_allowed_keys(const json& object,
-                                               std::span<const std::string_view> allowed,
-                                               std::string_view label) {
-  for (const auto& [key, value] : object.items()) {
-    (void)value;
-    if (std::ranges::find(allowed, key) == allowed.end()) {
-      return make_unexpected(std::string(label) + " has unknown key '" + key + "'");
-    }
-  }
-  return {};
-}
-
-[[nodiscard]] Result<float> required_float(const json& object, std::string_view field,
-                                           std::string_view label) {
-  const auto it = object.find(field);
-  if (it == object.end() || !it->is_number()) {
-    return make_unexpected(std::string(label) + "." + std::string(field) + " must be a number");
-  }
-  return it->get<float>();
-}
-
-[[nodiscard]] Result<int> required_int(const json& object, std::string_view field,
-                                       std::string_view label) {
-  const auto it = object.find(field);
-  if (it == object.end() || !it->is_number_integer()) {
-    return make_unexpected(std::string(label) + "." + std::string(field) + " must be an integer");
-  }
-  return it->get<int>();
-}
-
-[[nodiscard]] Result<bool> required_bool(const json& object, std::string_view field,
-                                         std::string_view label) {
-  const auto it = object.find(field);
-  if (it == object.end() || !it->is_boolean()) {
-    return make_unexpected(std::string(label) + "." + std::string(field) + " must be a boolean");
-  }
-  return it->get<bool>();
-}
-
-[[nodiscard]] Result<std::string> required_string(const json& object, std::string_view field,
-                                                  std::string_view label) {
-  const auto it = object.find(field);
-  if (it == object.end() || !it->is_string()) {
-    return make_unexpected(std::string(label) + "." + std::string(field) + " must be a string");
-  }
-  return it->get<std::string>();
-}
-
-[[nodiscard]] Result<std::array<float, 3>> required_vec3(const json& object, std::string_view field,
-                                                         std::string_view label) {
-  const auto it = object.find(field);
-  if (it == object.end() || !it->is_array() || it->size() != 3) {
-    return make_unexpected(std::string(label) + "." + std::string(field) +
-                           " must be a 3-number array");
-  }
-  std::array<float, 3> out{};
-  for (size_t i = 0; i < out.size(); ++i) {
-    if (!(*it)[i].is_number()) {
-      return make_unexpected(std::string(label) + "." + std::string(field) +
-                             " must be a 3-number array");
-    }
-    out[i] = (*it)[i].get<float>();
-  }
-  return out;
-}
-
-[[nodiscard]] Result<std::array<float, 4>> required_vec4(const json& object, std::string_view field,
-                                                         std::string_view label) {
-  const auto it = object.find(field);
-  if (it == object.end() || !it->is_array() || it->size() != 4) {
-    return make_unexpected(std::string(label) + "." + std::string(field) +
-                           " must be a 4-number array");
-  }
-  std::array<float, 4> out{};
-  for (size_t i = 0; i < out.size(); ++i) {
-    if (!(*it)[i].is_number()) {
-      return make_unexpected(std::string(label) + "." + std::string(field) +
-                             " must be a 4-number array");
-    }
-    out[i] = (*it)[i].get<float>();
-  }
-  return out;
-}
-
-[[nodiscard]] json vec3_json(const glm::vec3& value) {
-  return json::array({value.x, value.y, value.z});
-}
-
-[[nodiscard]] json vec4_json(const glm::vec4& value) {
-  return json::array({value.x, value.y, value.z, value.w});
-}
-
-[[nodiscard]] json quat_json(const glm::quat& value) {
-  return json::array({value.w, value.x, value.y, value.z});
-}
-
-[[nodiscard]] Result<Transform> parse_transform(const json& payload) {
-  constexpr std::array<std::string_view, 3> keys{"rotation", "scale", "translation"};
-  Result<void> object_ok = ensure_object(payload, "transform");
-  REQUIRED_OR_RETURN(object_ok);
-  Result<void> keys_ok = ensure_allowed_keys(payload, keys, "transform");
-  REQUIRED_OR_RETURN(keys_ok);
-  Result<std::array<float, 3>> translation = required_vec3(payload, "translation", "transform");
-  REQUIRED_OR_RETURN(translation);
-  Result<std::array<float, 4>> rotation = required_vec4(payload, "rotation", "transform");
-  REQUIRED_OR_RETURN(rotation);
-  Result<std::array<float, 3>> scale = required_vec3(payload, "scale", "transform");
-  REQUIRED_OR_RETURN(scale);
-  return Transform{.translation = {(*translation)[0], (*translation)[1], (*translation)[2]},
-                   .rotation = {(*rotation)[0], (*rotation)[1], (*rotation)[2], (*rotation)[3]},
-                   .scale = {(*scale)[0], (*scale)[1], (*scale)[2]}};
-}
-
-[[nodiscard]] json transform_json(const Transform& transform) {
-  return json{{"rotation", quat_json(transform.rotation)},
-              {"scale", vec3_json(transform.scale)},
-              {"translation", vec3_json(transform.translation)}};
-}
-
-[[nodiscard]] Result<Camera> parse_camera(const json& payload) {
-  constexpr std::array<std::string_view, 4> keys{"fov_y", "primary", "z_far", "z_near"};
-  Result<void> object_ok = ensure_object(payload, "camera");
-  REQUIRED_OR_RETURN(object_ok);
-  Result<void> keys_ok = ensure_allowed_keys(payload, keys, "camera");
-  REQUIRED_OR_RETURN(keys_ok);
-  Result<float> fov_y = required_float(payload, "fov_y", "camera");
-  REQUIRED_OR_RETURN(fov_y);
-  Result<float> z_near = required_float(payload, "z_near", "camera");
-  REQUIRED_OR_RETURN(z_near);
-  Result<float> z_far = required_float(payload, "z_far", "camera");
-  REQUIRED_OR_RETURN(z_far);
-  Result<bool> primary = required_bool(payload, "primary", "camera");
-  REQUIRED_OR_RETURN(primary);
-  return Camera{.fov_y = *fov_y, .z_near = *z_near, .z_far = *z_far, .primary = *primary};
-}
-
-[[nodiscard]] json camera_json(const Camera& camera) {
-  return json{{"fov_y", camera.fov_y},
-              {"primary", camera.primary},
-              {"z_far", camera.z_far},
-              {"z_near", camera.z_near}};
-}
-
-[[nodiscard]] Result<DirectionalLight> parse_directional_light(const json& payload) {
-  constexpr std::array<std::string_view, 3> keys{"color", "direction", "intensity"};
-  Result<void> object_ok = ensure_object(payload, "directional_light");
-  REQUIRED_OR_RETURN(object_ok);
-  Result<void> keys_ok = ensure_allowed_keys(payload, keys, "directional_light");
-  REQUIRED_OR_RETURN(keys_ok);
-  Result<std::array<float, 3>> direction = required_vec3(payload, "direction", "directional_light");
-  REQUIRED_OR_RETURN(direction);
-  Result<std::array<float, 3>> color = required_vec3(payload, "color", "directional_light");
-  REQUIRED_OR_RETURN(color);
-  Result<float> intensity = required_float(payload, "intensity", "directional_light");
-  REQUIRED_OR_RETURN(intensity);
-  return DirectionalLight{.direction = {(*direction)[0], (*direction)[1], (*direction)[2]},
-                          .color = {(*color)[0], (*color)[1], (*color)[2]},
-                          .intensity = *intensity};
-}
-
-[[nodiscard]] json directional_light_json(const DirectionalLight& light) {
-  return json{{"color", vec3_json(light.color)},
-              {"direction", vec3_json(light.direction)},
-              {"intensity", light.intensity}};
-}
-
-[[nodiscard]] Result<AssetId> parse_asset_id_field(const json& payload, std::string_view field,
-                                                   std::string_view label) {
-  Result<std::string> text = required_string(payload, field, label);
-  REQUIRED_OR_RETURN(text);
-  std::optional<AssetId> parsed = AssetId::parse(*text);
-  if (!parsed) {
-    return make_unexpected(std::string(label) + "." + std::string(field) +
-                           " must be a valid AssetId");
-  }
-  return *parsed;
-}
-
-[[nodiscard]] Result<MeshRenderable> parse_mesh_renderable(const json& payload) {
-  constexpr std::array<std::string_view, 1> keys{"model"};
-  Result<void> object_ok = ensure_object(payload, "mesh_renderable");
-  REQUIRED_OR_RETURN(object_ok);
-  Result<void> keys_ok = ensure_allowed_keys(payload, keys, "mesh_renderable");
-  REQUIRED_OR_RETURN(keys_ok);
-  Result<AssetId> model = parse_asset_id_field(payload, "model", "mesh_renderable");
-  REQUIRED_OR_RETURN(model);
-  return MeshRenderable{.model = *model};
-}
-
-[[nodiscard]] json mesh_renderable_json(const MeshRenderable& mesh) {
-  return json{{"model", mesh.model.to_string()}};
-}
-
-[[nodiscard]] Result<SpriteRenderable> parse_sprite_renderable(const json& payload) {
-  constexpr std::array<std::string_view, 4> keys{"sorting_layer", "sorting_order", "texture",
-                                                 "tint"};
-  Result<void> object_ok = ensure_object(payload, "sprite_renderable");
-  REQUIRED_OR_RETURN(object_ok);
-  Result<void> keys_ok = ensure_allowed_keys(payload, keys, "sprite_renderable");
-  REQUIRED_OR_RETURN(keys_ok);
-  Result<AssetId> texture = parse_asset_id_field(payload, "texture", "sprite_renderable");
-  REQUIRED_OR_RETURN(texture);
-  Result<std::array<float, 4>> tint = required_vec4(payload, "tint", "sprite_renderable");
-  REQUIRED_OR_RETURN(tint);
-  Result<int> sorting_layer = required_int(payload, "sorting_layer", "sprite_renderable");
-  REQUIRED_OR_RETURN(sorting_layer);
-  Result<int> sorting_order = required_int(payload, "sorting_order", "sprite_renderable");
-  REQUIRED_OR_RETURN(sorting_order);
-  return SpriteRenderable{.texture = *texture,
-                          .tint = {(*tint)[0], (*tint)[1], (*tint)[2], (*tint)[3]},
-                          .sorting_layer = *sorting_layer,
-                          .sorting_order = *sorting_order};
-}
-
-[[nodiscard]] json sprite_renderable_json(const SpriteRenderable& sprite) {
-  return json{{"sorting_layer", sprite.sorting_layer},
-              {"sorting_order", sprite.sorting_order},
-              {"texture", sprite.texture.to_string()},
-              {"tint", vec4_json(sprite.tint)}};
-}
-
-[[nodiscard]] Result<void> validate_transform_payload(const json& payload) {
-  Result<Transform> parsed = parse_transform(payload);
-  REQUIRED_OR_RETURN(parsed);
-  return {};
-}
-
-[[nodiscard]] Result<void> validate_camera_payload(const json& payload) {
-  Result<Camera> parsed = parse_camera(payload);
-  REQUIRED_OR_RETURN(parsed);
-  return {};
-}
-
-[[nodiscard]] Result<void> validate_directional_light_payload(const json& payload) {
-  Result<DirectionalLight> parsed = parse_directional_light(payload);
-  REQUIRED_OR_RETURN(parsed);
-  return {};
-}
-
-[[nodiscard]] Result<void> validate_mesh_renderable_payload(const json& payload) {
-  Result<MeshRenderable> parsed = parse_mesh_renderable(payload);
-  REQUIRED_OR_RETURN(parsed);
-  return {};
-}
-
-[[nodiscard]] Result<void> validate_sprite_renderable_payload(const json& payload) {
-  Result<SpriteRenderable> parsed = parse_sprite_renderable(payload);
-  REQUIRED_OR_RETURN(parsed);
-  return {};
-}
-
-bool serialize_transform_payload(flecs::entity entity, json& components) {
-  const auto* transform = entity.try_get<Transform>();
-  if (!transform) {
-    return false;
-  }
-  components["transform"] = transform_json(*transform);
-  return true;
-}
-
-bool serialize_camera_payload(flecs::entity entity, json& components) {
-  const auto* camera = entity.try_get<Camera>();
-  if (!camera) {
-    return false;
-  }
-  components["camera"] = camera_json(*camera);
-  return true;
-}
-
-bool serialize_directional_light_payload(flecs::entity entity, json& components) {
-  const auto* light = entity.try_get<DirectionalLight>();
-  if (!light) {
-    return false;
-  }
-  components["directional_light"] = directional_light_json(*light);
-  return true;
-}
-
-bool serialize_mesh_renderable_payload(flecs::entity entity, json& components) {
-  const auto* mesh = entity.try_get<MeshRenderable>();
-  if (!mesh) {
-    return false;
-  }
-  components["mesh_renderable"] = mesh_renderable_json(*mesh);
-  return true;
-}
-
-bool serialize_sprite_renderable_payload(flecs::entity entity, json& components) {
-  const auto* sprite = entity.try_get<SpriteRenderable>();
-  if (!sprite) {
-    return false;
-  }
-  components["sprite_renderable"] = sprite_renderable_json(*sprite);
-  return true;
-}
-
-[[nodiscard]] Result<void> deserialize_transform_payload(flecs::entity entity,
-                                                         const json& payload) {
-  Result<Transform> component = parse_transform(payload);
-  REQUIRED_OR_RETURN(component);
-  entity.set<Transform>(*component);
-  return {};
-}
-
-[[nodiscard]] Result<void> deserialize_camera_payload(flecs::entity entity, const json& payload) {
-  Result<Camera> component = parse_camera(payload);
-  REQUIRED_OR_RETURN(component);
-  entity.set<Camera>(*component);
-  return {};
-}
-
-[[nodiscard]] Result<void> deserialize_directional_light_payload(flecs::entity entity,
-                                                                 const json& payload) {
-  Result<DirectionalLight> component = parse_directional_light(payload);
-  REQUIRED_OR_RETURN(component);
-  entity.set<DirectionalLight>(*component);
-  return {};
-}
-
-[[nodiscard]] Result<void> deserialize_mesh_renderable_payload(flecs::entity entity,
-                                                               const json& payload) {
-  Result<MeshRenderable> component = parse_mesh_renderable(payload);
-  REQUIRED_OR_RETURN(component);
-  entity.set<MeshRenderable>(*component);
-  return {};
-}
-
-[[nodiscard]] Result<void> deserialize_sprite_renderable_payload(flecs::entity entity,
-                                                                 const json& payload) {
-  Result<SpriteRenderable> component = parse_sprite_renderable(payload);
-  REQUIRED_OR_RETURN(component);
-  entity.set<SpriteRenderable>(*component);
-  return {};
-}
-
-[[nodiscard]] std::span<const ComponentCodec> component_codecs() {
-  static constexpr std::array<ComponentCodec, 5> codecs{
-      ComponentCodec{.key = "transform",
-                     .bit = k_transform_bit,
-                     .validate = validate_transform_payload,
-                     .serialize = serialize_transform_payload,
-                     .deserialize = deserialize_transform_payload},
-      ComponentCodec{.key = "camera",
-                     .bit = k_camera_bit,
-                     .validate = validate_camera_payload,
-                     .serialize = serialize_camera_payload,
-                     .deserialize = deserialize_camera_payload},
-      ComponentCodec{.key = "directional_light",
-                     .bit = k_directional_light_bit,
-                     .validate = validate_directional_light_payload,
-                     .serialize = serialize_directional_light_payload,
-                     .deserialize = deserialize_directional_light_payload},
-      ComponentCodec{.key = "mesh_renderable",
-                     .bit = k_mesh_renderable_bit,
-                     .validate = validate_mesh_renderable_payload,
-                     .serialize = serialize_mesh_renderable_payload,
-                     .deserialize = deserialize_mesh_renderable_payload},
-      ComponentCodec{.key = "sprite_renderable",
-                     .bit = k_sprite_renderable_bit,
-                     .validate = validate_sprite_renderable_payload,
-                     .serialize = serialize_sprite_renderable_payload,
-                     .deserialize = deserialize_sprite_renderable_payload},
-  };
-  return codecs;
-}
-
-[[nodiscard]] const ComponentCodec* find_component_codec(std::string_view key) {
-  for (const ComponentCodec& codec : component_codecs()) {
-    if (codec.key == key) {
-      return &codec;
-    }
-  }
-  return nullptr;
-}
-
 void derive_local_to_world(Scene& scene) {
   scene.world().each([](const Transform& transform, LocalToWorld& local_to_world) {
     local_to_world.value = transform_to_matrix(transform);
   });
-}
-
-[[nodiscard]] Result<EntityGuid> parse_guid(const json& entity, std::string_view label) {
-  const auto it = entity.find("guid");
-  if (it == entity.end() || !it->is_number_unsigned()) {
-    return make_unexpected(std::string(label) + ".guid must be an unsigned integer");
-  }
-  const uint64_t value = it->get<uint64_t>();
-  if (value == 0 || value > k_max_json_safe_integer) {
-    return make_unexpected(std::string(label) + ".guid must be in the JSON safe integer range");
-  }
-  return EntityGuid{value};
 }
 
 [[nodiscard]] Result<EntityGuid> parse_hex_guid(const json& entity, std::string_view label) {
@@ -533,51 +107,6 @@ void derive_local_to_world(Scene& scene) {
     return make_unexpected(std::string(label) + ".guid must be non-zero");
   }
   return EntityGuid{value};
-}
-
-[[nodiscard]] Result<std::vector<EntityRecord>> parse_entity_records(const json& root) {
-  const auto entities_it = root.find("entities");
-  if (entities_it == root.end() || !entities_it->is_array()) {
-    return make_unexpected("scene JSON must contain entities array");
-  }
-
-  std::vector<EntityRecord> records;
-  std::unordered_set<EntityGuid> seen;
-  for (size_t i = 0; i < entities_it->size(); ++i) {
-    const json& entity = (*entities_it)[i];
-    const std::string label = "entities[" + std::to_string(i) + "]";
-    Result<void> object_ok = ensure_object(entity, label);
-    REQUIRED_OR_RETURN(object_ok);
-    constexpr std::array<std::string_view, 3> entity_keys{"components", "guid", "name"};
-    Result<void> keys_ok = ensure_allowed_keys(entity, entity_keys, label);
-    REQUIRED_OR_RETURN(keys_ok);
-
-    Result<EntityGuid> guid = parse_guid(entity, label);
-    REQUIRED_OR_RETURN(guid);
-    if (seen.contains(*guid)) {
-      return make_unexpected(label + ".guid duplicates another entity");
-    }
-    seen.insert(*guid);
-
-    std::string name;
-    if (const auto name_it = entity.find("name"); name_it != entity.end()) {
-      if (!name_it->is_string()) {
-        return make_unexpected(label + ".name must be a string");
-      }
-      name = name_it->get<std::string>();
-    }
-
-    const auto components_it = entity.find("components");
-    if (components_it == entity.end() || !components_it->is_object()) {
-      return make_unexpected(label + ".components must be an object");
-    }
-    records.push_back(
-        EntityRecord{.guid = *guid, .name = std::move(name), .components = *components_it});
-  }
-
-  std::ranges::sort(records,
-                    [](const EntityRecord& a, const EntityRecord& b) { return a.guid < b.guid; });
-  return records;
 }
 
 [[nodiscard]] Result<std::vector<EntityRecord>> parse_entity_records_v2(const json& root) {
@@ -610,52 +139,6 @@ void derive_local_to_world(Scene& scene) {
   std::ranges::sort(records,
                     [](const EntityRecord& a, const EntityRecord& b) { return a.guid < b.guid; });
   return records;
-}
-
-[[nodiscard]] Result<void> validate_envelope(const json& root) {
-  Result<void> object_ok = ensure_object(root, "scene JSON");
-  REQUIRED_OR_RETURN(object_ok);
-  constexpr std::array<std::string_view, 3> top_keys{"entities", "registry_version", "scene"};
-  Result<void> keys_ok = ensure_allowed_keys(root, top_keys, "scene JSON");
-  REQUIRED_OR_RETURN(keys_ok);
-
-  const auto version_it = root.find("registry_version");
-  if (version_it == root.end() || !version_it->is_number_integer() ||
-      version_it->get<int>() != k_scene_registry_version) {
-    return make_unexpected("scene JSON registry_version must be " +
-                           std::to_string(k_scene_registry_version));
-  }
-
-  const auto scene_it = root.find("scene");
-  if (scene_it == root.end()) {
-    return make_unexpected("scene JSON must contain scene object");
-  }
-  Result<void> scene_ok = ensure_object(*scene_it, "scene");
-  REQUIRED_OR_RETURN(scene_ok);
-  constexpr std::array<std::string_view, 1> scene_keys{"name"};
-  Result<void> scene_keys_ok = ensure_allowed_keys(*scene_it, scene_keys, "scene");
-  REQUIRED_OR_RETURN(scene_keys_ok);
-  Result<std::string> name = required_string(*scene_it, "name", "scene");
-  REQUIRED_OR_RETURN(name);
-
-  Result<std::vector<EntityRecord>> records = parse_entity_records(root);
-  REQUIRED_OR_RETURN(records);
-  for (const EntityRecord& record : *records) {
-    for (const auto& [key, payload] : record.components.items()) {
-      if (key == "local_to_world") {
-        return make_unexpected("entity " + std::to_string(record.guid.value) +
-                               " has forbidden component local_to_world");
-      }
-      const ComponentCodec* codec = find_component_codec(key);
-      if (!codec) {
-        return make_unexpected("entity " + std::to_string(record.guid.value) +
-                               " has unknown component '" + key + "'");
-      }
-      Result<void> payload_ok = codec->validate(payload);
-      REQUIRED_OR_RETURN(payload_ok);
-    }
-  }
-  return {};
 }
 
 [[nodiscard]] std::string entity_guid_lower_hex(EntityGuid guid) {
@@ -830,7 +313,8 @@ Result<nlohmann::ordered_json> serialize_scene_to_json(
 Result<void> deserialize_scene_json(SceneManager& scenes,
                                     const SceneSerializationContext& serialization,
                                     const nlohmann::json& scene_json) {
-  Result<void, core::DiagnosticReport> validated = validate_scene_file(serialization, scene_json);
+  Result<void, core::DiagnosticReport> validated =
+      validate_scene_file_full_report(serialization, scene_json);
   if (!validated) {
     return make_unexpected(validated.error().to_string());
   }
@@ -882,17 +366,12 @@ Result<SceneLoadResult> load_scene_file(SceneManager& scenes,
   return SceneLoadResult{.scene_id = scene->id(), .scene = scene};
 }
 
-Result<void> validate_scene_file(const std::filesystem::path& path) {
-  Result<json> scene_json = parse_json_file(path);
-  REQUIRED_OR_RETURN(scene_json);
-  return validate_envelope(*scene_json);
-}
-
 Result<void> validate_scene_file(const SceneSerializationContext& serialization,
                                  const std::filesystem::path& path) {
   Result<json> scene_json = parse_json_file(path);
   REQUIRED_OR_RETURN(scene_json);
-  Result<void, core::DiagnosticReport> validated = validate_scene_file(serialization, *scene_json);
+  Result<void, core::DiagnosticReport> validated =
+      validate_scene_file_full_report(serialization, *scene_json);
   if (!validated) {
     return make_unexpected(validated.error().to_string());
   }
@@ -1213,7 +692,7 @@ void validate_schema_summary(core::DiagnosticReport& report,
 
 }  // namespace
 
-Result<void, core::DiagnosticReport> validate_scene_file(
+Result<void, core::DiagnosticReport> validate_scene_file_full_report(
     const SceneSerializationContext& serialization, const nlohmann::json& scene_json) {
   core::DiagnosticReport report;
   const core::ComponentRegistry& registry = serialization.component_registry();

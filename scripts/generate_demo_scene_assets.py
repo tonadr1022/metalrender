@@ -17,6 +17,15 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_RESOURCE_DIR = REPO_ROOT / "resources"
 DEMO_SEED = 10_000_000
 
+SCENE_FORMAT_VERSION = 2
+TENG_CORE_MODULE = {"id": "teng.core", "version": 1}
+SCENE_V2_REQUIRED_COMPONENTS: dict[str, int] = {
+    "teng.core.camera": 1,
+    "teng.core.directional_light": 1,
+    "teng.core.mesh_renderable": 1,
+    "teng.core.transform": 1,
+}
+
 
 @dataclass(frozen=True)
 class Camera:
@@ -256,26 +265,22 @@ def write_sidecar(resource_dir: Path, source_path: str) -> bool:
     return True
 
 
-def fmt_float(value: float) -> str:
-    if value == 0.0:
-        value = 0.0
-    text = f"{value:.8g}"
-    if "." not in text and "e" not in text:
-        text += ".0"
-    return text
-
-
-def array(values: Iterable[float]) -> str:
-    return "[" + ", ".join(fmt_float(v) for v in values) + "]"
+def entity_guid_hex(value: int) -> str:
+    """64-bit entity id as 16 lowercase hex digits (matches C++ entity_guid_lower_hex)."""
+    if value < 0 or value > 0xFFFFFFFFFFFFFFFF:
+        raise ValueError(f"entity guid out of u64 range: {value}")
+    if value == 0:
+        raise ValueError("entity guid must be non-zero")
+    return f"{value:016x}"
 
 
 def entity_record(guid: int, name: str, transform) -> dict:
     translation, rotation, scale = transform
     return {
-        "guid": guid,
+        "guid": entity_guid_hex(guid),
         "name": name,
         "components": {
-            "transform": {
+            "teng.core.transform": {
                 "translation": list(translation),
                 "rotation": list(rotation),
                 "scale": list(scale),
@@ -310,7 +315,11 @@ def write_scene(
         / f"demo_{index:02d}_{slug(preset.name.removeprefix('demo '))}.tscene.json"
     )
     scene = {
-        "registry_version": 1,
+        "scene_format_version": SCENE_FORMAT_VERSION,
+        "schema": {
+            "required_modules": [dict(TENG_CORE_MODULE)],
+            "required_components": dict(SCENE_V2_REQUIRED_COMPONENTS),
+        },
         "scene": {"name": preset.name},
         "entities": [],
     }
@@ -319,7 +328,7 @@ def write_scene(
     light_guid = camera_guid + 1
     cam_matrix = camera_matrix(preset.camera)
     camera = entity_record(camera_guid, "camera", transform_from_matrix(cam_matrix))
-    camera["components"]["camera"] = {
+    camera["components"]["teng.core.camera"] = {
         "fov_y": 1.04719755,
         "z_near": 0.1,
         "z_far": 10000.0,
@@ -331,7 +340,7 @@ def write_scene(
     light = entity_record(
         light_guid, "directional light", transform_from_matrix(light_matrix)
     )
-    light["components"]["directional_light"] = {
+    light["components"]["teng.core.directional_light"] = {
         "direction": [0.35, 1.0, 0.4],
         "color": [1.0, 1.0, 1.0],
         "intensity": 1.0,
@@ -345,11 +354,11 @@ def write_scene(
             mesh = entity_record(
                 camera_guid + 1000 + mesh_index, f"mesh {mesh_index}", transform
             )
-            mesh["components"]["mesh_renderable"] = {"model": asset_id}
+            mesh["components"]["teng.core.mesh_renderable"] = {"model": asset_id}
             scene["entities"].append(mesh)
             mesh_index += 1
 
-    scene["entities"].sort(key=lambda entity: entity["guid"])
+    scene["entities"].sort(key=lambda entity: int(entity["guid"], 16))
     path.write_text(json.dumps(scene, indent=2, sort_keys=True) + "\n")
     return path
 

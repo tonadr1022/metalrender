@@ -39,10 +39,9 @@ struct SceneLoadResult {
 [[nodiscard]] Result<SceneLoadResult> load_scene_file(
     SceneManager& scenes, const SceneSerializationContext& serialization,
     const std::filesystem::path& path);
-[[nodiscard]] Result<void> validate_scene_file(const std::filesystem::path& path);
 [[nodiscard]] Result<void> validate_scene_file(const SceneSerializationContext& serialization,
                                                const std::filesystem::path& path);
-[[nodiscard]] Result<void, core::DiagnosticReport> validate_scene_file(
+[[nodiscard]] Result<void, core::DiagnosticReport> validate_scene_file_full_report(
     const SceneSerializationContext& serialization, const nlohmann::json& scene_json);
 
 [[nodiscard]] Result<std::vector<std::byte>> cook_scene_to_memory(const nlohmann::json& json);

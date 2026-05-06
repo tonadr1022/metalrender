@@ -48,17 +48,16 @@ namespace {
 }  // namespace
 
 bool run_generated_scene_assets_smoke_test() {
-  // const std::filesystem::path root = find_repo_root();
-  // if (root.empty()) {
-  //   return false;
-  // }
+  const std::filesystem::path root = find_repo_root();
+  if (root.empty()) {
+    return false;
+  }
 
-  return true;
-  // const SceneTestContexts contexts = make_scene_test_contexts();
-  // return load_and_check_scene(contexts.flecs_components, contexts.scene_serialization,
-  //                             root / "resources/scenes/demo_00_cube.tscene.json", 1) &&
-  //        load_and_check_scene(contexts.flecs_components, contexts.scene_serialization,
-  //                             root / "resources/scenes/demo_01_cube_grid.tscene.json", 81);
+  const SceneTestContexts contexts = make_scene_test_contexts();
+  return load_and_check_scene(contexts.flecs_components, contexts.scene_serialization,
+                              root / "resources/scenes/demo_00_cube.tscene.json", 1) &&
+         load_and_check_scene(contexts.flecs_components, contexts.scene_serialization,
+                              root / "resources/scenes/demo_01_cube_grid.tscene.json", 81);
 }
 
 }  // namespace teng::engine

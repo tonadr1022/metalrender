@@ -2,13 +2,13 @@
   "entities": [
     {
       "components": {
-        "camera": {
+        "teng.core.camera": {
           "fov_y": 1.04719755,
           "primary": true,
           "z_far": 10000.0,
           "z_near": 0.1
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -27,12 +27,12 @@
           ]
         }
       },
-      "guid": 210001,
+      "guid": "0000000000033451",
       "name": "camera"
     },
     {
       "components": {
-        "directional_light": {
+        "teng.core.directional_light": {
           "color": [
             1.0,
             1.0,
@@ -45,7 +45,7 @@
           ],
           "intensity": 1.0
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -64,15 +64,15 @@
           ]
         }
       },
-      "guid": 210002,
+      "guid": "0000000000033452",
       "name": "directional light"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -91,15 +91,15 @@
           ]
         }
       },
-      "guid": 211001,
+      "guid": "0000000000033839",
       "name": "mesh 0"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -118,15 +118,15 @@
           ]
         }
       },
-      "guid": 211002,
+      "guid": "000000000003383a",
       "name": "mesh 1"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -145,15 +145,15 @@
           ]
         }
       },
-      "guid": 211003,
+      "guid": "000000000003383b",
       "name": "mesh 2"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -172,15 +172,15 @@
           ]
         }
       },
-      "guid": 211004,
+      "guid": "000000000003383c",
       "name": "mesh 3"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -199,15 +199,15 @@
           ]
         }
       },
-      "guid": 211005,
+      "guid": "000000000003383d",
       "name": "mesh 4"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -226,15 +226,15 @@
           ]
         }
       },
-      "guid": 211006,
+      "guid": "000000000003383e",
       "name": "mesh 5"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -253,15 +253,15 @@
           ]
         }
       },
-      "guid": 211007,
+      "guid": "000000000003383f",
       "name": "mesh 6"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -280,15 +280,15 @@
           ]
         }
       },
-      "guid": 211008,
+      "guid": "0000000000033840",
       "name": "mesh 7"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -307,15 +307,15 @@
           ]
         }
       },
-      "guid": 211009,
+      "guid": "0000000000033841",
       "name": "mesh 8"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -334,15 +334,15 @@
           ]
         }
       },
-      "guid": 211010,
+      "guid": "0000000000033842",
       "name": "mesh 9"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -361,15 +361,15 @@
           ]
         }
       },
-      "guid": 211011,
+      "guid": "0000000000033843",
       "name": "mesh 10"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -388,15 +388,15 @@
           ]
         }
       },
-      "guid": 211012,
+      "guid": "0000000000033844",
       "name": "mesh 11"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -415,15 +415,15 @@
           ]
         }
       },
-      "guid": 211013,
+      "guid": "0000000000033845",
       "name": "mesh 12"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -442,15 +442,15 @@
           ]
         }
       },
-      "guid": 211014,
+      "guid": "0000000000033846",
       "name": "mesh 13"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -469,15 +469,15 @@
           ]
         }
       },
-      "guid": 211015,
+      "guid": "0000000000033847",
       "name": "mesh 14"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -496,15 +496,15 @@
           ]
         }
       },
-      "guid": 211016,
+      "guid": "0000000000033848",
       "name": "mesh 15"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -523,15 +523,15 @@
           ]
         }
       },
-      "guid": 211017,
+      "guid": "0000000000033849",
       "name": "mesh 16"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -550,15 +550,15 @@
           ]
         }
       },
-      "guid": 211018,
+      "guid": "000000000003384a",
       "name": "mesh 17"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -577,15 +577,15 @@
           ]
         }
       },
-      "guid": 211019,
+      "guid": "000000000003384b",
       "name": "mesh 18"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -604,15 +604,15 @@
           ]
         }
       },
-      "guid": 211020,
+      "guid": "000000000003384c",
       "name": "mesh 19"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -631,15 +631,15 @@
           ]
         }
       },
-      "guid": 211021,
+      "guid": "000000000003384d",
       "name": "mesh 20"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -658,15 +658,15 @@
           ]
         }
       },
-      "guid": 211022,
+      "guid": "000000000003384e",
       "name": "mesh 21"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -685,15 +685,15 @@
           ]
         }
       },
-      "guid": 211023,
+      "guid": "000000000003384f",
       "name": "mesh 22"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -712,15 +712,15 @@
           ]
         }
       },
-      "guid": 211024,
+      "guid": "0000000000033850",
       "name": "mesh 23"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -739,15 +739,15 @@
           ]
         }
       },
-      "guid": 211025,
+      "guid": "0000000000033851",
       "name": "mesh 24"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -766,15 +766,15 @@
           ]
         }
       },
-      "guid": 211026,
+      "guid": "0000000000033852",
       "name": "mesh 25"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -793,15 +793,15 @@
           ]
         }
       },
-      "guid": 211027,
+      "guid": "0000000000033853",
       "name": "mesh 26"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -820,15 +820,15 @@
           ]
         }
       },
-      "guid": 211028,
+      "guid": "0000000000033854",
       "name": "mesh 27"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -847,15 +847,15 @@
           ]
         }
       },
-      "guid": 211029,
+      "guid": "0000000000033855",
       "name": "mesh 28"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -874,15 +874,15 @@
           ]
         }
       },
-      "guid": 211030,
+      "guid": "0000000000033856",
       "name": "mesh 29"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -901,15 +901,15 @@
           ]
         }
       },
-      "guid": 211031,
+      "guid": "0000000000033857",
       "name": "mesh 30"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -928,15 +928,15 @@
           ]
         }
       },
-      "guid": 211032,
+      "guid": "0000000000033858",
       "name": "mesh 31"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -955,15 +955,15 @@
           ]
         }
       },
-      "guid": 211033,
+      "guid": "0000000000033859",
       "name": "mesh 32"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -982,15 +982,15 @@
           ]
         }
       },
-      "guid": 211034,
+      "guid": "000000000003385a",
       "name": "mesh 33"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1009,15 +1009,15 @@
           ]
         }
       },
-      "guid": 211035,
+      "guid": "000000000003385b",
       "name": "mesh 34"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1036,15 +1036,15 @@
           ]
         }
       },
-      "guid": 211036,
+      "guid": "000000000003385c",
       "name": "mesh 35"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1063,15 +1063,15 @@
           ]
         }
       },
-      "guid": 211037,
+      "guid": "000000000003385d",
       "name": "mesh 36"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1090,15 +1090,15 @@
           ]
         }
       },
-      "guid": 211038,
+      "guid": "000000000003385e",
       "name": "mesh 37"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1117,15 +1117,15 @@
           ]
         }
       },
-      "guid": 211039,
+      "guid": "000000000003385f",
       "name": "mesh 38"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1144,15 +1144,15 @@
           ]
         }
       },
-      "guid": 211040,
+      "guid": "0000000000033860",
       "name": "mesh 39"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1171,15 +1171,15 @@
           ]
         }
       },
-      "guid": 211041,
+      "guid": "0000000000033861",
       "name": "mesh 40"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1198,15 +1198,15 @@
           ]
         }
       },
-      "guid": 211042,
+      "guid": "0000000000033862",
       "name": "mesh 41"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1225,15 +1225,15 @@
           ]
         }
       },
-      "guid": 211043,
+      "guid": "0000000000033863",
       "name": "mesh 42"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1252,15 +1252,15 @@
           ]
         }
       },
-      "guid": 211044,
+      "guid": "0000000000033864",
       "name": "mesh 43"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1279,15 +1279,15 @@
           ]
         }
       },
-      "guid": 211045,
+      "guid": "0000000000033865",
       "name": "mesh 44"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1306,15 +1306,15 @@
           ]
         }
       },
-      "guid": 211046,
+      "guid": "0000000000033866",
       "name": "mesh 45"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1333,15 +1333,15 @@
           ]
         }
       },
-      "guid": 211047,
+      "guid": "0000000000033867",
       "name": "mesh 46"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1360,15 +1360,15 @@
           ]
         }
       },
-      "guid": 211048,
+      "guid": "0000000000033868",
       "name": "mesh 47"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1387,15 +1387,15 @@
           ]
         }
       },
-      "guid": 211049,
+      "guid": "0000000000033869",
       "name": "mesh 48"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1414,15 +1414,15 @@
           ]
         }
       },
-      "guid": 211050,
+      "guid": "000000000003386a",
       "name": "mesh 49"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1441,15 +1441,15 @@
           ]
         }
       },
-      "guid": 211051,
+      "guid": "000000000003386b",
       "name": "mesh 50"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1468,15 +1468,15 @@
           ]
         }
       },
-      "guid": 211052,
+      "guid": "000000000003386c",
       "name": "mesh 51"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1495,15 +1495,15 @@
           ]
         }
       },
-      "guid": 211053,
+      "guid": "000000000003386d",
       "name": "mesh 52"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1522,15 +1522,15 @@
           ]
         }
       },
-      "guid": 211054,
+      "guid": "000000000003386e",
       "name": "mesh 53"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1549,15 +1549,15 @@
           ]
         }
       },
-      "guid": 211055,
+      "guid": "000000000003386f",
       "name": "mesh 54"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1576,15 +1576,15 @@
           ]
         }
       },
-      "guid": 211056,
+      "guid": "0000000000033870",
       "name": "mesh 55"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1603,15 +1603,15 @@
           ]
         }
       },
-      "guid": 211057,
+      "guid": "0000000000033871",
       "name": "mesh 56"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1630,15 +1630,15 @@
           ]
         }
       },
-      "guid": 211058,
+      "guid": "0000000000033872",
       "name": "mesh 57"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1657,15 +1657,15 @@
           ]
         }
       },
-      "guid": 211059,
+      "guid": "0000000000033873",
       "name": "mesh 58"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1684,15 +1684,15 @@
           ]
         }
       },
-      "guid": 211060,
+      "guid": "0000000000033874",
       "name": "mesh 59"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1711,15 +1711,15 @@
           ]
         }
       },
-      "guid": 211061,
+      "guid": "0000000000033875",
       "name": "mesh 60"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1738,15 +1738,15 @@
           ]
         }
       },
-      "guid": 211062,
+      "guid": "0000000000033876",
       "name": "mesh 61"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1765,15 +1765,15 @@
           ]
         }
       },
-      "guid": 211063,
+      "guid": "0000000000033877",
       "name": "mesh 62"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1792,15 +1792,15 @@
           ]
         }
       },
-      "guid": 211064,
+      "guid": "0000000000033878",
       "name": "mesh 63"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1819,15 +1819,15 @@
           ]
         }
       },
-      "guid": 211065,
+      "guid": "0000000000033879",
       "name": "mesh 64"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1846,15 +1846,15 @@
           ]
         }
       },
-      "guid": 211066,
+      "guid": "000000000003387a",
       "name": "mesh 65"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1873,15 +1873,15 @@
           ]
         }
       },
-      "guid": 211067,
+      "guid": "000000000003387b",
       "name": "mesh 66"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1900,15 +1900,15 @@
           ]
         }
       },
-      "guid": 211068,
+      "guid": "000000000003387c",
       "name": "mesh 67"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1927,15 +1927,15 @@
           ]
         }
       },
-      "guid": 211069,
+      "guid": "000000000003387d",
       "name": "mesh 68"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1954,15 +1954,15 @@
           ]
         }
       },
-      "guid": 211070,
+      "guid": "000000000003387e",
       "name": "mesh 69"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -1981,15 +1981,15 @@
           ]
         }
       },
-      "guid": 211071,
+      "guid": "000000000003387f",
       "name": "mesh 70"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2008,15 +2008,15 @@
           ]
         }
       },
-      "guid": 211072,
+      "guid": "0000000000033880",
       "name": "mesh 71"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2035,15 +2035,15 @@
           ]
         }
       },
-      "guid": 211073,
+      "guid": "0000000000033881",
       "name": "mesh 72"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2062,15 +2062,15 @@
           ]
         }
       },
-      "guid": 211074,
+      "guid": "0000000000033882",
       "name": "mesh 73"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2089,15 +2089,15 @@
           ]
         }
       },
-      "guid": 211075,
+      "guid": "0000000000033883",
       "name": "mesh 74"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2116,15 +2116,15 @@
           ]
         }
       },
-      "guid": 211076,
+      "guid": "0000000000033884",
       "name": "mesh 75"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2143,15 +2143,15 @@
           ]
         }
       },
-      "guid": 211077,
+      "guid": "0000000000033885",
       "name": "mesh 76"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2170,15 +2170,15 @@
           ]
         }
       },
-      "guid": 211078,
+      "guid": "0000000000033886",
       "name": "mesh 77"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2197,15 +2197,15 @@
           ]
         }
       },
-      "guid": 211079,
+      "guid": "0000000000033887",
       "name": "mesh 78"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2224,15 +2224,15 @@
           ]
         }
       },
-      "guid": 211080,
+      "guid": "0000000000033888",
       "name": "mesh 79"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2251,15 +2251,15 @@
           ]
         }
       },
-      "guid": 211081,
+      "guid": "0000000000033889",
       "name": "mesh 80"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2278,15 +2278,15 @@
           ]
         }
       },
-      "guid": 211082,
+      "guid": "000000000003388a",
       "name": "mesh 81"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2305,15 +2305,15 @@
           ]
         }
       },
-      "guid": 211083,
+      "guid": "000000000003388b",
       "name": "mesh 82"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2332,15 +2332,15 @@
           ]
         }
       },
-      "guid": 211084,
+      "guid": "000000000003388c",
       "name": "mesh 83"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2359,15 +2359,15 @@
           ]
         }
       },
-      "guid": 211085,
+      "guid": "000000000003388d",
       "name": "mesh 84"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2386,15 +2386,15 @@
           ]
         }
       },
-      "guid": 211086,
+      "guid": "000000000003388e",
       "name": "mesh 85"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2413,15 +2413,15 @@
           ]
         }
       },
-      "guid": 211087,
+      "guid": "000000000003388f",
       "name": "mesh 86"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2440,15 +2440,15 @@
           ]
         }
       },
-      "guid": 211088,
+      "guid": "0000000000033890",
       "name": "mesh 87"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2467,15 +2467,15 @@
           ]
         }
       },
-      "guid": 211089,
+      "guid": "0000000000033891",
       "name": "mesh 88"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2494,15 +2494,15 @@
           ]
         }
       },
-      "guid": 211090,
+      "guid": "0000000000033892",
       "name": "mesh 89"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2521,15 +2521,15 @@
           ]
         }
       },
-      "guid": 211091,
+      "guid": "0000000000033893",
       "name": "mesh 90"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2548,15 +2548,15 @@
           ]
         }
       },
-      "guid": 211092,
+      "guid": "0000000000033894",
       "name": "mesh 91"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2575,15 +2575,15 @@
           ]
         }
       },
-      "guid": 211093,
+      "guid": "0000000000033895",
       "name": "mesh 92"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2602,15 +2602,15 @@
           ]
         }
       },
-      "guid": 211094,
+      "guid": "0000000000033896",
       "name": "mesh 93"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2629,15 +2629,15 @@
           ]
         }
       },
-      "guid": 211095,
+      "guid": "0000000000033897",
       "name": "mesh 94"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2656,15 +2656,15 @@
           ]
         }
       },
-      "guid": 211096,
+      "guid": "0000000000033898",
       "name": "mesh 95"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2683,15 +2683,15 @@
           ]
         }
       },
-      "guid": 211097,
+      "guid": "0000000000033899",
       "name": "mesh 96"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2710,15 +2710,15 @@
           ]
         }
       },
-      "guid": 211098,
+      "guid": "000000000003389a",
       "name": "mesh 97"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2737,15 +2737,15 @@
           ]
         }
       },
-      "guid": 211099,
+      "guid": "000000000003389b",
       "name": "mesh 98"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2764,15 +2764,15 @@
           ]
         }
       },
-      "guid": 211100,
+      "guid": "000000000003389c",
       "name": "mesh 99"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2791,15 +2791,15 @@
           ]
         }
       },
-      "guid": 211101,
+      "guid": "000000000003389d",
       "name": "mesh 100"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2818,15 +2818,15 @@
           ]
         }
       },
-      "guid": 211102,
+      "guid": "000000000003389e",
       "name": "mesh 101"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2845,15 +2845,15 @@
           ]
         }
       },
-      "guid": 211103,
+      "guid": "000000000003389f",
       "name": "mesh 102"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2872,15 +2872,15 @@
           ]
         }
       },
-      "guid": 211104,
+      "guid": "00000000000338a0",
       "name": "mesh 103"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2899,15 +2899,15 @@
           ]
         }
       },
-      "guid": 211105,
+      "guid": "00000000000338a1",
       "name": "mesh 104"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2926,15 +2926,15 @@
           ]
         }
       },
-      "guid": 211106,
+      "guid": "00000000000338a2",
       "name": "mesh 105"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2953,15 +2953,15 @@
           ]
         }
       },
-      "guid": 211107,
+      "guid": "00000000000338a3",
       "name": "mesh 106"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -2980,15 +2980,15 @@
           ]
         }
       },
-      "guid": 211108,
+      "guid": "00000000000338a4",
       "name": "mesh 107"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3007,15 +3007,15 @@
           ]
         }
       },
-      "guid": 211109,
+      "guid": "00000000000338a5",
       "name": "mesh 108"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3034,15 +3034,15 @@
           ]
         }
       },
-      "guid": 211110,
+      "guid": "00000000000338a6",
       "name": "mesh 109"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3061,15 +3061,15 @@
           ]
         }
       },
-      "guid": 211111,
+      "guid": "00000000000338a7",
       "name": "mesh 110"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3088,15 +3088,15 @@
           ]
         }
       },
-      "guid": 211112,
+      "guid": "00000000000338a8",
       "name": "mesh 111"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3115,15 +3115,15 @@
           ]
         }
       },
-      "guid": 211113,
+      "guid": "00000000000338a9",
       "name": "mesh 112"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3142,15 +3142,15 @@
           ]
         }
       },
-      "guid": 211114,
+      "guid": "00000000000338aa",
       "name": "mesh 113"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3169,15 +3169,15 @@
           ]
         }
       },
-      "guid": 211115,
+      "guid": "00000000000338ab",
       "name": "mesh 114"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3196,15 +3196,15 @@
           ]
         }
       },
-      "guid": 211116,
+      "guid": "00000000000338ac",
       "name": "mesh 115"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3223,15 +3223,15 @@
           ]
         }
       },
-      "guid": 211117,
+      "guid": "00000000000338ad",
       "name": "mesh 116"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3250,15 +3250,15 @@
           ]
         }
       },
-      "guid": 211118,
+      "guid": "00000000000338ae",
       "name": "mesh 117"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3277,15 +3277,15 @@
           ]
         }
       },
-      "guid": 211119,
+      "guid": "00000000000338af",
       "name": "mesh 118"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3304,15 +3304,15 @@
           ]
         }
       },
-      "guid": 211120,
+      "guid": "00000000000338b0",
       "name": "mesh 119"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3331,15 +3331,15 @@
           ]
         }
       },
-      "guid": 211121,
+      "guid": "00000000000338b1",
       "name": "mesh 120"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3358,15 +3358,15 @@
           ]
         }
       },
-      "guid": 211122,
+      "guid": "00000000000338b2",
       "name": "mesh 121"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3385,15 +3385,15 @@
           ]
         }
       },
-      "guid": 211123,
+      "guid": "00000000000338b3",
       "name": "mesh 122"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3412,15 +3412,15 @@
           ]
         }
       },
-      "guid": 211124,
+      "guid": "00000000000338b4",
       "name": "mesh 123"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3439,15 +3439,15 @@
           ]
         }
       },
-      "guid": 211125,
+      "guid": "00000000000338b5",
       "name": "mesh 124"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3466,15 +3466,15 @@
           ]
         }
       },
-      "guid": 211126,
+      "guid": "00000000000338b6",
       "name": "mesh 125"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3493,15 +3493,15 @@
           ]
         }
       },
-      "guid": 211127,
+      "guid": "00000000000338b7",
       "name": "mesh 126"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -3520,12 +3520,26 @@
           ]
         }
       },
-      "guid": 211128,
+      "guid": "00000000000338b8",
       "name": "mesh 127"
     }
   ],
-  "registry_version": 1,
   "scene": {
     "name": "demo random cubes"
+  },
+  "scene_format_version": 2,
+  "schema": {
+    "required_components": {
+      "teng.core.camera": 1,
+      "teng.core.directional_light": 1,
+      "teng.core.mesh_renderable": 1,
+      "teng.core.transform": 1
+    },
+    "required_modules": [
+      {
+        "id": "teng.core",
+        "version": 1
+      }
+    ]
   }
 }

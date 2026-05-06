@@ -188,7 +188,7 @@ bool run_scene_serialization_smoke_test() {
   } catch (const json::parse_error&) {
     return false;
   }
-  if (!validate_scene_file(test_contexts.scene_serialization, saved_json).has_value()) {
+  if (!validate_scene_file_full_report(test_contexts.scene_serialization, saved_json).has_value()) {
     return false;
   }
   if (saved_json.contains("registry_version") || saved_json.value("scene_format_version", 0) != 2) {

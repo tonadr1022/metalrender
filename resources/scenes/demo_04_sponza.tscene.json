@@ -2,13 +2,13 @@
   "entities": [
     {
       "components": {
-        "camera": {
+        "teng.core.camera": {
           "fov_y": 1.04719755,
           "primary": true,
           "z_far": 10000.0,
           "z_near": 0.1
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -27,12 +27,12 @@
           ]
         }
       },
-      "guid": 410001,
+      "guid": "0000000000064191",
       "name": "camera"
     },
     {
       "components": {
-        "directional_light": {
+        "teng.core.directional_light": {
           "color": [
             1.0,
             1.0,
@@ -45,7 +45,7 @@
           ],
           "intensity": 1.0
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -64,15 +64,15 @@
           ]
         }
       },
-      "guid": 410002,
+      "guid": "0000000000064192",
       "name": "directional light"
     },
     {
       "components": {
-        "mesh_renderable": {
+        "teng.core.mesh_renderable": {
           "model": "deffc540-3fa5-09e9-9819-c724ced8ecd0"
         },
-        "transform": {
+        "teng.core.transform": {
           "rotation": [
             1.0,
             0.0,
@@ -91,12 +91,26 @@
           ]
         }
       },
-      "guid": 411001,
+      "guid": "0000000000064579",
       "name": "mesh 0"
     }
   ],
-  "registry_version": 1,
   "scene": {
     "name": "demo sponza"
+  },
+  "scene_format_version": 2,
+  "schema": {
+    "required_components": {
+      "teng.core.camera": 1,
+      "teng.core.directional_light": 1,
+      "teng.core.mesh_renderable": 1,
+      "teng.core.transform": 1
+    },
+    "required_modules": [
+      {
+        "id": "teng.core",
+        "version": 1
+      }
+    ]
   }
 }
