@@ -36,4 +36,8 @@ namespace teng::engine {
   return std::move(contexts.flecs_components);
 }
 
+[[nodiscard]] SceneSerializationContext make_scene_serialization_context() {
+  SceneTestContexts contexts = make_scene_test_contexts();
+  return std::move(contexts.scene_serialization);
+}
 }  // namespace teng::engine

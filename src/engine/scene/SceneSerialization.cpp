@@ -827,27 +827,6 @@ Result<nlohmann::ordered_json> serialize_scene_to_json(
   return root;
 }
 
-Result<void> deserialize_scene_json(SceneManager& scenes, const nlohmann::json& scene_json) {
-  Result<void> validated = validate_envelope(scene_json);
-  REQUIRED_OR_RETURN(validated);
-  const std::string name = scene_json["scene"]["name"].get<std::string>();
-  Result<std::vector<EntityRecord>> records = parse_entity_records(scene_json);
-  REQUIRED_OR_RETURN(records);
-
-  Scene& scene = scenes.create_scene(name);
-  for (const EntityRecord& record : *records) {
-    const flecs::entity entity = scene.create_entity(record.guid, record.name);
-    for (const auto& [key, payload] : record.components.items()) {
-      const ComponentCodec* codec = find_component_codec(key);
-      Result<void> component = codec->deserialize(entity, payload);
-      REQUIRED_OR_RETURN(component);
-    }
-  }
-  derive_local_to_world(scene);
-  scenes.set_active_scene(scene.id());
-  return {};
-}
-
 Result<void> deserialize_scene_json(SceneManager& scenes,
                                     const SceneSerializationContext& serialization,
                                     const nlohmann::json& scene_json) {
@@ -890,15 +869,6 @@ Result<void> save_scene_file(const Scene& scene, const SceneSerializationContext
   Result<nlohmann::ordered_json> scene_json = serialize_scene_to_json(scene, serialization);
   REQUIRED_OR_RETURN(scene_json);
   return write_text_file(path, (*scene_json).dump(2) + "\n");
-}
-
-Result<SceneLoadResult> load_scene_file(SceneManager& scenes, const std::filesystem::path& path) {
-  Result<json> scene_json = parse_json_file(path);
-  REQUIRED_OR_RETURN(scene_json);
-  Result<void> loaded = deserialize_scene_json(scenes, *scene_json);
-  REQUIRED_OR_RETURN(loaded);
-  Scene* scene = scenes.active_scene();
-  return SceneLoadResult{.scene_id = scene->id(), .scene = scene};
 }
 
 Result<SceneLoadResult> load_scene_file(SceneManager& scenes,
