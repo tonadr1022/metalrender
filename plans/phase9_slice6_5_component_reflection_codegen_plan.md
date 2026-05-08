@@ -1,6 +1,6 @@
 # Phase 9 Slice 6.5: Component reflection codegen before cooked v2
 
-**Status:** Implementation plan.
+**Status:** task 1 done.
 
 **Parent plan:** [`component_schema_authoring_implementation_plan.md`](component_schema_authoring_implementation_plan.md).  
 **Scene byte contract:** [`scene_serialization_design.md`](scene_serialization_design.md).  
@@ -246,7 +246,7 @@ Generator diagnostics should fail the configure/build step on:
 
 ## Migration plan
 
-### Task 1: Add plan and no-op macro surface
+### Task 1: Add plan and no-op macro surface DONE
 
 - Add `ComponentReflectionMacros.hpp`.
 - Define all reflection macros as no-op tokens that preserve valid C++.
