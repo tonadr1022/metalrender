@@ -1,6 +1,6 @@
 # Component schema and authoring implementation plan
 
-**Status:** Phase 9 sequencing plan. Slices 0-4 are implemented. Next: Slice 5, schema-driven JSON v2
+**Status:** Phase 9 sequencing plan. Slices 0-5 are implemented. Next: Slice 6, schema-driven JSON v2
 validation and serialization. Architectural contract:
 [`component_schema_authoring_model.md`](component_schema_authoring_model.md). Scene byte contract:
 [`scene_serialization_design.md`](scene_serialization_design.md).
@@ -19,8 +19,6 @@ authoring transactions, and C++ demo scene generation are all in place.
 Completed slices established the migration boundary and should not grow more historical detail here.
 Use code and tests as the source of truth for exact APIs.
 
-- Slice 0: `component_schema_authoring_inventory.md` captured old serialization/cook/demo paths as a
-  retirement checklist.
 - Slice 1: `src/core/Diagnostic.*` added structured diagnostics without globally migrating `Result<T>`.
 - Slice 2: `src/core/ComponentRegistry.*` added `ComponentRegistryBuilder`, frozen
   `ComponentRegistry`, stable component IDs, and freeze diagnostics.
@@ -30,50 +28,11 @@ Use code and tests as the source of truth for exact APIs.
   registration is split from Flecs runtime bindings through
   `register_core_components(ComponentRegistryBuilder&)` and
   `register_flecs_core_components(FlecsComponentContextBuilder&)`.
+- Slice 5: Replace central component JSON logic with schema-driven canonical JSON v2.
 
 Current boundary: schema data belongs to the frozen `ComponentRegistry`; `FlecsComponentContext` is
 only the scene-runtime Flecs binding context. Future slices must not put schema data back into the
 Flecs context to make serialization convenient.
-
-## Slice 5: Schema-driven JSON v2 validation and serialization
-
-**Purpose:** Replace central component JSON logic with schema-driven canonical JSON v2.
-
-Use the frozen `ComponentRegistry` directly for JSON validation/serialization and GPU-free tools. If
-runtime startup needs both scene ticking and schema serialization, add explicit durable registry
-ownership rather than embedding schema data in `FlecsComponentContext`.
-
-Work:
-
-- Implement JSON v2 envelope:
-  - `scene_format_version`
-  - `schema.registry_fingerprint`
-  - `schema.required_modules`
-  - `schema.components`
-  - `scene`
-  - `entities`
-- Use namespaced component keys in entity component payloads.
-- Generate complete component payloads from schema fields.
-- Validate JSON through the frozen registry using structured diagnostics **inside** the codec, with
-  existing `Result`/CLI surfaces unchanged (**string at the public boundary** until broader migration).
-- Emit canonical order: entity GUID, component key, field declaration order.
-- Reject non-authored/runtime-only components in canonical payloads based on storage policy.
-- Keep `teng-scene-tool` GPU-free.
-
-Exit:
-
-- Core scenes save/load as JSON v2.
-- Runtime/tool load rejects v1, unknown component keys, unsupported modules, and unsupported component
-  schema versions by default.
-- The central JSON `ComponentCodec` table is removed or no longer authoritative.
-
-Validation:
-
-- Round-trip tests for all core authored components.
-- Strict unknown component and runtime-only component rejection.
-- Complete default field emission.
-- Deterministic canonical JSON ordering.
-- `./scripts/agent_verify.sh`.
 
 ## Slice 6: Test-module component extension proof
 
@@ -184,7 +143,6 @@ Exit:
 
 - The only supported runtime scene path is schema-driven JSON v2 / cooked v2.
 - Component addition path is documented and covered by the extension proof.
-- `component_schema_authoring_inventory.md` is deleted or reduced to a short historical note.
 
 Validation:
 

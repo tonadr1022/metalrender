@@ -61,7 +61,9 @@ TEST_CASE("diagnostic reports preserve order and detect errors", "[diagnostic]")
 
 TEST_CASE("diagnostic reports render one diagnostic per line", "[diagnostic]") {
   DiagnosticPath warning_path;
-  warning_path.object_key("schema").object_key("components").object_key("teng.core.transform");
+  warning_path.object_key("schema")
+      .object_key("required_components")
+      .object_key("teng.core.transform");
 
   DiagnosticPath error_path;
   error_path.object_key("entities").array_index(0).object_key("components");
@@ -74,7 +76,7 @@ TEST_CASE("diagnostic reports render one diagnostic per line", "[diagnostic]") {
 
   const std::string expected =
       "warning schema.deprecated_field at "
-      "$.schema.components[\"teng.core.transform\"]: "
+      "$.schema.required_components[\"teng.core.transform\"]: "
       "field is accepted for migration\n"
       "error scene.unknown_component at "
       "$.entities[0].components: "

@@ -17,5 +17,6 @@ struct SceneTestContexts {
 [[nodiscard]] FlecsComponentContext make_scene_component_context();
 [[nodiscard]] SceneSerializationContext make_scene_serialization_context();
 [[nodiscard]] SceneTestContexts make_scene_test_contexts();
+[[nodiscard]] SceneTestContexts make_scene_test_contexts_with_test_extension();
 
 }  // namespace teng::engine

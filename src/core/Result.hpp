@@ -1,5 +1,6 @@
 #pragma once
 
+#include <memory>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -8,6 +9,9 @@
 #include "core/Config.hpp"
 
 namespace TENG_NAMESPACE {
+
+template <class T>
+concept ResultArrowTarget = std::is_object_v<T>;
 
 template <class E>
 class Unexpected {
@@ -40,6 +44,13 @@ class Result {
 
   [[nodiscard]] T& operator*() { return *value_; }
   [[nodiscard]] const T& operator*() const { return *value_; }
+
+  [[nodiscard]] T* operator->() requires ResultArrowTarget<T> {
+    return std::addressof(*value_);
+  }
+  [[nodiscard]] const T* operator->() const requires ResultArrowTarget<T> {
+    return std::addressof(*value_);
+  }
 
   [[nodiscard]] E& error() { return error_; }
   [[nodiscard]] const E& error() const { return error_; }

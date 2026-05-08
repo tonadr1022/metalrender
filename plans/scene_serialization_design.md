@@ -76,7 +76,7 @@ Exact field payloads are generated from the component schema registry.
 - `scene_format_version` identifies the JSON envelope/layout.
 - `schema.registry_fingerprint` is deterministic diagnostic/cache metadata, not an exact-load gate.
 - `schema.required_modules` declares the modules required by this file.
-- `schema.components` maps each component key used by the file to the current component schema version.
+- `schema.required_components` maps each component key used by the file to the current component schema version.
 - `scene.name` is required.
 - `entities` is required and sorted by unsigned `EntityGuid::value` ascending on canonical save.
 - Each entity has `guid`, optional `name`, and `components`.
@@ -149,7 +149,7 @@ Versioning is split:
 
 - `scene_format_version`: JSON envelope/layout version.
 - module versions: contributed component vocabulary compatibility.
-- per-component schema versions in `schema.components`.
+- per-component schema versions in `schema.required_components`.
 - cooked `binary_format_version`: cooked byte layout version.
 
 The old single `registry_version` concept is retired.
