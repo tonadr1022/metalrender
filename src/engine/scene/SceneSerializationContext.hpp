@@ -16,14 +16,14 @@ struct FrozenComponentRecord;
 namespace engine {
 
 using SerializeComponentFn = nlohmann::json (*)(flecs::entity entity);
-using DeserializeComponent = void (*)(flecs::entity entity, const nlohmann::json& payload);
+using DeserializeComponentFn = void (*)(flecs::entity entity, const nlohmann::json& payload);
 using HasComponentFn = bool (*)(flecs::entity entity);
 
 struct ComponentSerializationBinding {
   std::string_view component_key;
   HasComponentFn has_component_fn{};
   SerializeComponentFn serialize_fn{};
-  DeserializeComponent deserialize_fn{};
+  DeserializeComponentFn deserialize_fn{};
 };
 
 struct SceneSerializationContext {

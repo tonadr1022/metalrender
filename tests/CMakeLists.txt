@@ -66,6 +66,7 @@ add_library(teng_reflect_fixture_generated STATIC
 )
 add_dependencies(teng_reflect_fixture_generated teng_reflect_fixture_codegen)
 target_include_directories(teng_reflect_fixture_generated PUBLIC "${TENG_REFLECT_FIXTURE_OUT_DIR}")
+target_link_libraries(teng_reflect_fixture_generated PUBLIC teng_scene)
 
 target_link_libraries(teng_engine_smoke PUBLIC teng_reflect_fixture_generated)
 

@@ -171,6 +171,7 @@ def clang_tidy_command(
     config_args = []
     if (REPO_ROOT / ".clang-tidy").is_file():
         config_args = ["-config-file", str(REPO_ROOT / ".clang-tidy")]
+    extra_args = clang_tidy_extra_args()
 
     if shutil.which(run_clang_tidy):
         return [
@@ -178,6 +179,7 @@ def clang_tidy_command(
             "-p",
             str(build_dir),
             *config_args,
+            *extra_args,
             *map(str, files),
         ], f"clang-tidy ({len(files)})"
     if shutil.which(clang_tidy):
@@ -188,6 +190,7 @@ def clang_tidy_command(
                     f"--config-file={REPO_ROOT / '.clang-tidy'}",
                     "-p",
                     str(build_dir),
+                    *extra_args,
                     str(file),
                 ]
             )
@@ -195,6 +198,20 @@ def clang_tidy_command(
         )
         return ["bash", "-lc", joined], f"clang-tidy ({len(files)})"
     return None, f"clang-tidy skipped: {clang_tidy} not found"
+
+
+def clang_tidy_extra_args() -> list[str]:
+    if sys.platform != "darwin" or not shutil.which("xcrun"):
+        return []
+    try:
+        sdk_path = subprocess.check_output(
+            ["xcrun", "--show-sdk-path"], cwd=REPO_ROOT, text=True
+        ).strip()
+    except subprocess.CalledProcessError:
+        return []
+    if not sdk_path:
+        return []
+    return ["-extra-arg-before=-isysroot", f"-extra-arg-before={sdk_path}"]
 
 
 def run_format(paths: list[Path], summary: Summary) -> None:

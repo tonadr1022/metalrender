@@ -42,13 +42,20 @@ if [[ "${#TIDY_FILES[@]}" -gt 0 ]]; then
     if [[ -f "$REPO_ROOT/.clang-tidy" ]]; then
         TIDY_CONFIG_ARGS=(-config-file "$REPO_ROOT/.clang-tidy")
     fi
+    TIDY_EXTRA_ARGS=()
+    if [[ "$(uname -s)" == "Darwin" ]] && command -v xcrun >/dev/null 2>&1; then
+        SDK_PATH="$(xcrun --show-sdk-path 2>/dev/null || true)"
+        if [[ -n "$SDK_PATH" ]]; then
+            TIDY_EXTRA_ARGS=(-extra-arg-before=-isysroot "-extra-arg-before=$SDK_PATH")
+        fi
+    fi
     if command -v "$RCT" >/dev/null 2>&1; then
         # run-clang-tidy understands compile_commands.json and parallelizes by default.
-        "$RCT" -p "$BUILD_DIR" "${TIDY_CONFIG_ARGS[@]}" "${TIDY_FILES[@]}"
+        "$RCT" -p "$BUILD_DIR" "${TIDY_CONFIG_ARGS[@]}" "${TIDY_EXTRA_ARGS[@]}" "${TIDY_FILES[@]}"
     else
         # Fallback: invoke clang-tidy per file (slower, but avoids extra dependency).
         for f in "${TIDY_FILES[@]}"; do
-            "$CT" --config-file="$REPO_ROOT/.clang-tidy" -p "$BUILD_DIR" "$f"
+            "$CT" --config-file="$REPO_ROOT/.clang-tidy" -p "$BUILD_DIR" "${TIDY_EXTRA_ARGS[@]}" "$f"
         done
     fi
 fi
