@@ -28,6 +28,48 @@ set(TENG_ASSETS_SOURCES
     engine/assets/AssetRegistry.cpp
 )
 
+set(TENG_CORE_COMPONENT_REFLECT_OUT_DIR "${CMAKE_BINARY_DIR}/generated/components/teng_core")
+set(TENG_CORE_COMPONENT_REFLECT_GENERATED_HPP
+    "${TENG_CORE_COMPONENT_REFLECT_OUT_DIR}/core_components_reflect.generated.hpp"
+)
+set(TENG_CORE_COMPONENT_REFLECT_GENERATED_CPP
+    "${TENG_CORE_COMPONENT_REFLECT_OUT_DIR}/core_components_reflect.generated.cpp"
+)
+set(TENG_CORE_COMPONENT_REFLECT_MANIFEST
+    "${TENG_CORE_COMPONENT_REFLECT_OUT_DIR}/core_components_reflect.generated.manifest.json"
+)
+
+add_custom_command(
+    OUTPUT
+        "${TENG_CORE_COMPONENT_REFLECT_GENERATED_HPP}"
+        "${TENG_CORE_COMPONENT_REFLECT_GENERATED_CPP}"
+        "${TENG_CORE_COMPONENT_REFLECT_MANIFEST}"
+    COMMAND
+        $<TARGET_FILE:teng-component-codegen>
+        --out-dir "${TENG_CORE_COMPONENT_REFLECT_OUT_DIR}"
+        --module-name "teng_core"
+        --output-basename "core_components_reflect.generated"
+        --namespace "teng::engine::core_component_generated"
+        --function-prefix "core_components"
+        --include "engine/scene/SceneComponents.hpp"
+        --include "engine/Input.hpp"
+        --typed-thunks
+        --header "${CMAKE_CURRENT_SOURCE_DIR}/engine/scene/SceneComponents.hpp"
+        --header "${CMAKE_CURRENT_SOURCE_DIR}/engine/Input.hpp"
+        --extra-arg=-std=c++23
+        --extra-arg=-I${CMAKE_CURRENT_SOURCE_DIR}
+        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/flecs/include
+        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/glm
+        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/include
+        ${TENG_COMPONENT_CODEGEN_SYSTEM_ARGS}
+    DEPENDS
+        teng-component-codegen
+        "${CMAKE_CURRENT_SOURCE_DIR}/engine/scene/SceneComponents.hpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/engine/Input.hpp"
+    COMMENT "Generating core component reflection code"
+    VERBATIM
+)
+
 set(TENG_SCENE_SOURCES
     engine/scene/BuiltInComponentSerialization.cpp
     engine/scene/ComponentRegistry.cpp
@@ -41,6 +83,7 @@ set(TENG_SCENE_SOURCES
     engine/scene/SceneIds.cpp
     engine/scene/SceneManager.cpp
     engine/scene/SceneSerialization.cpp
+    "${TENG_CORE_COMPONENT_REFLECT_GENERATED_CPP}"
 )
 
 set(TENG_RENDER_SOURCES
@@ -147,7 +190,7 @@ function(configure_teng_compile_target target_name)
     target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/resources/shaders)
     target_include_directories(${target_name} PUBLIC ${CMAKE_SOURCE_DIR}/third_party/vendored)
     target_include_directories(${target_name} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
-    target_include_directories(${target_name} PUBLIC ${CMAKE_SOURCE_DIR}/third_party/flecs/include)
+    target_include_directories(${target_name} SYSTEM PUBLIC ${CMAKE_SOURCE_DIR}/third_party/flecs/include)
 
     target_link_libraries(${target_name} PUBLIC ${TENG_COMMON_PUBLIC_LIBS})
 endfunction()
@@ -194,6 +237,7 @@ add_teng_component(teng_platform OFF ${TENG_PLATFORM_SOURCES})
 add_teng_component(teng_gfx ON ${TENG_GFX_SOURCES})
 add_teng_component(teng_assets OFF ${TENG_ASSETS_SOURCES})
 add_teng_component(teng_scene OFF ${TENG_SCENE_SOURCES})
+target_include_directories(teng_scene PUBLIC "${TENG_CORE_COMPONENT_REFLECT_OUT_DIR}")
 add_teng_component(teng_scene_tool_lib OFF engine/scene/SceneValidate.cpp)
 add_teng_component(teng_render ON ${TENG_RENDER_SOURCES})
 add_teng_component(teng_engine_runtime ON ${TENG_ENGINE_RUNTIME_SOURCES})

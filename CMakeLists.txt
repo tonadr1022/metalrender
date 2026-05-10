@@ -26,9 +26,17 @@ set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${CMAKE_SOURCE_DIR}/cmake")
 include(Warnings)
 add_project_warnings(project_warnings)
 
+set(TENG_COMPONENT_CODEGEN_SYSTEM_ARGS)
+foreach(teng_codegen_system_include IN LISTS CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES)
+    list(APPEND TENG_COMPONENT_CODEGEN_SYSTEM_ARGS
+        "--extra-arg=-isystem${teng_codegen_system_include}"
+    )
+endforeach()
+
 set(POSITION_INDEPENDENT_CODE ON)
 
 add_subdirectory(third_party)
+add_subdirectory(tools)
 include(CTest)
 add_subdirectory(src)
 add_subdirectory(tests)

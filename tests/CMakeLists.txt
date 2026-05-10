@@ -1,5 +1,3 @@
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-
 set(TENG_TEST_EXTENSION_REFLECT_OUT_DIR "${CMAKE_BINARY_DIR}/generated/teng_test_extension")
 set(TENG_TEST_EXTENSION_REFLECT_GENERATED_HPP
     "${TENG_TEST_EXTENSION_REFLECT_OUT_DIR}/test_extension_reflect.generated.hpp"
@@ -17,8 +15,7 @@ add_custom_command(
         "${TENG_TEST_EXTENSION_REFLECT_GENERATED_CPP}"
         "${TENG_TEST_EXTENSION_REFLECT_MANIFEST}"
     COMMAND
-        "${Python3_EXECUTABLE}"
-        "${CMAKE_SOURCE_DIR}/scripts/teng_reflect_codegen.py"
+        $<TARGET_FILE:teng-component-codegen>
         --out-dir "${TENG_TEST_EXTENSION_REFLECT_OUT_DIR}"
         --module-name "test_extension"
         --output-basename "test_extension_reflect.generated"
@@ -26,9 +23,15 @@ add_custom_command(
         --function-prefix "test_extension"
         --include "TestExtensionComponent.hpp"
         --typed-thunks
-        --headers "${CMAKE_CURRENT_SOURCE_DIR}/smoke/TestExtensionComponent.hpp"
+        --header "${CMAKE_CURRENT_SOURCE_DIR}/smoke/TestExtensionComponent.hpp"
+        --extra-arg=-std=c++23
+        --extra-arg=-I${CMAKE_SOURCE_DIR}/src
+        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/flecs/include
+        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/glm
+        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/include
+        ${TENG_COMPONENT_CODEGEN_SYSTEM_ARGS}
     DEPENDS
-        "${CMAKE_SOURCE_DIR}/scripts/teng_reflect_codegen.py"
+        teng-component-codegen
         "${CMAKE_CURRENT_SOURCE_DIR}/smoke/TestExtensionComponent.hpp"
     COMMENT "Generating test extension reflection code"
     VERBATIM
@@ -95,13 +98,26 @@ add_custom_command(
         "${TENG_REFLECT_FIXTURE_GENERATED_CPP}"
         "${TENG_REFLECT_FIXTURE_MANIFEST}"
     COMMAND
-        "${Python3_EXECUTABLE}"
-        "${CMAKE_SOURCE_DIR}/scripts/teng_reflect_codegen.py"
+        $<TARGET_FILE:teng-component-codegen>
         --out-dir "${TENG_REFLECT_FIXTURE_OUT_DIR}"
         --module-name "fixtures"
-        --headers ${TENG_REFLECT_FIXTURE_HEADERS}
+        --output-basename "fixtures_reflect.generated"
+        --manifest "${TENG_REFLECT_FIXTURE_MANIFEST}"
+        --namespace "teng::engine::reflect_fixture_generated"
+        --function-prefix "fixture"
+        --include "ReflectScalarAndAssetFixture.hpp"
+        --include "ReflectEnumAndPolicyFixture.hpp"
+        --header "${CMAKE_CURRENT_SOURCE_DIR}/reflect_fixtures/ReflectScalarAndAssetFixture.hpp"
+        --header "${CMAKE_CURRENT_SOURCE_DIR}/reflect_fixtures/ReflectEnumAndPolicyFixture.hpp"
+        --typed-thunks
+        --extra-arg=-std=c++23
+        --extra-arg=-I${CMAKE_SOURCE_DIR}/src
+        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/flecs/include
+        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/glm
+        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/include
+        ${TENG_COMPONENT_CODEGEN_SYSTEM_ARGS}
     DEPENDS
-        "${CMAKE_SOURCE_DIR}/scripts/teng_reflect_codegen.py"
+        teng-component-codegen
         ${TENG_REFLECT_FIXTURE_HEADERS}
     COMMENT "Generating reflection fixture code"
     VERBATIM
@@ -120,6 +136,9 @@ add_library(teng_reflect_fixture_generated STATIC
 )
 add_dependencies(teng_reflect_fixture_generated teng_reflect_fixture_codegen)
 target_include_directories(teng_reflect_fixture_generated PUBLIC "${TENG_REFLECT_FIXTURE_OUT_DIR}")
+target_include_directories(teng_reflect_fixture_generated PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/reflect_fixtures"
+)
 target_link_libraries(teng_reflect_fixture_generated PUBLIC teng_scene)
 
 target_link_libraries(teng_engine_smoke PUBLIC teng_reflect_fixture_generated)
@@ -159,13 +178,18 @@ if (BUILD_TESTING)
         add_test(
             NAME "reflect_codegen_rejects_${invalid_stem}"
             COMMAND
-                "${Python3_EXECUTABLE}"
-                "${CMAKE_CURRENT_SOURCE_DIR}/reflect_fixtures/run_invalid_reflect_codegen.py"
-                --python "${Python3_EXECUTABLE}"
-                --generator "${CMAKE_SOURCE_DIR}/scripts/teng_reflect_codegen.py"
+                $<TARGET_FILE:teng-component-codegen>
                 --out-dir "${CMAKE_BINARY_DIR}/generated/teng_reflect_invalid/${invalid_stem}"
                 --module-name "invalid_${invalid_stem}"
                 --header "${invalid_header}"
+                --typed-thunks
+                --extra-arg=-std=c++23
+                --extra-arg=-I${CMAKE_SOURCE_DIR}/src
+                --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/flecs/include
+                --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/glm
+                --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/include
+                ${TENG_COMPONENT_CODEGEN_SYSTEM_ARGS}
         )
+        set_tests_properties("reflect_codegen_rejects_${invalid_stem}" PROPERTIES WILL_FAIL TRUE)
     endforeach()
 endif()

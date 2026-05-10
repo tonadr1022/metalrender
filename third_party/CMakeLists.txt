@@ -1,5 +1,6 @@
 set(CMAKE_CXX_STANDARD 23)
 
+set(JSON_SystemInclude ON CACHE BOOL "" FORCE)
 add_subdirectory(nlohmann_json)
 
 set(CATCH_INSTALL_DOCS OFF CACHE BOOL "" FORCE)
