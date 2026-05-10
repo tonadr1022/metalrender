@@ -62,7 +62,7 @@ TEST_CASE("test extension component JSON v2 round-trip", "[scene_serialization][
   const TestExtensionComponent written{
       .health = 3.25f,
       .active = false,
-      .kind = "beta",
+      .kind = TestExtensionKind::Beta,
       .attachment = AssetId::from_parts(1, 2),
   };
   entity.set<TestExtensionComponent>(written);
@@ -71,6 +71,9 @@ TEST_CASE("test extension component JSON v2 round-trip", "[scene_serialization][
       serialize_scene_to_json(scene, contexts.scene_serialization);
   REQUIRE(json_result.has_value());
   const json round_json = json::parse(json_result->dump());
+  const json& component_payload =
+      round_json["entities"][0]["components"][std::string{k_test_extension_component_key}];
+  CHECK(component_payload["kind"].get<std::string>() == "beta");
   const auto validated =
       validate_scene_file_full_report(contexts.scene_serialization, round_json);
   REQUIRE(validated.has_value());
@@ -90,6 +93,22 @@ TEST_CASE("test extension component JSON v2 round-trip", "[scene_serialization][
   CHECK(read.kind == written.kind);
   CHECK(read.attachment.high == written.attachment.high);
   CHECK(read.attachment.low == written.attachment.low);
+}
+
+TEST_CASE("test extension component loads authored enum key into enum storage",
+          "[scene_serialization][extension]") {
+  const SceneTestContexts contexts = make_scene_test_contexts_with_test_extension();
+  SceneManager scenes(contexts.flecs_components);
+
+  const auto load_result =
+      deserialize_scene_json(scenes, contexts.scene_serialization, scene_json_with_extension_only_entity());
+  REQUIRE(load_result.has_value());
+  Scene* loaded = scenes.active_scene();
+  REQUIRE(loaded != nullptr);
+  const flecs::entity loaded_entity = loaded->find_entity(EntityGuid{0x1});
+  REQUIRE(loaded_entity.is_valid());
+  REQUIRE(loaded_entity.has<TestExtensionComponent>());
+  CHECK(loaded_entity.get<TestExtensionComponent>().kind == TestExtensionKind::Beta);
 }
 
 TEST_CASE("serialize_component_schema_to_json includes test extension component",

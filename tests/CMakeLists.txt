@@ -1,3 +1,59 @@
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+
+set(TENG_TEST_EXTENSION_REFLECT_OUT_DIR "${CMAKE_BINARY_DIR}/generated/teng_test_extension")
+set(TENG_TEST_EXTENSION_REFLECT_GENERATED_HPP
+    "${TENG_TEST_EXTENSION_REFLECT_OUT_DIR}/test_extension_reflect.generated.hpp"
+)
+set(TENG_TEST_EXTENSION_REFLECT_GENERATED_CPP
+    "${TENG_TEST_EXTENSION_REFLECT_OUT_DIR}/test_extension_reflect.generated.cpp"
+)
+set(TENG_TEST_EXTENSION_REFLECT_MANIFEST
+    "${TENG_TEST_EXTENSION_REFLECT_OUT_DIR}/test_extension_reflect.generated.manifest.json"
+)
+
+add_custom_command(
+    OUTPUT
+        "${TENG_TEST_EXTENSION_REFLECT_GENERATED_HPP}"
+        "${TENG_TEST_EXTENSION_REFLECT_GENERATED_CPP}"
+        "${TENG_TEST_EXTENSION_REFLECT_MANIFEST}"
+    COMMAND
+        "${Python3_EXECUTABLE}"
+        "${CMAKE_SOURCE_DIR}/scripts/teng_reflect_codegen.py"
+        --out-dir "${TENG_TEST_EXTENSION_REFLECT_OUT_DIR}"
+        --module-name "test_extension"
+        --output-basename "test_extension_reflect.generated"
+        --namespace "teng::engine::test_extension_generated"
+        --function-prefix "test_extension"
+        --include "TestExtensionComponent.hpp"
+        --typed-thunks
+        --headers "${CMAKE_CURRENT_SOURCE_DIR}/smoke/TestExtensionComponent.hpp"
+    DEPENDS
+        "${CMAKE_SOURCE_DIR}/scripts/teng_reflect_codegen.py"
+        "${CMAKE_CURRENT_SOURCE_DIR}/smoke/TestExtensionComponent.hpp"
+    COMMENT "Generating test extension reflection code"
+    VERBATIM
+)
+
+add_custom_target(
+    teng_test_extension_reflect_codegen
+    DEPENDS
+        "${TENG_TEST_EXTENSION_REFLECT_GENERATED_HPP}"
+        "${TENG_TEST_EXTENSION_REFLECT_GENERATED_CPP}"
+        "${TENG_TEST_EXTENSION_REFLECT_MANIFEST}"
+)
+
+add_library(teng_test_extension_reflect_generated STATIC
+    "${TENG_TEST_EXTENSION_REFLECT_GENERATED_CPP}"
+)
+add_dependencies(teng_test_extension_reflect_generated teng_test_extension_reflect_codegen)
+target_include_directories(teng_test_extension_reflect_generated
+    PUBLIC
+        "${TENG_TEST_EXTENSION_REFLECT_OUT_DIR}"
+    PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/smoke"
+)
+target_link_libraries(teng_test_extension_reflect_generated PUBLIC teng_scene)
+
 add_library(teng_engine_smoke STATIC
     smoke/AssetServiceSmokeTest.cpp
     smoke/AssetRegistrySmokeTest.cpp
@@ -8,7 +64,7 @@ add_library(teng_engine_smoke STATIC
     smoke/TestExtensionComponent.cpp
     smoke/TestHelpers.cpp
 )
-target_link_libraries(teng_engine_smoke PUBLIC teng_runtime)
+target_link_libraries(teng_engine_smoke PUBLIC teng_runtime teng_test_extension_reflect_generated)
 target_include_directories(teng_engine_smoke
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/smoke
@@ -16,8 +72,6 @@ target_include_directories(teng_engine_smoke
 
 # -----------------------------------------------------------------------------
 # Task 2: reflection codegen fixture path (build-dir only; generated C++ must compile).
-
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(TENG_REFLECT_FIXTURE_OUT_DIR "${CMAKE_BINARY_DIR}/generated/teng_reflect_fixtures")
 set(TENG_REFLECT_FIXTURE_GENERATED_HPP

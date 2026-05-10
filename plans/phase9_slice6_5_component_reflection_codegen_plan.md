@@ -1,6 +1,6 @@
 # Phase 9 Slice 6.5: Component reflection codegen before cooked v2
 
-**Status:** task 2 done.
+**Status:** task 3 done.
 
 **Parent plan:** [`component_schema_authoring_implementation_plan.md`](component_schema_authoring_implementation_plan.md).  
 **Scene byte contract:** [`scene_serialization_design.md`](scene_serialization_design.md).  

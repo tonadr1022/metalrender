@@ -43,6 +43,15 @@ class Component:
     fields: tuple[Field, ...]
 
 
+@dataclass(frozen=True)
+class OutputOptions:
+    basename: str
+    namespace: str
+    function_prefix: str
+    header_includes: tuple[str, ...]
+    typed_thunks: bool
+
+
 class CodegenError(RuntimeError):
     pass
 
@@ -600,11 +609,160 @@ def _cpp_field_record(field: Field) -> str:
     return "scene::ReflectedFieldRecord{" + ", ".join(parts) + "}"
 
 
-def _write_generated_cpp(out_dir: Path, *, components: list[Component], module_name: str) -> None:
-    hpp = out_dir / "fixtures_reflect.generated.hpp"
-    cpp = out_dir / "fixtures_reflect.generated.cpp"
+def _enum_type(field: Field) -> str:
+    if not field.enum_values:
+        raise CodegenError(f"enum field {field.member} has no values")
+    first = field.enum_values[0].enumerator_expr
+    if "::" not in first:
+        raise CodegenError(f"enum value must be scoped, got: {first}")
+    enum_type = first.rsplit("::", 1)[0]
+    for value in field.enum_values:
+        if not value.enumerator_expr.startswith(f"{enum_type}::"):
+            raise CodegenError(
+                f"enum field {field.member} mixes enum types: {first}, {value.enumerator_expr}"
+            )
+    return enum_type
 
-    banner = f"fixtures_reflect (module={module_name})"
+
+def _typed_field_json_expr(field: Field, component_var: str) -> str:
+    member_expr = f"{component_var}.{field.member}"
+    if field.kind in {"Bool", "F32", "I32", "U32", "String"}:
+        return member_expr
+    if field.kind == "AssetId":
+        return f"{member_expr}.to_string()"
+    if field.kind == "Enum":
+        return f"std::string(to_key_{_c_ident(field.enum_key or field.member)}({member_expr}))"
+    raise CodegenError(f"typed generator does not know how to serialize kind {field.kind}")
+
+
+def _typed_field_load_expr(field: Field) -> str:
+    key = field.json_key or field.member
+    payload_get = f'payload[{_cpp_string_literal(key)}]'
+    if field.kind == "Bool":
+        return f"{payload_get}.get<bool>()"
+    if field.kind == "F32":
+        return f"{payload_get}.get<float>()"
+    if field.kind == "I32":
+        return f"{payload_get}.get<int32_t>()"
+    if field.kind == "U32":
+        return f"{payload_get}.get<uint32_t>()"
+    if field.kind == "String":
+        return f"{payload_get}.get<std::string>()"
+    if field.kind == "AssetId":
+        return f"AssetId::parse({payload_get}.get<std::string>()).value()"
+    if field.kind == "Enum":
+        return f"from_key_{_c_ident(field.enum_key or field.member)}({payload_get}.get<std::string>())"
+    raise CodegenError(f"typed generator does not know how to deserialize kind {field.kind}")
+
+
+def _write_enum_helpers(cpp_lines: list[str], components: list[Component]) -> None:
+    seen_enum_helpers: set[str] = set()
+    for component in components:
+        for field in component.fields:
+            if field.kind != "Enum":
+                continue
+            helper_ident = _c_ident(field.enum_key or field.member)
+            if helper_ident in seen_enum_helpers:
+                continue
+            seen_enum_helpers.add(helper_ident)
+            enum_type = _enum_type(field)
+            cpp_lines.append(
+                f"[[nodiscard]] std::string_view to_key_{helper_ident}({enum_type} value) {{"
+            )
+            cpp_lines.append("  switch (value) {")
+            for enum_value in field.enum_values:
+                cpp_lines.append(f"    case {enum_value.enumerator_expr}:")
+                cpp_lines.append(f"      return {_cpp_string_literal(enum_value.key)};")
+            cpp_lines.append("  }")
+            cpp_lines.append('  ALWAYS_ASSERT(false, "unknown reflected enum value");')
+            cpp_lines.append('  return "";')
+            cpp_lines.append("}")
+            cpp_lines.append("")
+            cpp_lines.append(
+                f"[[nodiscard]] {enum_type} from_key_{helper_ident}(std::string_view key) {{"
+            )
+            for enum_value in field.enum_values:
+                cpp_lines.append(f"  if (key == {_cpp_string_literal(enum_value.key)}) {{")
+                cpp_lines.append(f"    return {enum_value.enumerator_expr};")
+                cpp_lines.append("  }")
+            cpp_lines.append('  ALWAYS_ASSERT(false, "unknown reflected enum key {}", key);')
+            cpp_lines.append(f"  return {field.enum_values[0].enumerator_expr};")
+            cpp_lines.append("}")
+            cpp_lines.append("")
+            cpp_lines.append(
+                f"[[maybe_unused]] [[nodiscard]] int64_t to_stable_value_{helper_ident}("
+                f"{enum_type} value) {{"
+            )
+            cpp_lines.append("  switch (value) {")
+            for enum_value in field.enum_values:
+                cpp_lines.append(f"    case {enum_value.enumerator_expr}:")
+                cpp_lines.append(f"      return {enum_value.stable_value};")
+            cpp_lines.append("  }")
+            cpp_lines.append('  ALWAYS_ASSERT(false, "unknown reflected enum value");')
+            cpp_lines.append("  return 0;")
+            cpp_lines.append("}")
+            cpp_lines.append("")
+
+
+def _write_typed_thunks(cpp_lines: list[str], components: list[Component]) -> None:
+    _write_enum_helpers(cpp_lines, components)
+    for component in components:
+        ident = _c_ident(component.component_key)
+        cpp_lines.append(f"void register_flecs_{ident}(flecs::world& world) {{")
+        cpp_lines.append(f"  world.component<{component.cpp_type}>();")
+        cpp_lines.append("}")
+        cpp_lines.append("")
+        if component.add_on_create:
+            cpp_lines.append(f"void apply_on_create_{ident}(flecs::entity entity) {{")
+            cpp_lines.append(f"  entity.set<{component.cpp_type}>({component.cpp_type}{{}});")
+            cpp_lines.append("}")
+            cpp_lines.append("")
+        cpp_lines.append(f"bool has_component_{ident}(flecs::entity entity) {{")
+        cpp_lines.append(f"  return entity.has<{component.cpp_type}>();")
+        cpp_lines.append("}")
+        cpp_lines.append("")
+        if component.storage == "Authored":
+            cpp_lines.append(f"nlohmann::json serialize_component_{ident}(flecs::entity entity) {{")
+            cpp_lines.append(f"  const auto& component = entity.get<{component.cpp_type}>();")
+            cpp_lines.append("  return nlohmann::json{")
+            for field in component.fields:
+                key = field.json_key or field.member
+                cpp_lines.append(
+                    f"      {{{_cpp_string_literal(key)}, {_typed_field_json_expr(field, 'component')}}},"
+                )
+            cpp_lines.append("  };")
+            cpp_lines.append("}")
+            cpp_lines.append("")
+            cpp_lines.append(
+                f"void deserialize_component_{ident}(flecs::entity entity, "
+                "const nlohmann::json& payload) {"
+            )
+            cpp_lines.append(f"  entity.set<{component.cpp_type}>({component.cpp_type}{{")
+            for field in component.fields:
+                cpp_lines.append(f"      .{field.member} = {_typed_field_load_expr(field)},")
+            cpp_lines.append("  });")
+            cpp_lines.append("}")
+            cpp_lines.append("")
+
+
+def _write_fixture_thunks(cpp_lines: list[str]) -> None:
+    cpp_lines.append("void register_fixture_flecs_component(flecs::world&) {}")
+    cpp_lines.append("[[maybe_unused]] void apply_fixture_on_create(flecs::entity) {}")
+    cpp_lines.append("bool has_fixture_component(flecs::entity entity) { return entity.is_valid(); }")
+    cpp_lines.append("nlohmann::json serialize_fixture_component(flecs::entity) {")
+    cpp_lines.append("  return nlohmann::json::object();")
+    cpp_lines.append("}")
+    cpp_lines.append("void deserialize_fixture_component(flecs::entity, const nlohmann::json&) {}")
+    cpp_lines.append("")
+
+
+def _write_generated_cpp(
+    out_dir: Path, *, components: list[Component], module_name: str, options: OutputOptions
+) -> None:
+    hpp = out_dir / f"{options.basename}.hpp"
+    cpp = out_dir / f"{options.basename}.cpp"
+
+    banner = f"{options.basename} (module={module_name})"
     comp_count = len(components)
     field_count = sum(len(c.fields) for c in components)
 
@@ -627,7 +785,7 @@ def _write_generated_cpp(out_dir: Path, *, components: list[Component], module_n
 
 #include "engine/scene/ComponentRuntimeReflection.hpp"
 
-namespace teng::reflect_fixture_generated {{
+namespace {options.namespace} {{
 
 inline constexpr std::string_view k_banner = {json.dumps(banner)};
 inline constexpr std::size_t k_component_count = {comp_count};
@@ -637,23 +795,31 @@ inline constexpr std::size_t k_field_count = {field_count};
 extern const char* const k_dump_lines[];
 extern const std::size_t k_dump_line_count;
 
-void register_fixture_reflected_components(engine::scene::ComponentRegistryBuilder& builder);
-void register_fixture_reflected_flecs(
+void register_{options.function_prefix}_reflected_components(engine::scene::ComponentRegistryBuilder& builder);
+void register_{options.function_prefix}_reflected_flecs(
     const engine::scene::ComponentRegistry& registry,
     engine::FlecsComponentContextBuilder& builder);
-void register_fixture_reflected_serialization(engine::SceneSerializationContextBuilder& builder);
+void register_{options.function_prefix}_reflected_serialization(engine::SceneSerializationContextBuilder& builder);
 
-}}  // namespace teng::reflect_fixture_generated
+}}  // namespace {options.namespace}
 """
 
     cpp_lines = []
-    cpp_lines.append('#include "fixtures_reflect.generated.hpp"')
+    cpp_lines.append(f'#include "{options.basename}.hpp"')
     cpp_lines.append("")
     cpp_lines.append("#include <array>")
+    cpp_lines.append("#include <cstdint>")
+    cpp_lines.append("#include <string>")
+    cpp_lines.append("#include <string_view>")
     cpp_lines.append("")
     cpp_lines.append("#include <nlohmann/json.hpp>")
+    if options.typed_thunks:
+        cpp_lines.append("")
+        cpp_lines.append('#include "core/EAssert.hpp"')
+    for include in options.header_includes:
+        cpp_lines.append(f'#include "{include}"')
     cpp_lines.append("")
-    cpp_lines.append("namespace teng::reflect_fixture_generated {")
+    cpp_lines.append(f"namespace {options.namespace} {{")
     cpp_lines.append("")
     cpp_lines.append("namespace {")
     cpp_lines.append("")
@@ -685,24 +851,30 @@ void register_fixture_reflected_serialization(engine::SceneSerializationContextB
         cpp_lines.append("  },")
     cpp_lines.append("}};")
     cpp_lines.append("")
-    cpp_lines.append("void register_fixture_flecs_component(flecs::world&) {}")
-    cpp_lines.append("[[maybe_unused]] void apply_fixture_on_create(flecs::entity) {}")
-    cpp_lines.append("bool has_fixture_component(flecs::entity entity) { return entity.is_valid(); }")
-    cpp_lines.append("nlohmann::json serialize_fixture_component(flecs::entity) {")
-    cpp_lines.append("  return nlohmann::json::object();")
-    cpp_lines.append("}")
-    cpp_lines.append("void deserialize_fixture_component(flecs::entity, const nlohmann::json&) {}")
-    cpp_lines.append("")
+    if options.typed_thunks:
+        _write_typed_thunks(cpp_lines, components)
+    else:
+        _write_fixture_thunks(cpp_lines)
+
     flecs_components = [c for c in components if c.storage != "EditorOnly"]
     cpp_lines.append(
         f"const std::array<teng::engine::ReflectedFlecsThunks, {len(flecs_components)}> "
         "k_flecs_thunks = {{"
     )
     for c in flecs_components:
-        apply_fn = "apply_fixture_on_create" if c.add_on_create else "nullptr"
+        apply_fn = (
+            f"apply_on_create_{_c_ident(c.component_key)}"
+            if options.typed_thunks and c.add_on_create
+            else ("apply_fixture_on_create" if c.add_on_create else "nullptr")
+        )
+        register_fn = (
+            f"register_flecs_{_c_ident(c.component_key)}"
+            if options.typed_thunks
+            else "register_fixture_flecs_component"
+        )
         cpp_lines.append("  teng::engine::ReflectedFlecsThunks{")
         cpp_lines.append(f"      .component_key = {_cpp_string_literal(c.component_key)},")
-        cpp_lines.append("      .register_flecs_fn = register_fixture_flecs_component,")
+        cpp_lines.append(f"      .register_flecs_fn = {register_fn},")
         cpp_lines.append(f"      .apply_on_create_fn = {apply_fn},")
         cpp_lines.append("  },")
     cpp_lines.append("}};")
@@ -713,11 +885,21 @@ void register_fixture_reflected_serialization(engine::SceneSerializationContextB
         "k_serialization_thunks = {{"
     )
     for c in serialized_components:
+        ident = _c_ident(c.component_key)
+        has_fn = f"has_component_{ident}" if options.typed_thunks else "has_fixture_component"
+        serialize_fn = (
+            f"serialize_component_{ident}" if options.typed_thunks else "serialize_fixture_component"
+        )
+        deserialize_fn = (
+            f"deserialize_component_{ident}"
+            if options.typed_thunks
+            else "deserialize_fixture_component"
+        )
         cpp_lines.append("  teng::engine::ReflectedSerializationThunks{")
         cpp_lines.append(f"      .component_key = {_cpp_string_literal(c.component_key)},")
-        cpp_lines.append("      .has_component_fn = has_fixture_component,")
-        cpp_lines.append("      .serialize_fn = serialize_fixture_component,")
-        cpp_lines.append("      .deserialize_fn = deserialize_fixture_component,")
+        cpp_lines.append(f"      .has_component_fn = {has_fn},")
+        cpp_lines.append(f"      .serialize_fn = {serialize_fn},")
+        cpp_lines.append(f"      .deserialize_fn = {deserialize_fn},")
         cpp_lines.append("  },")
     cpp_lines.append("}};")
     cpp_lines.append("")
@@ -730,24 +912,26 @@ void register_fixture_reflected_serialization(engine::SceneSerializationContextB
     cpp_lines.append("};")
     cpp_lines.append("")
     cpp_lines.append(
-        "void register_fixture_reflected_components(engine::scene::ComponentRegistryBuilder& builder) {"
+        f"void register_{options.function_prefix}_reflected_components("
+        "engine::scene::ComponentRegistryBuilder& builder) {"
     )
     cpp_lines.append("  engine::register_reflected_components(builder, k_components);")
     cpp_lines.append("}")
     cpp_lines.append("")
-    cpp_lines.append("void register_fixture_reflected_flecs(")
+    cpp_lines.append(f"void register_{options.function_prefix}_reflected_flecs(")
     cpp_lines.append("    const engine::scene::ComponentRegistry& registry,")
     cpp_lines.append("    engine::FlecsComponentContextBuilder& builder) {")
     cpp_lines.append("  engine::register_reflected_flecs(registry, builder, k_flecs_thunks);")
     cpp_lines.append("}")
     cpp_lines.append("")
     cpp_lines.append(
-        "void register_fixture_reflected_serialization(engine::SceneSerializationContextBuilder& builder) {"
+        f"void register_{options.function_prefix}_reflected_serialization("
+        "engine::SceneSerializationContextBuilder& builder) {"
     )
     cpp_lines.append("  engine::register_reflected_serialization(builder, k_serialization_thunks);")
     cpp_lines.append("}")
     cpp_lines.append("")
-    cpp_lines.append("}  // namespace teng::reflect_fixture_generated")
+    cpp_lines.append(f"}}  // namespace {options.namespace}")
     cpp_lines.append("")
 
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -759,6 +943,33 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Header reflection/codegen fixture generator.")
     parser.add_argument("--out-dir", required=True, help="Output directory.")
     parser.add_argument("--module-name", required=True, help="Generated module name label.")
+    parser.add_argument(
+        "--output-basename",
+        default="fixtures_reflect.generated",
+        help="Generated header/source basename without .hpp/.cpp.",
+    )
+    parser.add_argument(
+        "--namespace",
+        default="teng::reflect_fixture_generated",
+        help="C++ namespace for generated registration functions.",
+    )
+    parser.add_argument(
+        "--function-prefix",
+        default="fixture",
+        help="Prefix in register_<prefix>_reflected_* functions.",
+    )
+    parser.add_argument(
+        "--include",
+        dest="header_includes",
+        action="append",
+        default=[],
+        help="Header include to add to the generated .cpp. May be passed multiple times.",
+    )
+    parser.add_argument(
+        "--typed-thunks",
+        action="store_true",
+        help="Generate typed Flecs and JSON thunks instead of fixture dummy thunks.",
+    )
     parser.add_argument(
         "--headers",
         nargs="+",
@@ -775,6 +986,13 @@ def main(argv: list[str]) -> int:
     out_dir = Path(args.out_dir)
     headers = [Path(h) for h in args.headers]
     module_name = str(args.module_name)
+    options = OutputOptions(
+        basename=str(args.output_basename),
+        namespace=str(args.namespace),
+        function_prefix=str(args.function_prefix),
+        header_includes=tuple(str(include) for include in args.header_includes),
+        typed_thunks=bool(args.typed_thunks),
+    )
 
     try:
         components = parse_headers(headers)
@@ -785,10 +1003,17 @@ def main(argv: list[str]) -> int:
         manifest_path = (
             Path(args.manifest)
             if args.manifest is not None
-            else (out_dir / "fixtures_reflect.manifest.json")
+            else (
+                out_dir
+                / (
+                    "fixtures_reflect.manifest.json"
+                    if options.basename == "fixtures_reflect.generated"
+                    else f"{options.basename}.manifest.json"
+                )
+            )
         )
         _write_manifest(manifest_path, manifest)
-        _write_generated_cpp(out_dir, components=components, module_name=module_name)
+        _write_generated_cpp(out_dir, components=components, module_name=module_name, options=options)
         return 0
     except CodegenError as exc:
         print(f"teng_reflect_codegen.py: error: {exc}", file=sys.stderr)
