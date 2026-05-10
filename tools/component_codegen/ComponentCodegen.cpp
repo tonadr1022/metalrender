@@ -17,15 +17,9 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
-#include <map>
 #include <optional>
-#include <set>
-#include <sstream>
 #include <stdexcept>
-#include <string>
 #include <string_view>
-#include <utility>
-#include <vector>
 
 namespace {
 
@@ -229,7 +223,7 @@ struct Component {
       continue;
     }
     const std::string annotation = annotate->getAnnotation().str();
-    if (annotation.rfind(prefix, 0) == 0) {
+    if (annotation.starts_with(prefix)) {
       return parse_args_payload(std::string_view{annotation}.substr(prefix.size()));
     }
   }
@@ -244,8 +238,7 @@ struct Component {
   std::string out;
   out.reserve(text.size());
   for (const char c : text) {
-    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-        c == '_') {
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_') {
       out.push_back(c);
     } else {
       out.push_back('_');
@@ -298,25 +291,25 @@ struct Component {
   if (type == "std::basic_string<char>" || type == "std::string") {
     return "String";
   }
-  if (type.find("glm::vec<2, float") != std::string::npos) {
+  if (type.contains("glm::vec<2, float")) {
     return "Vec2";
   }
-  if (type.find("glm::vec<3, float") != std::string::npos) {
+  if (type.contains("glm::vec<3, float")) {
     return "Vec3";
   }
-  if (type.find("glm::vec<4, float") != std::string::npos) {
+  if (type.contains("glm::vec<4, float")) {
     return "Vec4";
   }
-  if (type.find("glm::qua<float") != std::string::npos) {
+  if (type.contains("glm::qua<float")) {
     return "Quat";
   }
-  if (type.find("glm::mat<4, 4, float") != std::string::npos) {
+  if (type.contains("glm::mat<4, 4, float")) {
     return "Mat4";
   }
   if (type == "teng::engine::AssetId" || type == "struct teng::engine::AssetId") {
     return "AssetId";
   }
-  if (const clang::EnumType* enum_type = field.getType()->getAs<clang::EnumType>()) {
+  if (const auto* enum_type = field.getType()->getAs<clang::EnumType>()) {
     (void)enum_type;
     return "Enum";
   }
@@ -325,7 +318,7 @@ struct Component {
 }
 
 [[nodiscard]] const clang::EnumDecl& enum_decl_for_field(const clang::FieldDecl& field) {
-  const clang::EnumType* enum_type = field.getType()->getAs<clang::EnumType>();
+  const auto* enum_type = field.getType()->getAs<clang::EnumType>();
   if (!enum_type) {
     throw CodegenError("field '" + field.getNameAsString() + "' is not an enum");
   }
@@ -540,12 +533,11 @@ class ActionFactory : public clang::tooling::FrontendActionFactory {
            member + ".x, " + member + ".y, " + member + ".z}}";
   }
   if (field.kind == "Mat4") {
-    return "scene::ComponentFieldDefaultValue{scene::ComponentDefaultMat4{{" + member +
-           "[0][0], " + member + "[0][1], " + member + "[0][2], " + member + "[0][3], " +
-           member + "[1][0], " + member + "[1][1], " + member + "[1][2], " + member +
-           "[1][3], " + member + "[2][0], " + member + "[2][1], " + member + "[2][2], " +
-           member + "[2][3], " + member + "[3][0], " + member + "[3][1], " + member +
-           "[3][2], " + member + "[3][3]}}}";
+    return "scene::ComponentFieldDefaultValue{scene::ComponentDefaultMat4{{" + member + "[0][0], " +
+           member + "[0][1], " + member + "[0][2], " + member + "[0][3], " + member + "[1][0], " +
+           member + "[1][1], " + member + "[1][2], " + member + "[1][3], " + member + "[2][0], " +
+           member + "[2][1], " + member + "[2][2], " + member + "[2][3], " + member + "[3][0], " +
+           member + "[3][1], " + member + "[3][2], " + member + "[3][3]}}}";
   }
   if (field.kind == "AssetId") {
     return "scene::ComponentFieldDefaultValue{scene::ComponentDefaultAssetId{" + member +
@@ -563,7 +555,7 @@ class ActionFactory : public clang::tooling::FrontendActionFactory {
   parts.push_back(".key = " + cpp_string(field.key));
   parts.push_back(".member_name = " + cpp_string(field.member));
   parts.push_back(".kind = " + kind_expr(field.kind));
-  parts.push_back(".authored_required = true");
+  parts.emplace_back(".authored_required = true");
   parts.push_back(".default_value = " + default_expr(component, field));
   if (!field.asset_kind.empty()) {
     parts.push_back(".asset = scene::ComponentAssetFieldMetadata{.expected_kind = " +
@@ -595,9 +587,9 @@ class ActionFactory : public clang::tooling::FrontendActionFactory {
 }
 
 [[nodiscard]] std::string json_serialize_expr(const Field& field, std::string_view component_var) {
-  const std::string member = std::string{component_var} + "." + field.member;
-  if (field.kind == "Bool" || field.kind == "I32" || field.kind == "U32" ||
-      field.kind == "F32" || field.kind == "String") {
+  std::string member = std::string{component_var} + "." + field.member;
+  if (field.kind == "Bool" || field.kind == "I32" || field.kind == "U32" || field.kind == "F32" ||
+      field.kind == "String") {
     return member;
   }
   if (field.kind == "Vec2") {
@@ -616,10 +608,10 @@ class ActionFactory : public clang::tooling::FrontendActionFactory {
   }
   if (field.kind == "Mat4") {
     return "nlohmann::json::array({" + member + "[0][0], " + member + "[0][1], " + member +
-           "[0][2], " + member + "[0][3], " + member + "[1][0], " + member + "[1][1], " +
-           member + "[1][2], " + member + "[1][3], " + member + "[2][0], " + member +
-           "[2][1], " + member + "[2][2], " + member + "[2][3], " + member + "[3][0], " +
-           member + "[3][1], " + member + "[3][2], " + member + "[3][3]})";
+           "[0][2], " + member + "[0][3], " + member + "[1][0], " + member + "[1][1], " + member +
+           "[1][2], " + member + "[1][3], " + member + "[2][0], " + member + "[2][1], " + member +
+           "[2][2], " + member + "[2][3], " + member + "[3][0], " + member + "[3][1], " + member +
+           "[3][2], " + member + "[3][3]})";
   }
   if (field.kind == "AssetId") {
     return member + ".to_string()";
@@ -678,9 +670,9 @@ void write_generated(const Options& options, const std::vector<Component>& compo
   fs::create_directories(options.out_dir);
   const fs::path hpp = options.out_dir / (options.basename + ".hpp");
   const fs::path cpp = options.out_dir / (options.basename + ".cpp");
-  const fs::path manifest =
-      options.manifest_path.empty() ? options.out_dir / (options.basename + ".manifest.json")
-                                    : options.manifest_path;
+  const fs::path manifest = options.manifest_path.empty()
+                                ? options.out_dir / (options.basename + ".manifest.json")
+                                : options.manifest_path;
 
   {
     std::ofstream out{hpp};
@@ -805,8 +797,8 @@ void write_generated(const Options& options, const std::vector<Component>& compo
         out << "  const auto& component = entity.get<" << component.cpp_type << ">();\n";
         out << "  return nlohmann::json{\n";
         for (const Field& field : component.fields) {
-          out << "      {" << cpp_string(field.key) << ", " << json_serialize_expr(field, "component")
-              << "},\n";
+          out << "      {" << cpp_string(field.key) << ", "
+              << json_serialize_expr(field, "component") << "},\n";
         }
         out << "  };\n";
         out << "}\n\n";
@@ -860,8 +852,7 @@ void write_generated(const Options& options, const std::vector<Component>& compo
     std::vector<std::string> dump_lines;
     for (const Component& component : components) {
       dump_lines.push_back("component " + component.component_key + " type=" + component.cpp_type +
-                           " storage=" + component.storage + " visibility=" +
-                           component.visibility);
+                           " storage=" + component.storage + " visibility=" + component.visibility);
       for (const Field& field : component.fields) {
         dump_lines.push_back("  field " + field.key + " member=" + field.member +
                              " kind=" + field.kind + " script=" + field.script_exposure);
@@ -884,7 +875,8 @@ void write_generated(const Options& options, const std::vector<Component>& compo
     out << "}\n\n";
     out << "void register_" << options.function_prefix
         << "_reflected_flecs(engine::FlecsComponentContextBuilder& builder) {\n";
-    out << "  register_" << options.function_prefix << "_reflected_flecs(builder.registry(), builder);\n";
+    out << "  register_" << options.function_prefix
+        << "_reflected_flecs(builder.registry(), builder);\n";
     out << "}\n\n";
     out << "void register_" << options.function_prefix
         << "_reflected_serialization(engine::SceneSerializationContextBuilder& builder) {\n";
@@ -939,7 +931,7 @@ void write_generated(const Options& options, const std::vector<Component>& compo
       options.headers.push_back(require_value(arg));
     } else if (arg == "--typed-thunks") {
       options.typed_thunks = true;
-    } else if (arg.rfind("--extra-arg=", 0) == 0) {
+    } else if (arg.starts_with("--extra-arg=")) {
       options.compile_args.push_back(arg.substr(std::string{"--extra-arg="}.size()));
     } else if (arg == "--extra-arg") {
       options.compile_args.push_back(require_value(arg));
