@@ -13,21 +13,17 @@
 #include <llvm/Support/raw_ostream.h>
 
 #include <algorithm>
-#include <charconv>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <optional>
-#include <stdexcept>
 #include <string_view>
+
+#include "ComponentCodegenUtil.hpp"
 
 namespace {
 
 namespace fs = std::filesystem;
-
-struct CodegenError : std::runtime_error {
-  using std::runtime_error::runtime_error;
-};
 
 struct Options {
   fs::path out_dir;
@@ -40,69 +36,6 @@ struct Options {
   std::vector<std::string> headers;
   std::vector<std::string> compile_args;
   bool typed_thunks{};
-};
-
-struct AnnotationArgs {
-  std::map<std::string, std::string> values;
-
-  [[nodiscard]] std::string required(std::string_view key, std::string_view context) const {
-    const auto it = values.find(std::string{key});
-    if (it == values.end() || it->second.empty()) {
-      throw CodegenError(std::string{context} + " missing required annotation key '" +
-                         std::string{key} + "'");
-    }
-    return it->second;
-  }
-
-  [[nodiscard]] std::string optional(std::string_view key, std::string_view fallback) const {
-    const auto it = values.find(std::string{key});
-    if (it == values.end()) {
-      return std::string{fallback};
-    }
-    return it->second;
-  }
-
-  [[nodiscard]] bool optional_bool(std::string_view key, bool fallback) const {
-    const auto it = values.find(std::string{key});
-    if (it == values.end()) {
-      return fallback;
-    }
-    if (it->second == "true") {
-      return true;
-    }
-    if (it->second == "false") {
-      return false;
-    }
-    throw CodegenError("expected boolean annotation value for '" + std::string{key} + "'");
-  }
-
-  [[nodiscard]] uint32_t optional_u32(std::string_view key, uint32_t fallback) const {
-    const auto it = values.find(std::string{key});
-    if (it == values.end()) {
-      return fallback;
-    }
-    uint32_t value{};
-    const char* begin = it->second.data();
-    const char* end = begin + it->second.size();
-    const auto result = std::from_chars(begin, end, value);
-    if (result.ec != std::errc{} || result.ptr != end) {
-      throw CodegenError("expected integer annotation value for '" + std::string{key} + "'");
-    }
-    return value;
-  }
-
-  [[nodiscard]] int64_t required_i64(std::string_view key, std::string_view context) const {
-    const std::string raw = required(key, context);
-    int64_t value{};
-    const char* begin = raw.data();
-    const char* end = begin + raw.size();
-    const auto result = std::from_chars(begin, end, value);
-    if (result.ec != std::errc{} || result.ptr != end) {
-      throw CodegenError(std::string{context} + " expected integer annotation value for '" +
-                         std::string{key} + "'");
-    }
-    return value;
-  }
 };
 
 struct EnumValue {
@@ -133,31 +66,6 @@ struct Component {
   bool add_on_create{};
   std::vector<Field> fields;
 };
-
-[[nodiscard]] std::string trim(std::string_view text) {
-  const auto begin = text.find_first_not_of(" \t\r\n");
-  if (begin == std::string_view::npos) {
-    return {};
-  }
-  const auto end = text.find_last_not_of(" \t\r\n");
-  return std::string{text.substr(begin, end - begin + 1)};
-}
-
-[[nodiscard]] std::string unquote(std::string value) {
-  value = trim(value);
-  if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
-    std::string out;
-    out.reserve(value.size() - 2);
-    for (size_t i = 1; i + 1 < value.size(); ++i) {
-      if (value[i] == '\\' && i + 2 < value.size()) {
-        ++i;
-      }
-      out.push_back(value[i]);
-    }
-    return out;
-  }
-  return value;
-}
 
 [[nodiscard]] std::vector<std::string> split_top_level_commas(std::string_view text) {
   std::vector<std::string> items;
@@ -267,54 +175,6 @@ struct Component {
   }
   out.push_back('"');
   return out;
-}
-
-[[nodiscard]] std::string normalize_type(clang::QualType type) {
-  type = type.getCanonicalType();
-  return type.getAsString();
-}
-
-[[nodiscard]] std::string infer_kind(const clang::FieldDecl& field) {
-  const std::string type = normalize_type(field.getType());
-  if (type == "bool" || type == "_Bool") {
-    return "Bool";
-  }
-  if (type == "int" || type == "int32_t" || type == "std::int32_t") {
-    return "I32";
-  }
-  if (type == "unsigned int" || type == "uint32_t" || type == "std::uint32_t") {
-    return "U32";
-  }
-  if (type == "float") {
-    return "F32";
-  }
-  if (type == "std::basic_string<char>" || type == "std::string") {
-    return "String";
-  }
-  if (type.contains("glm::vec<2, float")) {
-    return "Vec2";
-  }
-  if (type.contains("glm::vec<3, float")) {
-    return "Vec3";
-  }
-  if (type.contains("glm::vec<4, float")) {
-    return "Vec4";
-  }
-  if (type.contains("glm::qua<float")) {
-    return "Quat";
-  }
-  if (type.contains("glm::mat<4, 4, float")) {
-    return "Mat4";
-  }
-  if (type == "teng::engine::AssetId" || type == "struct teng::engine::AssetId") {
-    return "AssetId";
-  }
-  if (const auto* enum_type = field.getType()->getAs<clang::EnumType>()) {
-    (void)enum_type;
-    return "Enum";
-  }
-  throw CodegenError("unsupported reflected field type '" + type + "' for member '" +
-                     field.getNameAsString() + "'");
 }
 
 [[nodiscard]] const clang::EnumDecl& enum_decl_for_field(const clang::FieldDecl& field) {
