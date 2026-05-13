@@ -42,15 +42,21 @@ class Result {
   [[nodiscard]] bool has_value() const { return value_.has_value(); }
   [[nodiscard]] explicit operator bool() const { return has_value(); }
 
+  // NOLINTBEGIN(bugprone-unchecked-optional-access)
   [[nodiscard]] T& operator*() { return *value_; }
   [[nodiscard]] const T& operator*() const { return *value_; }
 
-  [[nodiscard]] T* operator->() requires ResultArrowTarget<T> {
+  [[nodiscard]] T* operator->()
+    requires ResultArrowTarget<T>
+  {
     return std::addressof(*value_);
   }
-  [[nodiscard]] const T* operator->() const requires ResultArrowTarget<T> {
+  [[nodiscard]] const T* operator->() const
+    requires ResultArrowTarget<T>
+  {
     return std::addressof(*value_);
   }
+  // NOLINTEND(bugprone-unchecked-optional-access)
 
   [[nodiscard]] E& error() { return error_; }
   [[nodiscard]] const E& error() const { return error_; }

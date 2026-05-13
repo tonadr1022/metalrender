@@ -1,9 +1,10 @@
 #include <filesystem>
 #include <iostream>
+#include <span>
 #include <string_view>
+#include <vector>
 
 #include "core/Logger.hpp"
-#include "engine/scene/BuiltinComponentSerialization.hpp"
 #include "engine/scene/ComponentRegistry.hpp"
 #include "engine/scene/CoreComponentRegistrar.hpp"
 #include "engine/scene/SceneComponentContext.hpp"
@@ -29,24 +30,23 @@ struct SceneTestContexts {
 };
 
 [[nodiscard]] SceneTestContexts make_scene_test_contexts() {
-  scene::ComponentRegistryBuilder component_registry_builder;
-  register_core_components(component_registry_builder);
+  std::vector<scene::ComponentModuleDescriptor> component_modules;
+  const std::span<const scene::ComponentModuleDescriptor> core_modules = core_component_modules();
+  component_modules.insert(component_modules.end(), core_modules.begin(), core_modules.end());
   SceneTestContexts contexts{};
   core::DiagnosticReport report;
-  if (!component_registry_builder.try_freeze(contexts.component_registry, report)) {
+  if (!scene::try_freeze_component_registry(component_modules, contexts.component_registry,
+                                            report)) {
     LERROR("Failed to freeze component registry: {}", report.to_string());
     std::exit(1);
   }
-  FlecsComponentContextBuilder flecs_builder{contexts.component_registry};
-  register_flecs_core_components(flecs_builder);
-  if (!flecs_builder.try_freeze(contexts.flecs_components, report)) {
+  if (!make_flecs_component_context(contexts.component_registry, contexts.flecs_components,
+                                    report)) {
     LERROR("Failed to freeze scene component context: {}", report.to_string());
     std::exit(1);
   }
 
-  SceneSerializationContextBuilder serialization_builder{contexts.component_registry};
-  register_builtin_component_serialization(serialization_builder);
-  contexts.scene_serialization = serialization_builder.freeze();
+  contexts.scene_serialization = make_scene_serialization_context(contexts.component_registry);
   return contexts;
 }
 

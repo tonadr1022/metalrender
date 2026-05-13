@@ -22,12 +22,11 @@ add_custom_command(
         --namespace "teng::engine::test_extension_generated"
         --function-prefix "test_extension"
         --include "TestExtensionComponent.hpp"
-        --typed-thunks
         --header "${CMAKE_CURRENT_SOURCE_DIR}/smoke/TestExtensionComponent.hpp"
         --extra-arg=-std=c++23
         --extra-arg=-I${CMAKE_SOURCE_DIR}/src
         --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/flecs/include
-        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/glm
+        --extra-arg=-isystem${CMAKE_SOURCE_DIR}/third_party/glm
         --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/include
         ${TENG_COMPONENT_CODEGEN_SYSTEM_ARGS}
     DEPENDS
@@ -109,11 +108,10 @@ add_custom_command(
         --include "ReflectEnumAndPolicyFixture.hpp"
         --header "${CMAKE_CURRENT_SOURCE_DIR}/reflect_fixtures/ReflectScalarAndAssetFixture.hpp"
         --header "${CMAKE_CURRENT_SOURCE_DIR}/reflect_fixtures/ReflectEnumAndPolicyFixture.hpp"
-        --typed-thunks
         --extra-arg=-std=c++23
         --extra-arg=-I${CMAKE_SOURCE_DIR}/src
         --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/flecs/include
-        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/glm
+        --extra-arg=-isystem${CMAKE_SOURCE_DIR}/third_party/glm
         --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/include
         ${TENG_COMPONENT_CODEGEN_SYSTEM_ARGS}
     DEPENDS
@@ -182,11 +180,10 @@ if (BUILD_TESTING)
                 --out-dir "${CMAKE_BINARY_DIR}/generated/teng_reflect_invalid/${invalid_stem}"
                 --module-name "invalid_${invalid_stem}"
                 --header "${invalid_header}"
-                --typed-thunks
                 --extra-arg=-std=c++23
                 --extra-arg=-I${CMAKE_SOURCE_DIR}/src
                 --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/flecs/include
-                --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/glm
+                --extra-arg=-isystem${CMAKE_SOURCE_DIR}/third_party/glm
                 --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/include
                 ${TENG_COMPONENT_CODEGEN_SYSTEM_ARGS}
         )

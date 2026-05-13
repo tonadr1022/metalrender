@@ -59,6 +59,15 @@ add_subdirectory(ktx)
 
 add_subdirectory(glfw)
 add_subdirectory(glm)
+
+# GLM as a system include for all consumers without patching the submodule:
+# glm-header-only publishes normal INTERFACE includes; replace them with the same
+# paths as SYSTEM INTERFACE so compile_commands use -isystem (clang-tidy, warnings).
+set_target_properties(glm-header-only PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "")
+target_include_directories(glm-header-only SYSTEM INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/glm>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 target_compile_definitions(glm INTERFACE VK_NO_PROTOTYPES)
 
 add_subdirectory(concurrentqueue)

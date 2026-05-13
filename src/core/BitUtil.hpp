@@ -8,7 +8,7 @@ namespace TENG_NAMESPACE {
 
 namespace util {
 
-constexpr size_t align_256(size_t n) { return (n + 255) & ~size_t(255); }
+constexpr size_t align_256(size_t n) { return (n + 255ull) & ~static_cast<size_t>(255ull); }
 
 // using this to avoid templates everywhere
 // NOLINTBEGIN(bugprone-macro-parentheses)

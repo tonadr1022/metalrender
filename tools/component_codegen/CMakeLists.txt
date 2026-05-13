@@ -3,6 +3,7 @@ find_package(Clang CONFIG REQUIRED)
 
 add_executable(teng-component-codegen
     ComponentCodegen.cpp
+    ComponentCodegenUtil.cpp
 )
 
 target_include_directories(teng-component-codegen

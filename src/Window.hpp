@@ -12,10 +12,6 @@ struct GLFWwindow;
 
 namespace TENG_NAMESPACE {
 
-namespace rhi {
-class Device;
-}
-
 class Window {
  public:
   using KeyCallbackFn = std::function<void(int key, int action, int mods)>;

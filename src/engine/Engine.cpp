@@ -8,6 +8,7 @@
 #include <ranges>
 #include <tracy/Tracy.hpp>
 #include <utility>
+#include <vector>
 
 #include "Window.hpp"
 #include "core/CVar.hpp"
@@ -17,7 +18,6 @@
 #include "core/TomlUtil.hpp"
 #include "engine/assets/AssetService.hpp"
 #include "engine/render/RenderService.hpp"
-#include "engine/scene/BuiltinComponentSerialization.hpp"
 #include "engine/scene/CoreComponentRegistrar.hpp"
 #include "engine/scene/SceneComponentContext.hpp"
 #include "engine/scene/SceneSerialization.hpp"
@@ -111,7 +111,7 @@ Engine::Engine(EngineConfig config)
   init();
 }
 
-Engine::~Engine() { shutdown(); }
+Engine::~Engine() = default;
 
 void Engine::init() {
   ZoneScoped;
@@ -127,27 +127,24 @@ void Engine::init() {
   }
   CVarSystem::get().load_from_file((local_resource_dir_ / "cvars.txt").string());
 
-  scene::ComponentRegistryBuilder component_registry_builder;
-  register_core_components(component_registry_builder);
+  std::vector<scene::ComponentModuleDescriptor> component_modules;
+  const std::span<const scene::ComponentModuleDescriptor> core_modules = core_component_modules();
+  component_modules.insert(component_modules.end(), core_modules.begin(), core_modules.end());
   core::DiagnosticReport report;
   component_registry_ = std::make_unique<scene::ComponentRegistry>();
-  if (!component_registry_builder.try_freeze(*component_registry_, report)) {
+  if (!scene::try_freeze_component_registry(component_modules, *component_registry_, report)) {
     LCRITICAL("Failed to freeze component registry: {}", report.to_string());
     std::exit(1);
   }
 
-  FlecsComponentContextBuilder scene_component_context_builder{*component_registry_};
-  register_flecs_core_components(scene_component_context_builder);
   frozen_scene_component_ctx_ = std::make_unique<FlecsComponentContext>();
-  if (!scene_component_context_builder.try_freeze(*frozen_scene_component_ctx_, report)) {
+  if (!make_flecs_component_context(*component_registry_, *frozen_scene_component_ctx_, report)) {
     LCRITICAL("Failed to freeze scene component context: {}", report.to_string());
     std::exit(1);
   }
 
-  SceneSerializationContextBuilder scene_serialization_context_builder{*component_registry_};
-  register_builtin_component_serialization(scene_serialization_context_builder);
-  scene_serialization_ctx_ =
-      std::make_unique<SceneSerializationContext>(scene_serialization_context_builder.freeze());
+  scene_serialization_ctx_ = std::make_unique<SceneSerializationContext>(
+      make_scene_serialization_context(*component_registry_));
   if (!scene_serialization_ctx_) {
     LCRITICAL("Failed to freeze scene serialization context: {}", report.to_string());
     std::exit(1);
@@ -247,11 +244,11 @@ gfx::rhi::GfxAPI Engine::resolve_gfx_api() const {
     case EngineGfxApi::PlatformDefault:
     default:
 #if defined(__APPLE__) && defined(METAL_BACKEND)
+      LINFO("Defaulting to Metal backend");
       return gfx::rhi::GfxAPI::Metal;
 #elifdef VULKAN_BACKEND
+      LINFO("Defaulting to Vulkan backend");
       return gfx::rhi::GfxAPI::Vulkan;
-#elifdef METAL_BACKEND
-      return gfx::rhi::GfxAPI::Metal;
 #else
       LCRITICAL("No graphics backend compiled");
       std::exit(1);

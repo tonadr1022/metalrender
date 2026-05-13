@@ -1,24 +1,17 @@
+#include "engine/scene/CoreComponentRegistrar.hpp"
+
 namespace teng::engine {
 
-class FlecsComponentContextBuilder;
-
 namespace scene {
-class ComponentRegistryBuilder;
+struct ComponentModuleDescriptor;
 }  // namespace scene
 
 namespace core_component_generated {
-void register_core_components_reflected_components(scene::ComponentRegistryBuilder& builder);
-void register_core_components_reflected_flecs(FlecsComponentContextBuilder& builder);
+std::span<const scene::ComponentModuleDescriptor> core_components_modules();
 }  // namespace core_component_generated
 
-void register_core_components(  // NOLINT(misc-use-internal-linkage)
-    scene::ComponentRegistryBuilder& builder) {
-  core_component_generated::register_core_components_reflected_components(builder);
-}
-
-void register_flecs_core_components(  // NOLINT(misc-use-internal-linkage)
-    FlecsComponentContextBuilder& builder) {
-  core_component_generated::register_core_components_reflected_flecs(builder);
+std::span<const scene::ComponentModuleDescriptor> core_component_modules() {
+  return core_component_generated::core_components_modules();
 }
 
 }  // namespace teng::engine

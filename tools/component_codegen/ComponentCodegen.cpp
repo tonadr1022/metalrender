@@ -1,23 +1,31 @@
+#include <clang/AST/ASTConsumer.h>
 #include <clang/AST/ASTContext.h>
 #include <clang/AST/Attr.h>
+#include <clang/AST/Decl.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/RecursiveASTVisitor.h>
+#include <clang/AST/Type.h>
 #include <clang/Basic/Diagnostic.h>
-#include <clang/Basic/SourceManager.h>
 #include <clang/Frontend/CompilerInstance.h>
 #include <clang/Frontend/FrontendAction.h>
 #include <clang/Tooling/CompilationDatabase.h>
 #include <clang/Tooling/Tooling.h>
-#include <llvm/Support/CommandLine.h>
-#include <llvm/Support/Path.h>
+#include <llvm/Support/Casting.h>
 #include <llvm/Support/raw_ostream.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <optional>
+#include <set>
+#include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include "ComponentCodegenUtil.hpp"
 
@@ -35,7 +43,6 @@ struct Options {
   std::vector<std::string> includes;
   std::vector<std::string> headers;
   std::vector<std::string> compile_args;
-  bool typed_thunks{};
 };
 
 struct EnumValue {
@@ -189,7 +196,9 @@ class Collector : public clang::RecursiveASTVisitor<Collector> {
  public:
   explicit Collector(clang::ASTContext& context) : context_(context) {}
 
-  bool VisitCXXRecordDecl(clang::CXXRecordDecl* record) {
+  // RecursiveASTVisitor's CRTP API requires overriding the same-named base method.
+  bool VisitCXXRecordDecl(  // NOLINT(bugprone-derived-method-shadowing-base-method)
+      clang::CXXRecordDecl* record) {
     if (!record->isThisDeclarationADefinition() || record->isImplicit()) {
       return true;
     }
@@ -303,6 +312,7 @@ class Action : public clang::ASTFrontendAction {
  public:
   explicit Action(std::vector<Component>& components) : components_(components) {}
 
+ protected:
   std::unique_ptr<clang::ASTConsumer> CreateASTConsumer(clang::CompilerInstance& compiler,
                                                         llvm::StringRef) override {
     class Consumer : public clang::ASTConsumer {
@@ -435,7 +445,7 @@ class ActionFactory : public clang::tooling::FrontendActionFactory {
   }
   parts.push_back(".script_exposure = " + script_expr(field.script_exposure));
 
-  std::string joined = "scene::ReflectedFieldRecord{";
+  std::string joined = "scene::ComponentFieldDescriptor{";
   for (size_t i = 0; i < parts.size(); ++i) {
     if (i != 0) {
       joined += ", ";
@@ -538,8 +548,9 @@ void write_generated(const Options& options, const std::vector<Component>& compo
     std::ofstream out{hpp};
     out << "#pragma once\n\n";
     out << "#include <cstddef>\n";
+    out << "#include <span>\n";
     out << "#include <string_view>\n\n";
-    out << "#include \"engine/scene/ComponentRuntimeReflection.hpp\"\n\n";
+    out << "#include \"engine/scene/ComponentRegistry.hpp\"\n\n";
     out << "namespace " << options.cpp_namespace << " {\n\n";
     out << "inline constexpr std::string_view k_banner = "
         << cpp_string(options.basename + " (module=" + options.module_name + ")") << ";\n";
@@ -551,15 +562,8 @@ void write_generated(const Options& options, const std::vector<Component>& compo
     out << "inline constexpr std::size_t k_field_count = " << field_count << ";\n\n";
     out << "extern const char* const k_dump_lines[];\n";
     out << "extern const std::size_t k_dump_line_count;\n\n";
-    out << "void register_" << options.function_prefix
-        << "_reflected_components(engine::scene::ComponentRegistryBuilder& builder);\n";
-    out << "void register_" << options.function_prefix << "_reflected_flecs(\n";
-    out << "    const engine::scene::ComponentRegistry& registry,\n";
-    out << "    engine::FlecsComponentContextBuilder& builder);\n";
-    out << "void register_" << options.function_prefix
-        << "_reflected_flecs(engine::FlecsComponentContextBuilder& builder);\n";
-    out << "void register_" << options.function_prefix
-        << "_reflected_serialization(engine::SceneSerializationContextBuilder& builder);\n\n";
+    out << "[[nodiscard]] std::span<const engine::scene::ComponentModuleDescriptor> "
+        << options.function_prefix << "_modules();\n\n";
     out << "}  // namespace " << options.cpp_namespace << "\n";
   }
 
@@ -587,8 +591,8 @@ void write_generated(const Options& options, const std::vector<Component>& compo
           continue;
         }
         const std::string helper = c_ident(field.enum_key);
-        out << "[[nodiscard]] std::string_view to_key_" << helper << "(" << field.enum_type
-            << " value) {\n";
+        out << "[[nodiscard, maybe_unused]] std::string_view to_key_" << helper << "("
+            << field.enum_type << " value) {\n";
         out << "  switch (value) {\n";
         for (const EnumValue& value : field.enum_values) {
           out << "    case " << value.enumerator_expr << ":\n";
@@ -598,7 +602,7 @@ void write_generated(const Options& options, const std::vector<Component>& compo
         out << "  ALWAYS_ASSERT(false, \"unknown reflected enum value\");\n";
         out << "  return \"\";\n";
         out << "}\n\n";
-        out << "[[nodiscard]] " << field.enum_type << " from_key_" << helper
+        out << "[[nodiscard, maybe_unused]] " << field.enum_type << " from_key_" << helper
             << "(std::string_view key) {\n";
         for (const EnumValue& value : field.enum_values) {
           out << "  if (key == " << cpp_string(value.key) << ") {\n";
@@ -613,31 +617,13 @@ void write_generated(const Options& options, const std::vector<Component>& compo
 
     for (const Component& component : components) {
       const std::string array_name = "k_" + c_ident(component.component_key) + "_fields";
-      out << "const std::array<scene::ReflectedFieldRecord, " << component.fields.size() << "> "
+      out << "const std::array<scene::ComponentFieldDescriptor, " << component.fields.size() << "> "
           << array_name << " = {{\n";
       for (const Field& field : component.fields) {
         out << "  " << field_record_expr(component, field) << ",\n";
       }
       out << "}};\n\n";
     }
-
-    out << "const std::array<scene::ReflectedComponentRecord, " << components.size()
-        << "> k_components = {{\n";
-    for (const Component& component : components) {
-      const std::string array_name = "k_" + c_ident(component.component_key) + "_fields";
-      out << "  scene::ReflectedComponentRecord{\n";
-      out << "      .component_key = " << cpp_string(component.component_key) << ",\n";
-      out << "      .module_id = " << cpp_string(component.module_id) << ",\n";
-      out << "      .module_version = " << component.module_version << ",\n";
-      out << "      .schema_version = " << component.schema_version << ",\n";
-      out << "      .storage = " << storage_expr(component.storage) << ",\n";
-      out << "      .visibility = " << visibility_expr(component.visibility) << ",\n";
-      out << "      .add_on_create = " << (component.add_on_create ? "true" : "false") << ",\n";
-      out << "      .fields = std::span<const scene::ReflectedFieldRecord>{" << array_name
-          << "},\n";
-      out << "  },\n";
-    }
-    out << "}};\n\n";
 
     for (const Component& component : components) {
       const std::string ident = c_ident(component.component_key);
@@ -673,37 +659,71 @@ void write_generated(const Options& options, const std::vector<Component>& compo
       }
     }
 
-    std::vector<const Component*> flecs_components;
-    std::vector<const Component*> serialized_components;
+    std::vector<std::pair<std::string, uint32_t>> modules;
     for (const Component& component : components) {
-      if (component.storage != "EditorOnly") {
-        flecs_components.push_back(&component);
-      }
-      if (component.storage == "Authored") {
-        serialized_components.push_back(&component);
+      const auto existing =
+          std::ranges::find(modules, component.module_id, &std::pair<std::string, uint32_t>::first);
+      if (existing == modules.end()) {
+        modules.emplace_back(component.module_id, component.module_version);
+      } else if (existing->second != component.module_version) {
+        throw CodegenError("module '" + component.module_id +
+                           "' has conflicting module_version annotations");
       }
     }
-    out << "const std::array<teng::engine::ReflectedFlecsThunks, " << flecs_components.size()
-        << "> k_flecs_thunks = {{\n";
-    for (const Component* component : flecs_components) {
-      const std::string ident = c_ident(component->component_key);
-      out << "  teng::engine::ReflectedFlecsThunks{\n";
-      out << "      .component_key = " << cpp_string(component->component_key) << ",\n";
-      out << "      .register_flecs_fn = register_flecs_" << ident << ",\n";
-      out << "      .apply_on_create_fn = "
-          << (component->add_on_create ? "apply_on_create_" + ident : "nullptr") << ",\n";
+    std::ranges::sort(modules);
+
+    auto emit_component_descriptor = [&](const Component& component) {
+      const std::string ident = c_ident(component.component_key);
+      const std::string array_name = "k_" + c_ident(component.component_key) + "_fields";
+      out << "  scene::ComponentDescriptor{\n";
+      out << "      .component_key = " << cpp_string(component.component_key) << ",\n";
+      out << "      .schema_version = " << component.schema_version << ",\n";
+      out << "      .storage = " << storage_expr(component.storage) << ",\n";
+      out << "      .visibility = " << visibility_expr(component.visibility) << ",\n";
+      out << "      .add_on_create = " << (component.add_on_create ? "true" : "false") << ",\n";
+      out << "      .fields = std::span<const scene::ComponentFieldDescriptor>{" << array_name
+          << "},\n";
+      out << "      .ops = scene::ComponentTypeOps{\n";
+      out << "          .register_flecs_fn = "
+          << (component.storage == "EditorOnly" ? "nullptr" : "register_flecs_" + ident) << ",\n";
+      out << "          .apply_on_create_fn = "
+          << (component.add_on_create ? "apply_on_create_" + ident : "nullptr") << ",\n";
+      out << "          .has_component_fn = "
+          << (component.storage == "Authored" ? "has_component_" + ident : "nullptr") << ",\n";
+      out << "          .serialize_fn = "
+          << (component.storage == "Authored" ? "serialize_component_" + ident : "nullptr")
+          << ",\n";
+      out << "          .deserialize_fn = "
+          << (component.storage == "Authored" ? "deserialize_component_" + ident : "nullptr")
+          << ",\n";
+      out << "      },\n";
       out << "  },\n";
+    };
+
+    for (const auto& [module_id, module_version] : modules) {
+      const std::string module_ident = c_ident(module_id);
+      const auto module_component_count =
+          static_cast<size_t>(std::ranges::count(components, module_id, &Component::module_id));
+      out << "const std::array<scene::ComponentDescriptor, " << module_component_count << "> k_"
+          << module_ident << "_components = {{\n";
+      for (const Component& component : components) {
+        if (component.module_id == module_id) {
+          emit_component_descriptor(component);
+        }
+      }
+      out << "}};\n\n";
+      (void)module_version;
     }
-    out << "}};\n\n";
-    out << "const std::array<teng::engine::ReflectedSerializationThunks, "
-        << serialized_components.size() << "> k_serialization_thunks = {{\n";
-    for (const Component* component : serialized_components) {
-      const std::string ident = c_ident(component->component_key);
-      out << "  teng::engine::ReflectedSerializationThunks{\n";
-      out << "      .component_key = " << cpp_string(component->component_key) << ",\n";
-      out << "      .has_component_fn = has_component_" << ident << ",\n";
-      out << "      .serialize_fn = serialize_component_" << ident << ",\n";
-      out << "      .deserialize_fn = deserialize_component_" << ident << ",\n";
+
+    out << "const std::array<scene::ComponentModuleDescriptor, " << modules.size()
+        << "> k_modules = {{\n";
+    for (const auto& [module_id, module_version] : modules) {
+      const std::string module_ident = c_ident(module_id);
+      out << "  scene::ComponentModuleDescriptor{\n";
+      out << "      .module_id = " << cpp_string(module_id) << ",\n";
+      out << "      .module_version = " << module_version << ",\n";
+      out << "      .components = std::span<const scene::ComponentDescriptor>{k_" << module_ident
+          << "_components},\n";
       out << "  },\n";
     }
     out << "}};\n\n";
@@ -724,23 +744,9 @@ void write_generated(const Options& options, const std::vector<Component>& compo
       out << "  " << cpp_string(line) << ",\n";
     }
     out << "};\n\n";
-    out << "void register_" << options.function_prefix
-        << "_reflected_components(engine::scene::ComponentRegistryBuilder& builder) {\n";
-    out << "  engine::register_reflected_components(builder, k_components);\n";
-    out << "}\n\n";
-    out << "void register_" << options.function_prefix << "_reflected_flecs(\n";
-    out << "    const engine::scene::ComponentRegistry& registry,\n";
-    out << "    engine::FlecsComponentContextBuilder& builder) {\n";
-    out << "  engine::register_reflected_flecs(registry, builder, k_flecs_thunks);\n";
-    out << "}\n\n";
-    out << "void register_" << options.function_prefix
-        << "_reflected_flecs(engine::FlecsComponentContextBuilder& builder) {\n";
-    out << "  register_" << options.function_prefix
-        << "_reflected_flecs(builder.registry(), builder);\n";
-    out << "}\n\n";
-    out << "void register_" << options.function_prefix
-        << "_reflected_serialization(engine::SceneSerializationContextBuilder& builder) {\n";
-    out << "  engine::register_reflected_serialization(builder, k_serialization_thunks);\n";
+    out << "std::span<const engine::scene::ComponentModuleDescriptor> " << options.function_prefix
+        << "_modules() {\n";
+    out << "  return k_modules;\n";
     out << "}\n\n";
     out << "}  // namespace " << options.cpp_namespace << "\n";
   }
@@ -789,8 +795,6 @@ void write_generated(const Options& options, const std::vector<Component>& compo
       options.includes.push_back(require_value(arg));
     } else if (arg == "--header") {
       options.headers.push_back(require_value(arg));
-    } else if (arg == "--typed-thunks") {
-      options.typed_thunks = true;
     } else if (arg.starts_with("--extra-arg=")) {
       options.compile_args.push_back(arg.substr(std::string{"--extra-arg="}.size()));
     } else if (arg == "--extra-arg") {
@@ -808,9 +812,6 @@ void write_generated(const Options& options, const std::vector<Component>& compo
   if (options.headers.empty()) {
     throw CodegenError("at least one --header is required");
   }
-  if (!options.typed_thunks) {
-    throw CodegenError("--typed-thunks is required; dummy fixture thunks are no longer supported");
-  }
   return options;
 }
 
@@ -822,7 +823,7 @@ int main(int argc, const char** argv) {
     if (options.compile_args.empty()) {
       options.compile_args = {"-std=c++23"};
     }
-    clang::tooling::FixedCompilationDatabase compilations(".", options.compile_args);
+    const clang::tooling::FixedCompilationDatabase compilations(".", options.compile_args);
     clang::tooling::ClangTool tool(compilations, options.headers);
 
     std::vector<Component> components;

@@ -145,10 +145,7 @@ void derive_local_to_world(Scene& scene) {
   return std::format("{:016x}", guid.value);
 }
 
-[[nodiscard]] json field_default_to_json(const scene::ComponentFieldRegistration& field) {
-  if (!field.default_value) {
-    return {nullptr};
-  }
+[[nodiscard]] json field_default_to_json(const scene::FrozenComponentFieldRecord& field) {
   return std::visit(
       [](const auto& v) -> json {
         using T = std::decay_t<decltype(v)>;
@@ -191,13 +188,13 @@ void derive_local_to_world(Scene& scene) {
         }
         return {nullptr};
       },
-      *field.default_value);
+      field.default_value);
 }
 
 [[nodiscard]] nlohmann::ordered_json canonical_component_payload(
     const scene::FrozenComponentRecord& record, json binding_payload) {
   nlohmann::ordered_json out;
-  for (const scene::ComponentFieldRegistration& field : record.fields) {
+  for (const scene::FrozenComponentFieldRecord& field : record.fields) {
     const auto it = binding_payload.find(field.key);
     if (it != binding_payload.end()) {
       out[std::string{field.key}] = *it;
@@ -222,27 +219,27 @@ Result<nlohmann::ordered_json> serialize_scene_to_json(
   std::vector<SerializedEntity> entities;
   std::set<std::string> all_used_component_keys;
 
-  std::vector<const ComponentSerializationBinding*> sorted_bindings;
-  sorted_bindings.reserve(serialization.component_bindings.size());
-  for (const ComponentSerializationBinding& binding : serialization.component_bindings) {
-    sorted_bindings.push_back(&binding);
+  std::vector<const scene::FrozenComponentRecord*> authored_components;
+  for (const scene::FrozenComponentRecord& component : registry.components()) {
+    if (component.storage == scene::ComponentStoragePolicy::Authored) {
+      authored_components.push_back(&component);
+    }
   }
-  std::ranges::sort(sorted_bindings, {}, &ComponentSerializationBinding::component_key);
+  std::ranges::sort(authored_components, {}, &scene::FrozenComponentRecord::component_key);
 
   scene.world().each([&](flecs::entity entity, const EntityGuidComponent& guid_component) {
     ordered_json components = ordered_json::object();
 
-    for (const ComponentSerializationBinding* binding : sorted_bindings) {
-      ALWAYS_ASSERT(binding->has_component_fn, "has_component_fn is required for component key {}",
-                    binding->component_key);
-      if (!binding->has_component_fn(entity) || !binding->serialize_fn) {
+    for (const scene::FrozenComponentRecord* record : authored_components) {
+      ALWAYS_ASSERT(record->ops.has_component_fn,
+                    "has_component_fn is required for component key {}", record->component_key);
+      ALWAYS_ASSERT(record->ops.serialize_fn, "serialize_fn is required for component key {}",
+                    record->component_key);
+      if (!record->ops.has_component_fn(entity)) {
         continue;
       }
-      const scene::FrozenComponentRecord* record = registry.find(binding->component_key);
-      ASSERT(record);
-      ASSERT(record->storage == scene::ComponentStoragePolicy::Authored);
-      json binding_payload = binding->serialize_fn(entity);
-      const std::string component_key{binding->component_key};
+      json binding_payload = record->ops.serialize_fn(entity);
+      const std::string component_key{record->component_key};
       components[component_key] = canonical_component_payload(*record, std::move(binding_payload));
       all_used_component_keys.insert(component_key);
     }
@@ -327,11 +324,12 @@ Result<void> deserialize_scene_json(SceneManager& scenes,
   for (const EntityRecord& record : *records) {
     const flecs::entity entity = scene.create_entity(record.guid, record.name);
     for (const auto& [key, payload] : record.components.items()) {
-      const ComponentSerializationBinding* binding = serialization.find_binding(key);
-      ALWAYS_ASSERT(binding, "validated component key {} is missing a serialization binding", key);
-      ALWAYS_ASSERT(binding->deserialize_fn,
+      const scene::FrozenComponentRecord* component = serialization.find_authored_component(key);
+      ALWAYS_ASSERT(component, "validated component key {} is missing a serialization binding",
+                    key);
+      ALWAYS_ASSERT(component->ops.deserialize_fn,
                     "validated component key {} is missing a deserialization binding", key);
-      binding->deserialize_fn(entity, payload);
+      component->ops.deserialize_fn(entity, payload);
     }
   }
 
@@ -381,7 +379,7 @@ Result<void> validate_scene_file(const SceneSerializationContext& serialization,
 namespace {
 
 using DiagnosticPath = core::DiagnosticPath;
-using FieldRecord = scene::ComponentFieldRegistration;
+using FieldRecord = scene::FrozenComponentFieldRecord;
 
 [[nodiscard]] DiagnosticPath path_with_key(DiagnosticPath path, std::string_view key) {
   path.object_key(std::string{key});
@@ -585,7 +583,7 @@ void validate_component_payload(core::DiagnosticReport& report,
     }
   }
 
-  if (!serialization.find_binding(component.component_key)) {
+  if (!serialization.find_authored_component(component.component_key)) {
     add_validation_error(
         report, std::move(path),
         "component '" + component.component_key + "' does not have a JSON serialization binding");

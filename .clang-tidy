@@ -42,9 +42,17 @@ Checks: >
   -readability-math-missing-parentheses,
   -google-objc-function-naming,
   -modernize-concat-nested-namespaces,
+  -bugprone-exception-escape,
+  -portability-avoid-pragma-once,
+  -bugprone-derived-method-shadowing-base-method,
   -misc-include-cleaner,
-  -bugprone-unchecked-optional-access
+  # TODO: remove these
+  -modernize-avoid-c-style-cast,
+  -bugprone-throwing-static-initialization,
+  -clang-diagnostic-c2y-extensions
 WarningsAsErrors: "*"
+HeaderFilterRegex: '^.*/(apps|src|tests|tools)/.*'
+ExcludeHeaderFilterRegex: 'third_party/.*'
 CheckOptions:
   - { key: readability-identifier-naming.NamespaceCase, value: lower_case }
   - { key: readability-identifier-naming.ClassCase, value: CamelCase }

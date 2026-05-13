@@ -64,20 +64,20 @@ Result<nlohmann::json> serialize_component_schema_to_json(
     for (const auto& field : component.fields) {
       json field_json = json::object();
       field_json["key"] = field.key;
+      field_json["member_name"] = field.member_name;
       field_json["kind"] = component_field_kind_to_string(field.kind);
       field_json["authored_required"] = field.authored_required;
-      if (field.default_value) {
-        field_json["default_value"] = component_field_default_value_to_json(*field.default_value);
-      }
+      field_json["default_value"] = component_field_default_value_to_json(field.default_value);
       field_json["asset"] = field.asset ? asset_field_metadata_to_json(*field.asset) : nullptr;
 
-      if (field.enumeration) {
+      if (const auto& enumeration_opt = field.enumeration; enumeration_opt) {
+        const scene::ComponentEnumRegistration& enumeration = *enumeration_opt;
         json enum_values = json::array();
-        for (const scene::ComponentEnumValueRegistration& ev : field.enumeration->values) {
+        for (const scene::ComponentEnumValueRegistration& ev : enumeration.values) {
           enum_values.push_back(json{{"key", ev.key}, {"value", ev.value}});
         }
         field_json["enumeration"] =
-            json{{"enum_key", field.enumeration->enum_key}, {"values", std::move(enum_values)}};
+            json{{"enum_key", enumeration.enum_key}, {"values", std::move(enum_values)}};
       } else {
         field_json["enumeration"] = nullptr;
       }

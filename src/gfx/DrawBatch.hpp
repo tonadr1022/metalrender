@@ -8,10 +8,6 @@
 
 namespace TENG_NAMESPACE {
 
-namespace rhi {
-class Device;
-}
-
 namespace gfx {
 
 struct BufferCopyMgr;

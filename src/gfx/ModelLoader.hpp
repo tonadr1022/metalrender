@@ -10,11 +10,6 @@
 #include "gfx/rhi/GFXTypes.hpp"
 #include "hlsl/default_vertex.h"
 
-namespace MTL {
-class Texture;
-class Device;
-}  // namespace MTL
-
 namespace TENG_NAMESPACE {
 
 namespace gfx {

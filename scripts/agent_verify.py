@@ -32,7 +32,7 @@ SHADER_ENTRY_SUFFIXES = (
     ".mesh.hlsl",
     ".task.hlsl",
 )
-FIRST_PARTY_DIRS = ("apps/", "src/", "tests/")
+FIRST_PARTY_DIRS = ("apps/", "src/", "tests/", "tools/")
 FORMAT_DIRS = ("apps/", "src/", "tests/", "cmake/")
 TIDY_EXTS = (".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl")
 FORMAT_EXTS = (".cpp", ".h", ".hpp", ".cc", ".cxx", ".inl")
@@ -178,6 +178,8 @@ def clang_tidy_command(
             run_clang_tidy,
             "-p",
             str(build_dir),
+            "-header-filter",
+            f"{REPO_ROOT}/(apps|src|tests|tools)/.*",
             *config_args,
             *extra_args,
             *map(str, files),
@@ -188,6 +190,8 @@ def clang_tidy_command(
                 [
                     clang_tidy,
                     f"--config-file={REPO_ROOT / '.clang-tidy'}",
+                    "-header-filter",
+                    f"{REPO_ROOT}/(apps|src|tests|tools)/.*",
                     "-p",
                     str(build_dir),
                     *extra_args,
@@ -211,7 +215,11 @@ def clang_tidy_extra_args() -> list[str]:
         return []
     if not sdk_path:
         return []
-    return ["-extra-arg-before=-isysroot", f"-extra-arg-before={sdk_path}"]
+    return [
+        "-extra-arg-before=-isysroot",
+        f"-extra-arg-before={sdk_path}",
+        "-extra-arg=-Wno-c2y-extensions",
+    ]
 
 
 def run_format(paths: list[Path], summary: Summary) -> None:

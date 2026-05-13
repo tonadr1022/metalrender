@@ -19,10 +19,6 @@
 
 namespace TENG_NAMESPACE {
 
-namespace rhi {
-class Swapchain;
-}
-
 namespace gfx {
 
 enum class SizeClass : uint8_t { Swapchain, Custom };

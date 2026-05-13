@@ -9,10 +9,6 @@
 #include "core/Config.hpp"
 #include "gfx/rhi/Queue.hpp"
 
-namespace MTL {
-class Texture;
-}
-
 namespace TENG_NAMESPACE {
 
 class Window;

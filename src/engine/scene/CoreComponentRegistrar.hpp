@@ -1,10 +1,11 @@
 #pragma once
 
-#include "engine/scene/SceneComponentContext.hpp"
+#include <span>
+
+#include "engine/scene/ComponentRegistry.hpp"
 
 namespace TENG_NAMESPACE::engine {
 
-void register_core_components(scene::ComponentRegistryBuilder& builder);
-void register_flecs_core_components(FlecsComponentContextBuilder& builder);
+[[nodiscard]] std::span<const scene::ComponentModuleDescriptor> core_component_modules();
 
 }  // namespace TENG_NAMESPACE::engine

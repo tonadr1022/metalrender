@@ -53,13 +53,12 @@ add_custom_command(
         --function-prefix "core_components"
         --include "engine/scene/SceneComponents.hpp"
         --include "engine/Input.hpp"
-        --typed-thunks
         --header "${CMAKE_CURRENT_SOURCE_DIR}/engine/scene/SceneComponents.hpp"
         --header "${CMAKE_CURRENT_SOURCE_DIR}/engine/Input.hpp"
         --extra-arg=-std=c++23
         --extra-arg=-I${CMAKE_CURRENT_SOURCE_DIR}
         --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/flecs/include
-        --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/glm
+        --extra-arg=-isystem${CMAKE_SOURCE_DIR}/third_party/glm
         --extra-arg=-I${CMAKE_SOURCE_DIR}/third_party/nlohmann_json/include
         ${TENG_COMPONENT_CODEGEN_SYSTEM_ARGS}
     DEPENDS
@@ -71,9 +70,7 @@ add_custom_command(
 )
 
 set(TENG_SCENE_SOURCES
-    engine/scene/BuiltInComponentSerialization.cpp
     engine/scene/ComponentRegistry.cpp
-    engine/scene/ComponentRuntimeReflection.cpp
     engine/scene/CoreComponentRegistrar.cpp
     engine/scene/ComponentSchema.cpp
     engine/scene/SceneComponentContext.cpp

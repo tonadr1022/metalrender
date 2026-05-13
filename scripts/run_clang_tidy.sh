@@ -51,11 +51,14 @@ if [[ "${#TIDY_FILES[@]}" -gt 0 ]]; then
     fi
     if command -v "$RCT" >/dev/null 2>&1; then
         # run-clang-tidy understands compile_commands.json and parallelizes by default.
-        "$RCT" -p "$BUILD_DIR" "${TIDY_CONFIG_ARGS[@]}" "${TIDY_EXTRA_ARGS[@]}" "${TIDY_FILES[@]}"
+        "$RCT" -p "$BUILD_DIR" -header-filter="$REPO_ROOT/(apps|src|tests)/.*" \
+            "${TIDY_CONFIG_ARGS[@]}" "${TIDY_EXTRA_ARGS[@]}" "${TIDY_FILES[@]}"
     else
         # Fallback: invoke clang-tidy per file (slower, but avoids extra dependency).
         for f in "${TIDY_FILES[@]}"; do
-            "$CT" --config-file="$REPO_ROOT/.clang-tidy" -p "$BUILD_DIR" "${TIDY_EXTRA_ARGS[@]}" "$f"
+            "$CT" --config-file="$REPO_ROOT/.clang-tidy" \
+                -header-filter="$REPO_ROOT/(apps|src|tests)/.*" \
+                -p "$BUILD_DIR" "${TIDY_EXTRA_ARGS[@]}" "$f"
         done
     fi
 fi

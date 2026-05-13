@@ -1,12 +1,11 @@
+#include <algorithm>
 #include <catch2/catch_test_macros.hpp>
 #include <nlohmann/json.hpp>
 
 #include "TestExtensionComponent.hpp"
 #include "TestHelpers.hpp"
 #include "core/Diagnostic.hpp"
-#include "engine/scene/BuiltinComponentSerialization.hpp"
 #include "engine/scene/ComponentSchemaJson.hpp"
-#include "engine/scene/CoreComponentRegistrar.hpp"
 #include "engine/scene/Scene.hpp"
 #include "engine/scene/SceneManager.hpp"
 #include "engine/scene/SceneSerialization.hpp"
@@ -26,28 +25,22 @@ using json = nlohmann::json;
       {"schema",
        json{{"required_modules",
              json::array({json{{"id", std::string{k_test_extension_module_id}}, {"version", 1}}})},
-            {"required_components",
-             json{{std::string{k_test_extension_component_key}, 1}}}}},
+            {"required_components", json{{std::string{k_test_extension_component_key}, 1}}}}},
       {"scene", json{{"name", "extension module test"}}},
       {"entities",
-       json::array({json{
-           {"guid", "0000000000000001"},
-           {"components",
-            json{{std::string{k_test_extension_component_key},
-                  json{{"health", 42.5},
-                       {"active", false},
-                       {"kind", "beta"},
-                       {"attachment", sample_asset_id_text()}}}}}}})}};
+       json::array({json{{"guid", "0000000000000001"},
+                         {"components", json{{std::string{k_test_extension_component_key},
+                                              json{{"health", 42.5},
+                                                   {"active", false},
+                                                   {"kind", "beta"},
+                                                   {"attachment", sample_asset_id_text()}}}}}}})}};
 }
 
 [[nodiscard]] bool report_contains_substring(const core::DiagnosticReport& report,
                                              std::string_view needle) {
-  for (const core::Diagnostic& d : report.diagnostics()) {
-    if (d.message.find(needle) != std::string::npos) {
-      return true;
-    }
-  }
-  return false;
+  return std::ranges::any_of(report.diagnostics(), [needle](const core::Diagnostic& d) {
+    return d.message.contains(needle);
+  });
 }
 
 }  // namespace
@@ -74,12 +67,11 @@ TEST_CASE("test extension component JSON v2 round-trip", "[scene_serialization][
   const json& component_payload =
       round_json["entities"][0]["components"][std::string{k_test_extension_component_key}];
   CHECK(component_payload["kind"].get<std::string>() == "beta");
-  const auto validated =
-      validate_scene_file_full_report(contexts.scene_serialization, round_json);
+  const auto validated = validate_scene_file_full_report(contexts.scene_serialization, round_json);
   REQUIRE(validated.has_value());
 
   SceneManager loaded_scenes(contexts.flecs_components);
-  Result<void> load_result =
+  const Result<void> load_result =
       deserialize_scene_json(loaded_scenes, contexts.scene_serialization, round_json);
   REQUIRE(load_result.has_value());
   Scene* loaded = loaded_scenes.active_scene();
@@ -100,8 +92,8 @@ TEST_CASE("test extension component loads authored enum key into enum storage",
   const SceneTestContexts contexts = make_scene_test_contexts_with_test_extension();
   SceneManager scenes(contexts.flecs_components);
 
-  const auto load_result =
-      deserialize_scene_json(scenes, contexts.scene_serialization, scene_json_with_extension_only_entity());
+  const auto load_result = deserialize_scene_json(scenes, contexts.scene_serialization,
+                                                  scene_json_with_extension_only_entity());
   REQUIRE(load_result.has_value());
   Scene* loaded = scenes.active_scene();
   REQUIRE(loaded != nullptr);
@@ -137,29 +129,10 @@ TEST_CASE("serialize_component_schema_to_json includes test extension component"
 TEST_CASE("core-only registry rejects scenes using test extension component",
           "[scene_serialization][extension]") {
   const SceneTestContexts core_only = make_scene_test_contexts();
-  json scene_json = scene_json_with_extension_only_entity();
-  const auto validated =
-      validate_scene_file_full_report(core_only.scene_serialization, scene_json);
+  const json scene_json = scene_json_with_extension_only_entity();
+  const auto validated = validate_scene_file_full_report(core_only.scene_serialization, scene_json);
   REQUIRE_FALSE(validated.has_value());
   CHECK(report_contains_substring(validated.error(), "not registered"));
-}
-
-TEST_CASE("missing JSON binding for test extension fails validation", "[scene_serialization][extension]") {
-  scene::ComponentRegistryBuilder component_registry_builder;
-  register_core_components(component_registry_builder);
-  register_test_extension_components(component_registry_builder);
-  auto component_registry = std::make_unique<scene::ComponentRegistry>();
-  core::DiagnosticReport freeze_report;
-  REQUIRE(component_registry_builder.try_freeze(*component_registry, freeze_report));
-
-  SceneSerializationContextBuilder serialization_builder{*component_registry};
-  register_builtin_component_serialization(serialization_builder);
-  const SceneSerializationContext serialization = serialization_builder.freeze();
-
-  json scene_json = scene_json_with_extension_only_entity();
-  const auto validated = validate_scene_file_full_report(serialization, scene_json);
-  REQUIRE_FALSE(validated.has_value());
-  CHECK(report_contains_substring(validated.error(), "JSON serialization binding"));
 }
 
 // NOLINTEND(misc-use-anonymous-namespace)

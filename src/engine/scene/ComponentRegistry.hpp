@@ -1,8 +1,12 @@
 #pragma once
 
+#include <flecs.h>
+
 #include <array>
 #include <cstdint>
+#include <nlohmann/json_fwd.hpp>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <variant>
@@ -109,26 +113,63 @@ struct FrozenComponentRecord;
 
 using ComponentSchemaValidationHook = void (*)(const FrozenComponentRecord& component,
                                                core::DiagnosticReport& report);
+using RegisterFlecsFn = void (*)(flecs::world&);
+using ApplyOnCreateFn = void (*)(flecs::entity);
+using SerializeComponentFn = nlohmann::json (*)(flecs::entity entity);
+using DeserializeComponentFn = void (*)(flecs::entity entity, const nlohmann::json& payload);
+using HasComponentFn = bool (*)(flecs::entity entity);
 
-struct ComponentFieldRegistration {
-  std::string key;
-  ComponentFieldKind kind{};
-  bool authored_required{true};
-  std::optional<ComponentFieldDefaultValue> default_value;
-  std::optional<ComponentAssetFieldMetadata> asset;
-  std::optional<ComponentEnumRegistration> enumeration;
+enum class ScriptExposure : uint8_t {
+  None,
+  Read,
+  ReadWrite,
 };
 
-struct ComponentRegistration {
-  std::string component_key;
-  std::string module_id;
-  uint32_t module_version{1};
+struct ComponentFieldDescriptor {
+  std::string_view key;
+  std::string_view member_name;
+  ComponentFieldKind kind{};
+  bool authored_required{true};
+  ComponentFieldDefaultValue default_value;
+  std::optional<ComponentAssetFieldMetadata> asset;
+  std::optional<ComponentEnumRegistration> enumeration;
+  ScriptExposure script_exposure{ScriptExposure::None};
+};
+
+struct ComponentTypeOps {
+  RegisterFlecsFn register_flecs_fn{};
+  ApplyOnCreateFn apply_on_create_fn{};
+  HasComponentFn has_component_fn{};
+  SerializeComponentFn serialize_fn{};
+  DeserializeComponentFn deserialize_fn{};
+};
+
+struct ComponentDescriptor {
+  std::string_view component_key;
   uint32_t schema_version{1};
   ComponentStoragePolicy storage{ComponentStoragePolicy::Authored};
   ComponentSchemaVisibility visibility{ComponentSchemaVisibility::Editable};
   bool add_on_create{};
   ComponentSchemaValidationHook schema_validation_hook{nullptr};
-  std::vector<ComponentFieldRegistration> fields;
+  std::span<const ComponentFieldDescriptor> fields;
+  ComponentTypeOps ops;
+};
+
+struct ComponentModuleDescriptor {
+  std::string_view module_id;
+  uint32_t module_version{1};
+  std::span<const ComponentDescriptor> components;
+};
+
+struct FrozenComponentFieldRecord {
+  std::string key;
+  std::string member_name;
+  ComponentFieldKind kind{};
+  bool authored_required{true};
+  ComponentFieldDefaultValue default_value;
+  std::optional<ComponentAssetFieldMetadata> asset;
+  std::optional<ComponentEnumRegistration> enumeration;
+  ScriptExposure script_exposure{ScriptExposure::None};
 };
 
 struct FrozenModuleRecord {
@@ -149,7 +190,8 @@ struct FrozenComponentRecord {
   ComponentSchemaVisibility visibility{ComponentSchemaVisibility::Editable};
   bool add_on_create{};
   ComponentSchemaValidationHook schema_validation_hook{nullptr};
-  std::vector<ComponentFieldRegistration> fields;
+  std::vector<FrozenComponentFieldRecord> fields;
+  ComponentTypeOps ops;
   uint64_t stable_id{};
 };
 
@@ -165,31 +207,15 @@ class ComponentRegistry {
   [[nodiscard]] const std::vector<FrozenComponentRecord>& components() const { return components_; }
 
  private:
-  friend class ComponentRegistryBuilder;
+  friend bool try_freeze_component_registry(std::span<const ComponentModuleDescriptor> modules,
+                                            ComponentRegistry& out, core::DiagnosticReport& report);
 
   std::vector<FrozenModuleRecord> modules_;
   std::vector<FrozenComponentRecord> components_;
 };
 
-class ComponentRegistryBuilder {
- public:
-  void register_module(std::string module_id, uint32_t version);
-  void register_component(ComponentRegistration component);
-
-  /// Builds a frozen registry from trusted first-party/generated registrations.
-  /// Internal component field schema invariants assert; registry composition conflicts and
-  /// validation hooks append diagnostics to `report`.
-  [[nodiscard]] bool try_freeze(ComponentRegistry& out, core::DiagnosticReport& report) const;
-
-  [[nodiscard]] const std::vector<std::pair<std::string, uint32_t>>& modules() const {
-    return modules_;
-  }
-  [[nodiscard]] const std::vector<ComponentRegistration>& components() const { return components_; }
-  [[nodiscard]] const ComponentRegistration* find(std::string_view component_key) const;
-
- private:
-  std::vector<std::pair<std::string, uint32_t>> modules_;
-  std::vector<ComponentRegistration> components_;
-};
+[[nodiscard]] bool try_freeze_component_registry(std::span<const ComponentModuleDescriptor> modules,
+                                                 ComponentRegistry& out,
+                                                 core::DiagnosticReport& report);
 
 }  // namespace teng::engine::scene

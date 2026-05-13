@@ -12,61 +12,8 @@
 namespace teng::engine {
 
 using core::DiagnosticReport;
-using scene::ComponentRegistration;
-
-namespace {
-
-scene::ComponentRegistry make_component_registry(bool add_on_create = false) {
-  scene::ComponentRegistryBuilder builder;
-  builder.register_module("teng.test", 1);
-  builder.register_component(ComponentRegistration{.component_key = "teng.test.x",
-                                                   .module_id = "teng.test",
-                                                   .module_version = 1,
-                                                   .add_on_create = add_on_create});
-  scene::ComponentRegistry registry;
-  core::DiagnosticReport report;
-  CHECK(builder.try_freeze(registry, report));
-  CHECK(!report.has_errors());
-  return registry;
-}
-
-void check_try_freeze_fails(const FlecsComponentContextBuilder& builder) {
-  FlecsComponentContext out;
-  DiagnosticReport report;
-  CHECK_FALSE(builder.try_freeze(out, report));
-  CHECK(report.has_errors());
-}
-
-}  // namespace
 
 // NOLINTBEGIN(misc-use-anonymous-namespace)
-
-TEST_CASE("SceneComponentContext freeze rejects component missing Flecs binding",
-          "[scene_component_context]") {
-  auto registry = make_component_registry();
-  const FlecsComponentContextBuilder builder{registry};
-  check_try_freeze_fails(builder);
-}
-
-TEST_CASE("SceneComponentContext freeze rejects invalid Flecs bindings",
-          "[scene_component_context]") {
-  SECTION("null register_flecs_fn") {
-    auto registry = make_component_registry(false);
-    FlecsComponentContextBuilder builder{registry};
-    builder.register_flecs_component(FlecsComponentBinding{.component_key = "teng.test.a",
-                                                           .register_flecs_fn = nullptr,
-                                                           .apply_on_create_fn = nullptr});
-    check_try_freeze_fails(builder);
-  }
-
-  SECTION("add_on_create without apply_on_create_fn") {
-    auto registry = make_component_registry(true);
-    FlecsComponentContextBuilder builder{registry};
-    builder.register_flecs_component(FlecsComponentBinding{
-        .register_flecs_fn = [](flecs::world&) {}, .apply_on_create_fn = nullptr});
-    check_try_freeze_fails(builder);
-  }
-}
 
 TEST_CASE("core scene context creates entity with Transform and LocalToWorld without Camera",
           "[scene_component_context]") {
@@ -79,14 +26,12 @@ TEST_CASE("core scene context creates entity with Transform and LocalToWorld wit
   CHECK_FALSE(entity.has<Camera>());
 }
 
-TEST_CASE("generated fixture reflection records adapt into runtime builders",
+TEST_CASE("generated fixture descriptors adapt into runtime contexts",
           "[scene_component_context][reflection_codegen]") {
-  scene::ComponentRegistryBuilder registry_builder;
-  reflect_fixture_generated::register_fixture_reflected_components(registry_builder);
-
   scene::ComponentRegistry registry;
   DiagnosticReport registry_report;
-  REQUIRE(registry_builder.try_freeze(registry, registry_report));
+  REQUIRE(scene::try_freeze_component_registry(reflect_fixture_generated::fixture_modules(),
+                                               registry, registry_report));
   CHECK_FALSE(registry_report.has_errors());
   REQUIRE(registry.components().size() == reflect_fixture_generated::k_component_count);
 
@@ -97,30 +42,32 @@ TEST_CASE("generated fixture reflection records adapt into runtime builders",
   REQUIRE(scalar->fields.size() == 5);
   CHECK(scalar->fields[0].key == "health");
   CHECK(scalar->fields[4].key == "attachment");
-  REQUIRE(scalar->fields[4].asset.has_value());
-  CHECK(scalar->fields[4].asset->expected_kind == "texture");
+  if (const auto& attachment_asset = scalar->fields[4].asset; attachment_asset) {
+    CHECK(attachment_asset->expected_kind == "texture");
+  } else {
+    FAIL("expected attachment field to declare asset metadata");
+  }
 
   const scene::FrozenComponentRecord* enum_policy = registry.find("teng.fixture.enum_and_policy");
   REQUIRE(enum_policy != nullptr);
   CHECK(enum_policy->storage == scene::ComponentStoragePolicy::RuntimeSession);
   CHECK(enum_policy->visibility == scene::ComponentSchemaVisibility::Hidden);
   REQUIRE(enum_policy->fields.size() == 2);
-  REQUIRE(enum_policy->fields[0].enumeration.has_value());
-  CHECK(enum_policy->fields[0].enumeration->enum_key == "teng.fixture.enum_and_policy_mode");
+  if (const auto& mode_enumeration = enum_policy->fields[0].enumeration; mode_enumeration) {
+    CHECK(mode_enumeration->enum_key == "teng.fixture.enum_and_policy_mode");
+  } else {
+    FAIL("expected mode field to declare enumeration metadata");
+  }
 
-  FlecsComponentContextBuilder flecs_builder{registry};
-  reflect_fixture_generated::register_fixture_reflected_flecs(registry, flecs_builder);
   FlecsComponentContext flecs_context;
   DiagnosticReport flecs_report;
-  REQUIRE(flecs_builder.try_freeze(flecs_context, flecs_report));
+  REQUIRE(make_flecs_component_context(registry, flecs_context, flecs_report));
   CHECK_FALSE(flecs_report.has_errors());
   CHECK(flecs_context.flecs_register_fns.size() == reflect_fixture_generated::k_component_count);
 
-  SceneSerializationContextBuilder serialization_builder{registry};
-  reflect_fixture_generated::register_fixture_reflected_serialization(serialization_builder);
-  const SceneSerializationContext serialization = serialization_builder.freeze();
-  REQUIRE(serialization.find_binding("teng.fixture.scalar_and_asset") != nullptr);
-  CHECK(serialization.find_binding("teng.fixture.enum_and_policy") == nullptr);
+  const SceneSerializationContext serialization = make_scene_serialization_context(registry);
+  REQUIRE(serialization.find_authored_component("teng.fixture.scalar_and_asset") != nullptr);
+  CHECK(serialization.find_authored_component("teng.fixture.enum_and_policy") == nullptr);
 }
 
 // NOLINTEND(misc-use-anonymous-namespace)
