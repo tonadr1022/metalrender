@@ -1,7 +1,8 @@
 # Scene serialization v2 contract
 
-**Status:** JSON v2 is implemented against the frozen component registry; cooked v2 remains the next
-Phase 9 serialization slice. This document is no longer the source of truth for component
+**Status:** JSON v2 and **cooked scene v2** are implemented against the frozen component registry
+(encoding by stable component id and schema field order; see `SceneCooked` and
+`tests/smoke/SceneCookedTests.cpp`). This document is no longer the source of truth for component
 registration. Component schemas, field metadata, authoring transactions, storage policies, and
 registry lifecycle are defined by
 [`component_schema_authoring_model.md`](component_schema_authoring_model.md).

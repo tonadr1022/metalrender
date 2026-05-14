@@ -10,7 +10,7 @@
 |------|------|
 | `src/engine/scene/SceneIds.*` | **`AssetId`** parse/format; **`AssetId::from_path()`** exists only for tests/legacy helpers — **must not** appear in serialized scene data |
 | `src/engine/assets/` | Registry records, database, scan/register/move/delete/fixup, **`AssetService`** |
-| `src/engine/scene/SceneSerialization.*` | Current canonical scene JSON load/save, validation, and cooked scene codec; Phase 9 replaces central component knowledge with schema-driven serialization |
+| `src/engine/scene/SceneSerialization.*` + `SceneCooked.*` | Canonical JSON v2 load/save/validation; cooked v2 cook/dump (registry-stable ids, schema field order) |
 | `src/engine/render/RenderService.*` | Resolves extraction **`AssetId`** → **`AssetService`** → GPU residency |
 | `apps/metalrender/main.cpp` | CLI **`--scene`**, **`resources/project.toml`** **`startup_scene`**, **`--quit-after-frames`** |
 | `scripts/generate_demo_scene_assets.py` | Current idempotent demo asset + scene generation; Phase 9 removes handwritten scene JSON construction |

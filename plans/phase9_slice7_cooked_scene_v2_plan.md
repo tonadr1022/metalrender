@@ -1,6 +1,8 @@
 # Phase 9 Slice 7: Cooked scene v2 from schema fields
 
-**Status:** Implementation outline for Phase 9 Slice 7.
+**Status:** **Complete** — cooked v2 shipped: `SceneCooked.*`, `src/engine/content/BinaryReader.*` /
+`BinaryWriter.*` / `CookedArtifact.*`, `SceneSerialization` cook/dump delegation, `teng-scene-tool`
+**cook**/**dump**, `tests/smoke/SceneCookedTests.cpp`.
 
 **Parent plan:** [`component_schema_authoring_implementation_plan.md`](component_schema_authoring_implementation_plan.md).
 **Architecture contract:** [`component_schema_authoring_model.md`](component_schema_authoring_model.md).
@@ -15,22 +17,26 @@ tables.
 Slice 7 exits when `teng-scene-tool cook` and `teng-scene-tool dump` work for core authored
 components plus the Slice 6 test-module component, and cook/dump preserves canonical JSON semantics.
 
-## Current state
+## Context at slice start (historical)
 
-- `ComponentRegistry` already freezes sorted component records, records module/schema versions, and
-  assigns `stable_id` through `stable_component_id_v1(component_key)`.
-- JSON v2 validation/save/load is schema-backed enough for Slice 7 to consume field metadata:
-  authored components are accepted, runtime-only components are rejected, and field declaration order is
-  available.
-- `SceneSerialization.cpp` still owns JSON helpers and has disabled cooked entry points:
-  `cook_scene_to_memory`, `cook_scene_file`, `dump_cooked_scene_to_json`, and
-  `dump_cooked_scene_file`.
-- `SceneSerialization.hpp` still exposes `k_scene_binary_format_version = 1`; Slice 7 should bump or
-  replace this with the cooked v2 constant.
-- `teng-scene-tool` advertises `cook` and `dump`, but both subcommands print unsupported and do not
-  call engine code.
-- No active fixed `ComponentBit` enum/mask remains in code, but the Slice 7 implementation should still
-  verify no new global cooked identity table is introduced.
+The bullets below described the repo **before** Slice 7 landed; they are kept only as a planning paper
+trail.
+
+- `ComponentRegistry` already froze sorted component records, module/schema versions, and `stable_id`
+  via `stable_component_id_v1(component_key)`.
+- JSON v2 exposed field declaration order and authored vs runtime-only rejection.
+- Cooked entry points in `SceneSerialization` were stubbed/disabled; `teng-scene-tool` **cook**/**dump**
+  printed unsupported.
+
+## Implementation pointers (current)
+
+- Cooked format and I/O: `src/engine/scene/SceneCooked.hpp`, `SceneCooked.cpp`.
+- Shared binary envelope helpers: `src/engine/content/BinaryReader.*`, `BinaryWriter.*`,
+  `CookedArtifact.*`.
+- Public cook/dump API surface: `SceneSerialization.hpp` / `SceneSerialization.cpp` (delegates to
+  `SceneCooked`).
+- CLI: `apps/teng-scene-tool/main.cpp` — **cook**, **dump**.
+- Tests: `tests/smoke/SceneCookedTests.cpp`.
 
 ## Dependencies and assumptions
 

@@ -1,7 +1,7 @@
 # Component schema and authoring implementation plan
 
-**Status:** Phase 9 sequencing plan. Slices 0-6.5 are implemented. Next: Slice 7, cooked scene v2
-from schema fields. Scene byte contract: [`scene_serialization_design.md`](scene_serialization_design.md).
+**Status:** Phase 9 sequencing plan. Slices 0–7 are implemented. Next: **Slice 8**, scene authoring
+library and transaction boundary. Scene byte contract: [`scene_serialization_design.md`](scene_serialization_design.md).
 
 ## Goal
 
@@ -28,6 +28,9 @@ Use code and tests as the source of truth for exact APIs.
 - Slice 6: a generated test-extension component round-trips without editing core serialization code.
 - Slice 6.5: Clang component reflection codegen now emits `ComponentModuleDescriptor` data that
   freezes directly into the registry; old builder/adaptor registration streams are gone.
+- Slice 7: cooked scene v2 from registry field metadata — `SceneCooked.*`, `BinaryReader`/`BinaryWriter`/
+  `CookedArtifact`, `teng-scene-tool` **cook**/**dump**, `tests/smoke/SceneCookedTests.cpp`; no central
+  cooked component bit table.
 
 Current boundary: schema data belongs to the frozen `ComponentRegistry`; `FlecsComponentContext` is
 only the scene-runtime Flecs binding context. `SceneSerializationContext` references the same frozen
@@ -58,6 +61,8 @@ Validation:
 - Diagnostics for loading a scene without the required module/component schema.
 
 ## Slice 7: Cooked scene v2 from schema fields
+
+**Status:** implemented.
 
 **Purpose:** Remove central cooked component bit/codec identity.
 

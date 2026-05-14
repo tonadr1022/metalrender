@@ -4,7 +4,7 @@
 
 **Parent plan:** [`component_schema_authoring_implementation_plan.md`](component_schema_authoring_implementation_plan.md).  
 **Scene byte contract:** [`scene_serialization_design.md`](scene_serialization_design.md).  
-**Next dependent slice:** [`phase9_slice7_cooked_scene_v2_plan.md`](phase9_slice7_cooked_scene_v2_plan.md).
+**Dependent slice:** Slice 7 (cooked v2) — **complete:** [`phase9_slice7_cooked_scene_v2_plan.md`](phase9_slice7_cooked_scene_v2_plan.md). **Next:** Slice 8 in [`component_schema_authoring_implementation_plan.md`](component_schema_authoring_implementation_plan.md).
 
 ## Purpose
 
