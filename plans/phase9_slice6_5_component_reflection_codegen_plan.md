@@ -1,6 +1,6 @@
 # Phase 9 Slice 6.5: Clang component reflection codegen
 
-**Status:** implemented with Clang Tooling.
+**Status:** implemented with Clang Tooling and descriptor-based registry freeze.
 
 **Parent plan:** [`component_schema_authoring_implementation_plan.md`](component_schema_authoring_implementation_plan.md).  
 **Scene byte contract:** [`scene_serialization_design.md`](scene_serialization_design.md).  
@@ -38,15 +38,24 @@ generated C++ glue.
 - Generator source: `tools/component_codegen/ComponentCodegen.cpp`.
 - Annotation carrier: `src/engine/scene/ComponentReflectionMacros.hpp`.
 - Generated files stay under `${CMAKE_BINARY_DIR}/generated/...`.
-- Generated delegates preserve the existing public entrypoints:
-  - `register_core_components(ComponentRegistryBuilder&)`
-  - `register_flecs_core_components(FlecsComponentContextBuilder&)`
-  - `register_builtin_component_serialization(SceneSerializationContextBuilder&)`
+- Generated modules expose descriptor spans:
+  - `std::span<const scene::ComponentModuleDescriptor> <prefix>_modules()`
+  - core wrapper: `teng::engine::core_component_modules()`
+- `scene::try_freeze_component_registry(...)` is the public registry construction boundary.
+- `make_flecs_component_context(...)` and `make_scene_serialization_context(...)` derive runtime
+  views from the frozen registry. There are no separate generated schema/Flecs/serialization
+  registration streams.
+- Generated descriptors carry component schema facts and typed operation thunks together:
+  - field key, C++ member name, kind, default, asset/enum metadata, script exposure
+  - storage policy, visibility, add-on-create policy, schema/module versions
+  - Flecs registration, add-on-create, presence, JSON serialize, and JSON deserialize ops as required
+    by storage policy
 
 ## Current Scope
 
 - Core components in `SceneComponents.hpp` and `EngineInputSnapshot` in `Input.hpp` are generated.
-- The external test extension component is generated and still proves non-core extension.
+- The external test extension component is generated and proves non-core extension by linking its
+  generated module descriptors into the registry freeze input.
 - Negative codegen tests cover duplicate component keys, duplicate field keys, duplicate enum keys,
   and missing required metadata.
 - `EntityGuidComponent` and `Name` remain special identity/document metadata and are intentionally not

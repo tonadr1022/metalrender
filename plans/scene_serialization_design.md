@@ -1,8 +1,9 @@
 # Scene serialization v2 contract
 
-**Status:** Contract target for Phase 9 after the component schema overhaul. This document is no
-longer the source of truth for component registration. Component schemas, field metadata, authoring
-transactions, storage policies, and registry lifecycle are defined by
+**Status:** JSON v2 is implemented against the frozen component registry; cooked v2 remains the next
+Phase 9 serialization slice. This document is no longer the source of truth for component
+registration. Component schemas, field metadata, authoring transactions, storage policies, and
+registry lifecycle are defined by
 [`component_schema_authoring_model.md`](component_schema_authoring_model.md).
 
 **Parent roadmap:** [`engine_runtime_migration_plan.md`](engine_runtime_migration_plan.md).
@@ -39,7 +40,7 @@ Top-level shape:
     "required_modules": [
       { "id": "teng.core", "version": 1 }
     ],
-    "components": {
+    "required_components": {
       "teng.core.transform": 1,
       "teng.core.camera": 1
     }
@@ -49,7 +50,7 @@ Top-level shape:
   },
   "entities": [
     {
-      "guid": 10001,
+      "guid": "0000000000002711",
       "name": "camera",
       "components": {
         "teng.core.transform": {
@@ -69,19 +70,19 @@ Top-level shape:
 }
 ```
 
-Exact field payloads are generated from the component schema registry.
+Exact field payloads are generated from the frozen component registry.
 
 ## Envelope rules
 
 - `scene_format_version` identifies the JSON envelope/layout.
-- `schema.registry_fingerprint` is deterministic diagnostic/cache metadata, not an exact-load gate.
+- `schema.registry_fingerprint`, if present, is deterministic diagnostic/cache metadata, not an
+  exact-load gate.
 - `schema.required_modules` declares the modules required by this file.
 - `schema.required_components` maps each component key used by the file to the current component schema version.
 - `scene.name` is required.
 - `entities` is required and sorted by unsigned `EntityGuid::value` ascending on canonical save.
 - Each entity has `guid`, optional `name`, and `components`.
-- `guid` remains an unsigned JSON number while `EntityGuid::value` stays within IEEE-754 safe integer
-  range.
+- `guid` is serialized as a fixed-width hex string.
 - Entity `name` is entity/document metadata mirrored into Flecs name state; it is not a component
   payload.
 - `EntityGuidComponent` is identity infrastructure; it is not serialized inside `components`.
@@ -202,8 +203,9 @@ same schema version.
 `teng-scene-tool` / `teng_scene_tool_lib` remain GPU-free and should validate, canonicalize, migrate,
 cook, dump, and optionally generate demo scenes through the same schema serializer as editor save.
 
-Handwritten Python construction of canonical scene JSON is retired. Python may orchestrate assets or
-invoke C++ tools, but it must not be the scene component schema.
+Handwritten Python construction of canonical scene JSON is migration scaffolding. It may orchestrate
+assets or invoke C++ tools while Slice 9 is open, but it must not become a second component schema
+source.
 
 ## Required tests
 

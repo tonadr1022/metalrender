@@ -34,10 +34,10 @@ components plus the Slice 6 test-module component, and cook/dump preserves canon
 
 ## Dependencies and assumptions
 
-- Slice 5 has landed enough JSON v2 functionality that `validate_scene_file_full_report` is the strict
+- JSON v2 has landed enough functionality that `validate_scene_file_full_report` is the strict
   validation gate for cooking.
-- Slice 6 has a test-only registrar and serialization binding outside core, so the cook/dump tests can
-  prove extension without editing a central cooked component table.
+- Slice 6 has a test-only generated module outside core, so the cook/dump tests can prove extension
+  without editing a central cooked component table.
 - Cooked v2 is little-endian only, matching `scene_serialization_design.md`.
 - Phase 9 does not preserve old cooked binaries. Unknown/newer cooked versions fail fast with a clear
   error.
@@ -122,8 +122,8 @@ Header:
 
 Schema metadata:
 
-- registry fingerprint if Slice 5 has settled it; otherwise store an explicit placeholder string and
-  mark fingerprint finalization as retirement work.
+- registry fingerprint if available; otherwise store an explicit placeholder string and mark
+  fingerprint finalization as retirement work.
 - required modules: sorted module ID string table index plus module version.
 - required components: stable component ID, component key string table index, schema version, and
   module string table index.
@@ -161,8 +161,7 @@ Field payload:
 1. Parse JSON file through existing JSON IO.
 2. Validate through `validate_scene_file_full_report(serialization, scene_json)`.
 3. Canonicalize before binary emission:
-   - Prefer a small `canonicalize_scene_json(serialization, scene_json)` helper if Slice 5 already
-     exposes one.
+   - Prefer a small `canonicalize_scene_json(serialization, scene_json)` helper if one is available.
    - If no helper exists yet, deserialize into a `Scene` and reserialize, or implement a narrowly scoped
      canonical ordered-json builder that uses the same registry rules.
 4. Build deterministic schema metadata from the actual components used by the canonical document.
@@ -207,7 +206,7 @@ Field payload:
     `SpriteRenderable`.
   - Cook to memory, dump to JSON, validate, and compare canonical semantics to the canonicalized input.
 - Test-module parity:
-  - Use the Slice 6 test component registrar and serialization binding.
+  - Use the Slice 6 generated test component module descriptors.
   - Confirm no edits to core registrars or cooked tables are required.
 - Version rejection:
   - Mutate `binary_format_version` to an unsupported value.
@@ -264,13 +263,13 @@ cmake --build --preset Debug --target teng_engine_tests teng-scene-tool
 - **AssetId representation:** binary should store parsed IDs, while dump must reproduce canonical string
   form.
 - **Extension proof weakness:** if the test-module component still needs central serialization edits,
-  Slice 7 should stop and finish Slice 6’s extension seam first.
+  Slice 7 should stop and finish the extension path first.
 
 ## Open questions
 
 - Should `SceneCooked.hpp` be public under `teng_scene`, or should cook/dump stay public only through
   `SceneSerialization.hpp`?
 - Should registry fingerprint be mandatory in the first cooked v2 header, or allowed as an empty string
-  until Slice 5 finalizes the fingerprint input?
+  until the fingerprint input is finalized?
 - Should enum fields encode authored keys for readability/stability or numeric values for compactness?
   The plan chooses authored keys for v2 to match JSON semantics and avoid future enum renumbering risk.

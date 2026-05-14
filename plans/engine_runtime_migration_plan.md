@@ -202,14 +202,15 @@ schema-aware path. **Exit:** a test-only component registered outside core scene
 round-trips through JSON and cook/dump; central `ComponentCodec` and cooked bit enum identity are gone;
 runtime scene creation requires an explicit frozen registry/context. Full editor foundation is deferred.
 
-Current state: core diagnostics, frozen `ComponentRegistry`, declarative core schemas, and
-registry-driven Flecs registration have landed. Schema registration is split from runtime Flecs
-bindings: `register_core_components(ComponentRegistryBuilder&)` builds the registry-only schema path,
-and `register_flecs_core_components(FlecsComponentContextBuilder&)` wires scene-runtime Flecs behavior.
+Current state: core diagnostics, frozen `ComponentRegistry`, schema-driven JSON v2, descriptor-based
+component reflection codegen, and registry-derived Flecs/serialization contexts have landed. Generated
+component modules expose `ComponentModuleDescriptor` spans; engine, tests, and tools compose those
+spans and call `try_freeze_component_registry(...)`. `FlecsComponentContext` and
+`SceneSerializationContext` are runtime views derived from the frozen registry, not parallel schema
+registries.
 
-Next: Slice 5 replaces central JSON logic with schema-driven JSON v2. It should consume the frozen
-`ComponentRegistry` directly for serialization and GPU-free tools, and introduce durable registry
-ownership where needed instead of folding schema data back into `FlecsComponentContext`.
+Next: Slice 7 replaces the remaining cooked scene path with schema-field encoding from the frozen
+registry, then later slices add the authoring transaction boundary and C++ demo scene generation.
 
 ### Phase 10: Editor foundation
 
@@ -240,10 +241,11 @@ Physics/animation/audio as optional modules + systems + services; document fixed
 
 ## Immediate priorities
 
-1. Phase 9 Slice 5 — schema-driven JSON v2 validation and serialization.
-2. Phase 10 editor foundation — consume Phase 9 schema/document APIs instead of inventing parallel
+1. Phase 9 Slice 7 — cooked scene v2 from schema fields.
+2. Phase 9 Slice 8 — scene authoring library and transaction boundary.
+3. Phase 10 editor foundation — consume Phase 9 schema/document APIs instead of inventing parallel
    inspector/serialization logic.
-3. Phase 11 2D proof.
+4. Phase 11 2D proof.
 
 **Smoke:** `./scripts/agent_verify.sh`; `metalrender --quit-after-frames 30`; `--scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30`. Shaders: `agent_verify` runs `teng-shaderc --all`.
 
