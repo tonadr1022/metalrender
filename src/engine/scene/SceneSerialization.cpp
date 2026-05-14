@@ -827,32 +827,87 @@ Result<void, core::DiagnosticReport> validate_scene_file_full_report(
   return {};
 }
 
-Result<std::vector<std::byte>> cook_scene_to_memory(const nlohmann::json& json) {
-  (void)json;
-  return make_unexpected(
-      "cooked scenes are not supported while JSON v2 serialization is being rebuilt");
-}
+Result<nlohmann::ordered_json> canonicalize_scene_json(
+    const SceneSerializationContext& serialization, const nlohmann::json& scene_json) {
+  Result<void, core::DiagnosticReport> validated =
+      validate_scene_file_full_report(serialization, scene_json);
+  if (!validated) {
+    return make_unexpected(validated.error().to_string());
+  }
 
-Result<void> cook_scene_file(const std::filesystem::path& input_path,
-                             const std::filesystem::path& output_path) {
-  (void)input_path;
-  (void)output_path;
-  return make_unexpected(
-      "cooked scenes are not supported while JSON v2 serialization is being rebuilt");
-}
+  Result<std::vector<EntityRecord>> records = parse_entity_records_v2(scene_json);
+  REQUIRED_OR_RETURN(records);
 
-Result<nlohmann::json> dump_cooked_scene_to_json(std::span<const std::byte> bytes) {
-  (void)bytes;
-  return make_unexpected(
-      "cooked scenes are not supported while JSON v2 serialization is being rebuilt");
-}
+  nlohmann::ordered_json root;
+  root["scene_format_version"] = 2;
 
-Result<void> dump_cooked_scene_file(const std::filesystem::path& input_path,
-                                    const std::filesystem::path& output_path) {
-  (void)input_path;
-  (void)output_path;
-  return make_unexpected(
-      "cooked scenes are not supported while JSON v2 serialization is being rebuilt");
+  std::set<std::string> used_component_keys;
+  nlohmann::ordered_json entities = nlohmann::ordered_json::array();
+  for (const EntityRecord& record : *records) {
+    nlohmann::ordered_json entity_json;
+    entity_json["guid"] = entity_guid_lower_hex(record.guid);
+    if (!record.name.empty()) {
+      entity_json["name"] = record.name;
+    }
+
+    nlohmann::ordered_json components = nlohmann::ordered_json::object();
+    std::vector<std::string> component_keys;
+    for (const auto& [key, payload] : record.components.items()) {
+      component_keys.push_back(key);
+    }
+    std::ranges::sort(component_keys);
+    for (const std::string& key : component_keys) {
+      const scene::FrozenComponentRecord* component = serialization.find_authored_component(key);
+      ALWAYS_ASSERT(component, "validated component key {} is missing a serialization binding", key);
+      components[key] = canonical_component_payload(*component, record.components.at(key));
+      used_component_keys.insert(key);
+    }
+    entity_json["components"] = std::move(components);
+    entities.push_back(std::move(entity_json));
+  }
+
+  struct ModuleRef {
+    std::string id;
+    uint32_t version{};
+  };
+  std::vector<ModuleRef> modules;
+  for (const std::string& component_key : used_component_keys) {
+    const scene::FrozenComponentRecord* component = serialization.find_authored_component(component_key);
+    ASSERT(component);
+    if (std::ranges::none_of(modules, [&](const ModuleRef& module) {
+          return module.id == component->module_id;
+        })) {
+      modules.push_back(ModuleRef{.id = component->module_id, .version = component->module_version});
+    }
+  }
+  std::ranges::sort(modules, {}, &ModuleRef::id);
+
+  nlohmann::ordered_json required_modules = nlohmann::ordered_json::array();
+  for (const ModuleRef& module : modules) {
+    nlohmann::ordered_json module_json;
+    module_json["id"] = module.id;
+    module_json["version"] = module.version;
+    required_modules.push_back(std::move(module_json));
+  }
+
+  nlohmann::ordered_json required_components = nlohmann::ordered_json::object();
+  for (const std::string& component_key : used_component_keys) {
+    const scene::FrozenComponentRecord* component = serialization.find_authored_component(component_key);
+    ASSERT(component);
+    required_components[component_key] = component->schema_version;
+  }
+
+  nlohmann::ordered_json schema;
+  schema["required_modules"] = std::move(required_modules);
+  schema["required_components"] = std::move(required_components);
+
+  nlohmann::ordered_json scene;
+  scene["name"] = scene_json["scene"]["name"].get<std::string>();
+
+  root["schema"] = std::move(schema);
+  root["scene"] = std::move(scene);
+  root["entities"] = std::move(entities);
+  return root;
 }
 
 Result<void> migrate_scene_file(const std::filesystem::path& input_path,

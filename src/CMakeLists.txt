@@ -28,6 +28,12 @@ set(TENG_ASSETS_SOURCES
     engine/assets/AssetRegistry.cpp
 )
 
+set(TENG_CONTENT_SOURCES
+    engine/content/BinaryReader.cpp
+    engine/content/BinaryWriter.cpp
+    engine/content/CookedArtifact.cpp
+)
+
 set(TENG_CORE_COMPONENT_REFLECT_OUT_DIR "${CMAKE_BINARY_DIR}/generated/components/teng_core")
 set(TENG_CORE_COMPONENT_REFLECT_GENERATED_HPP
     "${TENG_CORE_COMPONENT_REFLECT_OUT_DIR}/core_components_reflect.generated.hpp"
@@ -79,6 +85,7 @@ set(TENG_SCENE_SOURCES
     engine/scene/SceneComponents.cpp
     engine/scene/SceneIds.cpp
     engine/scene/SceneManager.cpp
+    engine/scene/SceneCooked.cpp
     engine/scene/SceneSerialization.cpp
     "${TENG_CORE_COMPONENT_REFLECT_GENERATED_CPP}"
 )
@@ -233,6 +240,7 @@ add_teng_component(teng_cvars OFF ${TENG_CVAR_SOURCES})
 add_teng_component(teng_platform OFF ${TENG_PLATFORM_SOURCES})
 add_teng_component(teng_gfx ON ${TENG_GFX_SOURCES})
 add_teng_component(teng_assets OFF ${TENG_ASSETS_SOURCES})
+add_teng_component(teng_content OFF ${TENG_CONTENT_SOURCES})
 add_teng_component(teng_scene OFF ${TENG_SCENE_SOURCES})
 target_include_directories(teng_scene PUBLIC "${TENG_CORE_COMPONENT_REFLECT_OUT_DIR}")
 add_teng_component(teng_scene_tool_lib OFF engine/scene/SceneValidate.cpp)
@@ -248,7 +256,8 @@ target_link_libraries(teng_gfx
     PRIVATE teng_shader_compiler cgltf meshoptimizer ktx Tracy::TracyClient
 )
 target_link_libraries(teng_assets PUBLIC teng_core)
-target_link_libraries(teng_scene PUBLIC teng_core teng_assets)
+target_link_libraries(teng_content PUBLIC teng_core)
+target_link_libraries(teng_scene PUBLIC teng_core teng_assets teng_content)
 teng_link_flecs(teng_scene)
 target_link_libraries(teng_scene_tool_lib PUBLIC teng_core teng_assets teng_scene)
 target_link_libraries(teng_render PUBLIC teng_core teng_scene teng_gfx PRIVATE Tracy::TracyClient)

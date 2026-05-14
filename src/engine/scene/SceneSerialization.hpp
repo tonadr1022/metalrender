@@ -2,8 +2,6 @@
 
 #include <filesystem>
 #include <nlohmann/json.hpp>
-#include <span>
-#include <vector>
 
 #include "core/Result.hpp"
 #include "engine/scene/SceneIds.hpp"
@@ -18,7 +16,6 @@ namespace teng::engine {
 struct SceneSerializationContext;
 
 inline constexpr int k_scene_registry_version = 1;
-inline constexpr uint32_t k_scene_binary_format_version = 1;
 
 struct SceneLoadResult {
   SceneId scene_id;
@@ -43,13 +40,9 @@ struct SceneLoadResult {
                                                const std::filesystem::path& path);
 [[nodiscard]] Result<void, core::DiagnosticReport> validate_scene_file_full_report(
     const SceneSerializationContext& serialization, const nlohmann::json& scene_json);
+[[nodiscard]] Result<nlohmann::ordered_json> canonicalize_scene_json(
+    const SceneSerializationContext& serialization, const nlohmann::json& scene_json);
 
-[[nodiscard]] Result<std::vector<std::byte>> cook_scene_to_memory(const nlohmann::json& json);
-[[nodiscard]] Result<void> cook_scene_file(const std::filesystem::path& input_path,
-                                           const std::filesystem::path& output_path);
-[[nodiscard]] Result<nlohmann::json> dump_cooked_scene_to_json(std::span<const std::byte> bytes);
-[[nodiscard]] Result<void> dump_cooked_scene_file(const std::filesystem::path& input_path,
-                                                  const std::filesystem::path& output_path);
 [[nodiscard]] Result<void> migrate_scene_file(const std::filesystem::path& input_path,
                                               const std::filesystem::path& output_path);
 

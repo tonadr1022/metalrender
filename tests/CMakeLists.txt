@@ -148,6 +148,7 @@ add_executable(teng_core_tests
 target_link_libraries(teng_core_tests PRIVATE teng_core teng_scene Catch2::Catch2WithMain project_warnings)
 
 add_executable(teng_engine_tests
+    smoke/SceneCookedTests.cpp
     smoke/SceneComponentContextTests.cpp
     smoke/SceneSerializationValidationTests.cpp
     smoke/TestModuleExtensionTests.cpp

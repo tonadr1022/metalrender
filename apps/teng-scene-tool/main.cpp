@@ -7,6 +7,7 @@
 #include "core/Logger.hpp"
 #include "engine/scene/ComponentRegistry.hpp"
 #include "engine/scene/CoreComponentRegistrar.hpp"
+#include "engine/scene/SceneCooked.hpp"
 #include "engine/scene/SceneComponentContext.hpp"
 #include "engine/scene/SceneSerialization.hpp"
 #include "engine/scene/SceneSerializationContext.hpp"
@@ -66,11 +67,11 @@ int main(int argc, char** argv) {
     std::cerr << "migrate is not supported\n";
     // result = teng::engine::migrate_scene_file(argv[2], argv[3]);
   } else if (command == "cook" && argc == 4) {
-    std::cerr << "cook is not supported\n";
-    // result = teng::engine::cook_scene_file(argv[2], argv[3]);
+    const SceneTestContexts contexts = make_scene_test_contexts();
+    result = teng::engine::cook_scene_file(contexts.scene_serialization, argv[2], argv[3]);
   } else if (command == "dump" && argc == 4) {
-    std::cerr << "dump is not supported\n";
-    // result = teng::engine::dump_cooked_scene_file(argv[2], argv[3]);
+    const SceneTestContexts contexts = make_scene_test_contexts();
+    result = teng::engine::dump_cooked_scene_file(contexts.scene_serialization, argv[2], argv[3]);
   } else {
     usage();
     return 1;
