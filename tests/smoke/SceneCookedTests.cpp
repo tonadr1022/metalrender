@@ -1,14 +1,14 @@
 #include <algorithm>
+#include <catch2/catch_test_macros.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <span>
 #include <string>
+#include <system_error>
 #include <vector>
-
-#include <catch2/catch_test_macros.hpp>
-#include <nlohmann/json.hpp>
 
 #include "TestExtensionComponent.hpp"
 #include "TestHelpers.hpp"
@@ -106,12 +106,11 @@ using json = nlohmann::json;
       {"entities",
        json::array({json{{"guid", "0000000000000030"},
                          {"name", "extension"},
-                         {"components",
-                          json{{std::string{k_test_extension_component_key},
-                                json{{"health", 42.5},
-                                     {"active", false},
-                                     {"kind", 1},
-                                     {"attachment", asset_id(3).to_string()}}}}}}})}};
+                         {"components", json{{std::string{k_test_extension_component_key},
+                                              json{{"health", 42.5},
+                                                   {"active", false},
+                                                   {"kind", 1},
+                                                   {"attachment", asset_id(3).to_string()}}}}}}})}};
 }
 
 void patch_u32(std::vector<std::byte>& bytes, size_t offset, uint32_t value) {
@@ -150,10 +149,11 @@ void patch_u64(std::vector<std::byte>& bytes, size_t offset, uint64_t value) {
                                             uint32_t section_id) {
   constexpr size_t header_size =
       content::k_cooked_artifact_magic_size + content::k_cooked_artifact_kind_size +
-      sizeof(uint32_t) * 4 + content::k_cooked_artifact_header_reserved_u32_count * sizeof(uint32_t);
-  const uint32_t section_count = read_u32(bytes, content::k_cooked_artifact_magic_size +
-                                                    content::k_cooked_artifact_kind_size +
-                                                    sizeof(uint32_t) * 3);
+      sizeof(uint32_t) * 4 +
+      content::k_cooked_artifact_header_reserved_u32_count * sizeof(uint32_t);
+  const uint32_t section_count =
+      read_u32(bytes, content::k_cooked_artifact_magic_size + content::k_cooked_artifact_kind_size +
+                          sizeof(uint32_t) * 3);
   for (uint32_t i = 0; i < section_count; ++i) {
     const size_t record = header_size + i * (sizeof(uint32_t) + sizeof(uint64_t) * 2);
     if (read_u32(bytes, record) == section_id) {
@@ -183,7 +183,8 @@ TEST_CASE("cooked scene dumps canonical JSON and loads into ECS", "[scene_cooked
   CHECK(dumped->dump() == canonical->dump());
 
   SceneManager scenes(contexts.flecs_components);
-  const Result<void> loaded = deserialize_cooked_scene(scenes, contexts.scene_serialization, *cooked);
+  const Result<void> loaded =
+      deserialize_cooked_scene(scenes, contexts.scene_serialization, *cooked);
   REQUIRE(loaded.has_value());
   Scene* scene = scenes.active_scene();
   REQUIRE(scene != nullptr);
@@ -196,6 +197,45 @@ TEST_CASE("cooked scene dumps canonical JSON and loads into ECS", "[scene_cooked
   CHECK(renderables.get<SpriteRenderable>().texture == asset_id(2));
 }
 
+TEST_CASE("cooked scene loads from disk without JSON deserialization", "[scene_cooked]") {
+  const std::filesystem::path root =
+      std::filesystem::temp_directory_path() / "metalrender_scene_cooked_no_json_smoke";
+  std::error_code ec;
+  std::filesystem::remove_all(root, ec);
+  const std::filesystem::path cooked_path = root / "scene.tcooked";
+
+  const SceneTestContexts contexts = make_scene_test_contexts();
+  Result<std::vector<std::byte>> cooked =
+      cook_scene_to_memory(contexts.scene_serialization, core_scene_json());
+  REQUIRE(cooked.has_value());
+
+  std::filesystem::create_directories(root, ec);
+  REQUIRE_FALSE(ec);
+  {
+    std::ofstream out(cooked_path, std::ios::binary | std::ios::trunc);
+    REQUIRE(out);
+    out.write(reinterpret_cast<const char*>(cooked->data()),
+              static_cast<std::streamsize>(cooked->size()));
+    REQUIRE(out);
+  }
+
+  SceneManager scenes(contexts.flecs_components);
+  Scene& scene = scenes.create_scene("no json path");
+  const Result<void> loaded =
+      load_cooked_scene_file_no_json(scene, contexts.scene_serialization, cooked_path);
+  REQUIRE(loaded.has_value());
+  CHECK(scene.name() == "no json path");
+
+  const flecs::entity renderables = scene.find_entity(EntityGuid{0x20});
+  REQUIRE(renderables.is_valid());
+  REQUIRE(renderables.has<MeshRenderable>());
+  REQUIRE(renderables.has<SpriteRenderable>());
+  CHECK(renderables.get<MeshRenderable>().model == asset_id(1));
+  CHECK(renderables.get<SpriteRenderable>().texture == asset_id(2));
+
+  std::filesystem::remove_all(root, ec);
+}
+
 TEST_CASE("cooked scene supports extension components without central tables", "[scene_cooked]") {
   const SceneTestContexts contexts = make_scene_test_contexts_with_test_extension();
   Result<std::vector<std::byte>> cooked =
@@ -204,11 +244,13 @@ TEST_CASE("cooked scene supports extension components without central tables", "
   Result<nlohmann::ordered_json> dumped =
       dump_cooked_scene_to_json(contexts.scene_serialization, *cooked);
   REQUIRE(dumped.has_value());
-  CHECK((*dumped)["entities"][0]["components"][std::string{k_test_extension_component_key}]["kind"] ==
-        1);
+  CHECK(
+      (*dumped)["entities"][0]["components"][std::string{k_test_extension_component_key}]["kind"] ==
+      1);
 
   SceneManager scenes(contexts.flecs_components);
-  const Result<void> loaded = deserialize_cooked_scene(scenes, contexts.scene_serialization, *cooked);
+  const Result<void> loaded =
+      deserialize_cooked_scene(scenes, contexts.scene_serialization, *cooked);
   REQUIRE(loaded.has_value());
   const flecs::entity entity = scenes.active_scene()->find_entity(EntityGuid{0x30});
   REQUIRE(entity.is_valid());
@@ -222,9 +264,8 @@ TEST_CASE("cooked scene asset dependency extraction stays graph-friendly", "[sce
   Result<nlohmann::ordered_json> canonical =
       canonicalize_scene_json(core_contexts.scene_serialization, core_scene_json());
   REQUIRE(canonical.has_value());
-  Result<std::vector<SceneAssetDependency>> dependencies =
-      collect_scene_asset_dependencies(core_contexts.scene_serialization,
-                                       json::parse(canonical->dump()));
+  Result<std::vector<SceneAssetDependency>> dependencies = collect_scene_asset_dependencies(
+      core_contexts.scene_serialization, json::parse(canonical->dump()));
   REQUIRE(dependencies.has_value());
   REQUIRE(dependencies->size() == 2);
   CHECK(std::ranges::any_of(*dependencies, [](const SceneAssetDependency& dep) {
@@ -257,9 +298,8 @@ TEST_CASE("cooked scene rejects incompatible or corrupt bytes", "[scene_cooked]"
   REQUIRE(cooked.has_value());
 
   std::vector<std::byte> bad_version = *cooked;
-  patch_u32(bad_version, content::k_cooked_artifact_magic_size +
-                             content::k_cooked_artifact_kind_size,
-            999);
+  patch_u32(bad_version,
+            content::k_cooked_artifact_magic_size + content::k_cooked_artifact_kind_size, 999);
   CHECK_FALSE(dump_cooked_scene_to_json(contexts.scene_serialization, bad_version).has_value());
 
   std::vector<std::byte> bad_kind = *cooked;
@@ -274,11 +314,13 @@ TEST_CASE("cooked scene rejects incompatible or corrupt bytes", "[scene_cooked]"
   const size_t component_section = section_payload_offset(bad_component_id, 5);
   const size_t first_component_record = component_section + sizeof(uint32_t);
   patch_u64(bad_component_id, first_component_record, 42);
-  CHECK_FALSE(dump_cooked_scene_to_json(contexts.scene_serialization, bad_component_id).has_value());
+  CHECK_FALSE(
+      dump_cooked_scene_to_json(contexts.scene_serialization, bad_component_id).has_value());
 
   std::vector<std::byte> bad_schema_version = *cooked;
   patch_u32(bad_schema_version, first_component_record + sizeof(uint64_t), 999);
-  CHECK_FALSE(dump_cooked_scene_to_json(contexts.scene_serialization, bad_schema_version).has_value());
+  CHECK_FALSE(
+      dump_cooked_scene_to_json(contexts.scene_serialization, bad_schema_version).has_value());
 }
 
 TEST_CASE("cooked scene rejects runtime-only component payloads before emission",
@@ -287,8 +329,8 @@ TEST_CASE("cooked scene rejects runtime-only component payloads before emission"
   json scene = core_scene_json();
   scene["schema"]["required_components"]["teng.core.local_to_world"] = 1;
   scene["entities"][0]["components"]["teng.core.local_to_world"] =
-      json{{"value", json::array({1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0,
-                                  0.0, 0.0, 0.0, 1.0})}};
+      json{{"value", json::array({1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0,
+                                  0.0, 0.0, 1.0})}};
   CHECK_FALSE(cook_scene_to_memory(contexts.scene_serialization, scene).has_value());
 }
 

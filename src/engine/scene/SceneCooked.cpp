@@ -966,12 +966,14 @@ Result<void> load_cooked_scene_file_no_json(Scene& scene,
     for (uint32_t i = 0; i < entity.component_count; ++i) {
       const ComponentCookRecord& component_record =
           decoded->component_records[entity.component_begin + i];
-      const auto& component_key = decoded->components[component_record.component_key_index].key;
+      Result<const std::string*> component_key =
+          string_at(decoded->strings, component_record.component_key_index, "component record");
+      REQUIRED_OR_RETURN(component_key);
       const scene::FrozenComponentRecord* component =
-          serialization.find_authored_component(component_key);
-      ASSERT(component, "component key {} is not registered", component_key);
+          serialization.find_authored_component(**component_key);
+      ASSERT(component, "component key {} is not registered", **component_key);
       ASSERT(component->ops.deserialize_cooked_fn,
-             "component key {} is missing a deserialization binding", component_key);
+             "component key {} is missing a deserialization binding", **component_key);
       content::BinaryReader payload_reader(decoded->payloads.subspan(
           component_record.payload_offset, component_record.payload_size));
       component->ops.deserialize_cooked_fn(flecs_entity, payload_reader);
