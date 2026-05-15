@@ -291,6 +291,12 @@ TEST_CASE("cooked scene asset dependency extraction stays graph-friendly", "[sce
   CHECK(extension_dependencies->front().field_key == "attachment");
 }
 
+TEST_CASE("cooked scene path convention", "[scene_cooked]") {
+  CHECK(is_cooked_scene_file_path(std::filesystem::path{"demo_01_cube_grid.tscene.bin"}));
+  CHECK_FALSE(is_cooked_scene_file_path(std::filesystem::path{"demo_01_cube_grid.tscene.json"}));
+  CHECK_FALSE(is_cooked_scene_file_path(std::filesystem::path{"scene.bin"}));
+}
+
 TEST_CASE("cooked scene rejects incompatible or corrupt bytes", "[scene_cooked]") {
   const SceneTestContexts contexts = make_scene_test_contexts();
   Result<std::vector<std::byte>> cooked =

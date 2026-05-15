@@ -20,6 +20,7 @@
 #include "engine/render/RenderService.hpp"
 #include "engine/scene/CoreComponentRegistrar.hpp"
 #include "engine/scene/SceneComponentContext.hpp"
+#include "engine/scene/SceneCooked.hpp"
 #include "engine/scene/SceneSerialization.hpp"
 #include "engine/scene/SceneSerializationContext.hpp"
 #include "gfx/rhi/Device.hpp"
@@ -297,7 +298,10 @@ void Engine::clear_transient_input() {
 }
 
 Result<SceneLoadResult> Engine::load_scene(const std::filesystem::path& scene_path) {
-  return teng::engine::load_scene_file(*scenes_, *scene_serialization_ctx_, scene_path);
+  if (is_cooked_scene_file_path(scene_path)) {
+    return load_cooked_scene_file(*scenes_, *scene_serialization_ctx_, scene_path);
+  }
+  return load_scene_file(*scenes_, *scene_serialization_ctx_, scene_path);
 }
 
 Result<SceneLoadResult> Engine::load_project_startup_scene() {

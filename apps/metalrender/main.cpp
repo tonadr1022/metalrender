@@ -21,7 +21,8 @@ struct RuntimeOptions {
 
 void usage(const char* argv0) {
   std::cout << "usage: " << argv0 << " [--scene <path>] [--quit-after-frames <n>]\n"
-            << "  --scene              Load a canonical JSON scene instead of project startup_scene\n"
+            << "  --scene              Load `*.tscene.json` or cooked `*.tscene.bin` "
+               "(see teng-scene-tool cook) instead of project startup_scene\n"
             << "  --quit-after-frames  Exit after completing n frames (n >= 1)\n"
             << "  -h, --help           Show this help\n";
 }

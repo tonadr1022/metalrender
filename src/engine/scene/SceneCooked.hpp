@@ -21,6 +21,11 @@ struct SceneSerializationContext;
 inline constexpr uint32_t k_cooked_scene_binary_format_version = 2;
 inline constexpr uint32_t k_cooked_scene_json_format_version = 2;
 
+/// Cooked scene blobs are conventionally named `*.tscene.bin` (see `teng-scene-tool cook`).
+[[nodiscard]] inline bool is_cooked_scene_file_path(const std::filesystem::path& path) {
+  return path.extension() == ".bin" && path.stem().extension() == ".tscene";
+}
+
 struct SceneAssetDependency {
   AssetId asset;
   assets::AssetDependencyKind kind{assets::AssetDependencyKind::Strong};
