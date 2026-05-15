@@ -43,47 +43,14 @@ cooking, or editor work convenient.
 
 **Purpose:** Prove extensibility outside core serialization.
 
-Landed:
-
-- Test-only component declarations live outside the core component list.
-- The generated test module includes representative fields and JSON ops.
-- Tests compose core and test-extension module descriptor spans before registry freeze.
-- JSON v2 save/load works without editing central engine serialization tables.
-
-Exit:
-
-- Adding the test component requires only its registrar and tests.
-
-Validation:
-
-- JSON round-trip for the test component.
-- Schema metadata enumeration for the test component.
-- Diagnostics for loading a scene without the required module/component schema.
-
 ## Slice 7: Cooked scene v2 from schema fields
 
 **Status:** implemented.
 
 **Purpose:** Remove central cooked component bit/codec identity.
 
-Work:
-
-- Carry `binary_format_version`, `scene_format_version`, and schema compatibility metadata.
-- Encode component records by stable component ID and component schema version.
-- Encode supported fields in schema declaration order.
-- Dump cooked data back to canonical JSON semantics.
-- Remove fixed `ComponentBit` enum/mask as the global identity model.
-- Allow local generated indexes/masks only if derived from registry/file contents.
-
-Exit:
-
 - Cook/dump works for core components and the test-module component.
 - Old central cooked bit assignments are gone.
-
-Validation:
-
-- Cook/dump JSON parity for core fixture and test-module component.
-- Unknown/newer component schema version rejection.
 
 ## Slice 8: Reduced scene authoring library and transaction boundary
 
@@ -107,6 +74,7 @@ Exit:
 - Authoring code can mutate scenes without direct editor writes into ECS.
 - Dirty tracking and observable operation boundaries exist.
 - Invalid schema-key edits leave the scene unchanged.
+- Dummy imgui editor can create an entity (make or reuse a dummy layer for this)
 
 Validation:
 
