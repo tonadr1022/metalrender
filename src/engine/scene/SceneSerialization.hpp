@@ -14,8 +14,12 @@ class DiagnosticReport;
 namespace teng::engine {
 
 struct SceneSerializationContext;
+class Scene;
 
 inline constexpr int k_scene_registry_version = 1;
+
+/// Sync runtime LocalToWorld matrices from authored Transform after scene load.
+void derive_local_to_world(Scene& scene);
 
 struct SceneLoadResult {
   SceneId scene_id;

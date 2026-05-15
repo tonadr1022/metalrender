@@ -25,6 +25,7 @@
 #include "core/EAssert.hpp"
 #include "core/Result.hpp"
 #include "engine/scene/ComponentRegistry.hpp"
+#include "engine/scene/Scene.hpp"
 #include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/SceneSerializationContext.hpp"
 
@@ -73,12 +74,6 @@ struct EntityRecord {
     return make_unexpected("failed to parse JSON scene " + path.string() + " at byte " +
                            std::to_string(error.byte) + ": " + error.what());
   }
-}
-
-void derive_local_to_world(Scene& scene) {
-  scene.world().each([](const Transform& transform, LocalToWorld& local_to_world) {
-    local_to_world.value = transform_to_matrix(transform);
-  });
 }
 
 [[nodiscard]] Result<EntityGuid> parse_hex_guid(const json& entity, std::string_view label) {
@@ -918,6 +913,12 @@ Result<void> migrate_scene_file(const std::filesystem::path& input_path,
   (void)output_path;
   return make_unexpected(
       "scene migration is not supported until a JSON v2 migration target exists");
+}
+
+void derive_local_to_world(Scene& scene) {
+  scene.world().each([](const Transform& transform, LocalToWorld& local_to_world) {
+    local_to_world.value = transform_to_matrix(transform);
+  });
 }
 
 }  // namespace engine

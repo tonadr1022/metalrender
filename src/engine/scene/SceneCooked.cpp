@@ -23,6 +23,7 @@
 #include "engine/content/BinaryWriter.hpp"
 #include "engine/content/CookedArtifact.hpp"
 #include "engine/scene/ComponentRegistry.hpp"
+#include "engine/scene/Scene.hpp"
 #include "engine/scene/SceneSerialization.hpp"
 #include "engine/scene/SceneSerializationContext.hpp"
 
@@ -854,6 +855,32 @@ namespace {
   };
 }
 
+[[nodiscard]] Result<void> populate_scene_from_decoded(
+    Scene& scene, const SceneSerializationContext& serialization,
+    const DecodedCookedScene& decoded) {
+  for (const EntityCookRecord& entity : decoded.entities) {
+    const flecs::entity flecs_entity = scene.create_entity(
+        entity.guid,
+        entity.name_index != k_invalid_string_index ? decoded.strings[entity.name_index] : "");
+    for (uint32_t i = 0; i < entity.component_count; ++i) {
+      const ComponentCookRecord& component_record =
+          decoded.component_records[entity.component_begin + i];
+      Result<const std::string*> component_key =
+          string_at(decoded.strings, component_record.component_key_index, "component record");
+      REQUIRED_OR_RETURN(component_key);
+      const scene::FrozenComponentRecord* component =
+          serialization.find_authored_component(**component_key);
+      ASSERT(component, "component key {} is not registered", **component_key);
+      ASSERT(component->ops.deserialize_cooked_fn,
+             "component key {} is missing a deserialization binding", **component_key);
+      content::BinaryReader payload_reader(decoded.payloads.subspan(
+          component_record.payload_offset, component_record.payload_size));
+      component->ops.deserialize_cooked_fn(flecs_entity, payload_reader);
+    }
+  }
+  return {};
+}
+
 }  // namespace
 
 Result<ordered_json> dump_cooked_scene_to_json(const SceneSerializationContext& serialization,
@@ -958,46 +985,25 @@ Result<void> load_cooked_scene_file_no_json(Scene& scene,
   REQUIRED_OR_RETURN(bytes);
   const Result<DecodedCookedScene> decoded = decode_cooked_scene_header(serialization, *bytes);
   REQUIRED_OR_RETURN(decoded);
-
-  for (const EntityCookRecord& entity : decoded->entities) {
-    const flecs::entity flecs_entity = scene.create_entity(
-        entity.guid,
-        entity.name_index != k_invalid_string_index ? decoded->strings[entity.name_index] : "");
-    for (uint32_t i = 0; i < entity.component_count; ++i) {
-      const ComponentCookRecord& component_record =
-          decoded->component_records[entity.component_begin + i];
-      Result<const std::string*> component_key =
-          string_at(decoded->strings, component_record.component_key_index, "component record");
-      REQUIRED_OR_RETURN(component_key);
-      const scene::FrozenComponentRecord* component =
-          serialization.find_authored_component(**component_key);
-      ASSERT(component, "component key {} is not registered", **component_key);
-      ASSERT(component->ops.deserialize_cooked_fn,
-             "component key {} is missing a deserialization binding", **component_key);
-      content::BinaryReader payload_reader(decoded->payloads.subspan(
-          component_record.payload_offset, component_record.payload_size));
-      component->ops.deserialize_cooked_fn(flecs_entity, payload_reader);
-    }
-  }
-
-  // Temporary compatibility fixup: render extraction currently expects LocalToWorld to be current
-  // immediately after load. A dedicated transform propagation/dirty system should retire this.
-  scene.world().each([](const Transform& transform, LocalToWorld& local_to_world) {
-    local_to_world.value = transform_to_matrix(transform);
-  });
-
+  const Result<void> populated = populate_scene_from_decoded(scene, serialization, *decoded);
+  REQUIRED_OR_RETURN(populated);
+  derive_local_to_world(scene);
   return {};
 }
 
 Result<SceneLoadResult> load_cooked_scene_file(SceneManager& scenes,
                                                const SceneSerializationContext& serialization,
                                                const std::filesystem::path& path) {
-  Result<std::vector<std::byte>> bytes = read_binary_file(path);
+  const Result<std::vector<std::byte>> bytes = read_binary_file(path);
   REQUIRED_OR_RETURN(bytes);
-  Result<void> loaded = deserialize_cooked_scene(scenes, serialization, *bytes);
-  REQUIRED_OR_RETURN(loaded);
-  Scene* scene = scenes.active_scene();
-  return SceneLoadResult{.scene_id = scene->id(), .scene = scene};
+  const Result<DecodedCookedScene> decoded = decode_cooked_scene_header(serialization, *bytes);
+  REQUIRED_OR_RETURN(decoded);
+  Scene& scene = scenes.create_scene(decoded->scene_name);
+  const Result<void> populated = populate_scene_from_decoded(scene, serialization, *decoded);
+  REQUIRED_OR_RETURN(populated);
+  derive_local_to_world(scene);
+  scenes.set_active_scene(scene.id());
+  return SceneLoadResult{.scene_id = scene.id(), .scene = &scene};
 }
 
 }  // namespace teng::engine
