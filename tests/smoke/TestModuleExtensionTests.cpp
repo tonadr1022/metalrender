@@ -32,7 +32,7 @@ using json = nlohmann::json;
                          {"components", json{{std::string{k_test_extension_component_key},
                                               json{{"health", 42.5},
                                                    {"active", false},
-                                                   {"kind", "beta"},
+                                                   {"kind", 1},
                                                    {"attachment", sample_asset_id_text()}}}}}}})}};
 }
 
@@ -66,7 +66,7 @@ TEST_CASE("test extension component JSON v2 round-trip", "[scene_serialization][
   const json round_json = json::parse(json_result->dump());
   const json& component_payload =
       round_json["entities"][0]["components"][std::string{k_test_extension_component_key}];
-  CHECK(component_payload["kind"].get<std::string>() == "beta");
+  CHECK(component_payload["kind"].get<std::int64_t>() == 1);
   const auto validated = validate_scene_file_full_report(contexts.scene_serialization, round_json);
   REQUIRE(validated.has_value());
 
@@ -87,7 +87,7 @@ TEST_CASE("test extension component JSON v2 round-trip", "[scene_serialization][
   CHECK(read.attachment.low == written.attachment.low);
 }
 
-TEST_CASE("test extension component loads authored enum key into enum storage",
+TEST_CASE("test extension component loads authored enum discriminant into enum storage",
           "[scene_serialization][extension]") {
   const SceneTestContexts contexts = make_scene_test_contexts_with_test_extension();
   SceneManager scenes(contexts.flecs_components);

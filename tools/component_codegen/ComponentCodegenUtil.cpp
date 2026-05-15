@@ -59,6 +59,22 @@
   }
   return value;
 }
+
+[[nodiscard]] std::optional<int64_t> AnnotationArgs::try_i64(std::string_view key) const {
+  const auto it = values.find(std::string{key});
+  if (it == values.end()) {
+    return std::nullopt;
+  }
+  int64_t value{};
+  const char* begin = it->second.data();
+  const char* end = begin + it->second.size();
+  const auto result = std::from_chars(begin, end, value);
+  if (result.ec != std::errc{} || result.ptr != end) {
+    throw CodegenError("expected integer annotation value for '" + std::string{key} + "'");
+  }
+  return value;
+}
+
 std::string trim(std::string_view text) {
   const auto begin = text.find_first_not_of(" \t\r\n");
   if (begin == std::string_view::npos) {

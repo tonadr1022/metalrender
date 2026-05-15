@@ -110,7 +110,7 @@ using json = nlohmann::json;
                           json{{std::string{k_test_extension_component_key},
                                 json{{"health", 42.5},
                                      {"active", false},
-                                     {"kind", "beta"},
+                                     {"kind", 1},
                                      {"attachment", asset_id(3).to_string()}}}}}}})}};
 }
 
@@ -205,7 +205,7 @@ TEST_CASE("cooked scene supports extension components without central tables", "
       dump_cooked_scene_to_json(contexts.scene_serialization, *cooked);
   REQUIRE(dumped.has_value());
   CHECK((*dumped)["entities"][0]["components"][std::string{k_test_extension_component_key}]["kind"] ==
-        "beta");
+        1);
 
   SceneManager scenes(contexts.flecs_components);
   const Result<void> loaded = deserialize_cooked_scene(scenes, contexts.scene_serialization, *cooked);

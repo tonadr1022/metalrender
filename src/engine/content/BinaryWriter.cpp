@@ -1,6 +1,5 @@
 #include "engine/content/BinaryWriter.hpp"
 
-#include <algorithm>
 #include <cstring>
 
 #include "core/EAssert.hpp"
@@ -32,9 +31,9 @@ void BinaryWriter::write_u32(uint32_t value) { write_le(bytes_, value, sizeof(va
 
 void BinaryWriter::write_u64(uint64_t value) { write_le(bytes_, value, sizeof(value)); }
 
-void BinaryWriter::write_i32(int32_t value) {
-  write_u32(static_cast<uint32_t>(value));
-}
+void BinaryWriter::write_i32(int32_t value) { write_u32(static_cast<uint32_t>(value)); }
+
+void BinaryWriter::write_i64(int64_t value) { write_u64(static_cast<uint64_t>(value)); }
 
 void BinaryWriter::write_f32(float value) {
   uint32_t bits{};

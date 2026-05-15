@@ -9,3 +9,5 @@
 #define TENG_COMPONENT(...) [[clang::annotate("teng.component:" #__VA_ARGS__)]]
 #define TENG_FIELD(...) [[clang::annotate("teng.field:" #__VA_ARGS__)]]
 #define TENG_ENUM_VALUE(...) [[clang::annotate("teng.enum_value:" #__VA_ARGS__)]]
+// Single numeric literal for both reflection stable value and C++ enumerator initializer.
+#define TENG_ENUM_N(v) TENG_ENUM_VALUE(value = v) = (v)

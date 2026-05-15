@@ -6,6 +6,7 @@
 #include <span>
 #include <unordered_map>
 #include <unordered_set>
+#include <variant>
 
 #include "core/EAssert.hpp"
 
@@ -155,6 +156,15 @@ void validate_component_fields(std::string_view component_key,
           ASSERT(inserted_number.second,
                  "Component schema '{}.{}' registers duplicate enum numeric value {}",
                  component_key, field.key, ev.value);
+        }
+        if (const auto* def = std::get_if<ComponentDefaultEnum>(&field.default_value)) {
+          const bool known = std::ranges::any_of(
+              en.values, [v = def->value](const ComponentEnumValueRegistration& ev) {
+                return ev.value == v;
+              });
+          ASSERT(known, "Component schema '{}.{}' enum default value {} is not a registered enum "
+                         "discriminant",
+                 component_key, field.key, def->value);
         }
       }
     } else if (field.enumeration.has_value()) {

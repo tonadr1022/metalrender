@@ -184,7 +184,7 @@ void derive_local_to_world(Scene& scene) {
           return json(v.value);
         }
         if constexpr (std::is_same_v<T, scene::ComponentDefaultEnum>) {
-          return json(v.key);
+          return json(v.value);
         }
         return {nullptr};
       },
@@ -534,18 +534,20 @@ void validate_field_value(core::DiagnosticReport& report, const json& value,
       }
       return;
     case ComponentFieldKind::Enum: {
-      if (!value.is_string()) {
-        add_validation_error(report, std::move(path), std::string{label} + " must be an enum key");
+      if (!value.is_number_integer()) {
+        add_validation_error(report, std::move(path),
+                             std::string{label} + " must be an integer enum discriminant");
         return;
       }
-      const std::string key = value.get<std::string>();
+      const int64_t discriminant = value.get<int64_t>();
       const bool known_value =
           field.enumeration &&
-          std::ranges::any_of(field.enumeration->values,
-                              [&key](const auto& enum_value) { return enum_value.key == key; });
+          std::ranges::any_of(field.enumeration->values, [discriminant](const auto& enum_value) {
+            return enum_value.value == discriminant;
+          });
       if (!known_value) {
         add_validation_error(report, std::move(path),
-                             std::string{label} + " must be a known enum key");
+                             std::string{label} + " must be a registered enum discriminant");
       }
       return;
     }

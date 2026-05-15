@@ -28,10 +28,9 @@ namespace {
           return json::array({v.w, v.x, v.y, v.z});
         } else if constexpr (std::is_same_v<T, scene::ComponentDefaultMat4>) {
           return json(v.elements);
-        } else if constexpr (std::is_same_v<T, scene::ComponentDefaultAssetId>) {
+        } else if constexpr (std::is_same_v<T, scene::ComponentDefaultEnum> ||
+                             std::is_same_v<T, scene::ComponentDefaultAssetId>) {
           return json(v.value);
-        } else if constexpr (std::is_same_v<T, scene::ComponentDefaultEnum>) {
-          return json(v.key);
         } else {
           static_assert(sizeof(T) == 0, "unhandled ComponentFieldDefaultValue alternative");
         }

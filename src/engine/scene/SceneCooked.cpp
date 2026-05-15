@@ -1,10 +1,9 @@
 #include "engine/scene/SceneCooked.hpp"
 
-#include <algorithm>
 #include <array>
 #include <cstddef>
-#include <cstdio>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -135,7 +134,8 @@ class StringTableBuilder {
   if (!out) {
     return make_unexpected(io_error(path, "write"));
   }
-  out.write(reinterpret_cast<const char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
+  out.write(reinterpret_cast<const char*>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
   return {};
 }
 
@@ -189,8 +189,7 @@ class StringTableBuilder {
 }
 
 [[nodiscard]] Result<const std::string*> string_at(const std::vector<std::string>& strings,
-                                                   uint32_t index,
-                                                   std::string_view label) {
+                                                   uint32_t index, std::string_view label) {
   if (index >= strings.size()) {
     return make_unexpected(std::string(label) + " references an invalid string index");
   }
@@ -254,9 +253,16 @@ void write_string_table(content::BinaryWriter& writer, const std::vector<std::st
       writer.write_f32(payload.get<float>());
       return {};
     case ComponentFieldKind::String:
-    case ComponentFieldKind::Enum:
       writer.write_u32(payload.get<uint32_t>());
       return {};
+    case ComponentFieldKind::Enum: {
+      if (!payload.is_number_integer()) {
+        return make_unexpected("enum field payload is not an integer");
+      }
+      const int64_t v = payload.get<int64_t>();
+      writer.write_i64(v);
+      return {};
+    }
     case ComponentFieldKind::Vec2:
     case ComponentFieldKind::Vec3:
     case ComponentFieldKind::Vec4:
@@ -308,13 +314,17 @@ void write_string_table(content::BinaryWriter& writer, const std::vector<std::st
       REQUIRED_OR_RETURN(value);
       return json(*value);
     }
-    case ComponentFieldKind::String:
-    case ComponentFieldKind::Enum: {
+    case ComponentFieldKind::String: {
       Result<uint32_t> index = reader.read_u32();
       REQUIRED_OR_RETURN(index);
       Result<const std::string*> text = string_at(strings, *index, "field payload");
       REQUIRED_OR_RETURN(text);
       return json(**text);
+    }
+    case ComponentFieldKind::Enum: {
+      Result<int64_t> value = reader.read_i64();
+      REQUIRED_OR_RETURN(value);
+      return json(*value);
     }
     case ComponentFieldKind::Vec2:
     case ComponentFieldKind::Vec3:
@@ -360,9 +370,9 @@ void write_string_table(content::BinaryWriter& writer, const std::vector<std::st
   using scene::ComponentFieldKind;
   switch (field.kind) {
     case ComponentFieldKind::String:
-    case ComponentFieldKind::Enum:
       (void)strings.add(value.get<std::string>());
       return {};
+    case ComponentFieldKind::Enum:
     case ComponentFieldKind::Bool:
     case ComponentFieldKind::I32:
     case ComponentFieldKind::U32:
@@ -386,8 +396,7 @@ void write_string_table(content::BinaryWriter& writer, const std::vector<std::st
     const json& value = payload.at(field.key);
     Result<void> added = add_field_strings(strings, field, value);
     REQUIRED_OR_RETURN(added);
-    if (field.kind == scene::ComponentFieldKind::String ||
-        field.kind == scene::ComponentFieldKind::Enum) {
+    if (field.kind == scene::ComponentFieldKind::String) {
       encoded[field.key] = strings.add(value.get<std::string>());
     } else {
       encoded[field.key] = value;
@@ -438,8 +447,8 @@ Result<std::vector<SceneAssetDependency>> collect_scene_asset_dependencies(
   return dependencies;
 }
 
-Result<std::vector<std::byte>> cook_scene_to_memory(
-    const SceneSerializationContext& serialization, const nlohmann::json& scene_json) {
+Result<std::vector<std::byte>> cook_scene_to_memory(const SceneSerializationContext& serialization,
+                                                    const nlohmann::json& scene_json) {
   Result<ordered_json> canonical = canonicalize_scene_json(serialization, scene_json);
   REQUIRED_OR_RETURN(canonical);
   const json canonical_json = json::parse(canonical->dump());
@@ -454,7 +463,8 @@ Result<std::vector<std::byte>> cook_scene_to_memory(
   std::vector<ComponentCookRecord> component_records;
   content::BinaryWriter payload_writer;
 
-  const uint32_t scene_name_index = strings.add(canonical_json.at("scene").at("name").get<std::string>());
+  const uint32_t scene_name_index =
+      strings.add(canonical_json.at("scene").at("name").get<std::string>());
 
   for (const json& module_json : canonical_json.at("schema").at("required_modules")) {
     const std::string id = module_json.at("id").get<std::string>();
@@ -467,7 +477,8 @@ Result<std::vector<std::byte>> cook_scene_to_memory(
 
   for (const auto& [component_key, version] :
        canonical_json.at("schema").at("required_components").items()) {
-    const scene::FrozenComponentRecord* component = serialization.find_authored_component(component_key);
+    const scene::FrozenComponentRecord* component =
+        serialization.find_authored_component(component_key);
     ASSERT(component);
     component_uses.push_back(ComponentUse{
         .key = component_key,
@@ -497,8 +508,8 @@ Result<std::vector<std::byte>> cook_scene_to_memory(
       REQUIRED_OR_RETURN(encoded_payload);
       const auto payload_offset = static_cast<uint64_t>(payload_writer.size());
       for (const scene::FrozenComponentFieldRecord& field : component->fields) {
-        Result<void> encoded = encode_field_payload(payload_writer, field,
-                                                    encoded_payload->at(field.key));
+        Result<void> encoded =
+            encode_field_payload(payload_writer, field, encoded_payload->at(field.key));
         REQUIRED_OR_RETURN(encoded);
       }
       component_records.push_back(ComponentCookRecord{
@@ -639,8 +650,8 @@ namespace {
   if (*section_count != k_section_count) {
     return make_unexpected("unsupported cooked scene section count");
   }
-  Result<void> skipped = reader.skip(content::k_cooked_artifact_header_reserved_u32_count *
-                                     sizeof(uint32_t));
+  Result<void> skipped =
+      reader.skip(content::k_cooked_artifact_header_reserved_u32_count * sizeof(uint32_t));
   REQUIRED_OR_RETURN(skipped);
 
   std::vector<content::CookedSectionDesc> sections;
@@ -938,6 +949,42 @@ Result<void> deserialize_cooked_scene(SceneManager& scenes,
   REQUIRED_OR_RETURN(scene_json);
   const json plain_json = json::parse(scene_json->dump());
   return deserialize_scene_json(scenes, serialization, plain_json);
+}
+
+Result<void> load_cooked_scene_file_no_json(Scene& scene,
+                                            const SceneSerializationContext& serialization,
+                                            const std::filesystem::path& path) {
+  const Result<std::vector<std::byte>> bytes = read_binary_file(path);
+  REQUIRED_OR_RETURN(bytes);
+  const Result<DecodedCookedScene> decoded = decode_cooked_scene_header(serialization, *bytes);
+  REQUIRED_OR_RETURN(decoded);
+
+  for (const EntityCookRecord& entity : decoded->entities) {
+    const flecs::entity flecs_entity = scene.create_entity(
+        entity.guid,
+        entity.name_index != k_invalid_string_index ? decoded->strings[entity.name_index] : "");
+    for (uint32_t i = 0; i < entity.component_count; ++i) {
+      const ComponentCookRecord& component_record =
+          decoded->component_records[entity.component_begin + i];
+      const auto& component_key = decoded->components[component_record.component_key_index].key;
+      const scene::FrozenComponentRecord* component =
+          serialization.find_authored_component(component_key);
+      ASSERT(component, "component key {} is not registered", component_key);
+      ASSERT(component->ops.deserialize_cooked_fn,
+             "component key {} is missing a deserialization binding", component_key);
+      content::BinaryReader payload_reader(decoded->payloads.subspan(
+          component_record.payload_offset, component_record.payload_size));
+      component->ops.deserialize_cooked_fn(flecs_entity, payload_reader);
+    }
+  }
+
+  // Temporary compatibility fixup: render extraction currently expects LocalToWorld to be current
+  // immediately after load. A dedicated transform propagation/dirty system should retire this.
+  scene.world().each([](const Transform& transform, LocalToWorld& local_to_world) {
+    local_to_world.value = transform_to_matrix(transform);
+  });
+
+  return {};
 }
 
 Result<SceneLoadResult> load_cooked_scene_file(SceneManager& scenes,

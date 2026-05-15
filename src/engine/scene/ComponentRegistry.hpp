@@ -14,6 +14,10 @@
 
 #include "core/Diagnostic.hpp"
 
+namespace teng::engine::content {
+class BinaryReader;
+}  // namespace teng::engine::content
+
 namespace teng::engine::scene {
 
 enum class ComponentStoragePolicy : uint8_t {
@@ -87,7 +91,7 @@ struct ComponentDefaultAssetId {
 };
 
 struct ComponentDefaultEnum {
-  std::string key;
+  int64_t value{};
 };
 
 using ComponentFieldDefaultValue =
@@ -117,6 +121,7 @@ using RegisterFlecsFn = void (*)(flecs::world&);
 using ApplyOnCreateFn = void (*)(flecs::entity);
 using SerializeComponentFn = nlohmann::json (*)(flecs::entity entity);
 using DeserializeComponentFn = void (*)(flecs::entity entity, const nlohmann::json& payload);
+using DeserializeCookedComponentFn = void (*)(flecs::entity entity, content::BinaryReader& reader);
 using HasComponentFn = bool (*)(flecs::entity entity);
 
 enum class ScriptExposure : uint8_t {
@@ -142,6 +147,7 @@ struct ComponentTypeOps {
   HasComponentFn has_component_fn{};
   SerializeComponentFn serialize_fn{};
   DeserializeComponentFn deserialize_fn{};
+  DeserializeCookedComponentFn deserialize_cooked_fn{};
 };
 
 struct ComponentDescriptor {

@@ -48,4 +48,8 @@ struct SceneAssetDependency {
 [[nodiscard]] Result<std::vector<SceneAssetDependency>> collect_scene_asset_dependencies(
     const SceneSerializationContext& serialization, const nlohmann::json& canonical_scene_json);
 
+Result<void> load_cooked_scene_file_no_json(Scene& scene,
+                                            const SceneSerializationContext& serialization,
+                                            const std::filesystem::path& path);
+
 }  // namespace teng::engine

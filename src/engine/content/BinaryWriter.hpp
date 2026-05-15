@@ -19,6 +19,7 @@ class BinaryWriter {
   void write_u32(uint32_t value);
   void write_u64(uint64_t value);
   void write_i32(int32_t value);
+  void write_i64(int64_t value);
   void write_f32(float value);
   void write_bytes(std::span<const std::byte> bytes);
   void write_fixed_string(std::string_view text, size_t size);

@@ -11,8 +11,8 @@
 namespace teng::engine {
 
 enum class TestExtensionKind : uint8_t {
-  Alpha TENG_ENUM_VALUE(key = "alpha", value = 0) = 0,
-  Beta TENG_ENUM_VALUE(key = "beta", value = 1) = 1,
+  Alpha TENG_ENUM_N(0),
+  Beta TENG_ENUM_N(1),
 };
 
 /// Test-only ECS component
@@ -24,7 +24,7 @@ struct TENG_COMPONENT(key = "teng.test.extension_proof", module = "teng.test", s
   TENG_FIELD(script = "ReadWrite")
   bool active{true};
 
-  TENG_FIELD(key = "kind", enum_key = "teng.test.extension_proof_kind", script = "ReadWrite")
+  TENG_FIELD(key = "kind", script = "ReadWrite")
   TestExtensionKind kind{TestExtensionKind::Alpha};
 
   TENG_FIELD(asset_kind = "texture", script = "ReadWrite")

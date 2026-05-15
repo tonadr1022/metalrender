@@ -24,7 +24,17 @@ class BinaryReader {
   [[nodiscard]] Result<uint32_t> read_u32();
   [[nodiscard]] Result<uint64_t> read_u64();
   [[nodiscard]] Result<int32_t> read_i32();
+  [[nodiscard]] Result<int64_t> read_i64();
   [[nodiscard]] Result<float> read_f32();
+
+  [[nodiscard]] uint8_t read_u8_unchecked();
+  [[nodiscard]] uint16_t read_u16_unchecked();
+  [[nodiscard]] uint32_t read_u32_unchecked();
+  [[nodiscard]] uint64_t read_u64_unchecked();
+  [[nodiscard]] int32_t read_i32_unchecked();
+  [[nodiscard]] int64_t read_i64_unchecked();
+  [[nodiscard]] float read_f32_unchecked();
+
   [[nodiscard]] Result<std::string> read_fixed_string(size_t size);
 
  private:
@@ -32,7 +42,7 @@ class BinaryReader {
   size_t position_{};
 };
 
-[[nodiscard]] Result<std::span<const std::byte>> checked_subspan(
-    std::span<const std::byte> bytes, uint64_t offset, uint64_t size);
+[[nodiscard]] Result<std::span<const std::byte>> checked_subspan(std::span<const std::byte> bytes,
+                                                                 uint64_t offset, uint64_t size);
 
 }  // namespace teng::engine::content

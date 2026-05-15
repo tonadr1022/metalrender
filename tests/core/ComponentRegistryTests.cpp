@@ -188,7 +188,7 @@ TEST_CASE("freeze preserves field facts", "[component_registry]") {
           .key = "tier",
           .member_name = "tier",
           .kind = ComponentFieldKind::Enum,
-          .default_value = ComponentFieldDefaultValue{ComponentDefaultEnum{.key = "pro"}},
+          .default_value = ComponentFieldDefaultValue{ComponentDefaultEnum{.value = 10}},
           .enumeration =
               ComponentEnumRegistration{
                   .enum_key = "tier_kind",
@@ -225,7 +225,7 @@ TEST_CASE("freeze preserves field facts", "[component_registry]") {
   } else {
     FAIL("expected tier enumeration metadata");
   }
-  CHECK(std::get<ComponentDefaultEnum>(rec->fields[2].default_value).key == "pro");
+  CHECK(std::get<ComponentDefaultEnum>(rec->fields[2].default_value).value == 10);
 }
 
 TEST_CASE("freeze validates component operation policy", "[component_registry]") {

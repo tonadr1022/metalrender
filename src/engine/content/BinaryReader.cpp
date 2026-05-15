@@ -81,6 +81,12 @@ Result<int32_t> BinaryReader::read_i32() {
   return static_cast<int32_t>(*value);
 }
 
+Result<int64_t> BinaryReader::read_i64() {
+  Result<uint64_t> value = read_u64();
+  REQUIRED_OR_RETURN(value);
+  return static_cast<int64_t>(*value);
+}
+
 Result<float> BinaryReader::read_f32() {
   Result<uint32_t> bits = read_u32();
   REQUIRED_OR_RETURN(bits);
@@ -89,6 +95,38 @@ Result<float> BinaryReader::read_f32() {
   std::memcpy(&value, &*bits, sizeof(value));
   return value;
 }
+
+uint8_t BinaryReader::read_u8_unchecked() { return static_cast<uint8_t>(bytes_[position_++]); }
+
+uint16_t BinaryReader::read_u16_unchecked() {
+  uint16_t value{};
+  for (size_t i = 0; i < sizeof(value); ++i) {
+    value |= static_cast<uint16_t>(static_cast<uint8_t>(bytes_[position_++])) << (i * 8u);
+  }
+  return value;
+}
+
+uint32_t BinaryReader::read_u32_unchecked() {
+  uint32_t value{};
+  for (size_t i = 0; i < sizeof(value); ++i) {
+    value |= static_cast<uint32_t>(static_cast<uint8_t>(bytes_[position_++])) << (i * 8u);
+  }
+  return value;
+}
+
+uint64_t BinaryReader::read_u64_unchecked() {
+  uint64_t value{};
+  for (size_t i = 0; i < sizeof(value); ++i) {
+    value |= static_cast<uint64_t>(static_cast<uint8_t>(bytes_[position_++])) << (i * 8u);
+  }
+  return value;
+}
+
+int32_t BinaryReader::read_i32_unchecked() { return static_cast<int32_t>(read_u32_unchecked()); }
+
+int64_t BinaryReader::read_i64_unchecked() { return static_cast<int64_t>(read_u64_unchecked()); }
+
+float BinaryReader::read_f32_unchecked() { return static_cast<float>(read_u32_unchecked()); }
 
 Result<std::string> BinaryReader::read_fixed_string(size_t size) {
   Result<std::span<const std::byte>> bytes = read_bytes(size);

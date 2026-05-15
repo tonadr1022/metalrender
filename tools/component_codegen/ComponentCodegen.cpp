@@ -57,8 +57,8 @@ struct Field {
   std::string kind;
   std::string script_exposure{"None"};
   std::string asset_kind;
-  std::string enum_key;
   std::string enum_type;
+  std::string enum_key;
   std::vector<EnumValue> enum_values;
 };
 
@@ -240,8 +240,9 @@ class Collector : public clang::RecursiveASTVisitor<Collector> {
         field.asset_kind = field_annotation->required("asset_kind", field.member);
       }
       if (field.kind == "Enum") {
-        field.enum_key = field_annotation->required("enum_key", field.member);
         collect_enum_values(*field_decl, field);
+        field.enum_key =
+            field_annotation->optional("enum_key", component.component_key + "_" + field.key);
       }
       component.fields.push_back(std::move(field));
     }
@@ -288,8 +289,12 @@ class Collector : public clang::RecursiveASTVisitor<Collector> {
       }
       EnumValue value;
       value.enumerator_expr = field.enum_type + "::" + constant->getNameAsString();
-      value.key = annotation->required("key", value.enumerator_expr);
-      value.stable_value = annotation->required_i64("value", value.enumerator_expr);
+      value.key = annotation->optional("key", constant->getNameAsString());
+      if (const std::optional<int64_t> opt_stable = annotation->try_i64("value")) {
+        value.stable_value = *opt_stable;
+      } else {
+        value.stable_value = constant->getInitVal().getSExtValue();
+      }
       if (!keys.insert(value.key).second) {
         throw CodegenError("duplicate enum key '" + value.key + "' in enum '" + field.enum_type +
                            "'");
@@ -414,8 +419,8 @@ class ActionFactory : public clang::tooling::FrontendActionFactory {
            ".to_string()}}";
   }
   if (field.kind == "Enum") {
-    return "scene::ComponentFieldDefaultValue{scene::ComponentDefaultEnum{std::string{to_key_" +
-           c_ident(field.enum_key) + "(" + member + ")}}}";
+    return "scene::ComponentFieldDefaultValue{scene::ComponentDefaultEnum{to_stable_" +
+           c_ident(field.enum_key) + "(" + member + ")}}";
   }
   throw CodegenError("no default emitter for field kind '" + field.kind + "'");
 }
@@ -487,7 +492,7 @@ class ActionFactory : public clang::tooling::FrontendActionFactory {
     return member + ".to_string()";
   }
   if (field.kind == "Enum") {
-    return "std::string{to_key_" + c_ident(field.enum_key) + "(" + member + ")}";
+    return "static_cast<std::int64_t>(to_stable_" + c_ident(field.enum_key) + "(" + member + "))";
   }
   throw CodegenError("no JSON serializer for kind '" + field.kind + "'");
 }
@@ -531,9 +536,62 @@ class ActionFactory : public clang::tooling::FrontendActionFactory {
     return "AssetId::parse(" + payload + ".get<std::string>()).value()";
   }
   if (field.kind == "Enum") {
-    return "from_key_" + c_ident(field.enum_key) + "(" + payload + ".get<std::string>())";
+    return "from_stable_" + c_ident(field.enum_key) + "(" + payload + ".get<std::int64_t>())";
   }
   throw CodegenError("no JSON loader for kind '" + field.kind + "'");
+}
+
+[[nodiscard]] std::string cooked_load_expr(const Field& field) {
+  if (field.kind == "Bool") {
+    return "reader.read_u8_unchecked() != 0";
+  }
+  if (field.kind == "I32") {
+    return "reader.read_i32_unchecked()";
+  }
+  if (field.kind == "U32") {
+    return "reader.read_u32_unchecked()";
+  }
+  if (field.kind == "F32") {
+    return "reader.read_f32_unchecked()";
+  }
+  if (field.kind == "String") {
+    return "reader.read_u32_unchecked()";
+  }
+  if (field.kind == "Vec2") {
+    return "{reader.read_f32_unchecked(), reader.read_f32_unchecked()}";
+  }
+  if (field.kind == "Vec3") {
+    return "{reader.read_f32_unchecked(), reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked()}";
+  }
+  if (field.kind == "Vec4") {
+    return "{reader.read_f32_unchecked(), reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked()}";
+  }
+  if (field.kind == "Quat") {
+    return "glm::qua<float>{reader.read_f32_unchecked(), reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked()}";
+  }
+  if (field.kind == "Mat4") {
+    return "{reader.read_f32_unchecked(), reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked(), reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked(), reader.read_f32_unchecked(), reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked(), reader.read_f32_unchecked(), reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked(), reader.read_f32_unchecked(), reader.read_f32_unchecked(), "
+           "reader.read_f32_unchecked()}";
+  }
+  if (field.kind == "AssetId") {
+    return "{reader.read_u64_unchecked(), reader.read_u64_unchecked()}";
+  }
+  if (field.kind == "Enum") {
+    return "from_stable_" + c_ident(field.enum_key) + "(reader.read_i64_unchecked())";
+  }
+
+  throw CodegenError("no cooked loader for kind '" + field.kind + "'");
 }
 
 void write_generated(const Options& options, const std::vector<Component>& components) {
@@ -550,6 +608,7 @@ void write_generated(const Options& options, const std::vector<Component>& compo
     out << "#include <cstddef>\n";
     out << "#include <span>\n";
     out << "#include <string_view>\n\n";
+    out << "#include \"engine/content/BinaryReader.hpp\"\n\n";
     out << "#include \"engine/scene/ComponentRegistry.hpp\"\n\n";
     out << "namespace " << options.cpp_namespace << " {\n\n";
     out << "inline constexpr std::string_view k_banner = "
@@ -575,6 +634,7 @@ void write_generated(const Options& options, const std::vector<Component>& compo
     out << "#include <string>\n";
     out << "#include <string_view>\n\n";
     out << "#include <glm/gtc/type_ptr.hpp>\n";
+    out << "#include <glm/gtc/quaternion.hpp>\n";
     out << "#include <nlohmann/json.hpp>\n\n";
     out << "#include \"core/EAssert.hpp\"\n";
     for (const std::string& include : options.includes) {
@@ -591,25 +651,27 @@ void write_generated(const Options& options, const std::vector<Component>& compo
           continue;
         }
         const std::string helper = c_ident(field.enum_key);
-        out << "[[nodiscard, maybe_unused]] std::string_view to_key_" << helper << "("
+        out << "[[nodiscard, maybe_unused]] std::int64_t to_stable_" << helper << "("
             << field.enum_type << " value) {\n";
         out << "  switch (value) {\n";
         for (const EnumValue& value : field.enum_values) {
           out << "    case " << value.enumerator_expr << ":\n";
-          out << "      return " << cpp_string(value.key) << ";\n";
+          out << "      return " << std::to_string(value.stable_value) << ";\n";
         }
         out << "  }\n";
         out << "  ALWAYS_ASSERT(false, \"unknown reflected enum value\");\n";
-        out << "  return \"\";\n";
+        out << "  return " << std::to_string(field.enum_values.front().stable_value) << ";\n";
         out << "}\n\n";
-        out << "[[nodiscard, maybe_unused]] " << field.enum_type << " from_key_" << helper
-            << "(std::string_view key) {\n";
+        out << "[[nodiscard, maybe_unused]] " << field.enum_type << " from_stable_" << helper
+            << "(std::int64_t discriminant) {\n";
+        out << "  switch (discriminant) {\n";
         for (const EnumValue& value : field.enum_values) {
-          out << "  if (key == " << cpp_string(value.key) << ") {\n";
-          out << "    return " << value.enumerator_expr << ";\n";
-          out << "  }\n";
+          out << "    case " << std::to_string(value.stable_value) << ":\n";
+          out << "      return " << value.enumerator_expr << ";\n";
         }
-        out << "  ALWAYS_ASSERT(false, \"unknown reflected enum key {}\", key);\n";
+        out << "  }\n";
+        out << "  ALWAYS_ASSERT(false, \"unknown reflected enum discriminant {}\", "
+               "discriminant);\n";
         out << "  return " << field.enum_values.front().enumerator_expr << ";\n";
         out << "}\n\n";
       }
@@ -648,11 +710,21 @@ void write_generated(const Options& options, const std::vector<Component>& compo
         }
         out << "  };\n";
         out << "}\n\n";
+
         out << "void deserialize_component_" << ident
             << "(flecs::entity entity, const nlohmann::json& payload) {\n";
         out << "  entity.set<" << component.cpp_type << ">(" << component.cpp_type << "{\n";
         for (const Field& field : component.fields) {
           out << "      ." << field.member << " = " << json_load_expr(field) << ",\n";
+        }
+        out << "  });\n";
+        out << "}\n\n";
+
+        out << "void deserialize_cooked_component_" << ident
+            << "(flecs::entity entity, content::BinaryReader& reader) {\n";
+        out << "  entity.set<" << component.cpp_type << ">(" << component.cpp_type << "{\n";
+        for (const Field& field : component.fields) {
+          out << "      ." << field.member << " = " << cooked_load_expr(field) << ",\n";
         }
         out << "  });\n";
         out << "}\n\n";
@@ -695,6 +767,9 @@ void write_generated(const Options& options, const std::vector<Component>& compo
           << ",\n";
       out << "          .deserialize_fn = "
           << (component.storage == "Authored" ? "deserialize_component_" + ident : "nullptr")
+          << ",\n";
+      out << "          .deserialize_cooked_fn = "
+          << (component.storage == "Authored" ? "deserialize_cooked_component_" + ident : "nullptr")
           << ",\n";
       out << "      },\n";
       out << "  },\n";
