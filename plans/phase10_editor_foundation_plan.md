@@ -470,7 +470,7 @@ Do not implement filesystem watching or automatic reload prompts in Phase 10.
 
 ## Implementation slices
 
-### Slice 10.1 — Split runtime and editor targets
+### Slice 10.1 — Split runtime and editor targets (done)
 
 Files and targets:
 
@@ -490,14 +490,6 @@ Exit:
 `DebugSceneAuthoringLayer.*` can remain temporarily unlinked if `metalrender` is cleaned up before
 the new editor layer has equivalent minimum functionality. Delete it in the first slice where it is
 fully replaced.
-
-Validation:
-
-```bash
-./scripts/agent_verify.sh
-./build/Debug/bin/metalrender --quit-after-frames 30
-./build/Debug/bin/teng_editor --quit-after-frames 30
-```
 
 ### Slice 10.2 — Editor session and document controller
 

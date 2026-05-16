@@ -78,7 +78,8 @@ int main(int argc, char** argv) {
   }
 
   const bool compile_all = result["all"].as<bool>();
-  const std::vector<std::string> positional = result["shaders"].as<std::vector<std::string>>();
+  const std::vector<std::string> positional =
+      result.contains("shaders") ? result["shaders"].as<std::vector<std::string>>() : std::vector<std::string>{};
 
   if (compile_all && !positional.empty()) {
     std::cerr << kExeName << ": --all cannot be combined with shader paths\n";
