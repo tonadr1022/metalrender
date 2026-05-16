@@ -1,81 +1,57 @@
-#include <charconv>
 #include <cstdint>
-#include <cstdlib>
+#include <cxxopts.hpp>
 #include <filesystem>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
-#include <string_view>
 #include <tracy/Tracy.hpp>
 
 #include "editor/EditorLayer.hpp"
 #include "engine/Engine.hpp"
 #include "engine/ImGuiOverlayLayer.hpp"
 
-namespace {
-
-struct EditorOptions {
-  std::filesystem::path scene_path;
-  std::optional<std::uint32_t> quit_after_frames;
-};
-
-void usage(const char* argv0) {
-  std::cout << "usage: " << argv0 << " [--scene <path>] [--quit-after-frames <n>]\n"
-            << "  --scene              Open `*.tscene.json` or cooked `*.tscene.bin` "
-               "instead of project startup_scene\n"
-            << "  --quit-after-frames  Exit after completing n frames (n >= 1)\n"
-            << "  -h, --help           Show this help\n";
-}
-
-bool parse_u32(std::string_view text, std::uint32_t& out) {
-  if (text.empty()) {
-    return false;
-  }
-  std::uint32_t value{};
-  const char* const begin = text.data();
-  const char* const end = text.data() + text.size();
-  const auto result = std::from_chars(begin, end, value, 10);
-  if (result.ptr == begin || result.ptr != end || result.ec != std::errc{} || value == 0) {
-    return false;
-  }
-  out = value;
-  return true;
-}
-
-std::optional<EditorOptions> parse_options(int argc, char* argv[]) {
-  EditorOptions options;
-  for (int i = 1; i < argc; ++i) {
-    const std::string arg = argv[i];
-    if (arg == "--scene" && i + 1 < argc) {
-      options.scene_path = argv[++i];
-    } else if (arg == "--quit-after-frames" && i + 1 < argc) {
-      std::uint32_t frame_count{};
-      if (!parse_u32(std::string_view(argv[++i]), frame_count)) {
-        std::cerr << argv[0] << ": --quit-after-frames requires a positive 32-bit integer value\n";
-        return std::nullopt;
-      }
-      options.quit_after_frames = frame_count;
-    } else if (arg == "-h" || arg == "--help") {
-      usage(argv[0]);
-      std::exit(0);
-    } else {
-      std::cerr << argv[0] << ": unknown option: " << arg << '\n';
-      usage(argv[0]);
-      return std::nullopt;
-    }
-  }
-
-  return options;
-}
-
-}  // namespace
-
 int main(int argc, char* argv[]) {
   ZoneScoped;
-  std::optional<EditorOptions> options = parse_options(argc, argv);
-  if (!options) {
+
+  cxxopts::Options options(argv[0], "Teng editor");
+  // clang-format off
+  options.add_options()
+    ("scene", "Open `*.tscene.json` or cooked `*.tscene.bin` instead of project startup_scene",
+     cxxopts::value<std::string>())
+    ("quit-after-frames", "Exit after completing n frames (n >= 1)",
+     cxxopts::value<std::uint32_t>())
+    ("h,help", "Show this help");
+  // clang-format on
+
+  cxxopts::ParseResult result;
+  try {
+    result = options.parse(argc, argv);
+  } catch (const cxxopts::exceptions::exception& e) {
+    std::cerr << argv[0] << ": " << e.what() << '\n';
+    std::cout << options.help() << '\n';
     return 1;
+  }
+
+  if (result.contains("help")) {
+    std::cout << options.help() << '\n';
+    return 0;
+  }
+
+  std::filesystem::path scene_path;
+  if (result.contains("scene")) {
+    scene_path = result["scene"].as<std::string>();
+  }
+
+  std::optional<std::uint32_t> quit_after_frames;
+  if (result.contains("quit-after-frames")) {
+    const std::uint32_t frame_count = result["quit-after-frames"].as<std::uint32_t>();
+    if (frame_count == 0) {
+      std::cerr << argv[0] << ": --quit-after-frames requires a positive 32-bit integer value\n";
+      std::cout << options.help() << '\n';
+      return 1;
+    }
+    quit_after_frames = frame_count;
   }
 
   teng::engine::Engine engine(teng::engine::EngineConfig{
@@ -88,11 +64,10 @@ int main(int argc, char* argv[]) {
       .floating_window = false,
       .vsync = true,
       .enable_imgui = true,
-      .quit_after_frames = options->quit_after_frames,
+      .quit_after_frames = quit_after_frames,
   });
-  teng::Result<teng::engine::SceneLoadResult> loaded = options->scene_path.empty()
-                                                           ? engine.load_project_startup_scene()
-                                                           : engine.load_scene(options->scene_path);
+  teng::Result<teng::engine::SceneLoadResult> loaded =
+      scene_path.empty() ? engine.load_project_startup_scene() : engine.load_scene(scene_path);
   if (!loaded) {
     std::cerr << "teng_editor: failed to load scene: " << loaded.error() << '\n';
     return 1;

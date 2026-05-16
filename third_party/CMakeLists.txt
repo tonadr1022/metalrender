@@ -161,5 +161,10 @@ target_include_directories(cgltf INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/cgltf/inc
 add_library(fts_fuzzy_match INTERFACE)
 target_include_directories(fts_fuzzy_match INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/fts_fuzzy_match)
 
+set(CXXOPTS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(CXXOPTS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(CXXOPTS_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+add_subdirectory(cxxopts)
+
 add_library(tomlplusplus INTERFACE)
 target_include_directories(tomlplusplus INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/tomlplusplus/include)
