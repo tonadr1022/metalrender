@@ -66,8 +66,9 @@ These are not open assumptions for implementers.
    as `<edit name> (Play)`. Authored `EntityGuid`s inside the play scene remain identical to the edit
    snapshot.
 9. **Active scene policy:** edit mode activates the edit scene; play mode activates the play scene so
-   existing `RenderService::enqueue_active_scene()` and `SceneManager::tick_active_scene()` continue
-   to operate without renderer special cases.
+   `SceneManager::tick_active_scene()` and the default runtime render path continue to operate without
+   scene-manager special cases. Editor camera work may add an explicit render submission API, but it
+   should not change which scene is active in edit vs play mode.
 10. **Save while playing:** disabled. Save writes only the edit document, and the editor must not save
     from the play scene.
 11. **Editing while playing:** disabled for the edit document in the first vertical. The inspector may
@@ -93,6 +94,43 @@ These are not open assumptions for implementers.
 20. **Render camera ownership:** render submission takes a source-agnostic render camera/view value.
     The renderer must not care whether the camera came from an authored runtime entity, an editor
     viewport, a shadow pass, a reflection probe, a thumbnail preview, or a future split-screen view.
+
+## Extensibility decision gates
+
+These are the places where Phase 10 must either make a narrow decision before implementation or add
+explicit migration scaffolding. Do not let these become incidental UI or renderer behavior.
+
+1. **Editor mutation command boundary:** before implementing hierarchy or inspector mutations, decide
+   and document the editor-side operation boundary that panels use to mutate the edit document. The
+   first version may be small, but hierarchy/inspector UI should not directly scatter calls to
+   `SceneDocument::*`. The boundary should record at least an operation label, affected stable
+   `EntityGuid`s, the `SceneDocument` call to apply, the returned status/error, and a future
+   undo/coalescing hook. Full undo/redo remains out of Phase 10, but the call path must be easy to
+   wrap with undo later.
+2. **Render submission API and frame lifetime:** before implementing editor viewport camera plumbing,
+   decide the exact render handoff API and frame lifetime for a non-authored camera. Prefer an explicit
+   per-submission value such as `RenderCamera`/`SceneView` passed to `RenderService` over a sticky
+   global override. If a temporary frame override is used, it must be set and cleared within the same
+   frame and covered by a test or smoke assertion.
+3. **Render camera type naming:** do not introduce an engine-level type named bare `RenderView`
+   without reconciling it with the existing `gfx::RenderView` renderer-internal type. Prefer a name
+   that signals camera/submission semantics, such as `RenderCamera`, `SceneView`, or
+   `RenderSubmissionView`.
+4. **Scene swap atomicity:** reload and play-copy flows must be two-phase. Load or deserialize the
+   replacement scene first, then switch active/edit/play state only after success. On failure, leave
+   the current edit scene, active scene, document binding, selection, dirty state, and mode unchanged.
+   Any partially-created scene from a failed operation must be destroyed before returning the error.
+5. **Scene tick policy scaffolding:** the Phase 10 `Engine::set_scene_tick_enabled(bool)` switch is
+   acceptable only as narrow migration scaffolding. Before adding richer editor previews, thumbnails,
+   multi-scene rendering, or background simulation, replace or extend it with an explicit scene role /
+   tick policy model. Document that retirement path in the implementation comments or follow-up notes.
+6. **Panel ownership boundary:** `EditorLayer` orchestrates editor UI, but panel implementation should
+   live behind small panel/helper units as soon as hierarchy and inspector become non-trivial. Panels
+   receive an editor context/session/controller reference and do not own engine services.
+7. **Inspector draft commit semantics:** before field widgets mutate components, decide the commit
+   rule per widget kind. Each completed user gesture should produce one editor operation where
+   practical, with a stable coalescing key reserved for future undo behavior. Draft widget state must
+   be cleared on selection changes, component removal, reload, and play/edit transitions.
 
 ## Architecture
 
@@ -165,7 +203,7 @@ branches.
 A suitable Phase 10 shape is:
 
 ```cpp
-struct CameraData {
+struct RenderCamera {
   glm::mat4 view{1.f};
   glm::mat4 projection{1.f};
   glm::vec3 position{};
@@ -173,24 +211,28 @@ struct CameraData {
   float far_plane{10000.f};
 };
 
-enum class ViewType {
+enum class RenderViewKind {
   Runtime,
   Editor,
   Shadow,
   ReflectionProbe,
 };
 
-struct RenderView {
-  CameraData camera;
-  ViewType type{ViewType::Runtime};
+struct SceneView {
+  RenderCamera camera;
+  RenderViewKind kind{RenderViewKind::Runtime};
 };
 ```
 
 Naming and exact fields may be refined during implementation to match existing render structs. The
-important invariant is that `RenderView`/`CameraData` is not ECS-owned and is not serialized. Runtime
+important invariant is that this camera/view value is not ECS-owned and is not serialized. Runtime
 mode derives a `Runtime` view from the selected authored camera entity. Edit mode derives an `Editor`
-view from editor-owned viewport camera state. The renderer can use `ViewType` for view-specific
+view from editor-owned viewport camera state. The renderer can use `RenderViewKind` for view-specific
 features such as editor selection overlays, but core scene rendering consumes only camera data.
+
+Avoid naming the engine-level type just `RenderView` unless the existing renderer-internal
+`gfx::RenderView` has been renamed or clearly separated; otherwise the term becomes ambiguous between
+"camera used to render a scene" and "GPU resources for a meshlet view."
 
 This model intentionally leaves room for split-screen, multiple editor viewports, minimaps,
 reflection captures, shadow maps, render-to-texture previews, thumbnail generation, VR stereo eyes,
@@ -209,7 +251,7 @@ In edit mode, the renderer should view the active edit scene through this editor
 remain visible and editable as scene objects, but they do not control the editor viewport unless a
 future explicit "pilot camera" feature is designed.
 
-The render path should support this by passing an editor `RenderView`/`CameraData` alongside the
+The render path should support this by passing an editor `SceneView`/`RenderCamera` alongside the
 scene render submission, not by adding editor-only components to the authored scene. The editor
 layer/session owns the edit viewport camera and updates the render view once per frame. The render
 view must be frame-scoped or explicitly cleared at end frame so an editor view cannot leak into a
@@ -231,6 +273,11 @@ Responsibilities:
 - Clear selection if the selected entity no longer exists after reload.
 
 `SceneDocument` stays a narrow authoring transaction wrapper.
+
+Editor panels should call through this controller/session command boundary for mutations rather than
+holding their own policy around `SceneDocument`. The controller is the place where Phase 10 records
+status now and where a future undo stack can wrap or replace operation application without rewriting
+each panel.
 
 ## Public API changes to plan for
 
@@ -304,6 +351,9 @@ Editor policy:
 - enter play sets scene ticking enabled before activating/running the play scene
 - stop play sets scene ticking disabled again after reactivating the edit scene
 
+Treat this switch as Phase 10 scaffolding. The implementation should leave a clear note that richer
+editor workflows need scene-role/tick-policy modeling instead of more booleans.
+
 ## UI panels
 
 ### Main editor layer
@@ -318,6 +368,10 @@ Editor policy:
 
 The UI should be functional and restrained. It does not need marketing polish, docking, custom
 icons, gizmos, or a content browser.
+
+`EditorLayer` should orchestrate the editor shell. As hierarchy and inspector grow, split panels into
+small `src/editor/panels/*` units that receive session/controller references. Panels must not own
+engine services or encode save/play/reload policy locally.
 
 The scene stats/debug panel is required, but its exact fields should be clarified at implementation
 time against the available engine data. Keep the first version small and self-contained; suitable
@@ -350,10 +404,14 @@ Phase 10 outliner is a deterministic flat list:
 - display `Name.value` when present, otherwise lower-hex `EntityGuid`
 - sort by display name then `EntityGuid`
 - single click selects an entity
-- create entity adds an authored entity through `SceneDocument::create_entity`
-- delete selected entity calls `SceneDocument::destroy_entity`
+- create entity adds an authored entity, ultimately through `SceneDocument::create_entity`
+- delete selected entity ultimately calls `SceneDocument::destroy_entity`
 
 No parent/child drag/drop, no prefab nesting, no multi-select.
+
+Create/delete should route through the editor mutation command boundary chosen for this phase, with
+that boundary applying the underlying `SceneDocument` call. This keeps hierarchy actions undo-ready
+without implementing the undo stack yet.
 
 ### Inspector
 
@@ -386,6 +444,10 @@ For ImGui this means using local draft values and committing simple values on
 deactivation-after-edit. Complex values that cannot be safely committed that way get an explicit
 Apply button.
 
+Each committed inspector gesture should produce one editor mutation operation where practical. Numeric
+drag/slider-like edits should reserve a stable coalescing key so a later undo stack can merge the
+gesture into one undo step.
+
 Draft widget state should be keyed by selected `EntityGuid`, component key, and field key, then
 cleared on selection changes, component removal, reload, and play/edit transitions so stale drafts do
 not apply to the wrong component.
@@ -404,6 +466,10 @@ not apply to the wrong component.
 8. Disable edit commands and document mutation UI.
 
 Do not save the scene to disk as part of play.
+
+Enter play must be atomic from the editor user's point of view. If serialization, validation,
+deserialization, or activation fails, destroy any partially-created play scene and leave the editor in
+edit mode with the original active scene, document binding, selection, and dirty state unchanged.
 
 ### While playing
 
@@ -430,13 +496,17 @@ That means a future editor might want pre-simulation controls, but Phase 10 can 
 
 The edit document's `dirty()` result must be unchanged by enter/stop play.
 
+If reactivating the edit scene fails, report the failure and keep enough session state to avoid
+saving from the play scene. This should be treated as an invariant failure in normal operation rather
+than a recoverable product flow.
+
 ## Edit-mode camera flow
 
 During edit mode:
 
 1. `Engine::tick()` polls window/input and runs layers, but scene ticking is disabled.
 2. `EditorLayer` updates `EditorViewportCamera` from input when the viewport has focus.
-3. `EditorLayer` builds an `Editor` `RenderView` from the editor viewport camera.
+3. `EditorLayer` builds an `Editor` `SceneView`/`RenderCamera` from the editor viewport camera.
 4. `RenderService` renders the active edit scene from that render view.
 5. `SceneDocument::dirty()` is unchanged by viewport navigation.
 
@@ -460,13 +530,18 @@ document mutation and should dirty the document.
   "Reload and discard unsaved edits?"
 - On confirm:
   - load the JSON from disk into a new scene
+  - build the replacement scene successfully before changing the existing edit scene/document
   - release/rebuild any `SceneDocument` that references the old edit scene before destroying it
-  - destroy the old edit scene
   - set the new scene active
   - rebuild `SceneDocument` with the same path
+  - destroy the old edit scene after the replacement document is bound
   - clear selection if the selected entity no longer exists
 
 Do not implement filesystem watching or automatic reload prompts in Phase 10.
+
+Reload must be failure-atomic. If reading, validation, deserialization, activation, or document
+rebind fails, destroy any newly-created scene and keep the old edit scene, active scene, document
+binding, selection, dirty state, and mode unchanged.
 
 ## Implementation slices
 
@@ -513,10 +588,14 @@ Responsibilities:
 - preserve document path
 - expose command availability
 - centralize status/error messages
+- define the editor mutation operation boundary that hierarchy/inspector panels will use later
+- keep the operation boundary thin enough that the future undo stack can wrap it without panel rewrites
 
 Exit:
 
 - The controller can save and report dirty state for the loaded edit scene without any panel code.
+- The plan or code documents the first editor operation shape before hierarchy/inspector mutations
+  are implemented.
 
 Validation:
 
@@ -524,7 +603,7 @@ Validation:
 ./scripts/agent_verify.sh 
 ```
 
-### Slice 10.3 — Serialization support for scene-copy play mode
+### Slice 10.3 — Serialization support for scene-copy play mode (done)
 
 Files:
 
@@ -545,12 +624,6 @@ Exit:
 - Tests prove edit scene and play scene can coexist with distinct `SceneId`s and matching authored
   entity GUIDs.
 
-Validation:
-
-```bash
-./scripts/agent_verify.sh
-```
-
 ### Slice 10.4a — Edit-mode simulation pause
 
 Files:
@@ -566,6 +639,7 @@ Work:
 - editor sets ticking disabled in edit mode
 - skip active scene input snapshot and scene tick while disabled
 - keep layer update/render/imgui and transient input clearing running while disabled
+- document the switch as temporary scaffolding for a later scene role / tick policy model
 
 Exit:
 
@@ -592,11 +666,16 @@ Files:
 
 Work:
 
-- add source-agnostic `CameraData`/`RenderView` or equivalent types
+- decide the explicit render submission API and frame lifetime for non-authored cameras before
+  editing renderer code
+- add source-agnostic `RenderCamera`/`SceneView` or equivalent types
+- avoid a bare engine-level `RenderView` name unless the existing `gfx::RenderView` ambiguity is
+  resolved first
 - derive a runtime render view from the primary authored scene camera
 - allow callers to submit an explicit render view for a scene render
-- ensure `ViewType::Editor` is available for editor-only overlay decisions without changing core
-  scene extraction semantics
+- ensure `RenderViewKind::Editor` or equivalent is available for editor-only overlay decisions
+  without changing core scene extraction semantics
+- ensure the editor view cannot leak into later runtime rendering
 
 Exit:
 
@@ -623,7 +702,7 @@ Work:
 
 - add editor-owned viewport camera state
 - update camera from editor input only when the viewport has focus
-- submit an `Editor` render view for edit-mode rendering
+- submit an `Editor` `SceneView`/`RenderCamera` for edit-mode rendering
 - prove edit viewport camera motion does not mutate authored `Transform` or dirty the document
 
 Exit:
@@ -649,7 +728,8 @@ Work:
 
 - draw deterministic entity list
 - single selection
-- create/delete through `SceneDocument`
+- create/delete through the editor mutation operation boundary, which applies `SceneDocument`
+  commands internally
 - disable mutations in play mode
 
 Exit:
@@ -675,9 +755,12 @@ Work:
 
 - inspect selected entity
 - render supported field widgets
-- commit through `SceneDocument`
+- commit through the editor mutation operation boundary, which applies `SceneDocument` commands
+  internally
 - add/remove authored editable components
 - show invalid edit errors without mutation
+- make one completed user gesture produce one operation where practical, with coalescing keys
+  reserved for future undo behavior
 
 Exit:
 
@@ -705,6 +788,8 @@ Work:
 - dirty-state indicator
 - discard-unsaved-edits modal for reload
 - status reporting
+- failure-atomic reload that leaves the current edit scene/document untouched until the replacement
+  scene and document binding are ready
 
 Exit:
 
@@ -736,6 +821,7 @@ Work:
 - disable edit/save/reload commands while playing
 - stop and destroy play scene
 - reactivate edit scene
+- failure-atomic enter play that destroys partial play scenes and leaves edit mode untouched on error
 
 Exit:
 
@@ -782,6 +868,8 @@ Validation:
 
 Required automated tests:
 
+- editor mutation operation boundary records status/errors and affected stable ids for create/delete
+  or a similarly small first operation
 - editor document controller save/reload preserves path and dirty state
 - dirty-document reload confirmation path discards edits only after confirmation
 - enter play creates a distinct play scene and preserves authored `EntityGuid`s
