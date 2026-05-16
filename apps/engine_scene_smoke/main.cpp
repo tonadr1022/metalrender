@@ -1,3 +1,4 @@
+#include <cxxopts.hpp>
 #include <iostream>
 
 #include "AssetDatabaseSmokeTest.hpp"
@@ -7,7 +8,27 @@
 #include "SceneSerializationSmokeTest.hpp"
 #include "SceneSmokeTest.hpp"
 
-int main() {
+int main(int argc, char** argv) {
+  cxxopts::Options options(argv[0], "Engine scene and asset smoke checks");
+  // clang-format off
+  options.add_options()
+    ("h,help", "Show this help");
+  // clang-format on
+
+  cxxopts::ParseResult parsed;
+  try {
+    parsed = options.parse(argc, argv);
+  } catch (const cxxopts::exceptions::exception& e) {
+    std::cerr << argv[0] << ": " << e.what() << '\n';
+    std::cout << options.help() << '\n';
+    return 1;
+  }
+
+  if (parsed.contains("help")) {
+    std::cout << options.help() << '\n';
+    return 0;
+  }
+
   if (!teng::engine::run_scene_foundation_smoke_test()) {
     std::cerr << "engine_scene_smoke: scene foundation smoke test failed\n";
     return 1;

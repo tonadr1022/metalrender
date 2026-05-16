@@ -4,4 +4,4 @@ add_executable(${target_name}
     main.cpp
 )
 
-target_link_libraries(${target_name} PRIVATE teng_runtime)
+target_link_libraries(${target_name} PRIVATE teng_runtime cxxopts::cxxopts)

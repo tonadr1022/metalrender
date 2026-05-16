@@ -17,7 +17,7 @@ struct CompileOptions {
   bool emit_dxil = true;
   bool emit_spirv = true;
   bool emit_depfile = true;
-#if defined(__APPLE__)
+#ifdef __APPLE__
   bool emit_metallib = true;
 #else
   bool emit_metallib = false;

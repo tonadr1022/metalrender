@@ -1,8 +1,9 @@
-#include <filesystem>
+#include <cxxopts.hpp>
 #include <iostream>
 #include <span>
+#include <sstream>
+#include <string>
 #include <string_view>
-#include <vector>
 
 #include "core/Logger.hpp"
 #include "engine/scene/ComponentRegistry.hpp"
@@ -16,11 +17,64 @@ namespace {
 using namespace teng;
 using namespace teng::engine;
 
-void usage() {
-  std::cerr << "usage:\n"
-            << "  teng-scene-tool validate <path>\n"
-            << "  teng-scene-tool cook <in> <out>\n"
-            << "  teng-scene-tool dump <binary> <out>\n";
+[[nodiscard]] constexpr bool is_help_flag(std::string_view s) {
+  return s == "-h" || s == "--help";
+}
+
+[[nodiscard]] std::string global_help_text(const char* exe) {
+  cxxopts::Options global(exe, "GPU-free scene validate / cook / dump");
+  // clang-format off
+  global.add_options()
+    ("h,help", "Show commands and usage");
+  // clang-format on
+  std::ostringstream out;
+  out << "Commands:\n"
+      << "  " << exe << " validate <path>\n"
+      << "  " << exe << " cook <in> <out>\n"
+      << "  " << exe << " dump <binary> <out>\n"
+      << '\n'
+      << global.help() << '\n';
+  return out.str();
+}
+
+[[nodiscard]] std::string validate_command_help(const char* exe) {
+  cxxopts::Options o(std::string(exe) + " validate", "Validate a *.tscene.json file");
+  // clang-format off
+  o.add_options()
+    ("h,help", "Show this help");
+  // clang-format on
+  std::ostringstream out;
+  out << o.help() << '\n'
+      << "Usage: " << exe << " validate <path>\n";
+  return out.str();
+}
+
+[[nodiscard]] std::string cook_command_help(const char* exe) {
+  cxxopts::Options o(std::string(exe) + " cook", "Cook JSON scene to binary *.tscene.bin");
+  // clang-format off
+  o.add_options()
+    ("h,help", "Show this help");
+  // clang-format on
+  std::ostringstream out;
+  out << o.help() << '\n'
+      << "Usage: " << exe << " cook <in.json> <out.bin>\n";
+  return out.str();
+}
+
+[[nodiscard]] std::string dump_command_help(const char* exe) {
+  cxxopts::Options o(std::string(exe) + " dump", "Dump a cooked scene binary to JSON");
+  // clang-format off
+  o.add_options()
+    ("h,help", "Show this help");
+  // clang-format on
+  std::ostringstream out;
+  out << o.help() << '\n'
+      << "Usage: " << exe << " dump <binary> <out.json>\n";
+  return out.str();
+}
+
+void usage_error(const char* exe) {
+  std::cerr << global_help_text(exe);
 }
 
 struct SceneTestContexts {
@@ -54,27 +108,119 @@ struct SceneTestContexts {
 
 int main(int argc, char** argv) {
   if (argc < 2) {
-    usage();
+    usage_error(argv[0]);
     return 1;
   }
+
+  if (argc >= 2 && is_help_flag(argv[1])) {
+    std::cout << global_help_text(argv[0]);
+    return 0;
+  }
+
   const std::string_view command = argv[1];
-  teng::Result<void> result;
-  if (command == "validate" && argc == 3) {
+
+  if (command == "validate") {
+    if (argc == 3 && is_help_flag(argv[2])) {
+      const char* const sub_argv[] = {argv[0], argv[2]};
+      cxxopts::Options o(std::string(argv[0]) + " validate", "Validate a *.tscene.json file");
+      // clang-format off
+      o.add_options()
+        ("h,help", "Show this help");
+      // clang-format on
+      try {
+        const auto r = o.parse(2, sub_argv);
+        if (r.contains("help")) {
+          std::cout << validate_command_help(argv[0]);
+          return 0;
+        }
+      } catch (const cxxopts::exceptions::exception& e) {
+        std::cerr << argv[0] << ": " << e.what() << '\n';
+        std::cout << validate_command_help(argv[0]);
+        return 1;
+      }
+    }
+    if (argc != 3 || is_help_flag(argv[2])) {
+      usage_error(argv[0]);
+      return 1;
+    }
     const SceneTestContexts contexts = make_scene_test_contexts();
-    result = teng::engine::validate_scene_file(contexts.scene_serialization, argv[2]);
-  } else if (command == "cook" && argc == 4) {
-    const SceneTestContexts contexts = make_scene_test_contexts();
-    result = teng::engine::cook_scene_file(contexts.scene_serialization, argv[2], argv[3]);
-  } else if (command == "dump" && argc == 4) {
-    const SceneTestContexts contexts = make_scene_test_contexts();
-    result = teng::engine::dump_cooked_scene_file(contexts.scene_serialization, argv[2], argv[3]);
-  } else {
-    usage();
-    return 1;
+    const teng::Result<void> result =
+        teng::engine::validate_scene_file(contexts.scene_serialization, argv[2]);
+    if (!result) {
+      std::cerr << "teng-scene-tool: " << result.error() << '\n';
+      return 1;
+    }
+    return 0;
   }
-  if (!result) {
-    std::cerr << "teng-scene-tool: " << result.error() << '\n';
-    return 1;
+
+  if (command == "cook") {
+    if (argc == 3 && is_help_flag(argv[2])) {
+      const char* const sub_argv[] = {argv[0], argv[2]};
+      cxxopts::Options o(std::string(argv[0]) + " cook", "Cook JSON scene to binary");
+      // clang-format off
+      o.add_options()
+        ("h,help", "Show this help");
+      // clang-format on
+      try {
+        const auto r = o.parse(2, sub_argv);
+        if (r.contains("help")) {
+          std::cout << cook_command_help(argv[0]);
+          return 0;
+        }
+      } catch (const cxxopts::exceptions::exception& e) {
+        std::cerr << argv[0] << ": " << e.what() << '\n';
+        std::cout << cook_command_help(argv[0]);
+        return 1;
+      }
+    }
+    if (argc != 4 || is_help_flag(argv[2]) || is_help_flag(argv[3])) {
+      usage_error(argv[0]);
+      return 1;
+    }
+    const SceneTestContexts contexts = make_scene_test_contexts();
+    const teng::Result<void> result =
+        teng::engine::cook_scene_file(contexts.scene_serialization, argv[2], argv[3]);
+    if (!result) {
+      std::cerr << "teng-scene-tool: " << result.error() << '\n';
+      return 1;
+    }
+    return 0;
   }
-  return 0;
+
+  if (command == "dump") {
+    if (argc == 3 && is_help_flag(argv[2])) {
+      const char* const sub_argv[] = {argv[0], argv[2]};
+      cxxopts::Options o(std::string(argv[0]) + " dump", "Dump cooked scene to JSON");
+      // clang-format off
+      o.add_options()
+        ("h,help", "Show this help");
+      // clang-format on
+      try {
+        const auto r = o.parse(2, sub_argv);
+        if (r.contains("help")) {
+          std::cout << dump_command_help(argv[0]);
+          return 0;
+        }
+      } catch (const cxxopts::exceptions::exception& e) {
+        std::cerr << argv[0] << ": " << e.what() << '\n';
+        std::cout << dump_command_help(argv[0]);
+        return 1;
+      }
+    }
+    if (argc != 4 || is_help_flag(argv[2]) || is_help_flag(argv[3])) {
+      usage_error(argv[0]);
+      return 1;
+    }
+    const SceneTestContexts contexts = make_scene_test_contexts();
+    const teng::Result<void> result =
+        teng::engine::dump_cooked_scene_file(contexts.scene_serialization, argv[2], argv[3]);
+    if (!result) {
+      std::cerr << "teng-scene-tool: " << result.error() << '\n';
+      return 1;
+    }
+    return 0;
+  }
+
+  usage_error(argv[0]);
+  return 1;
 }

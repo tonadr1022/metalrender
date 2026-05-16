@@ -1,5 +1,5 @@
 #include <algorithm>
-#include <cstdlib>
+#include <cxxopts.hpp>
 #include <filesystem>
 #include <iostream>
 #include <string>
@@ -13,11 +13,6 @@ namespace fs = std::filesystem;
 namespace {
 
 constexpr const char* kExeName = "teng-shaderc";
-
-void usage(const char* argv0) {
-  std::cerr << "usage: " << argv0
-            << " [--project-root <dir>] (--all | <shader.hlsl> [more.hlsl ...])\n";
-}
 
 bool is_entry_point_hlsl(const fs::path& path) {
   static constexpr std::string_view kSuffixes[] = {".vert.hlsl", ".frag.hlsl", ".comp.hlsl",
@@ -55,38 +50,55 @@ fs::path find_project_root_from(fs::path start) {
 }  // namespace
 
 int main(int argc, char** argv) {
-  std::vector<std::string> positional;
-  fs::path project_root;
-  bool compile_all = false;
+  cxxopts::Options options(argv[0], "Compile HLSL shaders to SPIR-V / MSL");
+  // clang-format off
+  options.add_options()
+    ("project-root", "Use this directory as the project root (must contain resources/shaders/hlsl)",
+     cxxopts::value<std::string>())
+    ("all", "Compile every entry-point *.vert|frag|comp|mesh|task.hlsl under resources/shaders/hlsl",
+     cxxopts::value<bool>()->default_value("false"))
+    ("h,help", "Show this help")
+    ("shaders", "HLSL entry-point files to compile", cxxopts::value<std::vector<std::string>>());
+  // clang-format on
+  options.parse_positional({"shaders"});
+  options.positional_help("<shader.hlsl> [more.hlsl ...]");
 
-  for (int i = 1; i < argc; ++i) {
-    std::string a = argv[i];
-    if (a == "--project-root" && i + 1 < argc) {
-      project_root = argv[++i];
-    } else if (a == "--all") {
-      compile_all = true;
-    } else if (a == "-h" || a == "--help") {
-      usage(argv[0]);
-      return 0;
-    } else {
-      positional.push_back(std::move(a));
-    }
+  cxxopts::ParseResult result;
+  try {
+    result = options.parse(argc, argv);
+  } catch (const cxxopts::exceptions::exception& e) {
+    std::cerr << argv[0] << ": " << e.what() << '\n';
+    std::cout << options.help() << '\n';
+    return 1;
   }
+
+  if (result.contains("help")) {
+    std::cout << options.help() << '\n';
+    return 0;
+  }
+
+  const bool compile_all = result["all"].as<bool>();
+  const std::vector<std::string> positional = result["shaders"].as<std::vector<std::string>>();
 
   if (compile_all && !positional.empty()) {
     std::cerr << kExeName << ": --all cannot be combined with shader paths\n";
-    usage(argv[0]);
+    std::cerr << options.help() << '\n';
     return 2;
   }
   if (!compile_all && positional.empty()) {
-    usage(argv[0]);
+    std::cerr << options.help() << '\n';
     return 2;
+  }
+
+  fs::path project_root;
+  if (result.contains("project-root")) {
+    project_root = result["project-root"].as<std::string>();
   }
 
   if (!project_root.empty()) {
     if (!set_project_root(fs::absolute(project_root))) return 1;
   } else {
-    fs::path found = find_project_root_from(fs::current_path());
+    const fs::path found = find_project_root_from(fs::current_path());
     if (found.empty()) {
       std::cerr << kExeName << ": could not find resources/shaders/hlsl; pass --project-root\n";
       return 1;
