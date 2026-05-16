@@ -148,6 +148,7 @@ add_executable(teng_core_tests
 target_link_libraries(teng_core_tests PRIVATE teng_core teng_scene Catch2::Catch2WithMain project_warnings)
 
 add_executable(teng_engine_tests
+    smoke/EditorSessionTests.cpp
     smoke/SceneAuthoringTests.cpp
     smoke/SceneCookedTests.cpp
     smoke/SceneComponentContextTests.cpp
@@ -155,7 +156,7 @@ add_executable(teng_engine_tests
     smoke/TestModuleExtensionTests.cpp
 )
 target_link_libraries(teng_engine_tests
-    PRIVATE teng_engine_smoke teng_scene_authoring Catch2::Catch2WithMain project_warnings
+    PRIVATE teng_engine_smoke teng_scene_authoring lib_teng_editor Catch2::Catch2WithMain project_warnings
 )
 
 if (BUILD_TESTING)

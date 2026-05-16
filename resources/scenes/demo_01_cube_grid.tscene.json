@@ -1,2276 +1,2276 @@
 {
-  "entities": [
-    {
-      "components": {
-        "teng.core.camera": {
-          "fov_y": 1.04719755,
-          "primary": true,
-          "z_far": 10000.0,
-          "z_near": 0.1
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            10.0,
-            8.0,
-            18.0
-          ]
-        }
-      },
-      "guid": "000000000001adb1",
-      "name": "camera"
-    },
-    {
-      "components": {
-        "teng.core.directional_light": {
-          "color": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "direction": [
-            0.35,
-            1.0,
-            0.4
-          ],
-          "intensity": 1.0
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            0.0,
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "guid": "000000000001adb2",
-      "name": "directional light"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -8.0,
-            0.0,
-            -8.0
-          ]
-        }
-      },
-      "guid": "000000000001b199",
-      "name": "mesh 0"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -6.0,
-            0.0,
-            -8.0
-          ]
-        }
-      },
-      "guid": "000000000001b19a",
-      "name": "mesh 1"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -4.0,
-            0.0,
-            -8.0
-          ]
-        }
-      },
-      "guid": "000000000001b19b",
-      "name": "mesh 2"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -2.0,
-            0.0,
-            -8.0
-          ]
-        }
-      },
-      "guid": "000000000001b19c",
-      "name": "mesh 3"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            0.0,
-            0.0,
-            -8.0
-          ]
-        }
-      },
-      "guid": "000000000001b19d",
-      "name": "mesh 4"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            2.0,
-            0.0,
-            -8.0
-          ]
-        }
-      },
-      "guid": "000000000001b19e",
-      "name": "mesh 5"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            4.0,
-            0.0,
-            -8.0
-          ]
-        }
-      },
-      "guid": "000000000001b19f",
-      "name": "mesh 6"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            6.0,
-            0.0,
-            -8.0
-          ]
-        }
-      },
-      "guid": "000000000001b1a0",
-      "name": "mesh 7"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            8.0,
-            0.0,
-            -8.0
-          ]
-        }
-      },
-      "guid": "000000000001b1a1",
-      "name": "mesh 8"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -8.0,
-            0.0,
-            -6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1a2",
-      "name": "mesh 9"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -6.0,
-            0.0,
-            -6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1a3",
-      "name": "mesh 10"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -4.0,
-            0.0,
-            -6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1a4",
-      "name": "mesh 11"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -2.0,
-            0.0,
-            -6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1a5",
-      "name": "mesh 12"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            0.0,
-            0.0,
-            -6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1a6",
-      "name": "mesh 13"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            2.0,
-            0.0,
-            -6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1a7",
-      "name": "mesh 14"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            4.0,
-            0.0,
-            -6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1a8",
-      "name": "mesh 15"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            6.0,
-            0.0,
-            -6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1a9",
-      "name": "mesh 16"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            8.0,
-            0.0,
-            -6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1aa",
-      "name": "mesh 17"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -8.0,
-            0.0,
-            -4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1ab",
-      "name": "mesh 18"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -6.0,
-            0.0,
-            -4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1ac",
-      "name": "mesh 19"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -4.0,
-            0.0,
-            -4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1ad",
-      "name": "mesh 20"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -2.0,
-            0.0,
-            -4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1ae",
-      "name": "mesh 21"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            0.0,
-            0.0,
-            -4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1af",
-      "name": "mesh 22"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            2.0,
-            0.0,
-            -4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1b0",
-      "name": "mesh 23"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            4.0,
-            0.0,
-            -4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1b1",
-      "name": "mesh 24"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            6.0,
-            0.0,
-            -4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1b2",
-      "name": "mesh 25"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            8.0,
-            0.0,
-            -4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1b3",
-      "name": "mesh 26"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -8.0,
-            0.0,
-            -2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1b4",
-      "name": "mesh 27"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -6.0,
-            0.0,
-            -2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1b5",
-      "name": "mesh 28"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -4.0,
-            0.0,
-            -2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1b6",
-      "name": "mesh 29"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -2.0,
-            0.0,
-            -2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1b7",
-      "name": "mesh 30"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            0.0,
-            0.0,
-            -2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1b8",
-      "name": "mesh 31"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            2.0,
-            0.0,
-            -2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1b9",
-      "name": "mesh 32"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            4.0,
-            0.0,
-            -2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1ba",
-      "name": "mesh 33"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            6.0,
-            0.0,
-            -2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1bb",
-      "name": "mesh 34"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            8.0,
-            0.0,
-            -2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1bc",
-      "name": "mesh 35"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -8.0,
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "guid": "000000000001b1bd",
-      "name": "mesh 36"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -6.0,
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "guid": "000000000001b1be",
-      "name": "mesh 37"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -4.0,
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "guid": "000000000001b1bf",
-      "name": "mesh 38"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -2.0,
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "guid": "000000000001b1c0",
-      "name": "mesh 39"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            0.0,
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "guid": "000000000001b1c1",
-      "name": "mesh 40"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            2.0,
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "guid": "000000000001b1c2",
-      "name": "mesh 41"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            4.0,
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "guid": "000000000001b1c3",
-      "name": "mesh 42"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            6.0,
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "guid": "000000000001b1c4",
-      "name": "mesh 43"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            8.0,
-            0.0,
-            0.0
-          ]
-        }
-      },
-      "guid": "000000000001b1c5",
-      "name": "mesh 44"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -8.0,
-            0.0,
-            2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1c6",
-      "name": "mesh 45"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -6.0,
-            0.0,
-            2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1c7",
-      "name": "mesh 46"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -4.0,
-            0.0,
-            2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1c8",
-      "name": "mesh 47"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -2.0,
-            0.0,
-            2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1c9",
-      "name": "mesh 48"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            0.0,
-            0.0,
-            2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1ca",
-      "name": "mesh 49"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            2.0,
-            0.0,
-            2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1cb",
-      "name": "mesh 50"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            4.0,
-            0.0,
-            2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1cc",
-      "name": "mesh 51"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            6.0,
-            0.0,
-            2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1cd",
-      "name": "mesh 52"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            8.0,
-            0.0,
-            2.0
-          ]
-        }
-      },
-      "guid": "000000000001b1ce",
-      "name": "mesh 53"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -8.0,
-            0.0,
-            4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1cf",
-      "name": "mesh 54"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -6.0,
-            0.0,
-            4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1d0",
-      "name": "mesh 55"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -4.0,
-            0.0,
-            4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1d1",
-      "name": "mesh 56"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -2.0,
-            0.0,
-            4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1d2",
-      "name": "mesh 57"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            0.0,
-            0.0,
-            4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1d3",
-      "name": "mesh 58"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            2.0,
-            0.0,
-            4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1d4",
-      "name": "mesh 59"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            4.0,
-            0.0,
-            4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1d5",
-      "name": "mesh 60"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            6.0,
-            0.0,
-            4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1d6",
-      "name": "mesh 61"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            8.0,
-            0.0,
-            4.0
-          ]
-        }
-      },
-      "guid": "000000000001b1d7",
-      "name": "mesh 62"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -8.0,
-            0.0,
-            6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1d8",
-      "name": "mesh 63"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -6.0,
-            0.0,
-            6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1d9",
-      "name": "mesh 64"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -4.0,
-            0.0,
-            6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1da",
-      "name": "mesh 65"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -2.0,
-            0.0,
-            6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1db",
-      "name": "mesh 66"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            0.0,
-            0.0,
-            6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1dc",
-      "name": "mesh 67"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            2.0,
-            0.0,
-            6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1dd",
-      "name": "mesh 68"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            4.0,
-            0.0,
-            6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1de",
-      "name": "mesh 69"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            6.0,
-            0.0,
-            6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1df",
-      "name": "mesh 70"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            8.0,
-            0.0,
-            6.0
-          ]
-        }
-      },
-      "guid": "000000000001b1e0",
-      "name": "mesh 71"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -8.0,
-            0.0,
-            8.0
-          ]
-        }
-      },
-      "guid": "000000000001b1e1",
-      "name": "mesh 72"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -6.0,
-            0.0,
-            8.0
-          ]
-        }
-      },
-      "guid": "000000000001b1e2",
-      "name": "mesh 73"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -4.0,
-            0.0,
-            8.0
-          ]
-        }
-      },
-      "guid": "000000000001b1e3",
-      "name": "mesh 74"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            -2.0,
-            0.0,
-            8.0
-          ]
-        }
-      },
-      "guid": "000000000001b1e4",
-      "name": "mesh 75"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            0.0,
-            0.0,
-            8.0
-          ]
-        }
-      },
-      "guid": "000000000001b1e5",
-      "name": "mesh 76"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            2.0,
-            0.0,
-            8.0
-          ]
-        }
-      },
-      "guid": "000000000001b1e6",
-      "name": "mesh 77"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            4.0,
-            0.0,
-            8.0
-          ]
-        }
-      },
-      "guid": "000000000001b1e7",
-      "name": "mesh 78"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            6.0,
-            0.0,
-            8.0
-          ]
-        }
-      },
-      "guid": "000000000001b1e8",
-      "name": "mesh 79"
-    },
-    {
-      "components": {
-        "teng.core.mesh_renderable": {
-          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
-        },
-        "teng.core.transform": {
-          "rotation": [
-            1.0,
-            0.0,
-            0.0,
-            0.0
-          ],
-          "scale": [
-            1.0,
-            1.0,
-            1.0
-          ],
-          "translation": [
-            8.0,
-            0.0,
-            8.0
-          ]
-        }
-      },
-      "guid": "000000000001b1e9",
-      "name": "mesh 80"
-    }
-  ],
-  "scene": {
-    "name": "demo cube grid"
-  },
   "scene_format_version": 2,
   "schema": {
-    "required_components": {
-      "teng.core.camera": 1,
-      "teng.core.directional_light": 1,
-      "teng.core.mesh_renderable": 1,
-      "teng.core.transform": 1
-    },
     "required_modules": [
       {
         "id": "teng.core",
         "version": 1
       }
-    ]
-  }
+    ],
+    "required_components": {
+      "teng.core.camera": 1,
+      "teng.core.directional_light": 1,
+      "teng.core.mesh_renderable": 1,
+      "teng.core.transform": 1
+    }
+  },
+  "scene": {
+    "name": "demo cube grid"
+  },
+  "entities": [
+    {
+      "guid": "000000000001adb1",
+      "name": "camera",
+      "components": {
+        "teng.core.camera": {
+          "fov_y": 1.0471975803375244,
+          "z_near": 0.10000000149011612,
+          "z_far": 10000.0,
+          "primary": true
+        },
+        "teng.core.transform": {
+          "translation": [
+            10.0,
+            8.0,
+            18.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001adb2",
+      "name": "directional light",
+      "components": {
+        "teng.core.directional_light": {
+          "direction": [
+            0.3499999940395355,
+            1.0,
+            0.4000000059604645
+          ],
+          "color": [
+            1.0,
+            1.0,
+            1.0
+          ],
+          "intensity": 1.0
+        },
+        "teng.core.transform": {
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b199",
+      "name": "mesh 0",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -8.0,
+            0.0,
+            -8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b19a",
+      "name": "mesh 1",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -6.0,
+            0.0,
+            -8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b19b",
+      "name": "mesh 2",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -4.0,
+            0.0,
+            -8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b19c",
+      "name": "mesh 3",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -2.0,
+            0.0,
+            -8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b19d",
+      "name": "mesh 4",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            0.0,
+            0.0,
+            -8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b19e",
+      "name": "mesh 5",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            2.0,
+            0.0,
+            -8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b19f",
+      "name": "mesh 6",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            4.0,
+            0.0,
+            -8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1a0",
+      "name": "mesh 7",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            6.0,
+            0.0,
+            -8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1a1",
+      "name": "mesh 8",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            8.0,
+            0.0,
+            -8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1a2",
+      "name": "mesh 9",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -8.0,
+            0.0,
+            -6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1a3",
+      "name": "mesh 10",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -6.0,
+            0.0,
+            -6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1a4",
+      "name": "mesh 11",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -4.0,
+            0.0,
+            -6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1a5",
+      "name": "mesh 12",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -2.0,
+            0.0,
+            -6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1a6",
+      "name": "mesh 13",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            0.0,
+            0.0,
+            -6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1a7",
+      "name": "mesh 14",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            2.0,
+            0.0,
+            -6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1a8",
+      "name": "mesh 15",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            4.0,
+            0.0,
+            -6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1a9",
+      "name": "mesh 16",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            6.0,
+            0.0,
+            -6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1aa",
+      "name": "mesh 17",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            8.0,
+            0.0,
+            -6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1ab",
+      "name": "mesh 18",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -8.0,
+            0.0,
+            -4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1ac",
+      "name": "mesh 19",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -6.0,
+            0.0,
+            -4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1ad",
+      "name": "mesh 20",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -4.0,
+            0.0,
+            -4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1ae",
+      "name": "mesh 21",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -2.0,
+            0.0,
+            -4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1af",
+      "name": "mesh 22",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            0.0,
+            0.0,
+            -4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1b0",
+      "name": "mesh 23",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            2.0,
+            0.0,
+            -4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1b1",
+      "name": "mesh 24",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            4.0,
+            0.0,
+            -4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1b2",
+      "name": "mesh 25",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            6.0,
+            0.0,
+            -4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1b3",
+      "name": "mesh 26",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            8.0,
+            0.0,
+            -4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1b4",
+      "name": "mesh 27",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -8.0,
+            0.0,
+            -2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1b5",
+      "name": "mesh 28",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -6.0,
+            0.0,
+            -2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1b6",
+      "name": "mesh 29",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -4.0,
+            0.0,
+            -2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1b7",
+      "name": "mesh 30",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -2.0,
+            0.0,
+            -2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1b8",
+      "name": "mesh 31",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            0.0,
+            0.0,
+            -2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1b9",
+      "name": "mesh 32",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            2.0,
+            0.0,
+            -2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1ba",
+      "name": "mesh 33",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            4.0,
+            0.0,
+            -2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1bb",
+      "name": "mesh 34",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            6.0,
+            0.0,
+            -2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1bc",
+      "name": "mesh 35",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            8.0,
+            0.0,
+            -2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1bd",
+      "name": "mesh 36",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -8.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1be",
+      "name": "mesh 37",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -6.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1bf",
+      "name": "mesh 38",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -4.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1c0",
+      "name": "mesh 39",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -2.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1c1",
+      "name": "mesh 40",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1c2",
+      "name": "mesh 41",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            2.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1c3",
+      "name": "mesh 42",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            4.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1c4",
+      "name": "mesh 43",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            6.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1c5",
+      "name": "mesh 44",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            8.0,
+            0.0,
+            0.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1c6",
+      "name": "mesh 45",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -8.0,
+            0.0,
+            2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1c7",
+      "name": "mesh 46",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -6.0,
+            0.0,
+            2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1c8",
+      "name": "mesh 47",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -4.0,
+            0.0,
+            2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1c9",
+      "name": "mesh 48",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -2.0,
+            0.0,
+            2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1ca",
+      "name": "mesh 49",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            0.0,
+            0.0,
+            2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1cb",
+      "name": "mesh 50",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            2.0,
+            0.0,
+            2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1cc",
+      "name": "mesh 51",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            4.0,
+            0.0,
+            2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1cd",
+      "name": "mesh 52",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            6.0,
+            0.0,
+            2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1ce",
+      "name": "mesh 53",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            8.0,
+            0.0,
+            2.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1cf",
+      "name": "mesh 54",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -8.0,
+            0.0,
+            4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1d0",
+      "name": "mesh 55",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -6.0,
+            0.0,
+            4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1d1",
+      "name": "mesh 56",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -4.0,
+            0.0,
+            4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1d2",
+      "name": "mesh 57",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -2.0,
+            0.0,
+            4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1d3",
+      "name": "mesh 58",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            0.0,
+            0.0,
+            4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1d4",
+      "name": "mesh 59",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            2.0,
+            0.0,
+            4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1d5",
+      "name": "mesh 60",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            4.0,
+            0.0,
+            4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1d6",
+      "name": "mesh 61",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            6.0,
+            0.0,
+            4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1d7",
+      "name": "mesh 62",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            8.0,
+            0.0,
+            4.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1d8",
+      "name": "mesh 63",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -8.0,
+            0.0,
+            6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1d9",
+      "name": "mesh 64",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -6.0,
+            0.0,
+            6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1da",
+      "name": "mesh 65",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -4.0,
+            0.0,
+            6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1db",
+      "name": "mesh 66",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -2.0,
+            0.0,
+            6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1dc",
+      "name": "mesh 67",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            0.0,
+            0.0,
+            6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1dd",
+      "name": "mesh 68",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            2.0,
+            0.0,
+            6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1de",
+      "name": "mesh 69",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            4.0,
+            0.0,
+            6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1df",
+      "name": "mesh 70",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            6.0,
+            0.0,
+            6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1e0",
+      "name": "mesh 71",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            8.0,
+            0.0,
+            6.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1e1",
+      "name": "mesh 72",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -8.0,
+            0.0,
+            8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1e2",
+      "name": "mesh 73",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -6.0,
+            0.0,
+            8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1e3",
+      "name": "mesh 74",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -4.0,
+            0.0,
+            8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1e4",
+      "name": "mesh 75",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            -2.0,
+            0.0,
+            8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1e5",
+      "name": "mesh 76",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            0.0,
+            0.0,
+            8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1e6",
+      "name": "mesh 77",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            2.0,
+            0.0,
+            8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1e7",
+      "name": "mesh 78",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            4.0,
+            0.0,
+            8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1e8",
+      "name": "mesh 79",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            6.0,
+            0.0,
+            8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "guid": "000000000001b1e9",
+      "name": "mesh 80",
+      "components": {
+        "teng.core.mesh_renderable": {
+          "model": "24d0fbf7-833e-cb90-cd2e-e7963f89d58e"
+        },
+        "teng.core.transform": {
+          "translation": [
+            8.0,
+            0.0,
+            8.0
+          ],
+          "rotation": [
+            1.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "scale": [
+            1.0,
+            1.0,
+            1.0
+          ]
+        }
+      }
+    }
+  ]
 }

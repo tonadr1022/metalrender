@@ -110,7 +110,9 @@ set(TENG_ENGINE_RUNTIME_SOURCES
 )
 
 set(TENG_EDITOR_SOURCES
+    editor/EditorDocumentController.cpp
     editor/EditorLayer.cpp
+    editor/EditorSession.cpp
 )
 
 set(TENG_GFX_SOURCES

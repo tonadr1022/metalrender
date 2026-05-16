@@ -7,9 +7,40 @@
 #include <string>
 #include <tracy/Tracy.hpp>
 
+#include "core/TomlUtil.hpp"
 #include "editor/EditorLayer.hpp"
 #include "engine/Engine.hpp"
 #include "engine/ImGuiOverlayLayer.hpp"
+
+namespace {
+
+[[nodiscard]] teng::Result<std::filesystem::path> resolve_project_startup_scene(
+    const std::filesystem::path& resource_dir) {
+  const std::filesystem::path project_path = resource_dir / "project.toml";
+  teng::Result<toml::table> project = teng::parse_toml_file(project_path);
+  if (!project) {
+    return teng::make_unexpected("failed to load project config " + project_path.string() + ": " +
+                                 project.error());
+  }
+
+  const std::optional<int64_t> schema_version = (*project)["schema_version"].value<int64_t>();
+  if (!schema_version || *schema_version != 1) {
+    return teng::make_unexpected("project config schema_version must be 1");
+  }
+
+  const std::optional<std::string> startup_scene = (*project)["startup_scene"].value<std::string>();
+  if (!startup_scene || startup_scene->empty()) {
+    return teng::make_unexpected("project config is missing startup_scene");
+  }
+
+  std::filesystem::path scene_path = *startup_scene;
+  if (scene_path.is_relative()) {
+    scene_path = resource_dir.parent_path() / scene_path;
+  }
+  return scene_path.lexically_normal();
+}
+
+}  // namespace
 
 int main(int argc, char* argv[]) {
   ZoneScoped;
@@ -38,9 +69,9 @@ int main(int argc, char* argv[]) {
     return 0;
   }
 
-  std::filesystem::path scene_path;
+  std::optional<std::filesystem::path> requested_scene_path;
   if (result.contains("scene")) {
-    scene_path = result["scene"].as<std::string>();
+    requested_scene_path = result["scene"].as<std::string>();
   }
 
   std::optional<std::uint32_t> quit_after_frames;
@@ -66,14 +97,26 @@ int main(int argc, char* argv[]) {
       .enable_imgui = true,
       .quit_after_frames = quit_after_frames,
   });
-  teng::Result<teng::engine::SceneLoadResult> loaded =
-      scene_path.empty() ? engine.load_project_startup_scene() : engine.load_scene(scene_path);
+  std::optional<std::filesystem::path> scene_path = requested_scene_path;
+  if (!scene_path) {
+    teng::Result<std::filesystem::path> startup_scene =
+        resolve_project_startup_scene(engine.context().resource_dir());
+    if (!startup_scene) {
+      std::cerr << "teng_editor: failed to resolve startup scene: " << startup_scene.error()
+                << '\n';
+      return 1;
+    }
+    scene_path = *startup_scene;
+  }
+
+  teng::Result<teng::engine::SceneLoadResult> loaded = engine.load_scene(*scene_path);
   if (!loaded) {
     std::cerr << "teng_editor: failed to load scene: " << loaded.error() << '\n';
     return 1;
   }
   engine.layers().push_layer(std::make_unique<teng::engine::ImGuiOverlayLayer>());
-  engine.layers().push_layer(std::make_unique<teng::editor::EditorLayer>());
+  engine.layers().push_layer(
+      std::make_unique<teng::editor::EditorLayer>(loaded->scene_id, scene_path));
   engine.run();
   return 0;
 }
