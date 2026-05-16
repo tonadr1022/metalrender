@@ -98,9 +98,21 @@ def git_lines(args: list[str]) -> list[str]:
 
 
 def changed_paths() -> list[Path]:
+    """Paths in the working tree to gate on: staged/unstaged diffs plus \
+    untracked files."""
     paths = set(git_lines(["diff", "--name-only", "--diff-filter=d"]))
-    paths.update(git_lines(["diff", "--cached", "--name-only", "--diff-filter=d"]))
+    paths.update(
+        git_lines(["diff", "--cached", "--name-only", "--diff-filter=d"])
+    )
+    # Untracked, honoring .gitignore (--exclude-standard).
     paths.update(git_lines(["ls-files", "-o", "--exclude-standard"]))
+    # Porcelain untracked (-uall): every nested untracked file, matching
+    # a full `git status`
+    # untracked listing (merged with ls-files for redundancy across
+    # git versions/settings).
+    for line in git_lines(["status", "--porcelain=v1", "-uall"]):
+        if line.startswith("?? "):
+            paths.add(line[3:])
     return [Path(path) for path in sorted(paths)]
 
 
@@ -112,7 +124,9 @@ def existing_first_party_files(
         path_text = path.as_posix()
         if not path_text.startswith(dirs):
             continue
-        if path.suffix not in exts and not any(path_text.endswith(ext) for ext in exts):
+        if path.suffix not in exts and not any(
+            path_text.endswith(ext) for ext in exts
+        ):
             continue
         absolute = REPO_ROOT / path
         if absolute.is_file():
@@ -226,12 +240,15 @@ def run_format(paths: list[Path], summary: Summary) -> None:
     clang_format = os.environ.get("CLANG_FORMAT", "clang-format")
     if not shutil.which(clang_format):
         raise RuntimeError(
-            f"{clang_format} not found; install clang-format or set CLANG_FORMAT"
+            f"{clang_format} not found; install clang-format "
+            "or set CLANG_FORMAT"
         )
 
     files = existing_first_party_files(paths, FORMAT_EXTS, FORMAT_DIRS)
     if not files:
-        summary.skipped.append("clang-format: no changed first-party C/C++ files")
+        summary.skipped.append(
+            "clang-format: no changed first-party C/C++ files"
+        )
         return
 
     print_phase("clang-format")
@@ -249,10 +266,17 @@ def run_format(paths: list[Path], summary: Summary) -> None:
     if needs_format:
         print(f"clang-format fixing {len(needs_format)} file(s)", flush=True)
         subprocess.run(
-            [clang_format, "-i", *map(str, needs_format)], cwd=REPO_ROOT, check=True
+            [clang_format, "-i", *map(str, needs_format)],
+            cwd=REPO_ROOT,
+            check=True,
         )
         subprocess.run(
-            [clang_format, "--dry-run", "--Werror", *map(str, needs_format)],
+            [
+                clang_format,
+                "--dry-run",
+                "--Werror",
+                *map(str, needs_format),
+            ],
             cwd=REPO_ROOT,
             check=True,
         )
@@ -264,7 +288,10 @@ def run_format(paths: list[Path], summary: Summary) -> None:
 def app_smoke_commands(bin_dir: Path) -> list[tuple[str, list[str]]]:
     metalrender = bin_dir / "metalrender"
     return [
-        ("app smoke: startup scene", [str(metalrender), "--quit-after-frames", "30"]),
+        (
+            "app smoke: startup scene",
+            [str(metalrender), "--quit-after-frames", "30"],
+        ),
         (
             "app smoke: demo_cube",
             [
@@ -280,13 +307,16 @@ def app_smoke_commands(bin_dir: Path) -> list[tuple[str, list[str]]]:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Configure, build, and run the repo's agent verification gates.",
+        description="Configure, build, and run the repo's agent "
+        "verification gates.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 Modes:
-  default  Build, smoke test, changed-file clang-tidy, and shader checks.
+  default  Build, smoke test, clang-tidy on changed/untracked first-party \
+    C/C++, and shader checks.
   quick    Build, smoke test, and shader checks; skips clang-tidy.
-  full     Default gates plus full shader compile and bounded metalrender app smokes.
+  full     Default gates plus full shader compile and bounded metalrender app \
+    smokes.
 
 Environment:
   CMAKE_PRESET      Same as --preset.
@@ -301,9 +331,13 @@ Environment:
         action="store_true",
         help="Run clang-format -i on changed first-party C/C++ files.",
     )
-    parser.add_argument("--skip-tidy", action="store_true", help="Skip clang-tidy.")
     parser.add_argument(
-        "--require-tidy", action="store_true", help="Fail if clang-tidy cannot run."
+        "--skip-tidy", action="store_true", help="Skip clang-tidy."
+    )
+    parser.add_argument(
+        "--require-tidy",
+        action="store_true",
+        help="Fail if clang-tidy cannot run.",
     )
     parser.add_argument(
         "--preset",
@@ -316,7 +350,9 @@ Environment:
         help="Use an already-configured build directory.",
     )
     parser.add_argument(
-        "--quick", action="store_true", help="Skip slower optional analysis gates."
+        "--quick",
+        action="store_true",
+        help="Skip slower optional analysis gates.",
     )
     parser.add_argument(
         "--full",
@@ -324,13 +360,16 @@ Environment:
         help="Run full shader compile and bounded app smokes.",
     )
     parser.add_argument(
-        "--app-smoke", action="store_true", help="Run bounded metalrender app smokes."
+        "--app-smoke",
+        action="store_true",
+        help="Run bounded metalrender app smokes.",
     )
     parser.add_argument(
         "--shader-mode",
         choices=("auto", "changed", "all", "skip"),
         default="auto",
-        help="Shader validation policy. auto runs all shaders on clean trees or shared shader changes.",
+        help="Shader validation policy. auto runs all shaders on clean trees \
+            or shared shader changes.",
     )
     return parser.parse_args()
 
@@ -354,7 +393,9 @@ def main() -> int:
             run_format(paths, summary)
 
         if not args.skip_configure:
-            run_checked("configure", ["cmake", "--preset", args.preset], quiet=True)
+            run_checked(
+                "configure", ["cmake", "--preset", args.preset], quiet=True
+            )
             summary.passed.append("configure")
         else:
             summary.skipped.append("configure: --skip-configure")
@@ -374,7 +415,10 @@ def main() -> int:
         summary.passed.append("build")
 
         gates: list[tuple[str, list[str]]] = [
-            ("ctest", ["ctest", "--test-dir", str(build_dir), "--output-on-failure"]),
+            (
+                "ctest",
+                ["ctest", "--test-dir", str(build_dir), "--output-on-failure"],
+            ),
         ]
 
         shader_mode = args.shader_mode
@@ -404,7 +448,8 @@ def main() -> int:
         print_phase("post-build gates")
         with ThreadPoolExecutor(max_workers=min(4, len(gates))) as executor:
             futures = [
-                executor.submit(run_capture, name, command) for name, command in gates
+                executor.submit(run_capture, name, command)
+                for name, command in gates
             ]
             for future in as_completed(futures):
                 result = future.result()
@@ -412,11 +457,13 @@ def main() -> int:
                 print(f"$ {command_text(result.command)}", flush=True)
                 if result.output:
                     print(
-                        result.output, end="" if result.output.endswith("\n") else "\n"
+                        result.output,
+                        end="" if result.output.endswith("\n") else "\n",
                     )
                 if result.returncode != 0:
                     print(
-                        f"agent_verify.py: {result.name} failed with exit code {result.returncode}",
+                        f"agent_verify.py: {result.name} failed with exit \
+                            code {result.returncode}",
                         file=sys.stderr,
                     )
                     return result.returncode
@@ -429,11 +476,13 @@ def main() -> int:
                 print(f"$ {command_text(result.command)}", flush=True)
                 if result.output:
                     print(
-                        result.output, end="" if result.output.endswith("\n") else "\n"
+                        result.output,
+                        end="" if result.output.endswith("\n") else "\n",
                     )
                 if result.returncode != 0:
                     print(
-                        f"agent_verify.py: {result.name} failed with exit code {result.returncode}",
+                        f"agent_verify.py: {result.name} failed with exit \
+                            code {result.returncode}",
                         file=sys.stderr,
                     )
                     return result.returncode
