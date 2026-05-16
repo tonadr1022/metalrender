@@ -10,4 +10,5 @@
 #define TENG_FIELD(...) [[clang::annotate("teng.field:" #__VA_ARGS__)]]
 #define TENG_ENUM_VALUE(...) [[clang::annotate("teng.enum_value:" #__VA_ARGS__)]]
 // Single numeric literal for both reflection stable value and C++ enumerator initializer.
+// NOLINTNEXTLINE(bugprone-macro-parentheses): `v` is stringified by the nested annotation macro.
 #define TENG_ENUM_N(v) TENG_ENUM_VALUE(value = v) = (v)

@@ -9,6 +9,7 @@
 #include <string_view>
 #include <tracy/Tracy.hpp>
 
+#include "DebugSceneAuthoringLayer.hpp"
 #include "engine/Engine.hpp"
 #include "engine/ImGuiOverlayLayer.hpp"
 
@@ -89,13 +90,14 @@ int main(int argc, char* argv[]) {
       .enable_imgui = true,
       .quit_after_frames = options->quit_after_frames,
   });
-  teng::Result<teng::engine::SceneLoadResult> loaded =
-      options->scene_path.empty() ? engine.load_project_startup_scene()
-                                  : engine.load_scene(options->scene_path);
+  teng::Result<teng::engine::SceneLoadResult> loaded = options->scene_path.empty()
+                                                           ? engine.load_project_startup_scene()
+                                                           : engine.load_scene(options->scene_path);
   if (!loaded) {
     std::cerr << "metalrender: failed to load scene: " << loaded.error() << '\n';
     return 1;
   }
+  engine.layers().push_layer(std::make_unique<teng::engine::DebugSceneAuthoringLayer>());
   engine.layers().push_layer(std::make_unique<teng::engine::ImGuiOverlayLayer>());
   engine.run();
   return 0;

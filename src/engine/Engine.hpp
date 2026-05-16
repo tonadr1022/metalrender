@@ -30,6 +30,9 @@ class RenderService;
 namespace assets {
 class AssetService;
 }
+namespace scene {
+class ComponentRegistry;
+}
 
 enum class EngineGfxApi {
   PlatformDefault,
@@ -67,6 +70,12 @@ class EngineContext {
   }
   [[nodiscard]] assets::AssetService& assets() const { return *assets_; }
   [[nodiscard]] SceneManager& scenes() const { return *scenes_; }
+  [[nodiscard]] const scene::ComponentRegistry& component_registry() const {
+    return *component_registry_;
+  }
+  [[nodiscard]] const SceneSerializationContext& scene_serialization() const {
+    return *scene_serialization_;
+  }
   [[nodiscard]] RenderService& renderer() const { return *renderer_; }
   [[nodiscard]] const EngineTime& time() const { return *time_; }
   [[nodiscard]] const EngineInputSnapshot& input() const { return *input_; }
@@ -84,6 +93,8 @@ class EngineContext {
   const std::filesystem::path* local_resource_dir_{};
   assets::AssetService* assets_{};
   SceneManager* scenes_{};
+  const scene::ComponentRegistry* component_registry_{};
+  const SceneSerializationContext* scene_serialization_{};
   RenderService* renderer_{};
   const EngineTime* time_{};
   const EngineInputSnapshot* input_{};

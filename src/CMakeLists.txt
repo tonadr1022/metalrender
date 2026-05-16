@@ -90,6 +90,13 @@ set(TENG_SCENE_SOURCES
     "${TENG_CORE_COMPONENT_REFLECT_GENERATED_CPP}"
 )
 
+set(TENG_SCENE_AUTHORING_SOURCES
+    engine/scene/authoring/SceneAuthoringCommand.cpp
+    engine/scene/authoring/SceneAuthoringInspector.cpp
+    engine/scene/authoring/SceneAuthoringJson.cpp
+    engine/scene/authoring/SceneDocument.cpp
+)
+
 set(TENG_RENDER_SOURCES
     engine/render/DebugClearRenderer.cpp
     engine/render/RenderSceneExtractor.cpp
@@ -243,6 +250,7 @@ add_teng_component(teng_assets OFF ${TENG_ASSETS_SOURCES})
 add_teng_component(teng_content OFF ${TENG_CONTENT_SOURCES})
 add_teng_component(teng_scene OFF ${TENG_SCENE_SOURCES})
 target_include_directories(teng_scene PUBLIC "${TENG_CORE_COMPONENT_REFLECT_OUT_DIR}")
+add_teng_component(teng_scene_authoring OFF ${TENG_SCENE_AUTHORING_SOURCES})
 add_teng_component(teng_scene_tool_lib OFF engine/scene/SceneValidate.cpp)
 add_teng_component(teng_render ON ${TENG_RENDER_SOURCES})
 add_teng_component(teng_engine_runtime ON ${TENG_ENGINE_RUNTIME_SOURCES})
@@ -259,6 +267,7 @@ target_link_libraries(teng_assets PUBLIC teng_core)
 target_link_libraries(teng_content PUBLIC teng_core)
 target_link_libraries(teng_scene PUBLIC teng_core teng_assets teng_content)
 teng_link_flecs(teng_scene)
+target_link_libraries(teng_scene_authoring PUBLIC teng_core teng_assets teng_scene)
 target_link_libraries(teng_scene_tool_lib PUBLIC teng_core teng_assets teng_scene)
 target_link_libraries(teng_render PUBLIC teng_core teng_scene teng_gfx PRIVATE Tracy::TracyClient)
 target_link_libraries(teng_engine_runtime PUBLIC

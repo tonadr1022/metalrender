@@ -22,6 +22,7 @@ void apply_on_create_noop(flecs::entity) {}
 bool has_component_noop(flecs::entity) { return false; }
 nlohmann::json serialize_component_noop(flecs::entity) { return nlohmann::json::object(); }
 void deserialize_component_noop(flecs::entity, const nlohmann::json&) {}
+void remove_component_noop(flecs::entity) {}
 
 [[nodiscard]] ComponentTypeOps runtime_ops() {
   return ComponentTypeOps{.register_flecs_fn = register_flecs_noop};
@@ -129,6 +130,7 @@ TEST_CASE("freeze succeeds for valid component descriptors", "[component_registr
                   .has_component_fn = has_component_noop,
                   .serialize_fn = serialize_component_noop,
                   .deserialize_fn = deserialize_component_noop,
+                  .remove_fn = remove_component_noop,
               },
       },
   };
@@ -143,6 +145,7 @@ TEST_CASE("freeze succeeds for valid component descriptors", "[component_registr
   CHECK(registry.components().front().module_id == "teng.core");
   CHECK(registry.components().front().add_on_create);
   CHECK(registry.components().front().ops.apply_on_create_fn == apply_on_create_noop);
+  CHECK(registry.components().front().ops.remove_fn == remove_component_noop);
   CHECK(registry.stable_component_id("teng.core.transform") ==
         stable_component_id_v1("teng.core.transform"));
   REQUIRE(registry.modules().size() == 1);

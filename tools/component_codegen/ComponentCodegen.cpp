@@ -728,6 +728,10 @@ void write_generated(const Options& options, const std::vector<Component>& compo
         }
         out << "  });\n";
         out << "}\n\n";
+
+        out << "void remove_component_" << ident << "(flecs::entity entity) {\n";
+        out << "  entity.remove<" << component.cpp_type << ">();\n";
+        out << "}\n\n";
       }
     }
 
@@ -770,6 +774,9 @@ void write_generated(const Options& options, const std::vector<Component>& compo
           << ",\n";
       out << "          .deserialize_cooked_fn = "
           << (component.storage == "Authored" ? "deserialize_cooked_component_" + ident : "nullptr")
+          << ",\n";
+      out << "          .remove_fn = "
+          << (component.storage == "Authored" ? "remove_component_" + ident : "nullptr")
           << ",\n";
       out << "      },\n";
       out << "  },\n";

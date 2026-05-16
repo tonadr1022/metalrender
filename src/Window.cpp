@@ -35,11 +35,15 @@ void Window::init(InitInfo& init_info) {
   int h = init_info.win_dims_y;
   if (w <= 0 || h <= 0) {
     GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-    const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+    const GLFWvidmode* mode = monitor ? glfwGetVideoMode(monitor) : nullptr;
     if (mode) {
       LINFO("resizing to monitor size");
       w = mode->width;
       h = mode->height;
+    } else {
+      LINFO("primary monitor unavailable; using fallback window size");
+      w = 1280;
+      h = 720;
     }
   }
 

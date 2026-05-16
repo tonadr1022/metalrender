@@ -123,6 +123,7 @@ using SerializeComponentFn = nlohmann::json (*)(flecs::entity entity);
 using DeserializeComponentFn = void (*)(flecs::entity entity, const nlohmann::json& payload);
 using DeserializeCookedComponentFn = void (*)(flecs::entity entity, content::BinaryReader& reader);
 using HasComponentFn = bool (*)(flecs::entity entity);
+using RemoveComponentFn = void (*)(flecs::entity entity);
 
 enum class ScriptExposure : uint8_t {
   None,
@@ -148,6 +149,7 @@ struct ComponentTypeOps {
   SerializeComponentFn serialize_fn{};
   DeserializeComponentFn deserialize_fn{};
   DeserializeCookedComponentFn deserialize_cooked_fn{};
+  RemoveComponentFn remove_fn{};
 };
 
 struct ComponentDescriptor {

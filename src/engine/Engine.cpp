@@ -198,6 +198,8 @@ void Engine::init() {
   (void)assets_->scan();
   context_.assets_ = assets_.get();
   context_.scenes_ = scenes_.get();
+  context_.component_registry_ = component_registry_.get();
+  context_.scene_serialization_ = scene_serialization_ctx_.get();
   context_.time_ = &time_;
   context_.input_ = &input_snapshot_;
   context_.imgui_enabled_ = &imgui_enabled_;
