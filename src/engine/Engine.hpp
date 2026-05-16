@@ -79,8 +79,6 @@ class EngineContext {
   [[nodiscard]] RenderService& renderer() const { return *renderer_; }
   [[nodiscard]] const EngineTime& time() const { return *time_; }
   [[nodiscard]] const EngineInputSnapshot& input() const { return *input_; }
-  [[nodiscard]] bool scene_tick_enabled() const { return *scene_tick_enabled_; }
-  void set_scene_tick_enabled(bool enabled) { *scene_tick_enabled_ = enabled; }
   [[nodiscard]] bool imgui_enabled() const { return *imgui_enabled_; }
   void set_imgui_enabled(bool enabled) { *imgui_enabled_ = enabled; }
   void toggle_imgui_enabled() { *imgui_enabled_ = !*imgui_enabled_; }
@@ -100,7 +98,6 @@ class EngineContext {
   RenderService* renderer_{};
   const EngineTime* time_{};
   const EngineInputSnapshot* input_{};
-  bool* scene_tick_enabled_{};
   bool* imgui_enabled_{};
 };
 
@@ -168,8 +165,6 @@ class Engine {
   [[nodiscard]] RenderService& renderer() { return *renderer_; }
   [[nodiscard]] const RenderService& renderer() const { return *renderer_; }
   [[nodiscard]] const EngineConfig& config() const { return config_; }
-  void set_scene_tick_enabled(bool enabled);
-  [[nodiscard]] bool scene_tick_enabled() const { return scene_tick_enabled_; }
 
  private:
   struct KeyEvent {
@@ -207,7 +202,6 @@ class Engine {
   EngineInputSnapshot input_snapshot_;
   glm::vec2 last_cursor_pos_{};
   bool have_cursor_pos_{false};
-  bool scene_tick_enabled_{true};
   bool imgui_enabled_{true};
   bool initialized_{false};
   bool shutting_down_{false};

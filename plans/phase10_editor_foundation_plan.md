@@ -644,7 +644,7 @@ Exit:
 - Tests prove edit scene and play scene can coexist with distinct `SceneId`s and matching authored
   entity GUIDs.
 
-### Slice 10.4a — Edit-mode simulation pause
+### Slice 10.4a — Edit-mode simulation pause (done)
 
 Files:
 
@@ -675,7 +675,7 @@ Validation:
 ./build/Debug/bin/teng_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
 ```
 
-### Slice 10.4b — Render view/camera plumbing
+### Slice 10.4b — Render view/camera plumbing (done)
 
 Files:
 
@@ -711,7 +711,7 @@ Validation:
 ./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
 ```
 
-### Slice 10.4c — Editor viewport camera
+### Slice 10.4c — Editor viewport camera (done)
 
 Files:
 

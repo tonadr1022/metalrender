@@ -43,9 +43,11 @@ EditorLayer::EditorLayer(engine::SceneId edit_scene_id,
 
 void EditorLayer::on_attach(engine::EngineContext& ctx) {
   (void)session_.bind(ctx, edit_scene_id_, scene_path_);
-  // Phase 10 scaffolding: this edit-mode boolean should retire into an explicit
-  // scene role/tick policy model before richer editor previews or multi-scene ticking.
-  ctx.set_scene_tick_enabled(false);
+  (void)ctx.scenes().set_scene_role(edit_scene_id_, engine::SceneRole::EditDocument);
+  (void)ctx.scenes().set_scene_execution_policy(edit_scene_id_, engine::SceneExecutionPolicy{
+                                                                    .receives_active_input = false,
+                                                                    .advances_simulation = false,
+                                                                });
 }
 
 void EditorLayer::on_imgui(engine::EngineContext& ctx) {

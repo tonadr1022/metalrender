@@ -6,13 +6,13 @@
 #include <system_error>
 
 #include "TestHelpers.hpp"
+#include "editor/EditorSession.hpp"
 #include "editor/EditorViewportCamera.hpp"
 #include "editor/EditorViewportTarget.hpp"
-#include "editor/EditorSession.hpp"
 #include "engine/Input.hpp"
 #include "engine/render/RenderScene.hpp"
-#include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/Scene.hpp"
+#include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/SceneManager.hpp"
 
 namespace teng::editor {
@@ -22,6 +22,18 @@ namespace {
   engine::Scene& scene = scenes.create_scene("editor test");
   scene.create_entity(engine::EntityGuid{0x10}, "subject");
   return scene;
+}
+
+void advance_active_scene_like_engine(engine::SceneManager& scenes,
+                                      const engine::EngineInputSnapshot& input,
+                                      float delta_seconds) {
+  const engine::SceneExecutionPolicy policy = scenes.active_scene_execution_policy();
+  if (policy.receives_active_input) {
+    scenes.active_scene()->set_input_snapshot(input);
+  }
+  if (policy.advances_simulation) {
+    REQUIRE(scenes.tick_active_scene(delta_seconds));
+  }
 }
 
 [[nodiscard]] std::filesystem::path fresh_temp_dir(std::string_view name) {
@@ -135,6 +147,72 @@ TEST_CASE("EditorSelection set and clear is independent from document save state
   session.selection().clear();
   CHECK_FALSE(session.selection().selected());
   CHECK_FALSE(session.document_controller().dirty());
+}
+
+TEST_CASE("SceneManager gives new scenes runtime role and enabled execution policy", "[editor]") {
+  const engine::SceneTestContexts contexts = engine::make_scene_test_contexts();
+  engine::SceneManager scenes(contexts.flecs_components);
+  const engine::Scene& scene = make_editor_test_scene(scenes);
+
+  CHECK(scenes.scene_role(scene.id()) == engine::SceneRole::Runtime);
+  const engine::SceneExecutionPolicy policy = scenes.scene_execution_policy(scene.id());
+  CHECK(policy.receives_active_input);
+  CHECK(policy.advances_simulation);
+  CHECK(scenes.active_scene_role() == engine::SceneRole::Runtime);
+  CHECK(scenes.active_scene_execution_policy().receives_active_input);
+  CHECK(scenes.active_scene_execution_policy().advances_simulation);
+}
+
+TEST_CASE("SceneManager edit document policy pauses active scene simulation", "[editor]") {
+  const engine::SceneTestContexts contexts = engine::make_scene_test_contexts();
+  engine::SceneManager scenes(contexts.flecs_components);
+  const engine::Scene& scene = make_editor_test_scene(scenes);
+  const flecs::entity entity = scene.find_entity(engine::EntityGuid{0x10});
+  entity.set<engine::FpsCameraController>({});
+
+  engine::EngineInputSnapshot input;
+  input.held_keys.insert(engine::KeyCode::W);
+  input.delta_seconds = 1.f;
+
+  advance_active_scene_like_engine(scenes, input, 1.f);
+  const glm::vec3 moved_translation = entity.get<engine::Transform>().translation;
+  REQUIRE(glm::length(moved_translation) > 0.01f);
+
+  entity.set<engine::Transform>({});
+  entity.set<engine::LocalToWorld>({});
+  REQUIRE(scenes.set_scene_role(scene.id(), engine::SceneRole::EditDocument));
+  REQUIRE(scenes.set_scene_execution_policy(scene.id(), engine::SceneExecutionPolicy{
+                                                            .receives_active_input = false,
+                                                            .advances_simulation = false,
+                                                        }));
+
+  advance_active_scene_like_engine(scenes, input, 1.f);
+
+  CHECK(scenes.active_scene_role() == engine::SceneRole::EditDocument);
+  const engine::SceneExecutionPolicy policy = scenes.active_scene_execution_policy();
+  CHECK_FALSE(policy.receives_active_input);
+  CHECK_FALSE(policy.advances_simulation);
+  CHECK(entity.get<engine::Transform>().translation == glm::vec3{0.f});
+}
+
+TEST_CASE("SceneManager can disable active scene input without disabling simulation", "[editor]") {
+  const engine::SceneTestContexts contexts = engine::make_scene_test_contexts();
+  engine::SceneManager scenes(contexts.flecs_components);
+  const engine::Scene& scene = make_editor_test_scene(scenes);
+  const flecs::entity entity = scene.find_entity(engine::EntityGuid{0x10});
+  entity.set<engine::FpsCameraController>({});
+  REQUIRE(scenes.set_scene_execution_policy(scene.id(), engine::SceneExecutionPolicy{
+                                                            .receives_active_input = false,
+                                                            .advances_simulation = true,
+                                                        }));
+
+  engine::EngineInputSnapshot input;
+  input.held_keys.insert(engine::KeyCode::W);
+  input.delta_seconds = 1.f;
+
+  advance_active_scene_like_engine(scenes, input, 1.f);
+
+  CHECK(entity.get<engine::Transform>().translation == glm::vec3{0.f});
 }
 
 TEST_CASE("Editor viewport extent clamps to a minimum size", "[editor]") {

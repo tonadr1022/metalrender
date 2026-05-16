@@ -209,7 +209,6 @@ void Engine::init() {
   context_.scene_serialization_ = scene_serialization_ctx_.get();
   context_.time_ = &time_;
   context_.input_ = &input_snapshot_;
-  context_.scene_tick_enabled_ = &scene_tick_enabled_;
   context_.imgui_enabled_ = &imgui_enabled_;
 
   renderer_ = std::make_unique<RenderService>(RenderService::CreateInfo{
@@ -334,8 +333,6 @@ Result<SceneLoadResult> Engine::load_project_startup_scene() {
   return load_scene(*startup_scene);
 }
 
-void Engine::set_scene_tick_enabled(bool enabled) { scene_tick_enabled_ = enabled; }
-
 bool Engine::tick() {
   ZoneScoped;
   if (shutting_down_ || !initialized_ || window_->should_close()) {
@@ -354,11 +351,12 @@ bool Engine::tick() {
   have_prev_time_ = true;
   input_snapshot_.delta_seconds = time_.delta_seconds;
 
-  if (scene_tick_enabled_ && scenes_->active_scene()) {
+  const SceneExecutionPolicy active_scene_policy = scenes_->active_scene_execution_policy();
+  if (active_scene_policy.receives_active_input && scenes_->active_scene()) {
     Scene* active_scene = scenes_->active_scene();
     active_scene->set_input_snapshot(input_snapshot_);
   }
-  if (scene_tick_enabled_ && !scenes_->tick_active_scene(time_.delta_seconds)) {
+  if (active_scene_policy.advances_simulation && !scenes_->tick_active_scene(time_.delta_seconds)) {
     return false;
   }
   clear_transient_input();
