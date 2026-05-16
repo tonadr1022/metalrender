@@ -49,12 +49,28 @@ bool is_stencil_format(rhi::TextureFormat format) {
   }
 }
 
-TexAndViewHolder::~TexAndViewHolder() {
-  for (auto v : views) {
-    context->destroy(handle, v);
+void TexAndViewHolder::destroy_views() {
+  if (!context) {
+    views.clear();
+    return;
+  }
+  for (const TextureViewHandle view : views) {
+    context->destroy(handle, view);
   }
   views.clear();
 }
+
+TexAndViewHolder& TexAndViewHolder::operator=(TexAndViewHolder&& other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
+  destroy_views();
+  static_cast<TextureHandleHolder&>(*this) = std::move(static_cast<TextureHandleHolder&>(other));
+  views = std::move(other.views);
+  return *this;
+}
+
+TexAndViewHolder::~TexAndViewHolder() { destroy_views(); }
 
 }  // namespace gfx::rhi
 

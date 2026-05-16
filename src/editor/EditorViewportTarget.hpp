@@ -19,8 +19,6 @@ class EditorViewportTarget {
   [[nodiscard]] bool valid() const { return color_.handle.is_valid(); }
   [[nodiscard]] uint32_t bindless_view_idx(gfx::rhi::Device& device) const;
 
-  void release(gfx::rhi::Device& device);
-
  private:
   gfx::rhi::TexAndViewHolder color_;
   glm::uvec2 extent_{};

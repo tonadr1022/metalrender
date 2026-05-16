@@ -60,16 +60,7 @@ void MeshletDepthPyramid::resize(glm::uvec2 source_dims) {
   debug_mip_ = std::clamp(debug_mip_, 0, std::max(0, static_cast<int>(mip_levels) - 1));
 }
 
-void MeshletDepthPyramid::shutdown() {
-  if (!tex_.handle.is_valid()) {
-    return;
-  }
-  for (auto v : tex_.views) {
-    device_.destroy(tex_.handle, v);
-  }
-  tex_.views.clear();
-  tex_ = {};
-}
+void MeshletDepthPyramid::shutdown() { tex_ = {}; }
 
 uint32_t MeshletDepthPyramid::mip_count() const {
   if (!tex_.is_valid()) {
@@ -124,7 +115,7 @@ RGResourceId MeshletDepthPyramid::bake(RGResourceId depth_src_rg, std::string_vi
 
     p.set_ex([this, mip, depth_handle, dp_dims](rhi::CmdEncoder* enc) {
       enc->bind_pipeline(depth_reduce_pso_);
-      glm::uvec2 in_dims = (mip == 0) ? device_.get_tex(rg_.get_att_img(depth_handle))->desc().dims
+      const glm::uvec2 in_dims = (mip == 0) ? device_.get_tex(rg_.get_att_img(depth_handle))->desc().dims
                                       : glm::uvec2{std::max(1u, dp_dims.x >> (mip - 1)),
                                                    std::max(1u, dp_dims.y >> (mip - 1))};
       DepthReducePC pc{.in_tex_dim_x = in_dims.x,

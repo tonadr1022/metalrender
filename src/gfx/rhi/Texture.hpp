@@ -35,9 +35,12 @@ struct TexAndViewHolder : public rhi::TextureHandleHolder {
   TexAndViewHolder(const TexAndViewHolder&) = delete;
   TexAndViewHolder(TexAndViewHolder&&) = default;
   TexAndViewHolder& operator=(const TexAndViewHolder&) = delete;
-  TexAndViewHolder& operator=(TexAndViewHolder&&) = default;
+  TexAndViewHolder& operator=(TexAndViewHolder&&) noexcept;
   ~TexAndViewHolder();
   std::vector<rhi::TextureViewHandle> views;
+
+ private:
+  void destroy_views();
 };
 
 }  // namespace gfx::rhi

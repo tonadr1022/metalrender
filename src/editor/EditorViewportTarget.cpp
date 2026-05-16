@@ -12,18 +12,6 @@ glm::uvec2 clamp_editor_viewport_extent(glm::uvec2 extent) {
           std::max(extent.y, k_editor_viewport_min_extent.y)};
 }
 
-// TODO: this seems like a smell
-void EditorViewportTarget::release(gfx::rhi::Device& device) {
-  // if (!color_.handle.is_valid()) {
-  //   return;
-  // }
-  // for (const gfx::rhi::TextureViewHandle view : color_.views) {
-  //   device.destroy(color_.handle, view);
-  // }
-  // color_.views.clear();
-  // color_ = {};
-}
-
 void EditorViewportTarget::ensure_size(gfx::rhi::Device& device, gfx::rhi::TextureFormat format,
                                        glm::uvec2 extent) {
   extent = clamp_editor_viewport_extent(extent);
@@ -31,7 +19,7 @@ void EditorViewportTarget::ensure_size(gfx::rhi::Device& device, gfx::rhi::Textu
     return;
   }
 
-  release(device);
+  color_ = {};
   extent_ = extent;
   color_ = gfx::rhi::TexAndViewHolder(device.create_tex_h({
       .format = format,
