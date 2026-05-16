@@ -1,0 +1,89 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "cmake: configure Debug",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--preset", "Debug"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "build: metalrender",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "build/Debug", "--target", "metalrender"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "build: teng_editor",
+      "type": "shell",
+      "command": "cmake",
+      "args": ["--build", "build/Debug", "--target", "teng_editor"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": ["$gcc"]
+    },
+    {
+      "label": "run: metalrender",
+      "type": "shell",
+      "command": "${workspaceFolder}/build/Debug/bin/metalrender",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": ["build: metalrender"],
+      "dependsOrder": "sequence",
+      "group": "test",
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "focus": true
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "run: teng_editor",
+      "type": "shell",
+      "command": "${workspaceFolder}/build/Debug/bin/teng_editor",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "dependsOn": ["build: teng_editor"],
+      "dependsOrder": "sequence",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "silent",
+        "panel": "dedicated",
+        "focus": true
+      },
+      "problemMatcher": []
+    }
+  ]
+}

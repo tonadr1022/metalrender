@@ -8,7 +8,6 @@
 #include <string>
 #include <utility>
 
-#include "core/Logger.hpp"
 #include "engine/render/RenderFrameContext.hpp"
 #include "engine/render/RenderScene.hpp"
 #include "engine/render/RenderSceneExtractor.hpp"
@@ -157,7 +156,6 @@ void EditorLayer::draw_viewport(engine::EngineContext& ctx) {
       static_cast<unsigned>(std::max(0.f, std::floor(avail.x * io.DisplayFramebufferScale.x))),
       static_cast<unsigned>(std::max(0.f, std::floor(avail.y * io.DisplayFramebufferScale.y))),
   });
-  LINFO("viewport_pixel_size_: {} {}", viewport_pixel_size_.x, viewport_pixel_size_.y);
 
   const gfx::rhi::Texture* const swapchain_tex =
       ctx.device().get_tex(ctx.swapchain().get_current_texture());

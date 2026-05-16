@@ -3,7 +3,6 @@ bin/
 build/
 shader_out/
 .zed/
-.vscode/
 imgui.ini
 .clangd
 build-debug
