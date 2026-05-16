@@ -40,14 +40,12 @@ void ImGuiOverlayLayer::on_imgui(EngineContext& ctx) {
   if (frame_started_) {
     ctx.renderer().on_imgui();
   }
-  if (frame_started_) {
-    ImGui::Render();
-  }
 }
 
 void ImGuiOverlayLayer::on_render(EngineContext& ctx) {
   ctx.renderer().set_imgui_ui_active(ctx.imgui_enabled() && frame_started_);
   if (frame_started_) {
+    ImGui::Render();
     ctx.renderer().enqueue_imgui_overlay_pass();
   }
 }
@@ -87,6 +85,7 @@ void ImGuiOverlayLayer::init_imgui(EngineContext& ctx) {
   }
 
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+  io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
   io.BackendRendererName = "imgui_impl_memes";
   io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset | ImGuiBackendFlags_RendererHasTextures;
   ImGui_ImplGlfw_InitForOther(ctx.window().get_handle(), true);

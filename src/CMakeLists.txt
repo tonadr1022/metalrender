@@ -109,6 +109,10 @@ set(TENG_ENGINE_RUNTIME_SOURCES
     engine/assets/AssetService.cpp
 )
 
+set(TENG_EDITOR_SOURCES
+    editor/EditorLayer.cpp
+)
+
 set(TENG_GFX_SOURCES
     gfx/ModelLoader.cpp
     gfx/ModelInstance.cpp
@@ -254,6 +258,7 @@ add_teng_component(teng_scene_authoring OFF ${TENG_SCENE_AUTHORING_SOURCES})
 add_teng_component(teng_scene_tool_lib OFF engine/scene/SceneValidate.cpp)
 add_teng_component(teng_render ON ${TENG_RENDER_SOURCES})
 add_teng_component(teng_engine_runtime ON ${TENG_ENGINE_RUNTIME_SOURCES})
+add_teng_component(lib_teng_editor OFF ${TENG_EDITOR_SOURCES})
 add_library(teng_runtime INTERFACE)
 
 target_link_libraries(teng_core PRIVATE fts_fuzzy_match)
@@ -280,4 +285,5 @@ target_link_libraries(teng_engine_runtime PUBLIC
     teng_render
 )
 target_link_libraries(teng_engine_runtime PRIVATE implot Tracy::TracyClient)
+target_link_libraries(lib_teng_editor PUBLIC teng_engine_runtime teng_scene_authoring PRIVATE imgui)
 target_link_libraries(teng_runtime INTERFACE teng_engine_runtime Tracy::TracyClient)

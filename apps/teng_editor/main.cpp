@@ -9,20 +9,21 @@
 #include <string_view>
 #include <tracy/Tracy.hpp>
 
+#include "editor/EditorLayer.hpp"
 #include "engine/Engine.hpp"
 #include "engine/ImGuiOverlayLayer.hpp"
 
 namespace {
 
-struct RuntimeOptions {
+struct EditorOptions {
   std::filesystem::path scene_path;
   std::optional<std::uint32_t> quit_after_frames;
 };
 
 void usage(const char* argv0) {
   std::cout << "usage: " << argv0 << " [--scene <path>] [--quit-after-frames <n>]\n"
-            << "  --scene              Load `*.tscene.json` or cooked `*.tscene.bin` "
-               "(see teng-scene-tool cook) instead of project startup_scene\n"
+            << "  --scene              Open `*.tscene.json` or cooked `*.tscene.bin` "
+               "instead of project startup_scene\n"
             << "  --quit-after-frames  Exit after completing n frames (n >= 1)\n"
             << "  -h, --help           Show this help\n";
 }
@@ -42,8 +43,8 @@ bool parse_u32(std::string_view text, std::uint32_t& out) {
   return true;
 }
 
-std::optional<RuntimeOptions> parse_options(int argc, char* argv[]) {
-  RuntimeOptions options;
+std::optional<EditorOptions> parse_options(int argc, char* argv[]) {
+  EditorOptions options;
   for (int i = 1; i < argc; ++i) {
     const std::string arg = argv[i];
     if (arg == "--scene" && i + 1 < argc) {
@@ -72,14 +73,14 @@ std::optional<RuntimeOptions> parse_options(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
   ZoneScoped;
-  std::optional<RuntimeOptions> options = parse_options(argc, argv);
+  std::optional<EditorOptions> options = parse_options(argc, argv);
   if (!options) {
     return 1;
   }
 
   teng::engine::Engine engine(teng::engine::EngineConfig{
       .resource_dir = {},
-      .app_name = "metalrender",
+      .app_name = "teng_editor",
       .preferred_gfx_api = teng::engine::EngineGfxApi::PlatformDefault,
       .initial_window_width = -1,
       .initial_window_height = -1,
@@ -93,10 +94,11 @@ int main(int argc, char* argv[]) {
                                                            ? engine.load_project_startup_scene()
                                                            : engine.load_scene(options->scene_path);
   if (!loaded) {
-    std::cerr << "metalrender: failed to load scene: " << loaded.error() << '\n';
+    std::cerr << "teng_editor: failed to load scene: " << loaded.error() << '\n';
     return 1;
   }
   engine.layers().push_layer(std::make_unique<teng::engine::ImGuiOverlayLayer>());
+  engine.layers().push_layer(std::make_unique<teng::editor::EditorLayer>());
   engine.run();
   return 0;
 }

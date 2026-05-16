@@ -18,6 +18,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent
 DEFAULT_TARGETS = [
     "metalrender",
+    "teng_editor",
     "teng-shaderc",
     "teng_core_tests",
     "teng_engine_tests",
