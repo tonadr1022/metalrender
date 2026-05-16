@@ -120,10 +120,10 @@ explicit migration scaffolding. Do not let these become incidental UI or rendere
    replacement scene first, then switch active/edit/play state only after success. On failure, leave
    the current edit scene, active scene, document binding, selection, dirty state, and mode unchanged.
    Any partially-created scene from a failed operation must be destroyed before returning the error.
-5. **Scene tick policy scaffolding:** the Phase 10 `Engine::set_scene_tick_enabled(bool)` switch is
-   acceptable only as narrow migration scaffolding. Before adding richer editor previews, thumbnails,
-   multi-scene rendering, or background simulation, replace or extend it with an explicit scene role /
-   tick policy model. Document that retirement path in the implementation comments or follow-up notes.
+5. **Scene role and execution policy:** edit-mode pause must be modeled with per-scene metadata, not
+   a global engine ticking boolean. Add a small scene role plus execution policy model now so edit
+   documents, play-session copies, runtime scenes, and future previews can coexist without later
+   replacing editor pause scaffolding.
 6. **Panel ownership boundary:** `EditorLayer` orchestrates editor UI, but panel implementation should
    live behind small panel/helper units as soon as hierarchy and inspector become non-trivial. Panels
    receive an editor context/session/controller reference and do not own engine services.
@@ -330,29 +330,49 @@ with the same option parsing as `metalrender`:
 
 No broad `EngineConfig` project system is needed for Phase 10.
 
-### Edit-mode simulation control
+### Scene role and execution policy
 
-Add a narrow engine/runtime switch so the editor can render the edit scene without progressing scene
-systems:
+Add per-scene runtime metadata so the editor can render the edit scene without progressing scene
+systems, while runtime and play-session scenes keep default gameplay behavior:
 
 ```cpp
-void Engine::set_scene_tick_enabled(bool enabled);
-[[nodiscard]] bool Engine::scene_tick_enabled() const;
+enum class SceneRole {
+  Runtime,
+  EditDocument,
+  PlaySession,
+  Preview,
+};
+
+struct SceneExecutionPolicy {
+  bool receives_active_input{true};
+  bool advances_simulation{true};
+};
 ```
 
-`Engine::tick()` should still poll input, update time, draw ImGui, extract/render the active scene,
-and run layers while scene ticking is disabled. It should skip only `SceneManager::tick_active_scene()`
-and the active scene input snapshot used by gameplay/session systems. Transient input state is still
-cleared exactly once per frame whether scene ticking is enabled or disabled.
+`SceneRole` records why a scene exists; `SceneExecutionPolicy` controls what `Engine::tick()` does with
+the active scene this frame. Role must not become scattered behavior checks in engine code. Use it for
+editor/session bookkeeping, diagnostics, scene-list filtering, and lifecycle assertions. Examples:
+
+- stop play may destroy scenes with `SceneRole::PlaySession`, but must never destroy the
+  `SceneRole::EditDocument` scene
+- editor stats and scene lists can label or filter `EditDocument`, `PlaySession`, and future `Preview`
+  scenes without guessing from names or active-scene state
+
+Default scene creation should use `SceneRole::Runtime` and a default policy that receives active input
+and advances simulation. `Engine::tick()` should still poll input, update time, draw ImGui,
+extract/render the active scene, and run layers when the active scene policy disables simulation. It
+should skip only the active scene input snapshot and `SceneManager::tick_active_scene()` according to
+the active scene's `SceneExecutionPolicy`. Transient input state is still cleared exactly once per
+frame whether scene simulation is enabled or disabled.
 
 Editor policy:
 
-- edit mode sets scene ticking disabled
-- enter play sets scene ticking enabled before activating/running the play scene
-- stop play sets scene ticking disabled again after reactivating the edit scene
-
-Treat this switch as Phase 10 scaffolding. The implementation should leave a clear note that richer
-editor workflows need scene-role/tick-policy modeling instead of more booleans.
+- edit scenes use `SceneRole::EditDocument` with
+  `{.receives_active_input = false, .advances_simulation = false}`
+- enter play creates or activates a runtime copy with `SceneRole::PlaySession` and the default
+  simulation policy
+- stop play destroys the play-session scene, reactivates the edit scene, and relies on the edit
+  scene's policy to keep simulation paused
 
 ## UI panels
 
@@ -629,17 +649,18 @@ Exit:
 Files:
 
 - `src/engine/Engine.hpp/.cpp`
+- `src/engine/scene/SceneManager.hpp/.cpp`
 - `src/editor/EditorLayer.hpp/.cpp`
-- focused tests for scene-tick disable behavior
+- focused tests for active-scene execution policy behavior
 
 Work:
 
-- add engine scene-tick enable/disable switch
-- default runtime behavior remains ticking enabled
-- editor sets ticking disabled in edit mode
-- skip active scene input snapshot and scene tick while disabled
-- keep layer update/render/imgui and transient input clearing running while disabled
-- document the switch as temporary scaffolding for a later scene role / tick policy model
+- add per-scene `SceneRole` metadata and `SceneExecutionPolicy`
+- default runtime behavior remains `SceneRole::Runtime` with input snapshot and simulation enabled
+- editor marks the edit scene as `SceneRole::EditDocument` with input snapshot and simulation disabled
+- skip active scene input snapshot and active scene tick according to the active scene execution policy
+- keep layer update/render/imgui and transient input clearing running when simulation is disabled
+- keep role descriptive and policy behavioral; do not scatter `SceneRole::EditDocument` engine branches
 
 Exit:
 
@@ -878,8 +899,10 @@ Required automated tests:
   state
 - edit commands are rejected or disabled while playing at the controller level
 - edit-mode viewport camera movement does not mutate authored transforms or dirty the document
-- disabling scene ticking still allows render/layer updates to run
-- disabling scene ticking still clears transient input once per frame
+- disabling active scene simulation through `SceneExecutionPolicy` still allows render/layer updates
+  to run
+- disabling active scene simulation through `SceneExecutionPolicy` still clears transient input once
+  per frame
 - serialization in-memory load returns `SceneLoadResult` without relying on incidental active scene
   lookup or activating the loaded scene
 - runtime/editor render-view selection is covered by small self-contained tests where practical

@@ -230,8 +230,27 @@ TEST_CASE("cooked scene loads from disk without JSON deserialization", "[scene_c
   REQUIRE(renderables.is_valid());
   REQUIRE(renderables.has<MeshRenderable>());
   REQUIRE(renderables.has<SpriteRenderable>());
+  REQUIRE(renderables.has<Transform>());
+  const auto& transform = renderables.get<Transform>();
+  CHECK(transform.translation.x == 2.0f);
+  CHECK(transform.translation.y == 0.0f);
+  CHECK(transform.translation.z == 0.0f);
+  CHECK(transform.rotation.w == 1.0f);
+  CHECK(transform.rotation.x == 0.0f);
+  CHECK(transform.rotation.y == 0.0f);
+  CHECK(transform.rotation.z == 0.0f);
+  CHECK(transform.scale.x == 1.0f);
+  CHECK(transform.scale.y == 2.0f);
+  CHECK(transform.scale.z == 1.0f);
   CHECK(renderables.get<MeshRenderable>().model == asset_id(1));
   CHECK(renderables.get<SpriteRenderable>().texture == asset_id(2));
+
+  const flecs::entity camera = scene.find_entity(EntityGuid{0x10});
+  REQUIRE(camera.is_valid());
+  REQUIRE(camera.has<Camera>());
+  CHECK(camera.get<Camera>().fov_y == 1.0f);
+  CHECK(camera.get<Camera>().z_near == 0.25f);
+  CHECK(camera.get<Camera>().z_far == 1000.0f);
 
   std::filesystem::remove_all(root, ec);
 }

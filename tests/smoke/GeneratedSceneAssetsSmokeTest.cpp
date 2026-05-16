@@ -6,6 +6,7 @@
 #include "TestHelpers.hpp"
 #include "engine/render/RenderScene.hpp"
 #include "engine/render/RenderSceneExtractor.hpp"
+#include "engine/scene/SceneCooked.hpp"
 #include "engine/scene/SceneManager.hpp"
 #include "engine/scene/SceneSerialization.hpp"
 
@@ -25,9 +26,11 @@ namespace {
 
 [[nodiscard]] bool load_and_check_scene(const FlecsComponentContext& component_ctx,
                                         const SceneSerializationContext& serialization_ctx,
-                                        const std::filesystem::path& path, size_t mesh_count) {
+                                        const std::filesystem::path& path, size_t mesh_count,
+                                        bool cooked = false) {
   SceneManager scenes(component_ctx);
-  Result<SceneLoadResult> loaded = load_scene_file(scenes, serialization_ctx, path);
+  Result<SceneLoadResult> loaded = cooked ? load_cooked_scene_file(scenes, serialization_ctx, path)
+                                          : load_scene_file(scenes, serialization_ctx, path);
   if (!loaded || !(*loaded).scene || scenes.active_scene() != (*loaded).scene) {
     return false;
   }
@@ -57,7 +60,9 @@ bool run_generated_scene_assets_smoke_test() {
   return load_and_check_scene(contexts.flecs_components, contexts.scene_serialization,
                               root / "resources/scenes/demo_00_cube.tscene.json", 1) &&
          load_and_check_scene(contexts.flecs_components, contexts.scene_serialization,
-                              root / "resources/scenes/demo_01_cube_grid.tscene.json", 81);
+                              root / "resources/scenes/demo_01_cube_grid.tscene.json", 81) &&
+         load_and_check_scene(contexts.flecs_components, contexts.scene_serialization,
+                              root / "resources/scenes/demo_01_cube_grid.tscene.bin", 81, true);
 }
 
 }  // namespace teng::engine

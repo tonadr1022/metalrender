@@ -126,7 +126,13 @@ int32_t BinaryReader::read_i32_unchecked() { return static_cast<int32_t>(read_u3
 
 int64_t BinaryReader::read_i64_unchecked() { return static_cast<int64_t>(read_u64_unchecked()); }
 
-float BinaryReader::read_f32_unchecked() { return static_cast<float>(read_u32_unchecked()); }
+float BinaryReader::read_f32_unchecked() {
+  const uint32_t bits = read_u32_unchecked();
+  float value{};
+  static_assert(sizeof(value) == sizeof(bits));
+  std::memcpy(&value, &bits, sizeof(value));
+  return value;
+}
 
 Result<std::string> BinaryReader::read_fixed_string(size_t size) {
   Result<std::span<const std::byte>> bytes = read_bytes(size);
