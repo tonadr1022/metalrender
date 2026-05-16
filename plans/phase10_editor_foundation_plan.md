@@ -10,7 +10,7 @@ decisions that were still open in [`editor_play_mode_semantics.md`](editor_play_
 Ship the first real editor vertical:
 
 - `metalrender` becomes a lean runtime/demo host again and does not link editor authoring UI.
-- `metalrender_editor` is a separate executable with editor-only layers and scene-authoring linkage.
+- `teng_editor` is a separate executable with editor-only layers and scene-authoring linkage.
 - The editor can open a schema-valid data scene, show an entity list and schema-driven inspector,
   mutate authored components through `SceneDocument`, save/reload the edit document, and enter/stop
   play mode without restarting the process.
@@ -46,8 +46,8 @@ This phase is intentionally a foundation, not a full production editor.
 
 These are not open assumptions for implementers.
 
-1. **Editor target name:** the executable is `metalrender_editor`; the reusable editor library is
-   `teng_editor`.
+1. **Editor target name:** the executable is `teng_editor`; the reusable editor library is
+   `lib_teng_editor`.
 2. **Runtime target cleanup:** `metalrender` must stop compiling `DebugSceneAuthoringLayer` and must
    stop linking `teng_scene_authoring`.
 3. **Editor UI backend:** use Dear ImGui and the existing renderer ImGui support; no new UI toolkit
@@ -102,9 +102,9 @@ apps/metalrender
   links: teng_runtime
   pushes: ImGuiOverlayLayer only when runtime debug UI is explicitly enabled
 
-apps/metalrender_editor
+apps/teng_editor
   main.cpp
-  links: teng_runtime, teng_editor
+  links: teng_runtime, lib_teng_editor
   constructs Engine, loads project/scene, pushes EditorLayer
   drives Engine::tick() through Engine::run() for the first vertical
 
@@ -126,9 +126,9 @@ src/engine/scene/authoring
 
 Add `src/editor/` as an editor-only static library:
 
-- `teng_editor` links `teng_engine_runtime` and `teng_scene_authoring`.
-- `teng_editor` links ImGui because it is editor UI.
-- `teng_runtime` and `metalrender` do not link `teng_editor` or `teng_scene_authoring`.
+- `lib_teng_editor` links `teng_engine_runtime` and `teng_scene_authoring`.
+- `lib_teng_editor` links ImGui because it is editor UI.
+- `teng_runtime` and `metalrender` do not link `lib_teng_editor` or `teng_scene_authoring`.
 - `teng_scene_authoring` remains GPU-free and reusable by tools/tests.
 
 This preserves the Phase 8 linkage rule: runtime/player code links static runtime component
@@ -273,7 +273,7 @@ Do not add Phase 10 API surface to `SceneDocument`. Bind the loaded path through
 
 ### Engine/app startup
 
-The editor needs to know which path was loaded. Prefer resolving this in `apps/metalrender_editor`
+The editor needs to know which path was loaded. Prefer resolving this in `apps/teng_editor`
 with the same option parsing as `metalrender`:
 
 - `--scene <path>` opens that scene as the edit document.
@@ -474,9 +474,9 @@ Do not implement filesystem watching or automatic reload prompts in Phase 10.
 
 Files and targets:
 
-- Extend `src/CMakeLists.txt` with `teng_editor`.
-- Add `apps/metalrender_editor/CMakeLists.txt`.
-- Add `apps/metalrender_editor/main.cpp`.
+- Extend `src/CMakeLists.txt` with `lib_teng_editor`.
+- Add `apps/teng_editor/CMakeLists.txt`.
+- Add `apps/teng_editor/main.cpp`.
 - Update `apps/CMakeLists.txt`.
 - Update `apps/metalrender/CMakeLists.txt`.
 - Stop compiling/linking `DebugSceneAuthoringLayer.*` into `metalrender`.
@@ -484,7 +484,7 @@ Files and targets:
 Exit:
 
 - `metalrender` links `teng_runtime` only.
-- `metalrender_editor` builds and launches the same startup scene with ImGui enabled.
+- `teng_editor` builds and launches the same startup scene with ImGui enabled.
 - `teng-scene-tool` remains GPU-free.
 
 `DebugSceneAuthoringLayer.*` can remain temporarily unlinked if `metalrender` is cleaned up before
@@ -494,9 +494,9 @@ fully replaced.
 Validation:
 
 ```bash
-./scripts/agent_verify.sh --quick
+./scripts/agent_verify.sh
 ./build/Debug/bin/metalrender --quit-after-frames 30
-./build/Debug/bin/metalrender_editor --quit-after-frames 30
+./build/Debug/bin/teng_editor --quit-after-frames 30
 ```
 
 ### Slice 10.2 — Editor session and document controller
@@ -529,7 +529,7 @@ Exit:
 Validation:
 
 ```bash
-./scripts/agent_verify.sh --quick
+./scripts/agent_verify.sh 
 ```
 
 ### Slice 10.3 — Serialization support for scene-copy play mode
@@ -556,7 +556,7 @@ Exit:
 Validation:
 
 ```bash
-./scripts/agent_verify.sh --quick
+./scripts/agent_verify.sh
 ```
 
 ### Slice 10.4a — Edit-mode simulation pause
@@ -583,9 +583,9 @@ Exit:
 Validation:
 
 ```bash
-./scripts/agent_verify.sh --quick
+./scripts/agent_verify.sh
 ./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
-./build/Debug/bin/metalrender_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
+./build/Debug/bin/teng_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
 ```
 
 ### Slice 10.4b — Render view/camera plumbing
@@ -615,7 +615,7 @@ Exit:
 Validation:
 
 ```bash
-./scripts/agent_verify.sh --quick
+./scripts/agent_verify.sh
 ./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
 ```
 
@@ -642,8 +642,8 @@ Exit:
 Validation:
 
 ```bash
-./scripts/agent_verify.sh --quick
-./build/Debug/bin/metalrender_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
+./scripts/agent_verify.sh
+./build/Debug/bin/teng_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
 ```
 
 ### Slice 10.5 — Flat hierarchy/outliner panel
@@ -667,8 +667,8 @@ Exit:
 Validation:
 
 ```bash
-./scripts/agent_verify.sh --quick
-./build/Debug/bin/metalrender_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
+./scripts/agent_verify.sh
+./build/Debug/bin/teng_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
 ```
 
 ### Slice 10.6 — Schema-driven inspector
@@ -694,8 +694,8 @@ Exit:
 Validation:
 
 ```bash
-./scripts/agent_verify.sh --quick
-./build/Debug/bin/metalrender_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
+./scripts/agent_verify.sh
+./build/Debug/bin/teng_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
 ```
 
 ### Slice 10.7 — Save and reload UX
@@ -721,8 +721,8 @@ Exit:
 Validation:
 
 ```bash
-./scripts/agent_verify.sh --quick
-./build/Debug/bin/metalrender_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
+./scripts/agent_verify.sh
+./build/Debug/bin/teng_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
 ./build/Debug/bin/teng-scene-tool validate resources/scenes/demo_cube.tscene.json
 ```
 
@@ -754,8 +754,8 @@ Exit:
 Validation:
 
 ```bash
-./scripts/agent_verify.sh --quick
-./build/Debug/bin/metalrender_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 120
+./scripts/agent_verify.sh 
+./build/Debug/bin/teng_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 120
 ```
 
 Manual validation should click Play and Stop repeatedly before the bounded smoke is considered enough.
@@ -773,7 +773,7 @@ Work:
 
 - mark Phase 10 plan as implemented or partially implemented as slices land
 - update stale references to missing plan files
-- add `metalrender_editor` to target lists and verification notes if default verification builds it
+- add `teng_editor` to target lists and verification notes if default verification builds it
 - update `agent_verify.sh` so the editor target builds by default
 
 Exit:
@@ -815,7 +815,7 @@ Additional tests:
 Fast inner loop:
 
 ```bash
-./scripts/agent_verify.sh --quick
+./scripts/agent_verify.sh 
 ```
 
 Full exit check:
@@ -824,7 +824,7 @@ Full exit check:
 ./scripts/agent_verify.sh
 ./build/Debug/bin/metalrender --quit-after-frames 30
 ./build/Debug/bin/metalrender --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
-./build/Debug/bin/metalrender_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
+./build/Debug/bin/teng_editor --scene resources/scenes/demo_cube.tscene.json --quit-after-frames 30
 ```
 
 Use `./scripts/agent_verify.sh --full` before declaring the whole phase done if editor changes touch
@@ -833,7 +833,7 @@ renderer, shader, or app startup behavior.
 ## Risks and mitigations
 
 - **Risk: editor UI leaks into runtime linkage.** Mitigation: make CMake checks/reviews verify
-  `metalrender` links `teng_runtime` only and does not link `teng_scene_authoring` or `teng_editor`.
+  `metalrender` links `teng_runtime` only and does not link `teng_scene_authoring` or `lib_teng_editor`.
 - **Risk: play scene accidentally becomes the save source.** Mitigation: centralize save in
   `EditorDocumentController` and disable save while playing.
 - **Risk: stale editor render view leaks into runtime rendering.** Mitigation: make render views
@@ -863,8 +863,8 @@ renderer, shader, or app startup behavior.
 
 ## Phase 10 exit criteria
 
-- `metalrender_editor` is a first-class target.
-- `metalrender` does not link `teng_scene_authoring`, `teng_editor`, or editor UI code.
+- `teng_editor` is a first-class target.
+- `metalrender` does not link `teng_scene_authoring`, `lib_teng_editor`, or editor UI code.
 - The editor opens a JSON v2 scene as an edit document.
 - The editor can create/delete/select entities and edit supported authored component fields through
   `SceneDocument`.

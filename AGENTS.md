@@ -16,10 +16,10 @@ Add `--format` to format changed first-party C/C++ files.
 Useful modes:
 
 ```bash
-./scripts/agent_verify.sh --quick          # skip clang-tidy
 ./scripts/agent_verify.sh --shader-mode all
 ./scripts/agent_verify.sh --app-smoke      # bounded metalrender startup + demo scene
 ./scripts/agent_verify.sh --full           # full shaders + app smoke
+./scripts/agent_verify.sh --quick          # skip clang-tidy (not recommended)
 ```
 
 ### Target names
