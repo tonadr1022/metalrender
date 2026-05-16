@@ -302,9 +302,9 @@ Result<nlohmann::ordered_json> serialize_scene_to_json(
   return root;
 }
 
-Result<void> deserialize_scene_json(SceneManager& scenes,
-                                    const SceneSerializationContext& serialization,
-                                    const nlohmann::json& scene_json) {
+Result<SceneLoadResult> deserialize_scene_json_to_scene(
+    SceneManager& scenes, const SceneSerializationContext& serialization,
+    const nlohmann::json& scene_json) {
   Result<void, core::DiagnosticReport> validated =
       validate_scene_file_full_report(serialization, scene_json);
   if (!validated) {
@@ -331,7 +331,16 @@ Result<void> deserialize_scene_json(SceneManager& scenes,
   // Temporary compatibility fixup: render extraction currently expects LocalToWorld to be current
   // immediately after load. A dedicated transform propagation/dirty system should retire this.
   derive_local_to_world(scene);
-  scenes.set_active_scene(scene.id());
+  return SceneLoadResult{.scene = &scene};
+}
+
+Result<void> deserialize_scene_json(SceneManager& scenes,
+                                    const SceneSerializationContext& serialization,
+                                    const nlohmann::json& scene_json) {
+  Result<SceneLoadResult> loaded =
+      deserialize_scene_json_to_scene(scenes, serialization, scene_json);
+  REQUIRED_OR_RETURN(loaded);
+  scenes.set_active_scene((*loaded).scene->id());
   return {};
 }
 
@@ -347,10 +356,11 @@ Result<SceneLoadResult> load_scene_file(SceneManager& scenes,
                                         const std::filesystem::path& path) {
   Result<json> scene_json = parse_json_file(path);
   REQUIRED_OR_RETURN(scene_json);
-  Result<void> loaded = deserialize_scene_json(scenes, serialization, *scene_json);
+  Result<SceneLoadResult> loaded =
+      deserialize_scene_json_to_scene(scenes, serialization, *scene_json);
   REQUIRED_OR_RETURN(loaded);
-  Scene* scene = scenes.active_scene();
-  return SceneLoadResult{.scene_id = scene->id(), .scene = scene};
+  scenes.set_active_scene((*loaded).scene->id());
+  return loaded;
 }
 
 Result<void> validate_scene_file(const SceneSerializationContext& serialization,

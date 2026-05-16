@@ -4,7 +4,6 @@
 #include <nlohmann/json.hpp>
 
 #include "core/Result.hpp"
-#include "engine/scene/SceneIds.hpp"
 #include "engine/scene/SceneManager.hpp"
 
 namespace teng::core {
@@ -20,12 +19,14 @@ class Scene;
 void derive_local_to_world(Scene& scene);
 
 struct SceneLoadResult {
-  SceneId scene_id;
   Scene* scene{};
 };
 
 [[nodiscard]] Result<nlohmann::ordered_json> serialize_scene_to_json(
     const Scene& scene, const SceneSerializationContext& serialization);
+[[nodiscard]] Result<SceneLoadResult> deserialize_scene_json_to_scene(
+    SceneManager& scenes, const SceneSerializationContext& serialization,
+    const nlohmann::json& scene_json);
 [[nodiscard]] Result<void> deserialize_scene_json(SceneManager& scenes,
                                                   const SceneSerializationContext& serialization,
                                                   const nlohmann::json& json);

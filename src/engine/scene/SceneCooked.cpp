@@ -1003,7 +1003,7 @@ Result<SceneLoadResult> load_cooked_scene_file(SceneManager& scenes,
   REQUIRED_OR_RETURN(populated);
   derive_local_to_world(scene);
   scenes.set_active_scene(scene.id());
-  return SceneLoadResult{.scene_id = scene.id(), .scene = &scene};
+  return SceneLoadResult{.scene = &scene};
 }
 
 }  // namespace teng::engine

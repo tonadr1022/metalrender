@@ -214,6 +214,38 @@ bool run_scene_serialization_smoke_test() {
     return false;
   }
 
+  const SceneId edit_scene_id = scene.id();
+  Result<nlohmann::ordered_json> edit_snapshot =
+      serialize_scene_to_json(scene, test_contexts.scene_serialization);
+  if (!edit_snapshot) {
+    return false;
+  }
+  Result<SceneLoadResult> play_copy = deserialize_scene_json_to_scene(
+      scenes, test_contexts.scene_serialization, json::parse((*edit_snapshot).dump()));
+  if (!play_copy || !(*play_copy).scene || (*play_copy).scene == &scene ||
+      (*play_copy).scene->id() == edit_scene_id || scenes.active_scene() != &scene) {
+    return false;
+  }
+  const Scene& play_scene = *(*play_copy).scene;
+  if (!play_scene.has_entity(EntityGuid{1001}) || !play_scene.has_entity(EntityGuid{1002}) ||
+      !play_scene.has_entity(EntityGuid{1003})) {
+    return false;
+  }
+  const LocalToWorld* play_mesh_ltw = play_scene.get_local_to_world(EntityGuid{1003});
+  if (!play_mesh_ltw || !approx((*play_mesh_ltw).value[3][0], 2.f)) {
+    return false;
+  }
+
+  SceneManager wrapper_scenes(test_contexts.flecs_components);
+  Scene& wrapper_edit_scene = wrapper_scenes.create_scene("wrapper edit");
+  const SceneId wrapper_edit_id = wrapper_edit_scene.id();
+  const Result<void> wrapper_loaded = deserialize_scene_json(
+      wrapper_scenes, test_contexts.scene_serialization, json::parse((*edit_snapshot).dump()));
+  if (!wrapper_loaded || wrapper_scenes.active_scene() == &wrapper_edit_scene ||
+      !wrapper_scenes.active_scene() || wrapper_scenes.active_scene_id() == wrapper_edit_id) {
+    return false;
+  }
+
   const std::filesystem::path invalid_path = root / "invalid.tscene.json";
   if (!write_text_file(invalid_path,
                        "{ \"scene_format_version\": 2, \"schema\": { \"required_modules\": [], "

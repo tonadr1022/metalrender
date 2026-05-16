@@ -116,7 +116,7 @@ int main(int argc, char* argv[]) {
   }
   engine.layers().push_layer(std::make_unique<teng::engine::ImGuiOverlayLayer>());
   engine.layers().push_layer(
-      std::make_unique<teng::editor::EditorLayer>(loaded->scene_id, scene_path));
+      std::make_unique<teng::editor::EditorLayer>(loaded->scene->id(), scene_path));
   engine.run();
   return 0;
 }
