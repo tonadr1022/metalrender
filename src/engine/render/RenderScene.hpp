@@ -28,6 +28,21 @@ struct RenderCamera {
   uint32_t render_layer_mask{0xffffffffu};
 };
 
+enum class RenderViewKind {
+  Runtime,
+  Editor,
+};
+
+struct SceneRenderView {
+  glm::mat4 view{1.f};
+  glm::mat4 projection{1.f};
+  glm::vec3 position{};
+  float near_plane{0.1f};
+  float far_plane{10'000.f};
+  RenderViewKind kind{RenderViewKind::Runtime};
+  bool valid{};
+};
+
 struct RenderDirectionalLight {
   EntityGuid entity;
   glm::mat4 local_to_world{1.f};
@@ -61,5 +76,8 @@ struct RenderScene {
   std::vector<RenderMesh> meshes;
   std::vector<RenderSprite> sprites;
 };
+
+[[nodiscard]] SceneRenderView make_runtime_scene_render_view(const RenderScene& scene,
+                                                             glm::uvec2 fallback_extent);
 
 }  // namespace teng::engine

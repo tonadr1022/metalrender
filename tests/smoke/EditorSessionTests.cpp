@@ -1,10 +1,17 @@
 #include <catch2/catch_test_macros.hpp>
 #include <filesystem>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/geometric.hpp>
 #include <optional>
 #include <system_error>
 
 #include "TestHelpers.hpp"
+#include "editor/EditorViewportCamera.hpp"
+#include "editor/EditorViewportTarget.hpp"
 #include "editor/EditorSession.hpp"
+#include "engine/Input.hpp"
+#include "engine/render/RenderScene.hpp"
+#include "engine/scene/SceneComponents.hpp"
 #include "engine/scene/Scene.hpp"
 #include "engine/scene/SceneManager.hpp"
 
@@ -128,6 +135,89 @@ TEST_CASE("EditorSelection set and clear is independent from document save state
   session.selection().clear();
   CHECK_FALSE(session.selection().selected());
   CHECK_FALSE(session.document_controller().dirty());
+}
+
+TEST_CASE("Editor viewport extent clamps to a minimum size", "[editor]") {
+  CHECK(clamp_editor_viewport_extent({0, 0}) == k_editor_viewport_min_extent);
+  CHECK(clamp_editor_viewport_extent({2, 4}) == k_editor_viewport_min_extent);
+  CHECK(clamp_editor_viewport_extent({100, 200}) == glm::uvec2{100, 200});
+}
+
+TEST_CASE("EditorViewportCamera projection respects panel aspect", "[editor]") {
+  const EditorViewportCamera camera;
+  const engine::SceneRenderView wide = camera.make_render_view({800u, 400u});
+  const engine::SceneRenderView square = camera.make_render_view({400u, 400u});
+  REQUIRE(wide.valid);
+  REQUIRE(square.valid);
+  CHECK(wide.projection[0][0] < square.projection[0][0]);
+}
+
+TEST_CASE("EditorViewportCamera movement is transient editor state", "[editor]") {
+  const engine::SceneTestContexts contexts = engine::make_scene_test_contexts();
+  engine::SceneManager scenes(contexts.flecs_components);
+  const engine::Scene& scene = make_editor_test_scene(scenes);
+  const flecs::entity entity = scene.find_entity(engine::EntityGuid{0x10});
+  const engine::Transform before_transform = entity.get<engine::Transform>();
+  const engine::LocalToWorld before_local_to_world = entity.get<engine::LocalToWorld>();
+
+  EditorSession session;
+  REQUIRE(session.bind(scenes, contexts.scene_serialization, scene.id(), std::nullopt));
+  EditorViewportCamera camera;
+
+  engine::EngineInputSnapshot input;
+  input.held_keys.insert(engine::KeyCode::W);
+  input.cursor_delta = {10.f, -5.f};
+  camera.update(input, 0.5f, true);
+
+  CHECK_FALSE(session.document_controller().dirty());
+  CHECK(entity.get<engine::Transform>().translation == before_transform.translation);
+  CHECK(entity.get<engine::Transform>().rotation == before_transform.rotation);
+  CHECK(entity.get<engine::Transform>().scale == before_transform.scale);
+  CHECK(entity.get<engine::LocalToWorld>().value == before_local_to_world.value);
+
+  const engine::SceneRenderView view = camera.make_render_view({1280u, 720u});
+  CHECK(view.valid);
+  CHECK(view.kind == engine::RenderViewKind::Editor);
+  CHECK(glm::length(camera.position() - glm::vec3{0.f, 1.5f, 5.f}) > 0.01f);
+}
+
+TEST_CASE("Runtime render view selection prefers primary authored camera", "[render]") {
+  engine::RenderScene scene;
+  scene.frame.output_extent = {1920u, 1080u};
+  scene.cameras.push_back(engine::RenderCamera{
+      .entity = engine::EntityGuid{0x20},
+      .local_to_world = glm::translate(glm::mat4{1.f}, glm::vec3{2.f, 3.f, 4.f}),
+      .fov_y = 0.7f,
+      .z_near = 0.2f,
+      .z_far = 500.f,
+      .primary = false,
+  });
+  scene.cameras.push_back(engine::RenderCamera{
+      .entity = engine::EntityGuid{0x30},
+      .local_to_world = glm::translate(glm::mat4{1.f}, glm::vec3{8.f, 9.f, 10.f}),
+      .fov_y = 0.9f,
+      .z_near = 0.3f,
+      .z_far = 750.f,
+      .primary = true,
+  });
+
+  const engine::SceneRenderView view = engine::make_runtime_scene_render_view(scene, {});
+
+  CHECK(view.valid);
+  CHECK(view.kind == engine::RenderViewKind::Runtime);
+  CHECK(view.position == glm::vec3{8.f, 9.f, 10.f});
+  CHECK(view.near_plane == 0.3f);
+  CHECK(view.far_plane == 750.f);
+}
+
+TEST_CASE("Runtime render view is invalid without an authored camera", "[render]") {
+  engine::RenderScene scene;
+  scene.frame.output_extent = {800u, 600u};
+
+  const engine::SceneRenderView view = engine::make_runtime_scene_render_view(scene, {});
+
+  CHECK_FALSE(view.valid);
+  CHECK(view.kind == engine::RenderViewKind::Runtime);
 }
 
 // NOLINTEND(misc-use-anonymous-namespace)

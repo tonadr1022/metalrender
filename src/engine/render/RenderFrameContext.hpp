@@ -27,6 +27,11 @@ namespace teng::engine {
 struct EngineTime;
 class SceneManager;
 
+struct RenderPresentation {
+  glm::uvec2 scene_extent{};
+  gfx::rhi::TextureHandle color_target;
+};
+
 struct RenderFrameContext {
   gfx::rhi::Device* device{};
   gfx::rhi::Swapchain* swapchain{};
@@ -40,6 +45,7 @@ struct RenderFrameContext {
   const std::filesystem::path* resource_dir{};
   const EngineTime* time{};
   glm::uvec2 output_extent{};
+  RenderPresentation presentation{};
   gfx::RGResourceId curr_swapchain_rg_id{};
   uint64_t frame_index{};
   uint32_t curr_frame_in_flight_idx{};

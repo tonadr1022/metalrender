@@ -47,35 +47,12 @@ const char* gpu_adapter_kind_str(rhi::GpuAdapterKind k) {
   }
 }
 
-glm::mat4 infinite_perspective_proj(float fov_y, float aspect, float z_near) {
-  // clang-format off
-  const float f = 1.0f / tanf(fov_y / 2.0f);
-  return {
-    f / aspect, 0.0f, 0.0f, 0.0f,
-    0.0f, f, 0.0f, 0.0f,
-    0.0f, 0.0f, 0.0f, -1.0f,
-    0.0f, 0.0f, z_near, 0.0f};
-  // clang-format on
-}
-
 glm::vec3 safe_normalize_toward_light(const glm::vec3& v) {
   const float s2 = glm::dot(v, v);
   if (s2 < 1e-12f) {
     return glm::normalize(glm::vec3(0.35f, 1.f, 0.4f));
   }
   return v * (1.f / std::sqrt(s2));
-}
-
-const engine::RenderCamera* pick_camera(const engine::RenderScene& scene) {
-  for (const auto& c : scene.cameras) {
-    if (c.primary) {
-      return &c;
-    }
-  }
-  if (!scene.cameras.empty()) {
-    return &scene.cameras.front();
-  }
-  return nullptr;
 }
 
 glm::vec3 directional_toward_light_unit_ws(const engine::RenderScene& scene) {
@@ -86,21 +63,13 @@ glm::vec3 directional_toward_light_unit_ws(const engine::RenderScene& scene) {
   return safe_normalize_toward_light(raw);
 }
 
-std::optional<ViewData> build_view_data_for_camera(const engine::RenderCamera& cam,
-                                                   glm::uvec2 extent_primary,
-                                                   glm::uvec2 extent_fallback) {
-  glm::uvec2 ext = extent_primary;
-  if (ext.x == 0 || ext.y == 0) {
-    ext = extent_fallback;
-  }
-  if (ext.x == 0 || ext.y == 0) {
+std::optional<ViewData> build_view_data_for_scene_view(const engine::SceneRenderView& scene_view) {
+  if (!scene_view.valid) {
     return std::nullopt;
   }
-  const float aspect = static_cast<float>(ext.x) / std::max(1.f, static_cast<float>(ext.y));
-  const float fov_y = cam.fov_y > 1e-6f ? cam.fov_y : glm::radians(60.f);
-  const float z_near = cam.z_near > 0.f ? cam.z_near : 0.1f;
-  const glm::mat4 proj = infinite_perspective_proj(fov_y, aspect, z_near);
-  const glm::mat4 view = glm::inverse(cam.local_to_world);
+
+  const glm::mat4 view = scene_view.view;
+  const glm::mat4 proj = scene_view.projection;
   const glm::mat4 vp = proj * view;
 
   ViewData vd{};
@@ -109,9 +78,34 @@ std::optional<ViewData> build_view_data_for_camera(const engine::RenderCamera& c
   vd.view = view;
   vd.proj = proj;
   vd.inv_proj = glm::inverse(proj);
-  vd.camera_pos = cam.local_to_world * glm::vec4(0.f, 0.f, 0.f, 1.f);
+  vd.camera_pos = glm::vec4{scene_view.position, 1.f};
   return vd;
 }
+
+[[nodiscard]] AttachmentInfo scene_sized_attachment(rhi::TextureFormat format, glm::uvec2 extent) {
+  return AttachmentInfo{
+      .format = format,
+      .dims = extent,
+      .size_class = SizeClass::Custom,
+  };
+}
+
+}  // namespace
+
+glm::uvec2 MeshletRenderer::effective_scene_extent(const engine::RenderFrameContext& frame) {
+  if (frame.presentation.scene_extent.x > 0 && frame.presentation.scene_extent.y > 0) {
+    return frame.presentation.scene_extent;
+  }
+  if (frame.output_extent.x > 0 && frame.output_extent.y > 0) {
+    return frame.output_extent;
+  }
+  if (frame.swapchain != nullptr) {
+    return {frame.swapchain->desc_.width, frame.swapchain->desc_.height};
+  }
+  return {};
+}
+
+namespace {
 
 void add_buffer_readback_copy2(RenderGraph& rg, std::string_view pass_name, RGResourceId& src_buf,
                                RGResourceId dst_rg_id, size_t src_offset, size_t dst_offset,
@@ -213,7 +207,7 @@ void MeshletRenderer::shutdown_subsystems() {
 }
 
 void MeshletRenderer::shutdown_gpu() {
-  rhi::Device* device = gpu_device_;
+  const rhi::Device* device = gpu_device_;
   if (gpu_initialized_) {
     shutdown_subsystems();
   }
@@ -243,12 +237,7 @@ void MeshletRenderer::make_depth_pyramid_tex(const engine::RenderFrameContext& f
   if (!depth_pyramid_) {
     return;
   }
-  glm::uvec2 dims = frame.output_extent;
-  if (dims.x == 0 || dims.y == 0) {
-    if (frame.swapchain != nullptr) {
-      dims = {frame.swapchain->desc_.width, frame.swapchain->desc_.height};
-    }
-  }
+  const glm::uvec2 dims = effective_scene_extent(frame);
   if (dims.x == 0 || dims.y == 0) {
     return;
   }
@@ -261,11 +250,26 @@ void MeshletRenderer::on_resize(engine::RenderFrameContext& frame) {
 
 void MeshletRenderer::on_imgui(engine::RenderFrameContext&) { imgui_gpu_panels(); }
 
-void MeshletRenderer::bake_swapchain_clear(engine::RenderFrameContext& frame,
-                                           std::string_view pass_name) {
-  ASSERT(frame.swapchain != nullptr);
+void MeshletRenderer::bake_present_clear(engine::RenderFrameContext& frame,
+                                         std::string_view pass_name) {
   const glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
   auto& p = frame.render_graph->add_graphics_pass(pass_name);
+  if (frame.presentation.color_target.is_valid()) {
+    RGResourceId present_id = frame.render_graph->import_external_texture(
+        frame.presentation.color_target,
+        RGState{.stage = PipelineStage::BottomOfPipe, .layout = ResourceLayout::Undefined},
+        pass_name);
+    present_id = p.write_color_output(present_id);
+    p.set_ex([color_target = frame.presentation.color_target, clear_color](CmdEncoder* enc) {
+      enc->begin_rendering({
+          RenderAttInfo::color_att(color_target, LoadOp::Clear, ClearValue{.color = clear_color}),
+      });
+      enc->end_rendering();
+    });
+    return;
+  }
+
+  ASSERT(frame.swapchain != nullptr);
   frame.curr_swapchain_rg_id = p.w_swapchain_tex_new(frame.swapchain, frame.curr_swapchain_rg_id);
   p.set_ex([swapchain = frame.swapchain, clear_color](CmdEncoder* enc) {
     enc->begin_rendering({
@@ -369,7 +373,8 @@ void MeshletRenderer::imgui_gpu_panels() {
   }
 }
 
-void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) {
+void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::RenderScene& scene,
+                             const engine::SceneRenderView& scene_view) {
   lazy_init(frame);
   last_imgui_frame_ = MeshletImguiFrameSnapshot{
       .device = frame.device,
@@ -411,27 +416,23 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
   auto& batch = frame.model_gpu_mgr->geometry_batch();
   const size_t task_cmd_count = batch.task_cmd_count;
   if (task_cmd_count == 0 || batch.get_stats().vertex_count == 0) {
-    bake_swapchain_clear(frame, "meshlet_empty_scene_clear");
+    bake_present_clear(frame, "meshlet_empty_scene_clear");
     return;
   }
 
-  const engine::RenderCamera* active_cam = pick_camera(scene);
-  if (active_cam == nullptr) {
-    bake_swapchain_clear(frame, "meshlet_no_camera_clear");
+  if (!scene_view.valid) {
+    bake_present_clear(frame, "meshlet_no_camera_clear");
     return;
   }
 
-  const glm::uvec2 extent_primary = scene.frame.output_extent;
-  const glm::uvec2 extent_fallback = frame.output_extent;
-  const std::optional<ViewData> view_opt =
-      build_view_data_for_camera(*active_cam, extent_primary, extent_fallback);
+  const std::optional<ViewData> view_opt = build_view_data_for_scene_view(scene_view);
   if (!view_opt.has_value()) {
-    bake_swapchain_clear(frame, "meshlet_bad_extent_clear");
+    bake_present_clear(frame, "meshlet_bad_view_clear");
     return;
   }
 
-  const float z_near = active_cam->z_near > 0.f ? active_cam->z_near : 0.1f;
-  const float z_far = active_cam->z_far > z_near ? active_cam->z_far : 10'000.f;
+  const float z_near = scene_view.near_plane > 0.f ? scene_view.near_plane : 0.1f;
+  const float z_far = scene_view.far_plane > z_near ? scene_view.far_plane : 10'000.f;
   const glm::vec3 toward_light = directional_toward_light_unit_ws(scene);
 
   if (frame.swapchain != nullptr) {
@@ -444,7 +445,7 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
     const size_t n = frame.model_gpu_mgr->instance_mgr().get_num_meshlet_vis_buf_elements();
     const size_t need = n * sizeof(uint32_t);
     if (need == 0) {
-      bake_swapchain_clear(frame, "meshlet_empty_vis_clear");
+      bake_present_clear(frame, "meshlet_empty_vis_clear");
       return;
     }
     const rhi::Buffer* cur =
@@ -462,7 +463,7 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
     }
   }
   if (!meshlet_vis_buf_.handle.is_valid()) {
-    bake_swapchain_clear(frame, "meshlet_invalid_vis_buf_clear");
+    bake_present_clear(frame, "meshlet_invalid_vis_buf_clear");
     return;
   }
 
@@ -485,18 +486,22 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
     });
   }
 
-  ASSERT(frame_uniform_gpu_allocator_.has_value());
-  frame_uniform_gpu_allocator_->set_frame_idx_and_reset_bufs(frame.curr_frame_in_flight_idx);
+  if (!frame_uniform_gpu_allocator_.has_value()) {
+    bake_present_clear(frame, "meshlet_missing_frame_allocator_clear");
+    return;
+  }
+  GPUFrameAllocator3& frame_uniform_allocator = frame_uniform_gpu_allocator_.value();
+  frame_uniform_allocator.set_frame_idx_and_reset_bufs(frame.curr_frame_in_flight_idx);
 
   frame_num_++;
 
   ViewData vd = *view_opt;
-  auto view_cb_suballoc = frame_uniform_gpu_allocator_->alloc2(sizeof(ViewData), &vd);
+  auto view_cb_suballoc = frame_uniform_allocator.alloc2(sizeof(ViewData), &vd);
 
   auto cd_early = prepare_cull_data_for_proj(vd.proj, z_near, z_far);
-  auto cull_early_cb = frame_uniform_gpu_allocator_->alloc2(sizeof(CullData), &cd_early);
+  auto cull_early_cb = frame_uniform_allocator.alloc2(sizeof(CullData), &cd_early);
   auto cd_late = prepare_cull_data_late(vd, z_near, z_far);
-  auto cull_late_cb = frame_uniform_gpu_allocator_->alloc2(sizeof(CullData), &cd_late);
+  auto cull_late_cb = frame_uniform_allocator.alloc2(sizeof(CullData), &cd_late);
 
   BufferSuballoc globals_cb_buf;
   BufferSuballoc shadow_globals_cb_buf;
@@ -509,12 +514,12 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
     gd.meshlet_stats_enabled = 1;
     gd._padding = 0;
     gd.diffuse_light_dir_world = glm::vec4(toward_light, 0.f);
-    globals_cb_buf = frame_uniform_gpu_allocator_->alloc2(sizeof(GlobalData), &gd);
+    globals_cb_buf = frame_uniform_allocator.alloc2(sizeof(GlobalData), &gd);
 
     GlobalData shadow_gd = gd;
     shadow_gd.meshlet_stats_enabled = 0;
     shadow_gd.render_mode = DEBUG_RENDER_MODE_NONE;
-    shadow_globals_cb_buf = frame_uniform_gpu_allocator_->alloc2(sizeof(GlobalData), &shadow_gd);
+    shadow_globals_cb_buf = frame_uniform_allocator.alloc2(sizeof(GlobalData), &shadow_gd);
   }
 
   RGResourceId instance_vis_current_rg{};
@@ -560,13 +565,13 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
       early_draws);
   late_draws.visible_object_count_rg = early_draws.visible_object_count_rg;
 
+  const glm::uvec2 scene_ext = effective_scene_extent(frame);
   RGResourceId gbuffer_a_id = frame.render_graph->create_texture(
-      {.format = rhi::TextureFormat::R16G16B16A16Sfloat}, "gbuffer_a");
+      scene_sized_attachment(rhi::TextureFormat::R16G16B16A16Sfloat, scene_ext), "gbuffer_a");
   RGResourceId gbuffer_b_id = frame.render_graph->create_texture(
-      {.format = rhi::TextureFormat::R16G16B16A16Sfloat}, "gbuffer_b");
+      scene_sized_attachment(rhi::TextureFormat::R16G16B16A16Sfloat, scene_ext), "gbuffer_b");
   const RGResourceId depth_att = frame.render_graph->create_texture(
-      {.format = TextureFormat::D32float, .size_class = SizeClass::Swapchain},
-      "meshlet_hello_depth_att");
+      scene_sized_attachment(TextureFormat::D32float, scene_ext), "meshlet_hello_depth_att");
   RGResourceId depth_att_id{};
 
   uint32_t meshlet_flags = MESHLET_OCCLUSION_CULL_ENABLED_BIT;
@@ -581,7 +586,7 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
       .task_cmd_count = task_cmd_count,
       .meshlet_vis_rg = meshlet_vis_rg_id,
       .meshlet_stats_rg = meshlet_stats_rg,
-      .frame_uniform_allocator = *frame_uniform_gpu_allocator_,
+      .frame_uniform_allocator = frame_uniform_allocator,
       .draw_prep = *draw_prep_,
   });
 
@@ -601,16 +606,12 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
     RenderGraph* rg = frame.render_graph;
     rhi::Device* device = frame.device;
     ModelGPUMgr* model_gpu_mgr = frame.model_gpu_mgr;
-    const glm::uvec2 out_ext = frame.output_extent;
-    rhi::Swapchain* swapchain = frame.swapchain;
+    const glm::uvec2 scene_ext = effective_scene_extent(frame);
     p.set_ex([this, early_draws, depth_att_id, view_cb_suballoc, globals_cb_buf, gbuffer_a_id,
               gbuffer_b_id, meshlet_vis_rg_id, meshlet_stats_rg, meshlet_flags, cull_early_cb, rg,
-              device, model_gpu_mgr, out_ext, swapchain](CmdEncoder* enc) {
+              device, model_gpu_mgr, scene_ext](CmdEncoder* enc) {
       const glm::vec4 clear_color{0.06f, 0.07f, 0.09f, 1.f};
-      const glm::uvec2 vp_u = (out_ext.x > 0 && out_ext.y > 0)
-                                  ? out_ext
-                                  : glm::uvec2{swapchain->desc_.width, swapchain->desc_.height};
-      const glm::ivec2 vp_dims{static_cast<int>(vp_u.x), static_cast<int>(vp_u.y)};
+      const glm::ivec2 vp_dims{static_cast<int>(scene_ext.x), static_cast<int>(scene_ext.y)};
       enc->begin_rendering({
           RenderAttInfo::color_att(rg->get_att_img(gbuffer_a_id), LoadOp::Clear,
                                    ClearValue{.color = clear_color}),
@@ -673,15 +674,11 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
       RenderGraph* rg = frame.render_graph;
       rhi::Device* device = frame.device;
       ModelGPUMgr* model_gpu_mgr = frame.model_gpu_mgr;
-      const glm::uvec2 out_ext = frame.output_extent;
-      rhi::Swapchain* swapchain = frame.swapchain;
+      const glm::uvec2 scene_ext = effective_scene_extent(frame);
       p.set_ex([this, late_draws, depth_att_id, view_cb_suballoc, globals_cb_buf, gbuffer_a_id,
                 gbuffer_b_id, meshlet_vis_rg_id, meshlet_stats_rg, meshlet_flags, cull_late_cb, rg,
-                device, model_gpu_mgr, out_ext, swapchain](CmdEncoder* enc) {
-        const glm::uvec2 vp_u = (out_ext.x > 0 && out_ext.y > 0)
-                                    ? out_ext
-                                    : glm::uvec2{swapchain->desc_.width, swapchain->desc_.height};
-        const glm::ivec2 vp_dims{static_cast<int>(vp_u.x), static_cast<int>(vp_u.y)};
+                device, model_gpu_mgr, scene_ext](CmdEncoder* enc) {
+        const glm::ivec2 vp_dims{static_cast<int>(scene_ext.x), static_cast<int>(scene_ext.y)};
         enc->begin_rendering({
             RenderAttInfo::color_att(rg->get_att_img(gbuffer_a_id), LoadOp::Load,
                                      ClearValue{.color = glm::vec4{0.f}}),
@@ -744,18 +741,31 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
                    RgSubresourceRange::all_mips_all_slices());
     }
 
-    p.w_swapchain_tex_new(frame.swapchain, frame.curr_swapchain_rg_id);
+    const glm::uvec2 shade_ext = effective_scene_extent(frame);
+    const rhi::TextureHandle present_color = frame.presentation.color_target;
+    if (present_color.is_valid()) {
+      const RGResourceId present_id = frame.render_graph->import_external_texture(
+          present_color,
+          RGState{.stage = PipelineStage::BottomOfPipe, .layout = ResourceLayout::Undefined},
+          "editor_viewport_shade_target");
+      p.write_color_output(present_id);
+    } else {
+      p.w_swapchain_tex_new(frame.swapchain, frame.curr_swapchain_rg_id);
+    }
 
     {
-      RenderGraph* rg = frame.render_graph;
+      const RenderGraph* rg = frame.render_graph;
       rhi::Device* device = frame.device;
-      const glm::uvec2 out_ext = frame.output_extent;
       rhi::Swapchain* swapchain = frame.swapchain;
       p.set_ex([this, gbuffer_a_id, gbuffer_b_id, depth_att_id, shadow_output, depth_reduce_ran,
-                globals_cb_buf, view_cb_suballoc, swapchain, device, rg, out_ext](CmdEncoder* enc) {
-        enc->begin_rendering({
-            RenderAttInfo::color_att(swapchain->get_current_texture(), LoadOp::DontCare),
-        });
+                globals_cb_buf, view_cb_suballoc, swapchain, device, rg, shade_ext,
+                present_color](CmdEncoder* enc) {
+        if (present_color.is_valid()) {
+          enc->begin_rendering({RenderAttInfo::color_att(present_color, LoadOp::DontCare)});
+        } else {
+          enc->begin_rendering(
+              {RenderAttInfo::color_att(swapchain->get_current_texture(), LoadOp::DontCare)});
+        }
         enc->bind_pipeline(shade_pso_);
         enc->bind_cbv(globals_cb_buf.buf, GLOBALS_SLOT, globals_cb_buf.offset_bytes,
                       sizeof(GlobalData));
@@ -765,11 +775,8 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
                       sizeof(CSMData));
         enc->set_wind_order(rhi::WindOrder::CounterClockwise);
         enc->set_cull_mode(rhi::CullMode::None);
-        const glm::uvec2 dims = (out_ext.x > 0 && out_ext.y > 0)
-                                    ? out_ext
-                                    : glm::uvec2{swapchain->desc_.width, swapchain->desc_.height};
-        enc->set_viewport({0, 0}, dims);
-        enc->set_scissor({0, 0}, dims);
+        enc->set_viewport({0, 0}, shade_ext);
+        enc->set_scissor({0, 0}, shade_ext);
 
         const uint32_t gbuffer_a_bindless =
             device->get_tex(rg->get_att_img(gbuffer_a_id))->bindless_idx();
@@ -794,8 +801,8 @@ void MeshletRenderer::render(engine::RenderFrameContext& frame, const engine::Re
             .depth_idx = depth_bindless,
             .shadow_depth_array_idx = shadow_bindless,
             .depth_pyramid_view_idx = pyramid_view_bindless,
-            .swap_w = dims.x,
-            .swap_h = dims.y,
+            .swap_w = shade_ext.x,
+            .swap_h = shade_ext.y,
             .pyramid_base_w = pyramid_base.x,
             .pyramid_base_h = pyramid_base.y,
         };

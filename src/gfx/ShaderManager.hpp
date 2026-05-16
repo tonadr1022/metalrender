@@ -12,11 +12,6 @@
 
 namespace TENG_NAMESPACE {
 
-namespace rhi {
-struct GraphicsPipelineCreateInfo;
-struct ShaderCreateInfo;
-}  // namespace rhi
-
 namespace gfx {
 
 class ShaderManager {

@@ -62,11 +62,14 @@ class RenderService {
   void shutdown();
   void set_renderer(std::unique_ptr<IRenderer> renderer);
   void begin_frame();
+  void begin_scene_presentation(RenderPresentation presentation);
   void enqueue_active_scene();
+  void enqueue_active_scene(const SceneRenderView& view);
   void enqueue_imgui_overlay_pass();
   void shutdown_imgui_renderer();
   void end_frame();
   void render_scene(const RenderScene& scene);
+  void render_scene(const RenderScene& scene, const SceneRenderView& view);
   void set_imgui_ui_active(bool active);
   void on_imgui();
   void request_render_graph_debug_dump();
@@ -75,9 +78,16 @@ class RenderService {
   [[nodiscard]] RenderFrameContext& frame_context() { return frame_; }
   [[nodiscard]] const RenderFrameContext& frame_context() const { return frame_; }
   [[nodiscard]] const RenderScene& last_extracted_scene() const { return last_extracted_scene_; }
+  [[nodiscard]] const SceneRenderView& last_submitted_view() const { return last_submitted_view_; }
+  [[nodiscard]] bool scene_submitted_this_frame() const { return scene_submitted_this_frame_; }
+  [[nodiscard]] uint32_t viewport_color_bindless_view() const {
+    return viewport_color_bindless_view_;
+  }
   [[nodiscard]] gfx::RenderGraph& render_graph() { return render_graph_; }
 
  private:
+  [[nodiscard]] SceneRenderView derive_runtime_view(const RenderScene& scene) const;
+  void submit_scene(const RenderScene& scene, const SceneRenderView& view);
   void update_frame_context();
   void flush_pending_buffer_copies(gfx::rhi::CmdEncoder* enc);
   void flush_pending_texture_uploads(gfx::rhi::CmdEncoder* enc);
@@ -99,8 +109,12 @@ class RenderService {
   gfx::RenderGraph render_graph_;
   RenderFrameContext frame_;
   RenderScene last_extracted_scene_;
+  SceneRenderView last_submitted_view_;
   std::vector<gfx::rhi::SamplerHandleHolder> samplers_;
+  RenderPresentation pending_presentation_{};
+  uint32_t viewport_color_bindless_view_{UINT32_MAX};
   bool frame_open_{};
+  bool scene_submitted_this_frame_{};
   bool initialized_{};
 };
 

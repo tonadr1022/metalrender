@@ -24,6 +24,11 @@ constexpr uint32_t kImGuiCsmArrayHighPrefix = 0x0A11CEB;  // (tid>>40) == 0x0A11
   return ImTextureRef{static_cast<ImTextureID>(packed)};
 }
 
+// Sampled as Texture2D<float4> via bindless_textures (ImGuiRenderer decodes handle -> bindless_idx).
+[[nodiscard]] inline ImTextureRef MakeImGuiTexRefTextureHandle(rhi::TextureHandle handle) {
+  return ImTextureRef{static_cast<ImTextureID>(handle.to64())};
+}
+
 [[nodiscard]] inline ImTextureRef MakeImGuiTexRefCsmArraySlice(uint32_t array_bindless_idx,
                                                                uint32_t cascade_layer) {
   const uint32_t high32 = (kImGuiCsmArrayHighPrefix << 8) | (cascade_layer & 0xFFu);

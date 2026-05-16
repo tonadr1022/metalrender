@@ -65,7 +65,7 @@ class RenderModelResidencyService {
       if (!mesh.model.is_valid() || entity_instances_.contains(mesh.entity)) {
         continue;
       }
-      ModelResidency* model = ensure_model_resident(mesh.model);
+      const ModelResidency* model = ensure_model_resident(mesh.model);
       if (model) {
         reserve_requests.emplace_back(model->gpu_handle, 1);
       }
@@ -132,7 +132,7 @@ class RenderModelResidencyService {
       free_entity_instance(mesh.entity);
     }
 
-    ModelResidency* model = ensure_model_resident(mesh.model);
+    const ModelResidency* model = ensure_model_resident(mesh.model);
     if (!model) {
       return;
     }
@@ -164,10 +164,11 @@ class RenderModelResidencyService {
 
     ModelGPUHandle gpu_handle;
     model_gpu_mgr_.upload_model(imported.asset->load_result, imported.asset->model, gpu_handle);
-    auto [inserted, did_insert] = models_.emplace(asset_id, ModelResidency{
-                                                               .model = std::move(imported.asset->model),
-                                                               .gpu_handle = gpu_handle,
-                                                           });
+    auto [inserted, did_insert] =
+        models_.emplace(asset_id, ModelResidency{
+                                      .model = std::move(imported.asset->model),
+                                      .gpu_handle = gpu_handle,
+                                  });
     ASSERT(did_insert);
     return &inserted->second;
   }
@@ -280,6 +281,7 @@ void RenderService::shutdown() {
   assets_ = nullptr;
   time_ = nullptr;
   frame_open_ = false;
+  scene_submitted_this_frame_ = false;
   initialized_ = false;
 }
 
@@ -311,6 +313,15 @@ void RenderService::begin_frame() {
                    .layout = gfx::rhi::ResourceLayout::Undefined},
       "swapchain");
   frame_open_ = true;
+  scene_submitted_this_frame_ = false;
+  viewport_color_bindless_view_ = UINT32_MAX;
+  pending_presentation_ = {};
+  frame_.presentation = {};
+}
+
+void RenderService::begin_scene_presentation(RenderPresentation presentation) {
+  ASSERT(frame_open_);
+  pending_presentation_ = presentation;
 }
 
 void RenderService::enqueue_active_scene() {
@@ -319,6 +330,13 @@ void RenderService::enqueue_active_scene() {
   ASSERT(frame_open_);
   ASSERT(renderer_ != nullptr);
 
+  const glm::uvec2 scene_extent =
+      pending_presentation_.scene_extent.x > 0 && pending_presentation_.scene_extent.y > 0
+          ? pending_presentation_.scene_extent
+          : frame_.output_extent;
+  frame_.presentation = pending_presentation_;
+  pending_presentation_ = {};
+
   Scene* active_scene = scenes_->active_scene();
   last_extracted_scene_ =
       active_scene
@@ -326,15 +344,44 @@ void RenderService::enqueue_active_scene() {
                                                      RenderSceneFrame{
                                                          .frame_index = frame_.frame_index,
                                                          .delta_seconds = time_->delta_seconds,
-                                                         .output_extent = frame_.output_extent,
+                                                         .output_extent = scene_extent,
                                                      }})
           : RenderScene{.frame = RenderSceneFrame{
                             .frame_index = frame_.frame_index,
                             .delta_seconds = time_->delta_seconds,
-                            .output_extent = frame_.output_extent,
+                            .output_extent = scene_extent,
                         }};
-  model_residency_->reconcile(last_extracted_scene_);
-  renderer_->render(frame_, last_extracted_scene_);
+  submit_scene(last_extracted_scene_, derive_runtime_view(last_extracted_scene_));
+}
+
+void RenderService::enqueue_active_scene(const SceneRenderView& view) {
+  ZoneScoped;
+  ASSERT(initialized_);
+  ASSERT(frame_open_);
+  ASSERT(renderer_ != nullptr);
+
+  const glm::uvec2 scene_extent =
+      pending_presentation_.scene_extent.x > 0 && pending_presentation_.scene_extent.y > 0
+          ? pending_presentation_.scene_extent
+          : frame_.output_extent;
+  frame_.presentation = pending_presentation_;
+  pending_presentation_ = {};
+
+  Scene* active_scene = scenes_->active_scene();
+  last_extracted_scene_ =
+      active_scene
+          ? extract_render_scene(*active_scene, {.frame =
+                                                     RenderSceneFrame{
+                                                         .frame_index = frame_.frame_index,
+                                                         .delta_seconds = time_->delta_seconds,
+                                                         .output_extent = scene_extent,
+                                                     }})
+          : RenderScene{.frame = RenderSceneFrame{
+                            .frame_index = frame_.frame_index,
+                            .delta_seconds = time_->delta_seconds,
+                            .output_extent = scene_extent,
+                        }};
+  submit_scene(last_extracted_scene_, view);
 }
 
 void RenderService::enqueue_imgui_overlay_pass() {
@@ -393,9 +440,16 @@ void RenderService::render_scene(const RenderScene& scene) {
   ASSERT(initialized_);
   ASSERT(renderer_ != nullptr);
 
+  render_scene(scene, derive_runtime_view(scene));
+}
+
+void RenderService::render_scene(const RenderScene& scene, const SceneRenderView& view) {
+  ZoneScoped;
+  ASSERT(initialized_);
+  ASSERT(renderer_ != nullptr);
+
   begin_frame();
-  model_residency_->reconcile(scene);
-  renderer_->render(frame_, scene);
+  submit_scene(scene, view);
   end_frame();
 }
 
@@ -416,9 +470,25 @@ void RenderService::recreate_resources_on_swapchain_resize() {
   }
 }
 
+SceneRenderView RenderService::derive_runtime_view(const RenderScene& scene) const {
+  return make_runtime_scene_render_view(scene, frame_.output_extent);
+}
+
+void RenderService::submit_scene(const RenderScene& scene, const SceneRenderView& view) {
+  model_residency_->reconcile(scene);
+  last_submitted_view_ = view;
+  scene_submitted_this_frame_ = true;
+  renderer_->render(frame_, scene, view);
+
+  const gfx::rhi::TextureHandle color_target = frame_.presentation.color_target;
+  frame_.presentation = {};
+  if (color_target.is_valid()) {
+    viewport_color_bindless_view_ = device_->get_tex_view_bindless_idx(color_target, 0);
+  }
+}
+
 void RenderService::update_frame_context() {
-  const glm::ivec2 window_size = window_->get_window_size();
-  frame_.output_extent = window_size;
+  frame_.output_extent = window_->get_window_size();
   frame_.frame_index = time_ ? time_->frame_index : 0;
   frame_.time = time_;
   frame_.device = device_;

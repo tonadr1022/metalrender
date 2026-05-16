@@ -1,11 +1,24 @@
 #include "editor/EditorLayer.hpp"
 
+#include <algorithm>
+#include <cmath>
 #include <format>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/ext/vector_float4.hpp>
 #include <string>
 #include <utility>
 
+#include "core/Logger.hpp"
+#include "engine/render/RenderFrameContext.hpp"
+#include "engine/render/RenderScene.hpp"
+#include "engine/render/RenderSceneExtractor.hpp"
+#include "engine/render/RenderService.hpp"
 #include "engine/scene/Scene.hpp"
+#include "gfx/ImGuiRenderer.hpp"
+#include "gfx/rhi/Swapchain.hpp"
+#include "gfx/rhi/Texture.hpp"
 #include "imgui.h"
+#include "imgui_internal.h"
 
 namespace teng::editor {
 
@@ -31,6 +44,9 @@ EditorLayer::EditorLayer(engine::SceneId edit_scene_id,
 
 void EditorLayer::on_attach(engine::EngineContext& ctx) {
   (void)session_.bind(ctx, edit_scene_id_, scene_path_);
+  // Phase 10 scaffolding: this edit-mode boolean should retire into an explicit
+  // scene role/tick policy model before richer editor previews or multi-scene ticking.
+  ctx.set_scene_tick_enabled(false);
 }
 
 void EditorLayer::on_imgui(engine::EngineContext& ctx) {
@@ -44,6 +60,48 @@ void EditorLayer::on_imgui(engine::EngineContext& ctx) {
   draw_inspector();
   draw_stats(ctx);
 }
+
+void EditorLayer::on_render_scene(engine::EngineContext& ctx) {
+  if (session_.mode() != EditorMode::Edit || !session_.bound()) {
+    return;
+  }
+
+  ctx.renderer().begin_scene_presentation(engine::RenderPresentation{
+      .scene_extent = viewport_pixel_size_,
+      .color_target = viewport_target_.handle(),
+  });
+
+  viewport_camera_.update(ctx.input(), ctx.time().delta_seconds, viewport_accepts_input_);
+  const engine::SceneRenderView view = viewport_camera_.make_render_view(viewport_pixel_size_);
+  if (!view.valid) {
+    return;
+  }
+  ctx.renderer().enqueue_active_scene(view);
+}
+
+namespace {
+
+void setup_default_dock_layout(const ImGuiID dockspace_id, const ImVec2& dockspace_size) {
+  ImGui::DockBuilderRemoveNode(dockspace_id);
+  ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+  ImGui::DockBuilderSetNodeSize(dockspace_id, dockspace_size);
+
+  ImGuiID dock_main_id = dockspace_id;
+  const ImGuiID dock_left_id =
+      ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.22f, nullptr, &dock_main_id);
+  const ImGuiID dock_right_id =
+      ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.26f, nullptr, &dock_main_id);
+  const ImGuiID dock_bottom_id =
+      ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.26f, nullptr, &dock_main_id);
+
+  ImGui::DockBuilderDockWindow("Viewport", dock_main_id);
+  ImGui::DockBuilderDockWindow("Hierarchy", dock_left_id);
+  ImGui::DockBuilderDockWindow("Inspector", dock_right_id);
+  ImGui::DockBuilderDockWindow("Stats", dock_bottom_id);
+  ImGui::DockBuilderFinish(dockspace_id);
+}
+
+}  // namespace
 
 void EditorLayer::draw_dockspace() {
   const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -79,13 +137,37 @@ void EditorLayer::draw_dockspace() {
   }
 
   const ImGuiID dockspace_id = ImGui::GetID("TengEditorDockspace");
-  ImGui::DockSpace(dockspace_id, ImVec2{0.0f, 0.0f}, ImGuiDockNodeFlags_PassthruCentralNode);
+  if (!dock_layout_initialized_) {
+    dock_layout_initialized_ = true;
+    setup_default_dock_layout(dockspace_id, viewport->WorkSize);
+  }
+  ImGui::DockSpace(dockspace_id, ImVec2{0.0f, 0.0f});
   ImGui::End();
 }
 
-void EditorLayer::draw_viewport(engine::EngineContext&) {
+void EditorLayer::draw_viewport(engine::EngineContext& ctx) {
   ImGui::Begin("Viewport");
-  ImGui::TextUnformatted("Editor viewport placeholder");
+  const ImGuiIO& io = ImGui::GetIO();
+  viewport_accepts_input_ =
+      (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) || ImGui::IsWindowHovered()) &&
+      !io.WantTextInput;
+
+  const ImVec2 avail = ImGui::GetContentRegionAvail();
+  viewport_pixel_size_ = clamp_editor_viewport_extent(glm::uvec2{
+      static_cast<unsigned>(std::max(0.f, std::floor(avail.x * io.DisplayFramebufferScale.x))),
+      static_cast<unsigned>(std::max(0.f, std::floor(avail.y * io.DisplayFramebufferScale.y))),
+  });
+  LINFO("viewport_pixel_size_: {} {}", viewport_pixel_size_.x, viewport_pixel_size_.y);
+
+  const gfx::rhi::Texture* const swapchain_tex =
+      ctx.device().get_tex(ctx.swapchain().get_current_texture());
+  viewport_target_.ensure_size(ctx.device(), swapchain_tex->desc().format, viewport_pixel_size_);
+
+  if (viewport_target_.valid()) {
+    ImGui::Image(gfx::MakeImGuiTexRefTextureHandle(viewport_target_.handle()), avail);
+  } else {
+    ImGui::TextUnformatted("Viewport");
+  }
   ImGui::End();
 }
 

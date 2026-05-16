@@ -41,7 +41,8 @@ class MeshletRenderer final : public engine::IRenderer {
 
   void set_csm_scene_defaults(const MeshletCsmRenderer::SceneDefaults& defaults);
 
-  void render(engine::RenderFrameContext& frame, const engine::RenderScene& scene) override;
+  void render(engine::RenderFrameContext& frame, const engine::RenderScene& scene,
+              const engine::SceneRenderView& view) override;
   void on_resize(engine::RenderFrameContext& frame) override;
   void on_imgui(engine::RenderFrameContext& frame) override;
 
@@ -52,7 +53,9 @@ class MeshletRenderer final : public engine::IRenderer {
   void lazy_init(const engine::RenderFrameContext& frame);
   void shutdown_subsystems();
   void make_depth_pyramid_tex(const engine::RenderFrameContext& frame);
-  void bake_swapchain_clear(engine::RenderFrameContext& frame, std::string_view pass_name);
+  void bake_present_clear(engine::RenderFrameContext& frame, std::string_view pass_name);
+
+  [[nodiscard]] static glm::uvec2 effective_scene_extent(const engine::RenderFrameContext& frame);
 
   [[nodiscard]] CullData prepare_cull_data_for_proj(const glm::mat4& proj, float z_near,
                                                     float z_far) const;

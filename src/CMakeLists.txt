@@ -99,6 +99,7 @@ set(TENG_SCENE_AUTHORING_SOURCES
 
 set(TENG_RENDER_SOURCES
     engine/render/DebugClearRenderer.cpp
+    engine/render/RenderScene.cpp
     engine/render/RenderSceneExtractor.cpp
     engine/render/RenderService.cpp
 )
@@ -113,6 +114,8 @@ set(TENG_EDITOR_SOURCES
     editor/EditorDocumentController.cpp
     editor/EditorLayer.cpp
     editor/EditorSession.cpp
+    editor/EditorViewportCamera.cpp
+    editor/EditorViewportTarget.cpp
 )
 
 set(TENG_GFX_SOURCES
@@ -287,5 +290,5 @@ target_link_libraries(teng_engine_runtime PUBLIC
     teng_render
 )
 target_link_libraries(teng_engine_runtime PRIVATE implot Tracy::TracyClient)
-target_link_libraries(lib_teng_editor PUBLIC teng_engine_runtime teng_scene_authoring PRIVATE imgui)
+target_link_libraries(lib_teng_editor PUBLIC teng_engine_runtime teng_scene_authoring PRIVATE imgui teng_gfx)
 target_link_libraries(teng_runtime INTERFACE teng_engine_runtime Tracy::TracyClient)

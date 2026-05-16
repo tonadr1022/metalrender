@@ -13,8 +13,10 @@ namespace teng::engine {
 
 DebugClearRenderer::DebugClearRenderer(glm::vec4 clear_color) : clear_color_(clear_color) {}
 
-void DebugClearRenderer::render(RenderFrameContext& frame, const RenderScene& scene) {
+void DebugClearRenderer::render(RenderFrameContext& frame, const RenderScene& scene,
+                                const SceneRenderView& view) {
   last_scene_ = &scene;
+  last_view_ = view;
 
   auto& pass = frame.render_graph->add_graphics_pass("debug_clear");
   pass.w_swapchain_tex(frame.swapchain);

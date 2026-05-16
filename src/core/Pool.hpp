@@ -82,7 +82,7 @@ struct Pool {
   }
 
   ObjectT* get(HandleT handle) {
-    std::shared_lock lock(mtx_);
+    const std::shared_lock lock(mtx_);
     if (!handle.gen_) return nullptr;
     if (handle.idx_ >= entries_.size()) {
       return nullptr;
@@ -210,7 +210,7 @@ struct BlockPool {
   }
 
   ObjectT* get(HandleT handle) {
-    std::shared_lock lock(mtx_);
+    const std::shared_lock lock(mtx_);
     if (!handle.gen_) return nullptr;
     const EntryKey entry_key = get_entry_key(handle.idx_);
     if (!entry_key_valid(entry_key)) {
@@ -223,7 +223,7 @@ struct BlockPool {
   }
 
   const ObjectT* get(HandleT handle) const {
-    std::shared_lock lock(mtx_);
+    const std::shared_lock lock(mtx_);
     if (!handle.gen_) return nullptr;
     const EntryKey entry_key = get_entry_key(handle.idx_);
     if (!entry_key_valid(entry_key)) {

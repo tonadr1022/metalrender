@@ -93,6 +93,13 @@ void LayerStack::imgui() {
   }
 }
 
+void LayerStack::render_scene() {
+  ASSERT(ctx_);
+  for (auto& layer : layers_) {
+    layer->on_render_scene(*ctx_);
+  }
+}
+
 void LayerStack::render() {
   ASSERT(ctx_);
   for (auto& layer : layers_) {
@@ -202,6 +209,7 @@ void Engine::init() {
   context_.scene_serialization_ = scene_serialization_ctx_.get();
   context_.time_ = &time_;
   context_.input_ = &input_snapshot_;
+  context_.scene_tick_enabled_ = &scene_tick_enabled_;
   context_.imgui_enabled_ = &imgui_enabled_;
 
   renderer_ = std::make_unique<RenderService>(RenderService::CreateInfo{
@@ -326,6 +334,8 @@ Result<SceneLoadResult> Engine::load_project_startup_scene() {
   return load_scene(*startup_scene);
 }
 
+void Engine::set_scene_tick_enabled(bool enabled) { scene_tick_enabled_ = enabled; }
+
 bool Engine::tick() {
   ZoneScoped;
   if (shutting_down_ || !initialized_ || window_->should_close()) {
@@ -344,10 +354,11 @@ bool Engine::tick() {
   have_prev_time_ = true;
   input_snapshot_.delta_seconds = time_.delta_seconds;
 
-  if (Scene* active_scene = scenes_->active_scene()) {
+  if (scene_tick_enabled_ && scenes_->active_scene()) {
+    Scene* active_scene = scenes_->active_scene();
     active_scene->set_input_snapshot(input_snapshot_);
   }
-  if (!scenes_->tick_active_scene(time_.delta_seconds)) {
+  if (scene_tick_enabled_ && !scenes_->tick_active_scene(time_.delta_seconds)) {
     return false;
   }
   clear_transient_input();
@@ -356,7 +367,8 @@ bool Engine::tick() {
 
   layers_.update(time_);
   layers_.imgui();
-  if (scenes_->active_scene()) {
+  layers_.render_scene();
+  if (scenes_->active_scene() && !renderer_->scene_submitted_this_frame()) {
     renderer_->enqueue_active_scene();
   }
   layers_.render();
