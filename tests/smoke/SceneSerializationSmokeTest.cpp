@@ -191,7 +191,7 @@ bool run_scene_serialization_smoke_test() {
   if (!validate_scene_file_full_report(test_contexts.scene_serialization, saved_json).has_value()) {
     return false;
   }
-  if (saved_json.contains("registry_version") || saved_json.value("scene_format_version", 0) != 2) {
+  if (saved_json.value("scene_format_version", 0) != 2) {
     return false;
   }
   if (!saved_json.contains("schema") || !saved_json["schema"].contains("required_components")) {

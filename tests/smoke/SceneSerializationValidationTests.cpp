@@ -58,11 +58,15 @@ TEST_CASE("JSON v2 scene validation accepts schema-backed scene documents",
 }
 
 TEST_CASE("JSON v2 scene validation rejects invalid envelope shapes", "[scene_serialization]") {
-  SECTION("v1 registry_version") {
+  SECTION("registry_version is rejected") {
+    json scene_json = valid_scene_v2();
+    scene_json["registry_version"] = 1;
+    CHECK_FALSE(validate(scene_json));
+  }
+
+  SECTION("missing scene_format_version") {
     json scene_json = valid_scene_v2();
     scene_json.erase("scene_format_version");
-    scene_json.erase("schema");
-    scene_json["registry_version"] = 1;
     CHECK_FALSE(validate(scene_json));
   }
 
@@ -177,7 +181,6 @@ TEST_CASE("JSON v2 scene save is deterministic and schema-valid", "[scene_serial
   CHECK(validate_scene_file_full_report(contexts.scene_serialization,
                                         nlohmann::json::parse(once.dump()))
             .has_value());
-  CHECK_FALSE(once.contains("registry_version"));
   CHECK(once.value("scene_format_version", 0) == 2);
 
   std::vector<std::string> top_level;

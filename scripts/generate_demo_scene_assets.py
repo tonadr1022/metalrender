@@ -372,8 +372,6 @@ def main() -> int:
     resource_dir = args.resource_dir.resolve()
     scene_dir = args.scene_dir.resolve() if args.scene_dir else resource_dir / "scenes"
     scene_dir.mkdir(parents=True, exist_ok=True)
-    for old_scene in scene_dir.glob("demo_*.tscene.toml"):
-        old_scene.unlink()
     for old_scene in scene_dir.glob("demo_*.tscene.json"):
         old_scene.unlink()
 

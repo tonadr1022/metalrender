@@ -104,7 +104,7 @@ struct EntityRecord {
   return EntityGuid{value};
 }
 
-[[nodiscard]] Result<std::vector<EntityRecord>> parse_entity_records_v2(const json& root) {
+[[nodiscard]] Result<std::vector<EntityRecord>> parse_entity_records(const json& root) {
   const auto entities_it = root.find("entities");
   if (entities_it == root.end() || !entities_it->is_array()) {
     return make_unexpected("scene JSON must contain entities array");
@@ -312,7 +312,7 @@ Result<void> deserialize_scene_json(SceneManager& scenes,
   }
 
   const std::string name = scene_json["scene"]["name"].get<std::string>();
-  Result<std::vector<EntityRecord>> records = parse_entity_records_v2(scene_json);
+  Result<std::vector<EntityRecord>> records = parse_entity_records(scene_json);
   REQUIRED_OR_RETURN(records);
 
   Scene& scene = scenes.create_scene(name);
@@ -333,12 +333,6 @@ Result<void> deserialize_scene_json(SceneManager& scenes,
   derive_local_to_world(scene);
   scenes.set_active_scene(scene.id());
   return {};
-}
-
-Result<void> deserialize_scene_json2(SceneManager& scenes,
-                                     const SceneSerializationContext& serialization,
-                                     const nlohmann::json& scene_json) {
-  return deserialize_scene_json(scenes, serialization, scene_json);
 }
 
 Result<void> save_scene_file(const Scene& scene, const SceneSerializationContext& serialization,
@@ -696,6 +690,11 @@ Result<void, core::DiagnosticReport> validate_scene_file_full_report(
     return make_unexpected(report);
   }
 
+  if (scene_json.contains("registry_version")) {
+    add_validation_error(report, DiagnosticPath{}.object_key("registry_version"),
+                         "registry_version is retired; use scene_format_version 2 with schema");
+  }
+
   const json* version =
       find_required(report, scene_json, "scene_format_version",
                     DiagnosticPath{}.object_key("scene_format_version"), "scene_format_version");
@@ -832,7 +831,7 @@ Result<nlohmann::ordered_json> canonicalize_scene_json(
     return make_unexpected(validated.error().to_string());
   }
 
-  Result<std::vector<EntityRecord>> records = parse_entity_records_v2(scene_json);
+  Result<std::vector<EntityRecord>> records = parse_entity_records(scene_json);
   REQUIRED_OR_RETURN(records);
 
   nlohmann::ordered_json root;
@@ -905,14 +904,6 @@ Result<nlohmann::ordered_json> canonicalize_scene_json(
   root["scene"] = std::move(scene);
   root["entities"] = std::move(entities);
   return root;
-}
-
-Result<void> migrate_scene_file(const std::filesystem::path& input_path,
-                                const std::filesystem::path& output_path) {
-  (void)input_path;
-  (void)output_path;
-  return make_unexpected(
-      "scene migration is not supported until a JSON v2 migration target exists");
 }
 
 void derive_local_to_world(Scene& scene) {

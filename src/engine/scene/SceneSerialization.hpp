@@ -16,8 +16,6 @@ namespace teng::engine {
 struct SceneSerializationContext;
 class Scene;
 
-inline constexpr int k_scene_registry_version = 1;
-
 /// Sync runtime LocalToWorld matrices from authored Transform after scene load.
 void derive_local_to_world(Scene& scene);
 
@@ -31,9 +29,6 @@ struct SceneLoadResult {
 [[nodiscard]] Result<void> deserialize_scene_json(SceneManager& scenes,
                                                   const SceneSerializationContext& serialization,
                                                   const nlohmann::json& json);
-[[nodiscard]] Result<void> deserialize_scene_json2(SceneManager& scenes,
-                                                   const SceneSerializationContext& serialization,
-                                                   const nlohmann::json& json);
 [[nodiscard]] Result<void> save_scene_file(const Scene& scene,
                                            const SceneSerializationContext& serialization,
                                            const std::filesystem::path& path);
@@ -46,8 +41,5 @@ struct SceneLoadResult {
     const SceneSerializationContext& serialization, const nlohmann::json& scene_json);
 [[nodiscard]] Result<nlohmann::ordered_json> canonicalize_scene_json(
     const SceneSerializationContext& serialization, const nlohmann::json& scene_json);
-
-[[nodiscard]] Result<void> migrate_scene_file(const std::filesystem::path& input_path,
-                                              const std::filesystem::path& output_path);
 
 }  // namespace teng::engine

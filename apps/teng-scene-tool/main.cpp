@@ -19,7 +19,6 @@ using namespace teng::engine;
 void usage() {
   std::cerr << "usage:\n"
             << "  teng-scene-tool validate <path>\n"
-            << "  teng-scene-tool migrate <in> <out>\n"
             << "  teng-scene-tool cook <in> <out>\n"
             << "  teng-scene-tool dump <binary> <out>\n";
 }
@@ -63,9 +62,6 @@ int main(int argc, char** argv) {
   if (command == "validate" && argc == 3) {
     const SceneTestContexts contexts = make_scene_test_contexts();
     result = teng::engine::validate_scene_file(contexts.scene_serialization, argv[2]);
-  } else if (command == "migrate" && argc == 4) {
-    std::cerr << "migrate is not supported\n";
-    // result = teng::engine::migrate_scene_file(argv[2], argv[3]);
   } else if (command == "cook" && argc == 4) {
     const SceneTestContexts contexts = make_scene_test_contexts();
     result = teng::engine::cook_scene_file(contexts.scene_serialization, argv[2], argv[3]);
