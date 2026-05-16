@@ -57,7 +57,7 @@ void EditorLayer::on_imgui(engine::EngineContext& ctx) {
 
   draw_dockspace();
   draw_viewport(ctx);
-  draw_hierarchy(ctx);
+  hierarchy_panel_.draw(session_);
   draw_inspector();
   draw_stats(ctx);
 }
@@ -167,22 +167,6 @@ void EditorLayer::draw_viewport(engine::EngineContext& ctx) {
     ImGui::Image(gfx::MakeImGuiTexRefTextureHandle(viewport_target_.handle()), avail);
   } else {
     ImGui::TextUnformatted("Viewport");
-  }
-  ImGui::End();
-}
-
-void EditorLayer::draw_hierarchy(engine::EngineContext& ctx) {
-  ImGui::Begin("Hierarchy");
-  if (session_.bound()) {
-    const engine::Scene& edit_scene = session_.document_controller().document().scene();
-    ImGui::Text("Edit scene: %s", edit_scene.name().c_str());
-  } else {
-    const engine::Scene* active_scene = ctx.scenes().active_scene();
-    if (active_scene) {
-      ImGui::Text("Active scene: %s", active_scene->name().c_str());
-    } else {
-      ImGui::TextUnformatted("No edit document");
-    }
   }
   ImGui::End();
 }

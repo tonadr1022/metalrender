@@ -6,6 +6,7 @@
 #include "editor/EditorSession.hpp"
 #include "editor/EditorViewportCamera.hpp"
 #include "editor/EditorViewportTarget.hpp"
+#include "editor/panels/HierarchyPanel.hpp"
 #include "engine/Engine.hpp"
 
 namespace teng::editor {
@@ -21,13 +22,13 @@ class EditorLayer final : public engine::Layer {
  private:
   void draw_dockspace();
   void draw_viewport(engine::EngineContext& ctx);
-  void draw_hierarchy(engine::EngineContext& ctx);
   void draw_inspector();
   void draw_stats(engine::EngineContext& ctx);
 
   engine::SceneId edit_scene_id_;
   std::optional<std::filesystem::path> scene_path_;
   EditorSession session_;
+  HierarchyPanel hierarchy_panel_;
   EditorViewportCamera viewport_camera_;
   EditorViewportTarget viewport_target_;
   glm::uvec2 viewport_pixel_size_{};

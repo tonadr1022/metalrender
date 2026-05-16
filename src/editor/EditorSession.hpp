@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "core/Result.hpp"
 #include "editor/EditorDocumentController.hpp"
@@ -53,10 +54,17 @@ class EditorSession {
   [[nodiscard]] bool can_reload() const { return false; }
   [[nodiscard]] bool can_play() const { return false; }
   [[nodiscard]] bool can_stop() const { return false; }
-  [[nodiscard]] bool can_create_entity() const { return false; }
-  [[nodiscard]] bool can_delete_selected_entity() const { return false; }
+  [[nodiscard]] bool can_create_entity() const {
+    return document_controller_.can_create_entity(mode_);
+  }
+  [[nodiscard]] bool can_delete_selected_entity() const {
+    return document_controller_.can_delete_entity(mode_, selection_.selected());
+  }
 
   [[nodiscard]] teng::Result<void> save();
+  [[nodiscard]] teng::Result<teng::engine::EntityGuid> create_entity(
+      std::string_view label = "Entity");
+  [[nodiscard]] teng::Result<void> delete_selected_entity();
 
  private:
   void sync_status_from_document();

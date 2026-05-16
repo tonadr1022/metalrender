@@ -38,6 +38,34 @@ teng::Result<void> EditorSession::save() {
   return {};
 }
 
+teng::Result<teng::engine::EntityGuid> EditorSession::create_entity(std::string_view label) {
+  teng::Result<teng::engine::EntityGuid> created =
+      document_controller_.create_entity(mode_, label);
+  sync_status_from_document();
+  if (!created) {
+    return teng::make_unexpected(last_status_);
+  }
+  selection_.select(*created);
+  return *created;
+}
+
+teng::Result<void> EditorSession::delete_selected_entity() {
+  const std::optional<teng::engine::EntityGuid> selected = selection_.selected();
+  if (!selected) {
+    const teng::Result<void> deleted = document_controller_.delete_entity(mode_, {});
+    sync_status_from_document();
+    return teng::make_unexpected(last_status_);
+  }
+
+  const teng::Result<void> deleted = document_controller_.delete_entity(mode_, *selected);
+  sync_status_from_document();
+  if (!deleted) {
+    return teng::make_unexpected(last_status_);
+  }
+  selection_.clear();
+  return {};
+}
+
 void EditorSession::sync_status_from_document() {
   last_status_ = document_controller_.last_status();
 }

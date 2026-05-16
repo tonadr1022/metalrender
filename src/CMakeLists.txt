@@ -116,6 +116,7 @@ set(TENG_EDITOR_SOURCES
     editor/EditorSession.cpp
     editor/EditorViewportCamera.cpp
     editor/EditorViewportTarget.cpp
+    editor/panels/HierarchyPanel.cpp
 )
 
 set(TENG_GFX_SOURCES

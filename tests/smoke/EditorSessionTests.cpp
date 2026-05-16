@@ -4,6 +4,7 @@
 #include <glm/geometric.hpp>
 #include <optional>
 #include <system_error>
+#include <vector>
 
 #include "TestHelpers.hpp"
 #include "editor/EditorSession.hpp"
@@ -147,6 +148,104 @@ TEST_CASE("EditorSelection set and clear is independent from document save state
   session.selection().clear();
   CHECK_FALSE(session.selection().selected());
   CHECK_FALSE(session.document_controller().dirty());
+}
+
+TEST_CASE("EditorSession creates an entity through the controller boundary", "[editor]") {
+  const engine::SceneTestContexts contexts = engine::make_scene_test_contexts();
+  engine::SceneManager scenes(contexts.flecs_components);
+  const engine::Scene& scene = make_editor_test_scene(scenes);
+
+  EditorSession session;
+  REQUIRE(session.bind(scenes, contexts.scene_serialization, scene.id(), std::nullopt));
+  REQUIRE(session.can_create_entity());
+
+  teng::Result<engine::EntityGuid> created = session.create_entity("Created");
+
+  REQUIRE(created);
+  CHECK(scene.has_entity(*created));
+  CHECK(session.selection().selected() == std::optional<engine::EntityGuid>{*created});
+  CHECK(session.document_controller().dirty());
+  const std::optional<EditorOperationRecord>& operation =
+      session.document_controller().last_operation();
+  if (!operation) {
+    FAIL("create operation was not recorded");
+  } else {
+    CHECK(operation->label == "Create entity");
+    CHECK(operation->affected_entities == std::vector<engine::EntityGuid>{*created});
+    CHECK(operation->succeeded);
+  }
+  CHECK_FALSE(session.last_status().empty());
+}
+
+TEST_CASE("EditorSession deletes the selected entity through the controller boundary", "[editor]") {
+  const engine::SceneTestContexts contexts = engine::make_scene_test_contexts();
+  engine::SceneManager scenes(contexts.flecs_components);
+  const engine::Scene& scene = make_editor_test_scene(scenes);
+
+  EditorSession session;
+  REQUIRE(session.bind(scenes, contexts.scene_serialization, scene.id(), std::nullopt));
+  session.selection().select(engine::EntityGuid{0x10});
+  REQUIRE(session.can_delete_selected_entity());
+
+  const teng::Result<void> deleted = session.delete_selected_entity();
+
+  REQUIRE(deleted);
+  CHECK_FALSE(scene.has_entity(engine::EntityGuid{0x10}));
+  CHECK_FALSE(session.selection().selected());
+  CHECK(session.document_controller().dirty());
+  const std::optional<EditorOperationRecord>& operation =
+      session.document_controller().last_operation();
+  if (!operation) {
+    FAIL("delete operation was not recorded");
+  } else {
+    CHECK(operation->label == "Delete entity");
+    CHECK(operation->affected_entities == std::vector<engine::EntityGuid>{engine::EntityGuid{0x10}});
+    CHECK(operation->succeeded);
+  }
+  CHECK_FALSE(session.last_status().empty());
+}
+
+TEST_CASE("EditorSession create and delete availability respects binding and mode", "[editor]") {
+  const EditorSession unbound_session;
+  CHECK_FALSE(unbound_session.can_create_entity());
+  CHECK_FALSE(unbound_session.can_delete_selected_entity());
+
+  const engine::SceneTestContexts contexts = engine::make_scene_test_contexts();
+  engine::SceneManager scenes(contexts.flecs_components);
+  const engine::Scene& scene = make_editor_test_scene(scenes);
+
+  EditorDocumentController controller;
+  REQUIRE(controller.bind(scenes, contexts.scene_serialization, scene.id(), std::nullopt));
+  CHECK_FALSE(controller.can_create_entity(EditorMode::Play));
+  CHECK_FALSE(controller.can_delete_entity(EditorMode::Play, engine::EntityGuid{0x10}));
+  CHECK_FALSE(controller.create_entity(EditorMode::Play, "blocked"));
+  CHECK_FALSE(controller.delete_entity(EditorMode::Play, engine::EntityGuid{0x10}));
+  CHECK(scene.has_entity(engine::EntityGuid{0x10}));
+}
+
+TEST_CASE("EditorSession preserves selection when deleting a missing entity fails", "[editor]") {
+  const engine::SceneTestContexts contexts = engine::make_scene_test_contexts();
+  engine::SceneManager scenes(contexts.flecs_components);
+  const engine::Scene& scene = make_editor_test_scene(scenes);
+
+  EditorSession session;
+  REQUIRE(session.bind(scenes, contexts.scene_serialization, scene.id(), std::nullopt));
+  session.selection().select(engine::EntityGuid{0xdead});
+
+  const teng::Result<void> deleted = session.delete_selected_entity();
+
+  CHECK_FALSE(deleted);
+  CHECK(scene.has_entity(engine::EntityGuid{0x10}));
+  CHECK(session.selection().selected() ==
+        std::optional<engine::EntityGuid>{engine::EntityGuid{0xdead}});
+  const std::optional<EditorOperationRecord>& operation =
+      session.document_controller().last_operation();
+  if (!operation) {
+    FAIL("failed delete operation was not recorded");
+  } else {
+    CHECK_FALSE(operation->succeeded);
+  }
+  CHECK_FALSE(session.last_status().empty());
 }
 
 TEST_CASE("SceneManager gives new scenes runtime role and enabled execution policy", "[editor]") {

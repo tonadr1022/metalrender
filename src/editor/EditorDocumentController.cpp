@@ -1,5 +1,6 @@
 #include "editor/EditorDocumentController.hpp"
 
+#include <format>
 #include <utility>
 
 #include "core/EAssert.hpp"
@@ -74,6 +75,15 @@ bool EditorDocumentController::can_save(EditorMode mode) const {
   return mode == EditorMode::Edit && bound() && document().path().has_value();
 }
 
+bool EditorDocumentController::can_create_entity(EditorMode mode) const {
+  return mode == EditorMode::Edit && bound();
+}
+
+bool EditorDocumentController::can_delete_entity(
+    EditorMode mode, const std::optional<teng::engine::EntityGuid>& entity) const {
+  return mode == EditorMode::Edit && bound() && entity.has_value() && entity->is_valid();
+}
+
 teng::Result<void> EditorDocumentController::save(EditorMode mode) {
   if (!can_save(mode)) {
     last_status_ = "Save is not available";
@@ -87,6 +97,65 @@ teng::Result<void> EditorDocumentController::save(EditorMode mode) {
   }
   last_status_ = "Document saved";
   return {};
+}
+
+teng::Result<teng::engine::EntityGuid> EditorDocumentController::create_entity(
+    EditorMode mode, std::string_view label) {
+  EditorOperationRecord operation{
+      .label = "Create entity",
+      .coalescing_key = "entity_create",
+  };
+
+  if (!can_create_entity(mode)) {
+    operation.status = "Create entity is not available";
+    record_operation(std::move(operation));
+    return teng::make_unexpected(last_status_);
+  }
+
+  teng::Result<teng::engine::EntityGuid> created = document().create_entity(label);
+  if (!created) {
+    operation.status = "Create entity failed: " + created.error();
+    record_operation(std::move(operation));
+    return teng::make_unexpected(last_status_);
+  }
+
+  operation.affected_entities.push_back(*created);
+  operation.succeeded = true;
+  operation.status = std::format("Created entity {:016x}", created->value);
+  record_operation(std::move(operation));
+  return *created;
+}
+
+teng::Result<void> EditorDocumentController::delete_entity(EditorMode mode,
+                                                           teng::engine::EntityGuid entity) {
+  EditorOperationRecord operation{
+      .label = "Delete entity",
+      .affected_entities = {entity},
+      .coalescing_key = "entity_delete",
+  };
+
+  if (!can_delete_entity(mode, entity)) {
+    operation.status = "Delete entity is not available";
+    record_operation(std::move(operation));
+    return teng::make_unexpected(last_status_);
+  }
+
+  teng::Result<void> deleted = document().destroy_entity(entity);
+  if (!deleted) {
+    operation.status = "Delete entity failed: " + deleted.error();
+    record_operation(std::move(operation));
+    return teng::make_unexpected(last_status_);
+  }
+
+  operation.succeeded = true;
+  operation.status = std::format("Deleted entity {:016x}", entity.value);
+  record_operation(std::move(operation));
+  return {};
+}
+
+void EditorDocumentController::record_operation(EditorOperationRecord operation) {
+  last_status_ = operation.status;
+  last_operation_ = std::move(operation);
 }
 
 }  // namespace teng::editor
